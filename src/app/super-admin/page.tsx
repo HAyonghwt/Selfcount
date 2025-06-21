@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Save, LogOut } from "lucide-react";
+import { Save, LogOut, Users } from "lucide-react";
 import Link from 'next/link';
 import { useToast } from "@/hooks/use-toast";
 import { db, firebaseConfig as localFirebaseConfig } from "@/lib/firebase";
@@ -18,8 +18,6 @@ export default function SuperAdminPage() {
     const [config, setConfig] = useState({
         appName: '',
         userDomain: '',
-        maxPlayers: '',
-        maxCourses: '',
         firebaseConfig: '',
     });
 
@@ -33,16 +31,12 @@ export default function SuperAdminPage() {
                 setConfig({
                     appName: data.appName || '00파크골프',
                     userDomain: data.userDomain || 'parkgolf.com',
-                    maxPlayers: data.maxPlayers?.toString() || '200',
-                    maxCourses: data.maxCourses?.toString() || '4',
                     firebaseConfig: data.firebaseConfig ? JSON.stringify(data.firebaseConfig, null, 2) : firebaseConfigString,
                 });
             } else {
                  setConfig({
                     appName: '00파크골프',
                     userDomain: 'parkgolf.com',
-                    maxPlayers: '200',
-                    maxCourses: '4',
                     firebaseConfig: firebaseConfigString,
                 });
             }
@@ -51,8 +45,6 @@ export default function SuperAdminPage() {
              setConfig({
                 appName: '00파크골프',
                 userDomain: 'parkgolf.com',
-                maxPlayers: '200',
-                maxCourses: '4',
                 firebaseConfig: firebaseConfigString,
             });
         }).finally(() => {
@@ -72,8 +64,6 @@ export default function SuperAdminPage() {
             set(configRef, {
                 appName: config.appName,
                 userDomain: config.userDomain,
-                maxPlayers: Number(config.maxPlayers),
-                maxCourses: Number(config.maxCourses),
                 firebaseConfig: parsedConfig,
             }).then(() => {
                 toast({
@@ -114,7 +104,7 @@ export default function SuperAdminPage() {
                         </Card>
                          <Card>
                             <CardHeader><CardTitle><Skeleton className="h-6 w-40" /></CardTitle><CardDescription><Skeleton className="h-4 w-56 mt-2" /></CardDescription></CardHeader>
-                            <CardContent className="space-y-6"><div className="space-y-2"><Skeleton className="h-4 w-24" /><Skeleton className="h-10 w-full" /></div><div className="space-y-2"><Skeleton className="h-4 w-24" /><Skeleton className="h-10 w-full" /></div></CardContent>
+                            <CardContent><Skeleton className="h-10 w-full" /></CardContent>
                         </Card>
                     </div>
                     <Card>
@@ -167,20 +157,20 @@ export default function SuperAdminPage() {
 
                     <Card>
                         <CardHeader>
-                            <CardTitle>대회 제한 설정</CardTitle>
-                             <CardDescription>대회 운영에 대한 제한을 설정합니다.</CardDescription>
+                            <CardTitle>사용자 계정 관리</CardTitle>
+                             <CardDescription>관리자 및 심판 사용자 계정은 Firebase 콘솔에서 직접 관리해야 합니다.</CardDescription>
                         </CardHeader>
-                        <CardContent className="space-y-4">
-                            <div className="space-y-2">
-                                <Label htmlFor="maxPlayers">최대 등록 선수</Label>
-                                <Input id="maxPlayers" type="number" value={config.maxPlayers} onChange={handleInputChange} />
-                                <p className="text-xs text-muted-foreground">한 대회에 등록할 수 있는 총 선수 인원을 제한합니다.</p>
-                            </div>
-                             <div className="space-y-2">
-                                <Label htmlFor="maxCourses">최대 코스 수</Label>
-                                <Input id="maxCourses" type="number" value={config.maxCourses} onChange={handleInputChange} />
-                                <p className="text-xs text-muted-foreground">관리자가 추가할 수 있는 최대 코스 수를 제한합니다.</p>
-                            </div>
+                        <CardContent className="space-y-4 text-sm text-muted-foreground">
+                            <p>보안을 위해 사용자 계정 생성 및 비밀번호 관리는 Firebase 프로젝트의 Authentication 섹션에서 직접 수행해야 합니다.</p>
+                            <p>
+                                <strong>관리자 계정:</strong> <code className="bg-muted px-1.5 py-0.5 rounded-sm">admin@{config.userDomain}</code><br/>
+                                <strong>심판 계정 예시:</strong> <code className="bg-muted px-1.5 py-0.5 rounded-sm">referee1@{config.userDomain}</code>
+                            </p>
+                             <Button asChild variant="secondary">
+                                <a href={`https://console.firebase.google.com/project/${localFirebaseConfig.projectId}/authentication/users`} target="_blank" rel="noopener noreferrer">
+                                    <Users className="mr-2 h-4 w-4" /> Firebase 인증 콘솔로 이동
+                                </a>
+                            </Button>
                         </CardContent>
                     </Card>
                 </div>
