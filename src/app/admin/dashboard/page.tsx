@@ -19,6 +19,62 @@ interface ProcessedPlayer {
     rank: number;
 }
 
+// Helper function for tie-breaking using back-count method
+const tieBreak = (a: any, b: any, activeCourses: any[]) => {
+    // 1. Total score
+    if (a.total !== b.total) {
+        return a.total - b.total;
+    }
+
+    // Sort courses by ID descending to check last course first
+    const sortedCourses = [...activeCourses].sort((c1, c2) => c2.id - c1.id);
+
+    for (const course of sortedCourses) {
+        const courseId = course.id;
+        
+        const aCourseScore = a.courseScores[courseId] || 0;
+        const bCourseScore = b.courseScores[courseId] || 0;
+        if (aCourseScore !== bCourseScore) {
+            return aCourseScore - bCourseScore;
+        }
+
+        const aHoleScores = a.detailedScores[courseId] || {};
+        const bHoleScores = b.detailedScores[courseId] || {};
+
+        const sumHoles = (scores: { [key: string]: number }, holes: string[]) => holes.reduce((sum, hole) => sum + (scores[hole] || 0), 0);
+
+        // 2. Last 6 holes (Holes 4-9)
+        const last6Holes = ['4', '5', '6', '7', '8', '9'];
+        const aLast6 = sumHoles(aHoleScores, last6Holes);
+        const bLast6 = sumHoles(bHoleScores, last6Holes);
+        if (aLast6 !== bLast6) {
+            return aLast6 - bLast6;
+        }
+
+        // 3. Last 3 holes (Holes 7-9)
+        const last3Holes = ['7', '8', '9'];
+        const aLast3 = sumHoles(aHoleScores, last3Holes);
+        const bLast3 = sumHoles(bHoleScores, last3Holes);
+        if (aLast3 !== bLast3) {
+            return aLast3 - bLast3;
+        }
+        
+        // 4. Hole by hole from 9 down to 1
+        for (let i = 9; i >= 1; i--) {
+            const hole = i.toString();
+            const aHole = aHoleScores[hole] || 0;
+            const bHole = bHoleScores[hole] || 0;
+            if (aHole !== bHole) {
+                return aHole - bHole;
+            }
+        }
+    }
+
+    // If still tied, they are equal.
+    return 0;
+};
+
+
 export default function AdminDashboard() {
     const [players, setPlayers] = useState({});
     const [scores, setScores] = useState({});
@@ -43,15 +99,17 @@ export default function AdminDashboard() {
 
     const processedData = useMemo(() => {
         const activeCourses = Object.values(courses).filter((c: any) => c.isActive);
-        const processedPlayers: Omit<ProcessedPlayer, 'rank'>[] = Object.entries(players).map(([id, player]: [string, any]) => {
-            const playerScores = scores[id] || {};
+        const processedPlayers = Object.entries(players).map(([id, player]: [string, any]) => {
+            const playerScoresData = scores[id] || {};
             let total = 0;
             const courseScores: { [courseId: string]: number } = {};
+            const detailedScores: { [courseId: string]: { [holeNumber: string]: number } } = {};
 
             activeCourses.forEach((course: any) => {
                 const courseId = course.id;
-                const scoresForCourse = playerScores[courseId] ? Object.values(playerScores[courseId]) as number[] : [];
-                const courseSum = scoresForCourse.reduce((a, b) => a + b, 0);
+                const scoresForCourse = playerScoresData[courseId] || {};
+                detailedScores[courseId] = scoresForCourse;
+                const courseSum = Object.values(scoresForCourse).reduce((a, b) => (a as number) + (b as number), 0) as number;
                 courseScores[courseId] = courseSum;
                 total += courseSum;
             });
@@ -64,22 +122,30 @@ export default function AdminDashboard() {
                 affiliation: player.type === 'team' ? player.p1_affiliation : player.affiliation,
                 courseScores,
                 total,
+                detailedScores
             };
         });
 
         const groupedAndRanked: { [groupName: string]: ProcessedPlayer[] } = {};
-        const allGroups = [...new Set(processedPlayers.map(p => p.group))];
+        const allGroups = [...new Set(processedPlayers.map(p => p.group))].filter(g => g);
 
         allGroups.forEach(groupName => {
-            if (!groupName) return;
             const groupPlayers = processedPlayers
                 .filter(p => p.group === groupName)
-                .sort((a, b) => a.total - b.total); // Add back-count tie-breaking later
+                .sort((a, b) => tieBreak(a, b, activeCourses));
             
-            groupedAndRanked[groupName] = groupPlayers.map((player, index) => ({
-                ...player,
-                rank: index + 1 // Simplified ranking
-            }));
+            const rankedPlayers: ProcessedPlayer[] = [];
+            groupPlayers.forEach((player, index) => {
+                let rank;
+                if (index > 0 && tieBreak(player, groupPlayers[index - 1], activeCourses) === 0) {
+                    rank = rankedPlayers[index - 1].rank;
+                } else {
+                    rank = index + 1;
+                }
+                const { detailedScores, ...restOfPlayer } = player;
+                rankedPlayers.push({ ...restOfPlayer, rank });
+            });
+            groupedAndRanked[groupName] = rankedPlayers;
         });
         
         return groupedAndRanked;
