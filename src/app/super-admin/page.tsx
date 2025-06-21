@@ -10,9 +10,11 @@ import Link from 'next/link';
 import { useToast } from "@/hooks/use-toast";
 import { db, firebaseConfig as localFirebaseConfig } from "@/lib/firebase";
 import { ref, set, get } from "firebase/database";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export default function SuperAdminPage() {
     const { toast } = useToast();
+    const [loading, setLoading] = useState(true);
     const [config, setConfig] = useState({
         appName: '',
         userDomain: '',
@@ -46,6 +48,15 @@ export default function SuperAdminPage() {
             }
         }).catch(() => {
              toast({ title: "오류", description: "설정 정보를 불러오는데 실패했습니다.", variant: "destructive" });
+             setConfig({
+                appName: '00파크골프',
+                userDomain: 'parkgolf.com',
+                maxPlayers: '200',
+                maxCourses: '4',
+                firebaseConfig: firebaseConfigString,
+            });
+        }).finally(() => {
+            setLoading(false);
         });
     }, [firebaseConfigString, toast]);
     
@@ -79,6 +90,41 @@ export default function SuperAdminPage() {
             });
         }
     };
+
+    if (loading) {
+        return (
+            <div className="min-h-screen bg-slate-100 p-4 sm:p-8">
+                 <header className="flex justify-between items-center mb-8">
+                    <div>
+                        <h1 className="text-3xl font-bold text-gray-800 font-headline">최고 관리자 페이지</h1>
+                        <p className="text-muted-foreground">ParkScore 앱의 전역 설정을 관리합니다.</p>
+                    </div>
+                    <Button variant="outline" asChild>
+                        <Link href="/">
+                            <LogOut className="mr-2 h-4 w-4" />
+                            로그아웃
+                        </Link>
+                    </Button>
+                </header>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    <div className="space-y-8">
+                        <Card>
+                            <CardHeader><CardTitle><Skeleton className="h-6 w-32" /></CardTitle><CardDescription><Skeleton className="h-4 w-48 mt-2" /></CardDescription></CardHeader>
+                            <CardContent className="space-y-6"><div className="space-y-2"><Skeleton className="h-4 w-24" /><Skeleton className="h-10 w-full" /></div><div className="space-y-2"><Skeleton className="h-4 w-40" /><Skeleton className="h-10 w-full" /></div></CardContent>
+                        </Card>
+                         <Card>
+                            <CardHeader><CardTitle><Skeleton className="h-6 w-40" /></CardTitle><CardDescription><Skeleton className="h-4 w-56 mt-2" /></CardDescription></CardHeader>
+                            <CardContent className="space-y-6"><div className="space-y-2"><Skeleton className="h-4 w-24" /><Skeleton className="h-10 w-full" /></div><div className="space-y-2"><Skeleton className="h-4 w-24" /><Skeleton className="h-10 w-full" /></div></CardContent>
+                        </Card>
+                    </div>
+                    <Card>
+                        <CardHeader><CardTitle><Skeleton className="h-6 w-32" /></CardTitle><CardDescription><Skeleton className="h-4 w-full max-w-md mt-2" /></CardDescription></CardHeader>
+                        <CardContent className="space-y-4"><div className="space-y-2"><Skeleton className="h-4 w-48" /><Skeleton className="h-48 w-full" /></div><Skeleton className="h-12 w-full" /></CardContent>
+                    </Card>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen bg-slate-100 p-4 sm:p-8">
