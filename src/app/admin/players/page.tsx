@@ -1,5 +1,5 @@
 "use client"
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -47,6 +47,9 @@ export default function PlayerManagementPage() {
     // Editing states
     const [editingPlayerId, setEditingPlayerId] = useState<string | null>(null);
     const [editingPlayerData, setEditingPlayerData] = useState<any | null>(null);
+    
+    const individualFileInputRef = useRef<HTMLInputElement>(null);
+    const teamFileInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
         const playersRef = ref(db, 'players');
@@ -83,7 +86,6 @@ export default function PlayerManagementPage() {
         let filename;
 
         if (type === 'individual') {
-            // Sheet 1: Example Group 1
             const ws1_data = [
                 ["조", "이름", "소속"],
                 ["1", "홍길동", "중앙 파크골프"],
@@ -91,43 +93,123 @@ export default function PlayerManagementPage() {
                 ["2", "이영희", "행복 파크골프"],
                 ["2", "박지성", "대한 파크골프"],
             ];
-            // Sheet 2: Example Group 2
             const ws2_data = [
                 ["조", "이름", "소속"],
                 ["10", "김연아", "피겨 클럽"],
                 ["10", "류현진", "야구 클럽"],
             ];
-            
             const ws1 = XLSX.utils.aoa_to_sheet(ws1_data);
             const ws2 = XLSX.utils.aoa_to_sheet(ws2_data);
-            
             XLSX.utils.book_append_sheet(wb, ws1, "A그룹 (예시)");
             XLSX.utils.book_append_sheet(wb, ws2, "B그룹 (예시)");
-
             filename = "개인전_선수등록_양식.xlsx";
         } else { // team
-            // Sheet 1: Example Group 1
             const ws1_data = [
                 ["조", "선수1 이름", "선수1 소속", "선수2 이름", "선수2 소속"],
                 ["1", "홍길동", "중앙 파크골프", "김철수", "중앙 파크골프"],
                 ["2", "이영희", "강남 클럽", "박지성", "대한 파크골프"],
             ];
-            // Sheet 2: Example Group 2
             const ws2_data = [
                 ["조", "선수1 이름", "선수1 소속", "선수2 이름", "선수2 소속"],
                 ["5", "나팀", "팀플레이", "너팀", "팀플레이"],
             ];
-
             const ws1 = XLSX.utils.aoa_to_sheet(ws1_data);
             const ws2 = XLSX.utils.aoa_to_sheet(ws2_data);
-
             XLSX.utils.book_append_sheet(wb, ws1, "시니어팀 (예시)");
             XLSX.utils.book_append_sheet(wb, ws2, "일반팀 (예시)");
-
             filename = "2인1팀_선수등록_양식.xlsx";
         }
 
         XLSX.writeFile(wb, filename);
+    };
+    
+    const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'individual' | 'team') => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            try {
+                const data = event.target?.result;
+                const wb = XLSX.read(data, { type: 'binary' });
+                let newPlayers: any[] = [];
+
+                wb.SheetNames.forEach(sheetName => {
+                    const groupName = sheetName;
+                    const ws = wb.Sheets[sheetName];
+                    const jsonData = XLSX.utils.sheet_to_json(ws);
+                    
+                    if (jsonData.length < 1) return;
+
+                    if (type === 'individual') {
+                        jsonData.forEach((row: any) => {
+                            const name = row['이름']?.toString().trim();
+                            const affiliation = row['소속']?.toString().trim();
+                            if (name && affiliation && row['조']) {
+                                newPlayers.push({
+                                    type: 'individual',
+                                    group: groupName,
+                                    jo: Number(row['조']),
+                                    name: name,
+                                    affiliation: affiliation,
+                                });
+                            }
+                        });
+                    } else { // team
+                         jsonData.forEach((row: any) => {
+                            const p1_name = row['선수1 이름']?.toString().trim();
+                            const p2_name = row['선수2 이름']?.toString().trim();
+                            if (p1_name && p2_name && row['조']) {
+                                newPlayers.push({
+                                    type: 'team',
+                                    group: groupName,
+                                    jo: Number(row['조']),
+                                    p1_name: p1_name,
+                                    p1_affiliation: row['선수1 소속']?.toString().trim() || '',
+                                    p2_name: p2_name,
+                                    p2_affiliation: row['선수2 소속']?.toString().trim() || '',
+                                });
+                            }
+                        });
+                    }
+                });
+
+                if (newPlayers.length === 0) {
+                    toast({ title: '오류', description: '파일에서 유효한 선수 정보를 찾을 수 없습니다.', variant: 'destructive' });
+                    return;
+                }
+
+                if (allPlayers.length + newPlayers.length > maxPlayers) {
+                    toast({
+                        title: '선수 등록 제한',
+                        description: `엑셀 파일의 선수(${newPlayers.length}명)를 추가하면 최대 인원(${maxPlayers}명)을 초과합니다. 현재 ${allPlayers.length}명 등록됨.`,
+                        variant: 'destructive'
+                    });
+                    return;
+                }
+                
+                const updates: { [key: string]: any } = {};
+                newPlayers.forEach(player => {
+                    const newPlayerKey = push(ref(db, 'players')).key;
+                    if(newPlayerKey) {
+                        updates[`/players/${newPlayerKey}`] = player;
+                    }
+                });
+
+                update(ref(db), updates)
+                    .then(() => {
+                        toast({ title: '성공', description: `${newPlayers.length}명의 선수가 성공적으로 등록되었습니다.`, className: 'bg-green-500 text-white' });
+                    })
+                    .catch(err => toast({ title: '저장 실패', description: err.message, variant: 'destructive' }));
+
+            } catch (error) {
+                console.error("Excel upload error:", error);
+                toast({ title: '파일 처리 오류', description: '엑셀 파일을 처리하는 중 오류가 발생했습니다. 파일 형식이 올바른지 확인해주세요.', variant: 'destructive' });
+            } finally {
+                if(e.target) e.target.value = '';
+            }
+        };
+        reader.readAsBinaryString(file);
     };
 
     const individualPlayers = allPlayers.filter(p => p.type === 'individual');
@@ -355,7 +437,8 @@ export default function PlayerManagementPage() {
                             </CardHeader>
                             <CardContent className="flex flex-col sm:flex-row gap-4">
                                 <Button variant="outline" onClick={() => handleDownloadTemplate('individual')}><Download className="mr-2 h-4 w-4" /> 엑셀 양식 다운로드</Button>
-                                <Button disabled><Upload className="mr-2 h-4 w-4" /> 엑셀 파일 업로드 (개발중)</Button>
+                                <Button onClick={() => individualFileInputRef.current?.click()}><Upload className="mr-2 h-4 w-4" /> 엑셀 파일 업로드</Button>
+                                <input type="file" ref={individualFileInputRef} className="hidden" accept=".xlsx, .xls" onChange={(e) => handleFileUpload(e, 'individual')} />
                             </CardContent>
                         </Card>
                         <Card>
@@ -459,7 +542,8 @@ export default function PlayerManagementPage() {
                             <CardHeader><CardTitle className="text-lg">엑셀로 일괄 등록</CardTitle></CardHeader>
                             <CardContent className="flex flex-col sm:flex-row gap-4">
                                <Button variant="outline" onClick={() => handleDownloadTemplate('team')}><Download className="mr-2 h-4 w-4" /> 엑셀 양식 다운로드</Button>
-                                <Button disabled><Upload className="mr-2 h-4 w-4" /> 엑셀 파일 업로드 (개발중)</Button>
+                                <Button onClick={() => teamFileInputRef.current?.click()}><Upload className="mr-2 h-4 w-4" /> 엑셀 파일 업로드</Button>
+                                <input type="file" ref={teamFileInputRef} className="hidden" accept=".xlsx, .xls" onChange={(e) => handleFileUpload(e, 'team')} />
                             </CardContent>
                         </Card>
                          <Card>
