@@ -19,10 +19,11 @@ interface Course {
 }
 
 const defaultPars: number[] = Array(9).fill(3);
+const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
 const initialCourses: Course[] = [
-  { id: 1, name: '햇살코스', pars: [...defaultPars], isActive: true },
-  { id: 2, name: '바람코스', pars: [...defaultPars], isActive: true },
+  { id: 1, name: 'A코스', pars: [...defaultPars], isActive: true },
+  { id: 2, name: 'B코스', pars: [...defaultPars], isActive: true },
 ];
 
 export default function TournamentManagementPage() {
@@ -68,10 +69,15 @@ export default function TournamentManagementPage() {
         });
         return;
     }
+    
+    const nextCourseIndex = courses.length;
+    const newCourseName = nextCourseIndex < alphabet.length
+        ? `${alphabet[nextCourseIndex]}코스`
+        : `코스 ${nextCourseIndex + 1}`;
 
     const newCourse: Course = {
       id: courses.length > 0 ? Math.max(...courses.map(c => c.id)) + 1 : 1,
-      name: `코스 ${courses.length + 1}`,
+      name: newCourseName,
       pars: [...defaultPars],
       isActive: true,
     };
@@ -90,7 +96,7 @@ export default function TournamentManagementPage() {
                 newPars[holeIndex] = null;
             } else {
                 const parsed = parseInt(value, 10);
-                if (!isNaN(parsed)) {
+                if (!isNaN(parsed) && parsed > 0) {
                     newPars[holeIndex] = parsed;
                 }
             }
