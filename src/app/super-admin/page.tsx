@@ -19,6 +19,8 @@ export default function SuperAdminPage() {
         appName: '',
         userDomain: '',
         firebaseConfig: '',
+        maxCourses: 4,
+        maxPlayers: 200,
     });
 
     const firebaseConfigString = JSON.stringify(localFirebaseConfig, null, 2);
@@ -32,12 +34,16 @@ export default function SuperAdminPage() {
                     appName: data.appName || '00파크골프',
                     userDomain: data.userDomain || 'parkgolf.com',
                     firebaseConfig: data.firebaseConfig ? JSON.stringify(data.firebaseConfig, null, 2) : firebaseConfigString,
+                    maxCourses: data.maxCourses || 4,
+                    maxPlayers: data.maxPlayers || 200,
                 });
             } else {
                  setConfig({
                     appName: '00파크골프',
                     userDomain: 'parkgolf.com',
                     firebaseConfig: firebaseConfigString,
+                    maxCourses: 4,
+                    maxPlayers: 200,
                 });
             }
         }).catch(() => {
@@ -46,6 +52,8 @@ export default function SuperAdminPage() {
                 appName: '00파크골프',
                 userDomain: 'parkgolf.com',
                 firebaseConfig: firebaseConfigString,
+                maxCourses: 4,
+                maxPlayers: 200,
             });
         }).finally(() => {
             setLoading(false);
@@ -65,6 +73,8 @@ export default function SuperAdminPage() {
                 appName: config.appName,
                 userDomain: config.userDomain,
                 firebaseConfig: parsedConfig,
+                maxCourses: Number(config.maxCourses),
+                maxPlayers: Number(config.maxPlayers),
             }).then(() => {
                 toast({
                     title: "성공",
@@ -151,6 +161,25 @@ export default function SuperAdminPage() {
                                     <Input id="userDomain" value={config.userDomain} onChange={handleInputChange} className="rounded-l-none" />
                                 </div>
                                  <p className="text-xs text-muted-foreground">admin@XXX.com 및 refereeN@XXX.com의 XXX 부분을 설정합니다.</p>
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>대회 운영 설정</CardTitle>
+                            <CardDescription>대회의 최대 코스 수와 참가 인원을 제한합니다.</CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            <div className="space-y-2">
+                                <Label htmlFor="maxCourses">최대 코스 수</Label>
+                                <Input id="maxCourses" type="number" value={config.maxCourses} onChange={handleInputChange} placeholder="예: 4" />
+                                <p className="text-xs text-muted-foreground">대회에 생성할 수 있는 최대 코스 수를 설정합니다.</p>
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="maxPlayers">최대 참가 인원 (팀 포함)</Label>
+                                <Input id="maxPlayers" type="number" value={config.maxPlayers} onChange={handleInputChange} placeholder="예: 200" />
+                                <p className="text-xs text-muted-foreground">대회에 등록할 수 있는 총 선수/팀 수를 제한합니다.</p>
                             </div>
                         </CardContent>
                     </Card>

@@ -35,6 +35,10 @@ export default function PlayerManagementPage() {
     const [teamJo, setTeamJo] = useState('');
     const [teamFormData, setTeamFormData] = useState(initialTeamState);
 
+    // Config states
+    const [maxPlayers, setMaxPlayers] = useState(200);
+    const [configLoading, setConfigLoading] = useState(true);
+
     useEffect(() => {
         const playersRef = ref(db, 'players');
         const unsubscribe = onValue(playersRef, (snapshot) => {
@@ -45,6 +49,18 @@ export default function PlayerManagementPage() {
             } else {
                 setAllPlayers([]);
             }
+        });
+        return () => unsubscribe();
+    }, []);
+
+    useEffect(() => {
+        const configRef = ref(db, 'config');
+        const unsubscribe = onValue(configRef, (snapshot) => {
+            const data = snapshot.val();
+            if (data && data.maxPlayers) {
+                setMaxPlayers(data.maxPlayers);
+            }
+            setConfigLoading(false);
         });
         return () => unsubscribe();
     }, []);
@@ -72,6 +88,15 @@ export default function PlayerManagementPage() {
         const playersToSave = individualFormData.filter(p => p.name.trim() !== '' && p.affiliation.trim() !== '');
         if (playersToSave.length === 0) {
             toast({ title: '정보 없음', description: '저장할 선수 정보가 없습니다.', variant: 'destructive' });
+            return;
+        }
+
+        if (allPlayers.length + playersToSave.length > maxPlayers) {
+            toast({
+                title: '선수 등록 제한',
+                description: `최대 참가 인원(${maxPlayers}명)을 초과합니다. 현재 ${allPlayers.length}명 등록됨.`,
+                variant: 'destructive'
+            });
             return;
         }
 
@@ -105,6 +130,16 @@ export default function PlayerManagementPage() {
             toast({ title: '정보 없음', description: '저장할 팀 정보가 없습니다.', variant: 'destructive' });
             return;
         }
+
+        if (allPlayers.length + teamsToSave.length > maxPlayers) {
+            toast({
+                title: '팀 등록 제한',
+                description: `최대 참가 인원(${maxPlayers}명)을 초과합니다. 현재 ${allPlayers.length}팀/명 등록됨.`,
+                variant: 'destructive'
+            });
+            return;
+        }
+
         const updates: { [key: string]: any } = {};
         teamsToSave.forEach(team => {
             const newTeamKey = push(ref(db, 'players')).key;
@@ -142,7 +177,9 @@ export default function PlayerManagementPage() {
         <Card>
             <CardHeader>
                 <CardTitle className="text-2xl font-bold font-headline">선수 관리</CardTitle>
-                <CardDescription>개인전 또는 2인 1팀 선수를 등록하고 관리합니다. 수동으로 등록하거나 엑셀 파일로 일괄 업로드할 수 있습니다.</CardDescription>
+                <CardDescription>개인전 또는 2인 1팀 선수를 등록하고 관리합니다. 수동으로 등록하거나 엑셀 파일로 일괄 업로드할 수 있습니다. <br />
+                <span className="font-bold text-primary">현재 총 등록 인원: {allPlayers.length} / {configLoading ? '...' : maxPlayers} 명</span>
+                </CardDescription>
             </CardHeader>
         </Card>
         <Tabs defaultValue="individual">
@@ -202,11 +239,14 @@ export default function PlayerManagementPage() {
                                         </div>
                                     ))}
                                 </div>
-                                <Button size="lg" className="mt-4" onClick={handleSaveIndividualPlayers}><UserPlus className="mr-2 h-4 w-4" /> 선수 저장</Button>
+                                <Button size="lg" className="mt-4" onClick={handleSaveIndividualPlayers} disabled={configLoading}><UserPlus className="mr-2 h-4 w-4" /> 선수 저장</Button>
                             </CardContent>
                         </Card>
                          <Card>
-                            <CardHeader><CardTitle>등록된 개인전 선수 목록</CardTitle></CardHeader>
+                            <CardHeader>
+                                <CardTitle>등록된 개인전 선수 목록</CardTitle>
+                                <CardDescription>{individualPlayers.length}명의 개인전 선수가 등록되었습니다.</CardDescription>
+                            </CardHeader>
                             <CardContent>
                                 <Table>
                                     <TableHeader>
@@ -282,11 +322,14 @@ export default function PlayerManagementPage() {
                                         </div>
                                     </div>
                                 ))}
-                                <Button size="lg" className="mt-4" onClick={handleSaveTeamPlayers}><UserPlus className="mr-2 h-4 w-4" /> 팀 저장</Button>
+                                <Button size="lg" className="mt-4" onClick={handleSaveTeamPlayers} disabled={configLoading}><UserPlus className="mr-2 h-4 w-4" /> 팀 저장</Button>
                             </CardContent>
                         </Card>
                         <Card>
-                            <CardHeader><CardTitle>등록된 2인 1팀 목록</CardTitle></CardHeader>
+                            <CardHeader>
+                                <CardTitle>등록된 2인 1팀 목록</CardTitle>
+                                <CardDescription>{teamPlayers.length}개의 팀이 등록되었습니다.</CardDescription>
+                            </CardHeader>
                             <CardContent>
                                 <Table>
                                     <TableHeader>

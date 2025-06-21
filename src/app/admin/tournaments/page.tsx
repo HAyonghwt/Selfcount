@@ -29,6 +29,8 @@ export default function TournamentManagementPage() {
   const [tournamentName, setTournamentName] = useState('');
   const [courses, setCourses] = useState<Course[]>([]);
   const { toast } = useToast();
+  const [maxCourses, setMaxCourses] = useState(10);
+  const [configLoading, setConfigLoading] = useState(true);
 
   useEffect(() => {
     const tournamentRef = ref(db, 'tournaments/current');
@@ -45,7 +47,28 @@ export default function TournamentManagementPage() {
     return () => unsubscribe();
   }, []);
 
+  useEffect(() => {
+    const configRef = ref(db, 'config');
+    const unsubscribe = onValue(configRef, (snapshot) => {
+        const data = snapshot.val();
+        if (data && data.maxCourses) {
+            setMaxCourses(data.maxCourses);
+        }
+        setConfigLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
   const handleAddCourse = () => {
+    if (!configLoading && courses.length >= maxCourses) {
+        toast({
+            title: '코스 추가 제한',
+            description: `최대 코스 수(${maxCourses}개)에 도달했습니다. 최고 관리자 설정에서 제한을 늘려주세요.`,
+            variant: 'destructive',
+        });
+        return;
+    }
+
     const newCourse: Course = {
       id: courses.length > 0 ? Math.max(...courses.map(c => c.id)) + 1 : 1,
       name: `코스 ${courses.length + 1}`,
@@ -129,7 +152,7 @@ export default function TournamentManagementPage() {
       <Card>
         <CardHeader>
           <CardTitle className="text-2xl font-bold font-headline">코스 관리</CardTitle>
-          <CardDescription>코스 이름, 홀별 Par 값을 설정하고, 전광판에 표시할 코스를 활성화/비활성화합니다.</CardDescription>
+          <CardDescription>코스 이름, 홀별 Par 값을 설정하고, 전광판에 표시할 코스를 활성화/비활성화합니다. 현재 {courses.length} / {maxCourses}개 코스가 생성되었습니다.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           {courses.map((course) => (
@@ -167,7 +190,7 @@ export default function TournamentManagementPage() {
               </CardContent>
             </Card>
           ))}
-          <Button variant="outline" onClick={handleAddCourse}>
+          <Button variant="outline" onClick={handleAddCourse} disabled={configLoading || courses.length >= maxCourses}>
             <PlusCircle className="mr-2 h-4 w-4" />
             코스 추가
           </Button>
