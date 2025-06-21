@@ -1,5 +1,5 @@
 "use client"
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -212,8 +212,41 @@ export default function PlayerManagementPage() {
         reader.readAsBinaryString(file);
     };
 
-    const individualPlayers = allPlayers.filter(p => p.type === 'individual');
-    const teamPlayers = allPlayers.filter(p => p.type === 'team');
+    const { groupedIndividualPlayers, groupedTeamPlayers } = useMemo(() => {
+        const individual = allPlayers.filter(p => p.type === 'individual');
+        const team = allPlayers.filter(p => p.type === 'team');
+
+        const createGroupedData = (players: any[]) => {
+            const grouped = players.reduce((acc, player) => {
+                const groupName = player.group || '미지정';
+                if (!acc[groupName]) {
+                    acc[groupName] = [];
+                }
+                acc[groupName].push(player);
+                return acc;
+            }, {} as { [key: string]: any[] });
+            
+            Object.values(grouped).forEach(playerList => {
+                playerList.sort((a, b) => {
+                    if (a.jo !== b.jo) return a.jo - b.jo;
+                    const nameA = a.name || a.p1_name || '';
+                    const nameB = b.name || b.p1_name || '';
+                    return nameA.localeCompare(nameB);
+                });
+            });
+
+            return grouped;
+        };
+
+        return {
+            groupedIndividualPlayers: createGroupedData(individual),
+            groupedTeamPlayers: createGroupedData(team),
+        };
+    }, [allPlayers]);
+
+    const individualPlayersCount = allPlayers.filter(p => p.type === 'individual').length;
+    const teamPlayersCount = allPlayers.filter(p => p.type === 'team').length;
+
 
     const handleIndividualFormChange = (index: number, field: string, value: string) => {
         const newForm = [...individualFormData];
@@ -482,51 +515,66 @@ export default function PlayerManagementPage() {
                          <Card>
                             <CardHeader>
                                 <CardTitle>등록된 개인전 선수 목록</CardTitle>
-                                <CardDescription>{individualPlayers.length}명의 개인전 선수가 등록되었습니다.</CardDescription>
+                                <CardDescription>
+                                    총 {individualPlayersCount}명의 개인전 선수가 등록되었습니다.
+                                    {Object.keys(groupedIndividualPlayers).length > 0 && ` (${Object.entries(groupedIndividualPlayers).map(([group, players]) => `${group}: ${players.length}명`).join(', ')})`}
+                                </CardDescription>
                             </CardHeader>
                             <CardContent>
                                 <Table>
                                     <TableHeader>
                                         <TableRow>
-                                            <TableHead className="px-4 py-2">그룹</TableHead><TableHead className="px-4 py-2">조</TableHead><TableHead className="px-4 py-2">선수명</TableHead><TableHead className="px-4 py-2">소속</TableHead><TableHead className="text-right px-4 py-2">관리</TableHead>
+                                            <TableHead className="px-4 py-2 w-[60px] text-center">번호</TableHead>
+                                            <TableHead className="px-4 py-2">그룹</TableHead>
+                                            <TableHead className="px-4 py-2">조</TableHead>
+                                            <TableHead className="px-4 py-2">선수명</TableHead>
+                                            <TableHead className="px-4 py-2">소속</TableHead>
+                                            <TableHead className="text-right px-4 py-2">관리</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
-                                        {individualPlayers.map(p => (
-                                            editingPlayerId === p.id ? (
-                                                <TableRow key={p.id} className="bg-muted/30">
-                                                    <TableCell className="px-4 py-2">
-                                                        <Select value={editingPlayerData.group} onValueChange={(value) => handleEditingFormChange('group', value)}>
-                                                            <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                                                            <SelectContent>{groups.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}</SelectContent>
-                                                        </Select>
-                                                    </TableCell>
-                                                    <TableCell className="px-4 py-2"><Input value={editingPlayerData.jo} type="number" onChange={(e) => handleEditingFormChange('jo', e.target.value)} className="h-9 w-20" /></TableCell>
-                                                    <TableCell className="px-4 py-2"><Input value={editingPlayerData.name} onChange={(e) => handleEditingFormChange('name', e.target.value)} className="h-9" /></TableCell>
-                                                    <TableCell className="px-4 py-2"><Input value={editingPlayerData.affiliation} onChange={(e) => handleEditingFormChange('affiliation', e.target.value)} className="h-9" /></TableCell>
-                                                    <TableCell className="text-right space-x-1 px-4 py-2">
-                                                        <Button variant="ghost" size="icon" onClick={handleUpdatePlayer}><Save className="h-4 w-4 text-primary" /></Button>
-                                                        <Button variant="ghost" size="icon" onClick={handleCancelEdit}><X className="h-4 w-4 text-muted-foreground" /></Button>
-                                                    </TableCell>
-                                                </TableRow>
-                                            ) : (
-                                                <TableRow key={p.id}>
-                                                    <TableCell className="px-4 py-2">{p.group}</TableCell><TableCell className="px-4 py-2">{p.jo}</TableCell><TableCell className="px-4 py-2">{p.name}</TableCell><TableCell className="px-4 py-2">{p.affiliation}</TableCell>
-                                                    <TableCell className="text-right space-x-2 px-4 py-2">
-                                                        <Button variant="outline" size="icon" onClick={() => handleEditClick(p)}><Edit className="h-4 w-4" /></Button>
-                                                        <AlertDialog>
-                                                            <AlertDialogTrigger asChild>
-                                                                <Button variant="destructive" size="icon"><Trash2 className="h-4 w-4" /></Button>
-                                                            </AlertDialogTrigger>
-                                                            <AlertDialogContent>
-                                                                <AlertDialogHeader><AlertDialogTitle>정말 삭제하시겠습니까?</AlertDialogTitle><AlertDialogDescription>{p.name} 선수의 정보를 삭제합니다.</AlertDialogDescription></AlertDialogHeader>
-                                                                <AlertDialogFooter><AlertDialogCancel>취소</AlertDialogCancel><AlertDialogAction onClick={() => handleDeletePlayer(p.id)}>삭제</AlertDialogAction></AlertDialogFooter>
-                                                            </AlertDialogContent>
-                                                        </AlertDialog>
-                                                    </TableCell>
-                                                </TableRow>
-                                            )
-                                        ))}
+                                        {Object.keys(groupedIndividualPlayers).sort().map(groupName => 
+                                            groupedIndividualPlayers[groupName].map((p, index) => (
+                                                editingPlayerId === p.id ? (
+                                                    <TableRow key={p.id} className="bg-muted/30">
+                                                        <TableCell className="px-4 py-2 text-center font-medium">{index + 1}</TableCell>
+                                                        <TableCell className="px-4 py-2">
+                                                            <Select value={editingPlayerData.group} onValueChange={(value) => handleEditingFormChange('group', value)}>
+                                                                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                                                                <SelectContent>{groups.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}</SelectContent>
+                                                            </Select>
+                                                        </TableCell>
+                                                        <TableCell className="px-4 py-2"><Input value={editingPlayerData.jo} type="number" onChange={(e) => handleEditingFormChange('jo', e.target.value)} className="h-9 w-20" /></TableCell>
+                                                        <TableCell className="px-4 py-2"><Input value={editingPlayerData.name} onChange={(e) => handleEditingFormChange('name', e.target.value)} className="h-9" /></TableCell>
+                                                        <TableCell className="px-4 py-2"><Input value={editingPlayerData.affiliation} onChange={(e) => handleEditingFormChange('affiliation', e.target.value)} className="h-9" /></TableCell>
+                                                        <TableCell className="text-right space-x-1 px-4 py-2">
+                                                            <Button variant="ghost" size="icon" onClick={handleUpdatePlayer}><Save className="h-4 w-4 text-primary" /></Button>
+                                                            <Button variant="ghost" size="icon" onClick={handleCancelEdit}><X className="h-4 w-4 text-muted-foreground" /></Button>
+                                                        </TableCell>
+                                                    </TableRow>
+                                                ) : (
+                                                    <TableRow key={p.id}>
+                                                        <TableCell className="px-4 py-2 text-center font-medium">{index + 1}</TableCell>
+                                                        <TableCell className="px-4 py-2">{p.group}</TableCell>
+                                                        <TableCell className="px-4 py-2">{p.jo}</TableCell>
+                                                        <TableCell className="px-4 py-2">{p.name}</TableCell>
+                                                        <TableCell className="px-4 py-2">{p.affiliation}</TableCell>
+                                                        <TableCell className="text-right space-x-2 px-4 py-2">
+                                                            <Button variant="outline" size="icon" onClick={() => handleEditClick(p)}><Edit className="h-4 w-4" /></Button>
+                                                            <AlertDialog>
+                                                                <AlertDialogTrigger asChild>
+                                                                    <Button variant="destructive" size="icon"><Trash2 className="h-4 w-4" /></Button>
+                                                                </AlertDialogTrigger>
+                                                                <AlertDialogContent>
+                                                                    <AlertDialogHeader><AlertDialogTitle>정말 삭제하시겠습니까?</AlertDialogTitle><AlertDialogDescription>{p.name} 선수의 정보를 삭제합니다.</AlertDialogDescription></AlertDialogHeader>
+                                                                    <AlertDialogFooter><AlertDialogCancel>취소</AlertDialogCancel><AlertDialogAction onClick={() => handleDeletePlayer(p.id)}>삭제</AlertDialogAction></AlertDialogFooter>
+                                                                </AlertDialogContent>
+                                                            </AlertDialog>
+                                                        </TableCell>
+                                                    </TableRow>
+                                                )
+                                            ))
+                                        )}
                                     </TableBody>
                                 </Table>
                             </CardContent>
@@ -581,63 +629,76 @@ export default function PlayerManagementPage() {
                         <Card>
                             <CardHeader>
                                 <CardTitle>등록된 2인 1팀 목록</CardTitle>
-                                <CardDescription>{teamPlayers.length}개의 팀이 등록되었습니다.</CardDescription>
+                                 <CardDescription>
+                                    총 {teamPlayersCount}개의 팀이 등록되었습니다.
+                                    {Object.keys(groupedTeamPlayers).length > 0 && ` (${Object.entries(groupedTeamPlayers).map(([group, players]) => `${group}: ${players.length}팀`).join(', ')})`}
+                                </CardDescription>
                             </CardHeader>
                             <CardContent>
                                 <Table>
                                     <TableHeader>
                                         <TableRow>
-                                            <TableHead className="px-4 py-2">그룹</TableHead><TableHead className="px-4 py-2">조</TableHead><TableHead className="px-4 py-2">팀원</TableHead><TableHead className="px-4 py-2">소속</TableHead><TableHead className="text-right px-4 py-2">관리</TableHead>
+                                            <TableHead className="px-4 py-2 w-[60px] text-center">번호</TableHead>
+                                            <TableHead className="px-4 py-2">그룹</TableHead>
+                                            <TableHead className="px-4 py-2">조</TableHead>
+                                            <TableHead className="px-4 py-2">팀원</TableHead>
+                                            <TableHead className="px-4 py-2">소속</TableHead>
+                                            <TableHead className="text-right px-4 py-2">관리</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
-                                        {teamPlayers.map(t => (
-                                            editingPlayerId === t.id ? (
-                                                <TableRow key={t.id} className="bg-muted/30">
-                                                    <TableCell className="px-4 py-2 align-top">
-                                                        <Select value={editingPlayerData.group} onValueChange={(value) => handleEditingFormChange('group', value)}>
-                                                            <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                                                            <SelectContent>{groups.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}</SelectContent>
-                                                        </Select>
-                                                    </TableCell>
-                                                    <TableCell className="px-4 py-2 align-top"><Input value={editingPlayerData.jo} type="number" onChange={(e) => handleEditingFormChange('jo', e.target.value)} className="h-9 w-20" /></TableCell>
-                                                    <TableCell className="px-4 py-2">
-                                                        <div className="space-y-1">
-                                                            <Input value={editingPlayerData.p1_name} onChange={(e) => handleEditingFormChange('p1_name', e.target.value)} className="h-9" placeholder="선수1 이름" />
-                                                            <Input value={editingPlayerData.p2_name} onChange={(e) => handleEditingFormChange('p2_name', e.target.value)} className="h-9" placeholder="선수2 이름" />
-                                                        </div>
-                                                    </TableCell>
-                                                    <TableCell className="px-4 py-2">
-                                                        <div className="space-y-1">
-                                                            <Input value={editingPlayerData.p1_affiliation} onChange={(e) => handleEditingFormChange('p1_affiliation', e.target.value)} className="h-9" placeholder="선수1 소속" />
-                                                            <Input value={editingPlayerData.p2_affiliation} onChange={(e) => handleEditingFormChange('p2_affiliation', e.target.value)} className="h-9" placeholder="선수2 소속" />
-                                                        </div>
-                                                    </TableCell>
-                                                    <TableCell className="text-right space-x-1 px-4 py-2 align-top">
-                                                        <Button variant="ghost" size="icon" onClick={handleUpdatePlayer}><Save className="h-4 w-4 text-primary" /></Button>
-                                                        <Button variant="ghost" size="icon" onClick={handleCancelEdit}><X className="h-4 w-4 text-muted-foreground" /></Button>
-                                                    </TableCell>
-                                                </TableRow>
-                                            ) : (
-                                                <TableRow key={t.id}>
-                                                    <TableCell className="px-4 py-2">{t.group}</TableCell><TableCell className="px-4 py-2">{t.jo}</TableCell>
-                                                    <TableCell className="px-4 py-2">{t.p1_name}, {t.p2_name}</TableCell>
-                                                    <TableCell className="px-4 py-2">{t.p1_affiliation}{t.p2_affiliation ? ` / ${t.p2_affiliation}` : ''}</TableCell>
-                                                    <TableCell className="text-right space-x-2 px-4 py-2">
-                                                        <Button variant="outline" size="icon" onClick={() => handleEditClick(t)}><Edit className="h-4 w-4" /></Button>
-                                                         <AlertDialog>
-                                                            <AlertDialogTrigger asChild>
-                                                                <Button variant="destructive" size="icon"><Trash2 className="h-4 w-4" /></Button>
-                                                            </AlertDialogTrigger>
-                                                            <AlertDialogContent>
-                                                                <AlertDialogHeader><AlertDialogTitle>정말 삭제하시겠습니까?</AlertDialogTitle><AlertDialogDescription>{t.p1_name}, {t.p2_name} 팀의 정보를 삭제합니다.</AlertDialogDescription></AlertDialogHeader>
-                                                                <AlertDialogFooter><AlertDialogCancel>취소</AlertDialogCancel><AlertDialogAction onClick={() => handleDeletePlayer(t.id)}>삭제</AlertDialogAction></AlertDialogFooter>
-                                                            </AlertDialogContent>
-                                                        </AlertDialog>
-                                                    </TableCell>
-                                                </TableRow>
-                                            )
-                                        ))}
+                                        {Object.keys(groupedTeamPlayers).sort().map(groupName =>
+                                            groupedTeamPlayers[groupName].map((t, index) => (
+                                                editingPlayerId === t.id ? (
+                                                    <TableRow key={t.id} className="bg-muted/30">
+                                                        <TableCell className="px-4 py-2 text-center font-medium">{index + 1}</TableCell>
+                                                        <TableCell className="px-4 py-2 align-top">
+                                                            <Select value={editingPlayerData.group} onValueChange={(value) => handleEditingFormChange('group', value)}>
+                                                                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                                                                <SelectContent>{groups.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}</SelectContent>
+                                                            </Select>
+                                                        </TableCell>
+                                                        <TableCell className="px-4 py-2 align-top"><Input value={editingPlayerData.jo} type="number" onChange={(e) => handleEditingFormChange('jo', e.target.value)} className="h-9 w-20" /></TableCell>
+                                                        <TableCell className="px-4 py-2">
+                                                            <div className="space-y-1">
+                                                                <Input value={editingPlayerData.p1_name} onChange={(e) => handleEditingFormChange('p1_name', e.target.value)} className="h-9" placeholder="선수1 이름" />
+                                                                <Input value={editingPlayerData.p2_name} onChange={(e) => handleEditingFormChange('p2_name', e.target.value)} className="h-9" placeholder="선수2 이름" />
+                                                            </div>
+                                                        </TableCell>
+                                                        <TableCell className="px-4 py-2">
+                                                            <div className="space-y-1">
+                                                                <Input value={editingPlayerData.p1_affiliation} onChange={(e) => handleEditingFormChange('p1_affiliation', e.target.value)} className="h-9" placeholder="선수1 소속" />
+                                                                <Input value={editingPlayerData.p2_affiliation} onChange={(e) => handleEditingFormChange('p2_affiliation', e.target.value)} className="h-9" placeholder="선수2 소속" />
+                                                            </div>
+                                                        </TableCell>
+                                                        <TableCell className="text-right space-x-1 px-4 py-2 align-top">
+                                                            <Button variant="ghost" size="icon" onClick={handleUpdatePlayer}><Save className="h-4 w-4 text-primary" /></Button>
+                                                            <Button variant="ghost" size="icon" onClick={handleCancelEdit}><X className="h-4 w-4 text-muted-foreground" /></Button>
+                                                        </TableCell>
+                                                    </TableRow>
+                                                ) : (
+                                                    <TableRow key={t.id}>
+                                                        <TableCell className="px-4 py-2 text-center font-medium">{index + 1}</TableCell>
+                                                        <TableCell className="px-4 py-2">{t.group}</TableCell>
+                                                        <TableCell className="px-4 py-2">{t.jo}</TableCell>
+                                                        <TableCell className="px-4 py-2">{t.p1_name}, {t.p2_name}</TableCell>
+                                                        <TableCell className="px-4 py-2">{t.p1_affiliation}{t.p2_affiliation ? ` / ${t.p2_affiliation}` : ''}</TableCell>
+                                                        <TableCell className="text-right space-x-2 px-4 py-2">
+                                                            <Button variant="outline" size="icon" onClick={() => handleEditClick(t)}><Edit className="h-4 w-4" /></Button>
+                                                            <AlertDialog>
+                                                                <AlertDialogTrigger asChild>
+                                                                    <Button variant="destructive" size="icon"><Trash2 className="h-4 w-4" /></Button>
+                                                                </AlertDialogTrigger>
+                                                                <AlertDialogContent>
+                                                                    <AlertDialogHeader><AlertDialogTitle>정말 삭제하시겠습니까?</AlertDialogTitle><AlertDialogDescription>{t.p1_name}, {t.p2_name} 팀의 정보를 삭제합니다.</AlertDialogDescription></AlertDialogHeader>
+                                                                    <AlertDialogFooter><AlertDialogCancel>취소</AlertDialogCancel><AlertDialogAction onClick={() => handleDeletePlayer(t.id)}>삭제</AlertDialogAction></AlertDialogFooter>
+                                                                </AlertDialogContent>
+                                                            </AlertDialog>
+                                                        </TableCell>
+                                                    </TableRow>
+                                                )
+                                            ))
+                                        )}
                                     </TableBody>
                                 </Table>
                             </CardContent>
