@@ -21,7 +21,7 @@ interface ProcessedPlayer {
 
 // Helper function for tie-breaking using back-count method
 const tieBreak = (a: any, b: any, activeCourses: any[]) => {
-    // 1. Total score
+    // 1. Total score (lower is better)
     if (a.total !== b.total) {
         return a.total - b.total;
     }
@@ -29,37 +29,22 @@ const tieBreak = (a: any, b: any, activeCourses: any[]) => {
     // Sort courses by ID descending to check last course first
     const sortedCourses = [...activeCourses].sort((c1, c2) => c2.id - c1.id);
 
+    // 2. Compare course by course totals, from last to first
     for (const course of sortedCourses) {
         const courseId = course.id;
-        
         const aCourseScore = a.courseScores[courseId] || 0;
         const bCourseScore = b.courseScores[courseId] || 0;
         if (aCourseScore !== bCourseScore) {
             return aCourseScore - bCourseScore;
         }
+    }
 
+    // 3. If still tied, compare hole by hole, from last hole of last course to first hole of first course
+    for (const course of sortedCourses) {
+        const courseId = course.id;
         const aHoleScores = a.detailedScores[courseId] || {};
         const bHoleScores = b.detailedScores[courseId] || {};
-
-        const sumHoles = (scores: { [key: string]: number }, holes: string[]) => holes.reduce((sum, hole) => sum + (scores[hole] || 0), 0);
-
-        // 2. Last 6 holes (Holes 4-9)
-        const last6Holes = ['4', '5', '6', '7', '8', '9'];
-        const aLast6 = sumHoles(aHoleScores, last6Holes);
-        const bLast6 = sumHoles(bHoleScores, last6Holes);
-        if (aLast6 !== bLast6) {
-            return aLast6 - bLast6;
-        }
-
-        // 3. Last 3 holes (Holes 7-9)
-        const last3Holes = ['7', '8', '9'];
-        const aLast3 = sumHoles(aHoleScores, last3Holes);
-        const bLast3 = sumHoles(bHoleScores, last3Holes);
-        if (aLast3 !== bLast3) {
-            return aLast3 - bLast3;
-        }
         
-        // 4. Hole by hole from 9 down to 1
         for (let i = 9; i >= 1; i--) {
             const hole = i.toString();
             const aHole = aHoleScores[hole] || 0;
