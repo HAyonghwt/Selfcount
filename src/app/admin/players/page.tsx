@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Upload, Download, UserPlus, Trash2, Edit, AlertTriangle, RotateCcw, Users, PlusCircle, X } from "lucide-react";
+import { Upload, Download, UserPlus, Trash2, Edit, AlertTriangle, RotateCcw, Users, PlusCircle, X, Save } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -42,6 +42,10 @@ export default function PlayerManagementPage() {
     // Group management states
     const [groups, setGroups] = useState<string[]>([]);
     const [newGroupName, setNewGroupName] = useState("");
+
+    // Editing states
+    const [editingPlayerId, setEditingPlayerId] = useState<string | null>(null);
+    const [editingPlayerData, setEditingPlayerData] = useState<any | null>(null);
 
     useEffect(() => {
         const playersRef = ref(db, 'players');
@@ -202,6 +206,37 @@ export default function PlayerManagementPage() {
             .catch(err => toast({ title: '오류', description: err.message, variant: 'destructive' }));
     };
 
+    const handleEditClick = (player: any) => {
+        setEditingPlayerId(player.id);
+        setEditingPlayerData(player);
+    };
+
+    const handleCancelEdit = () => {
+        setEditingPlayerId(null);
+        setEditingPlayerData(null);
+    };
+
+    const handleEditingFormChange = (field: string, value: string | number) => {
+        setEditingPlayerData((prev: any) => ({ ...prev, [field]: value }));
+    };
+
+    const handleUpdatePlayer = () => {
+        if (!editingPlayerId || !editingPlayerData) return;
+
+        const { id, ...dataToUpdate } = editingPlayerData;
+
+        if (dataToUpdate.jo && typeof dataToUpdate.jo === 'string') {
+            dataToUpdate.jo = Number(dataToUpdate.jo);
+        }
+
+        update(ref(db, `players/${editingPlayerId}`), dataToUpdate)
+            .then(() => {
+                toast({ title: '성공', description: '선수 정보가 수정되었습니다.', className: 'bg-green-500 text-white' });
+                handleCancelEdit();
+            })
+            .catch(err => toast({ title: '수정 실패', description: err.message, variant: 'destructive' }));
+    };
+
   return (
     <div className="space-y-6">
         <Card>
@@ -317,26 +352,44 @@ export default function PlayerManagementPage() {
                                 <Table>
                                     <TableHeader>
                                         <TableRow>
-                                            <TableHead>그룹</TableHead><TableHead>조</TableHead><TableHead>선수명</TableHead><TableHead>소속</TableHead><TableHead className="text-right">관리</TableHead>
+                                            <TableHead className="px-4 py-2">그룹</TableHead><TableHead className="px-4 py-2">조</TableHead><TableHead className="px-4 py-2">선수명</TableHead><TableHead className="px-4 py-2">소속</TableHead><TableHead className="text-right px-4 py-2">관리</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
                                         {individualPlayers.map(p => (
-                                            <TableRow key={p.id}>
-                                                <TableCell>{p.group}</TableCell><TableCell>{p.jo}</TableCell><TableCell>{p.name}</TableCell><TableCell>{p.affiliation}</TableCell>
-                                                <TableCell className="text-right space-x-2">
-                                                    <Button variant="outline" size="icon" disabled><Edit className="h-4 w-4" /></Button>
-                                                    <AlertDialog>
-                                                        <AlertDialogTrigger asChild>
-                                                            <Button variant="destructive" size="icon"><Trash2 className="h-4 w-4" /></Button>
-                                                        </AlertDialogTrigger>
-                                                        <AlertDialogContent>
-                                                            <AlertDialogHeader><AlertDialogTitle>정말 삭제하시겠습니까?</AlertDialogTitle><AlertDialogDescription>{p.name} 선수의 정보를 삭제합니다.</AlertDialogDescription></AlertDialogHeader>
-                                                            <AlertDialogFooter><AlertDialogCancel>취소</AlertDialogCancel><AlertDialogAction onClick={() => handleDeletePlayer(p.id)}>삭제</AlertDialogAction></AlertDialogFooter>
-                                                        </AlertDialogContent>
-                                                    </AlertDialog>
-                                                </TableCell>
-                                            </TableRow>
+                                            editingPlayerId === p.id ? (
+                                                <TableRow key={p.id} className="bg-muted/30">
+                                                    <TableCell className="px-4 py-2">
+                                                        <Select value={editingPlayerData.group} onValueChange={(value) => handleEditingFormChange('group', value)}>
+                                                            <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                                                            <SelectContent>{groups.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}</SelectContent>
+                                                        </Select>
+                                                    </TableCell>
+                                                    <TableCell className="px-4 py-2"><Input value={editingPlayerData.jo} type="number" onChange={(e) => handleEditingFormChange('jo', e.target.value)} className="h-9 w-20" /></TableCell>
+                                                    <TableCell className="px-4 py-2"><Input value={editingPlayerData.name} onChange={(e) => handleEditingFormChange('name', e.target.value)} className="h-9" /></TableCell>
+                                                    <TableCell className="px-4 py-2"><Input value={editingPlayerData.affiliation} onChange={(e) => handleEditingFormChange('affiliation', e.target.value)} className="h-9" /></TableCell>
+                                                    <TableCell className="text-right space-x-1 px-4 py-2">
+                                                        <Button variant="ghost" size="icon" onClick={handleUpdatePlayer}><Save className="h-4 w-4 text-primary" /></Button>
+                                                        <Button variant="ghost" size="icon" onClick={handleCancelEdit}><X className="h-4 w-4 text-muted-foreground" /></Button>
+                                                    </TableCell>
+                                                </TableRow>
+                                            ) : (
+                                                <TableRow key={p.id}>
+                                                    <TableCell className="px-4 py-2">{p.group}</TableCell><TableCell className="px-4 py-2">{p.jo}</TableCell><TableCell className="px-4 py-2">{p.name}</TableCell><TableCell className="px-4 py-2">{p.affiliation}</TableCell>
+                                                    <TableCell className="text-right space-x-2 px-4 py-2">
+                                                        <Button variant="outline" size="icon" onClick={() => handleEditClick(p)}><Edit className="h-4 w-4" /></Button>
+                                                        <AlertDialog>
+                                                            <AlertDialogTrigger asChild>
+                                                                <Button variant="destructive" size="icon"><Trash2 className="h-4 w-4" /></Button>
+                                                            </AlertDialogTrigger>
+                                                            <AlertDialogContent>
+                                                                <AlertDialogHeader><AlertDialogTitle>정말 삭제하시겠습니까?</AlertDialogTitle><AlertDialogDescription>{p.name} 선수의 정보를 삭제합니다.</AlertDialogDescription></AlertDialogHeader>
+                                                                <AlertDialogFooter><AlertDialogCancel>취소</AlertDialogCancel><AlertDialogAction onClick={() => handleDeletePlayer(p.id)}>삭제</AlertDialogAction></AlertDialogFooter>
+                                                            </AlertDialogContent>
+                                                        </AlertDialog>
+                                                    </TableCell>
+                                                </TableRow>
+                                            )
                                         ))}
                                     </TableBody>
                                 </Table>
@@ -397,28 +450,56 @@ export default function PlayerManagementPage() {
                                 <Table>
                                     <TableHeader>
                                         <TableRow>
-                                            <TableHead>그룹</TableHead><TableHead>조</TableHead><TableHead>팀원</TableHead><TableHead>소속</TableHead><TableHead className="text-right">관리</TableHead>
+                                            <TableHead className="px-4 py-2">그룹</TableHead><TableHead className="px-4 py-2">조</TableHead><TableHead className="px-4 py-2">팀원</TableHead><TableHead className="px-4 py-2">소속</TableHead><TableHead className="text-right px-4 py-2">관리</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
                                         {teamPlayers.map(t => (
-                                            <TableRow key={t.id}>
-                                                <TableCell>{t.group}</TableCell><TableCell>{t.jo}</TableCell>
-                                                <TableCell>{t.p1_name}, {t.p2_name}</TableCell>
-                                                <TableCell>{t.p1_affiliation}</TableCell>
-                                                <TableCell className="text-right space-x-2">
-                                                    <Button variant="outline" size="icon" disabled><Edit className="h-4 w-4" /></Button>
-                                                     <AlertDialog>
-                                                        <AlertDialogTrigger asChild>
-                                                            <Button variant="destructive" size="icon"><Trash2 className="h-4 w-4" /></Button>
-                                                        </AlertDialogTrigger>
-                                                        <AlertDialogContent>
-                                                            <AlertDialogHeader><AlertDialogTitle>정말 삭제하시겠습니까?</AlertDialogTitle><AlertDialogDescription>{t.p1_name}, {t.p2_name} 팀의 정보를 삭제합니다.</AlertDialogDescription></AlertDialogHeader>
-                                                            <AlertDialogFooter><AlertDialogCancel>취소</AlertDialogCancel><AlertDialogAction onClick={() => handleDeletePlayer(t.id)}>삭제</AlertDialogAction></AlertDialogFooter>
-                                                        </AlertDialogContent>
-                                                    </AlertDialog>
-                                                </TableCell>
-                                            </TableRow>
+                                            editingPlayerId === t.id ? (
+                                                <TableRow key={t.id} className="bg-muted/30">
+                                                    <TableCell className="px-4 py-2 align-top">
+                                                        <Select value={editingPlayerData.group} onValueChange={(value) => handleEditingFormChange('group', value)}>
+                                                            <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                                                            <SelectContent>{groups.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}</SelectContent>
+                                                        </Select>
+                                                    </TableCell>
+                                                    <TableCell className="px-4 py-2 align-top"><Input value={editingPlayerData.jo} type="number" onChange={(e) => handleEditingFormChange('jo', e.target.value)} className="h-9 w-20" /></TableCell>
+                                                    <TableCell className="px-4 py-2">
+                                                        <div className="space-y-1">
+                                                            <Input value={editingPlayerData.p1_name} onChange={(e) => handleEditingFormChange('p1_name', e.target.value)} className="h-9" placeholder="선수1 이름" />
+                                                            <Input value={editingPlayerData.p2_name} onChange={(e) => handleEditingFormChange('p2_name', e.target.value)} className="h-9" placeholder="선수2 이름" />
+                                                        </div>
+                                                    </TableCell>
+                                                    <TableCell className="px-4 py-2">
+                                                        <div className="space-y-1">
+                                                            <Input value={editingPlayerData.p1_affiliation} onChange={(e) => handleEditingFormChange('p1_affiliation', e.target.value)} className="h-9" placeholder="선수1 소속" />
+                                                            <Input value={editingPlayerData.p2_affiliation} onChange={(e) => handleEditingFormChange('p2_affiliation', e.target.value)} className="h-9" placeholder="선수2 소속" />
+                                                        </div>
+                                                    </TableCell>
+                                                    <TableCell className="text-right space-x-1 px-4 py-2 align-top">
+                                                        <Button variant="ghost" size="icon" onClick={handleUpdatePlayer}><Save className="h-4 w-4 text-primary" /></Button>
+                                                        <Button variant="ghost" size="icon" onClick={handleCancelEdit}><X className="h-4 w-4 text-muted-foreground" /></Button>
+                                                    </TableCell>
+                                                </TableRow>
+                                            ) : (
+                                                <TableRow key={t.id}>
+                                                    <TableCell className="px-4 py-2">{t.group}</TableCell><TableCell className="px-4 py-2">{t.jo}</TableCell>
+                                                    <TableCell className="px-4 py-2">{t.p1_name}, {t.p2_name}</TableCell>
+                                                    <TableCell className="px-4 py-2">{t.p1_affiliation}{t.p2_affiliation ? ` / ${t.p2_affiliation}` : ''}</TableCell>
+                                                    <TableCell className="text-right space-x-2 px-4 py-2">
+                                                        <Button variant="outline" size="icon" onClick={() => handleEditClick(t)}><Edit className="h-4 w-4" /></Button>
+                                                         <AlertDialog>
+                                                            <AlertDialogTrigger asChild>
+                                                                <Button variant="destructive" size="icon"><Trash2 className="h-4 w-4" /></Button>
+                                                            </AlertDialogTrigger>
+                                                            <AlertDialogContent>
+                                                                <AlertDialogHeader><AlertDialogTitle>정말 삭제하시겠습니까?</AlertDialogTitle><AlertDialogDescription>{t.p1_name}, {t.p2_name} 팀의 정보를 삭제합니다.</AlertDialogDescription></AlertDialogHeader>
+                                                                <AlertDialogFooter><AlertDialogCancel>취소</AlertDialogCancel><AlertDialogAction onClick={() => handleDeletePlayer(t.id)}>삭제</AlertDialogAction></AlertDialogFooter>
+                                                            </AlertDialogContent>
+                                                        </AlertDialog>
+                                                    </TableCell>
+                                                </TableRow>
+                                            )
                                         ))}
                                     </TableBody>
                                 </Table>
