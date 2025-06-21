@@ -80,29 +80,53 @@ export default function PlayerManagementPage() {
     
     const handleDownloadTemplate = (type: 'individual' | 'team') => {
         const wb = XLSX.utils.book_new();
-        let ws_data, filename;
+        let filename;
 
         if (type === 'individual') {
-            ws_data = [
+            // Sheet 1: Example Group 1
+            const ws1_data = [
                 ["조", "이름", "소속"],
                 ["1", "홍길동", "중앙 파크골프"],
                 ["1", "김철수", "강남 클럽"],
-                ["1", "이영희", "행복 파크골프"],
-                ["1", "박지성", "대한 파크골프"],
-                ["2", "손흥민", "월드클래스 클럽"],
+                ["2", "이영희", "행복 파크골프"],
+                ["2", "박지성", "대한 파크골프"],
             ];
+            // Sheet 2: Example Group 2
+            const ws2_data = [
+                ["조", "이름", "소속"],
+                ["10", "김연아", "피겨 클럽"],
+                ["10", "류현진", "야구 클럽"],
+            ];
+            
+            const ws1 = XLSX.utils.aoa_to_sheet(ws1_data);
+            const ws2 = XLSX.utils.aoa_to_sheet(ws2_data);
+            
+            XLSX.utils.book_append_sheet(wb, ws1, "A그룹 (예시)");
+            XLSX.utils.book_append_sheet(wb, ws2, "B그룹 (예시)");
+
             filename = "개인전_선수등록_양식.xlsx";
         } else { // team
-            ws_data = [
+            // Sheet 1: Example Group 1
+            const ws1_data = [
                 ["조", "선수1 이름", "선수1 소속", "선수2 이름", "선수2 소속"],
                 ["1", "홍길동", "중앙 파크골프", "김철수", "중앙 파크골프"],
-                ["1", "이영희", "강남 클럽", "박지성", "대한 파크골프"],
+                ["2", "이영희", "강남 클럽", "박지성", "대한 파크골프"],
             ];
+            // Sheet 2: Example Group 2
+            const ws2_data = [
+                ["조", "선수1 이름", "선수1 소속", "선수2 이름", "선수2 소속"],
+                ["5", "나팀", "팀플레이", "너팀", "팀플레이"],
+            ];
+
+            const ws1 = XLSX.utils.aoa_to_sheet(ws1_data);
+            const ws2 = XLSX.utils.aoa_to_sheet(ws2_data);
+
+            XLSX.utils.book_append_sheet(wb, ws1, "시니어팀 (예시)");
+            XLSX.utils.book_append_sheet(wb, ws2, "일반팀 (예시)");
+
             filename = "2인1팀_선수등록_양식.xlsx";
         }
 
-        const ws = XLSX.utils.aoa_to_sheet(ws_data);
-        XLSX.utils.book_append_sheet(wb, ws, "여기에 그룹명 입력 (예_ A그룹)");
         XLSX.writeFile(wb, filename);
     };
 
