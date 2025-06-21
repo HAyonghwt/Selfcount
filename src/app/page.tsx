@@ -90,7 +90,7 @@ export default function LoginPage() {
     <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
       <div className="absolute top-4 right-4">
         <Button variant="outline" size="lg" asChild>
-          <Link href="/scoreboard" target="_blank">
+          <Link href="/scoreboard">
             <Tv className="mr-2 h-5 w-5" />
             외부 전광판
           </Link>

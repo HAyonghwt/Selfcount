@@ -73,10 +73,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               ))}
                <SidebarMenuItem>
                   <SidebarMenuButton asChild tooltip={{ children: "외부 전광판" }}>
-                     <a href="/scoreboard" target="_blank" rel="noopener noreferrer">
+                     <Link href="/scoreboard">
                         <Tv className="h-5 w-5 text-accent" />
                         <span className="text-accent">외부 전광판</span>
-                    </a>
+                    </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
             </SidebarMenu>
