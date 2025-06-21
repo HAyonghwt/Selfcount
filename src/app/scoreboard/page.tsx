@@ -185,14 +185,22 @@ export default function ExternalScoreboard() {
             </div>
         );
     }
+    
+    const NoDataContent = () => (
+        <div className="text-center py-20">
+            <h1 className="text-4xl font-bold">{tournament.name || '파크골프 토너먼트'}</h1>
+            <p className="mt-4 text-2xl text-gray-400">
+                {Object.keys(players).length === 0 
+                    ? "표시할 선수 데이터가 없습니다. 선수를 먼저 등록해주세요."
+                    : "활성화된 코스가 없습니다. 관리자 페이지에서 코스를 활성화해주세요."}
+            </p>
+        </div>
+    );
 
     return (
         <div className="bg-[#04091A] min-h-screen text-white p-4 sm:p-6 md:p-8 font-sans">
             {Object.keys(processedDataByGroup).length === 0 ? (
-                 <div className="text-center py-20">
-                    <h1 className="text-4xl font-bold">{tournament.name || '파크골프 토너먼트'}</h1>
-                    <p className="mt-4 text-2xl text-gray-400">표시할 선수 데이터가 없습니다. 선수를 먼저 등록해주세요.</p>
-                </div>
+                 <NoDataContent />
             ) : Object.entries(processedDataByGroup).map(([groupName, groupPlayers]) => {
                 if (groupPlayers.length === 0) return null;
 
@@ -245,8 +253,8 @@ export default function ExternalScoreboard() {
                                                     <td className="p-2 font-bold">{player.hasAnyScore ? player.coursesData[course.id]?.courseTotal : '-'}</td>
                                                     {courseIndex === 0 && (
                                                         <>
-                                                            <td rowSpan={activeCourses.length || 1} className="p-2 align-middle text-2xl font-bold text-yellow-400">{player.hasAnyScore ? player.totalScore : ''}</td>
-                                                            <td rowSpan={activeCourses.length || 1} className="p-2 align-middle border-y-4 border-r-4 border-transparent rounded-r-lg text-2xl font-bold">{player.hasAnyScore ? `${player.rank}위` : ''}</td>
+                                                            <td rowSpan={activeCourses.length || 1} className="p-2 align-middle text-2xl font-bold text-yellow-400">{player.hasAnyScore ? player.totalScore : '-'}</td>
+                                                            <td rowSpan={activeCourses.length || 1} className="p-2 align-middle border-y-4 border-r-4 border-transparent rounded-r-lg text-2xl font-bold">{player.hasAnyScore ? `${player.rank}위` : '-'}</td>
                                                         </>
                                                     )}
                                                 </tr>
