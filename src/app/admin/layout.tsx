@@ -103,7 +103,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </SidebarFooter>
         </Sidebar>
         <SidebarInset className="bg-secondary/40">
-           <div className="p-4 sm:p-6 lg:p-8 h-full overflow-y-auto">
+           <div className="p-4 sm:p-6 h-full overflow-y-auto">
             {children}
           </div>
         </SidebarInset>
