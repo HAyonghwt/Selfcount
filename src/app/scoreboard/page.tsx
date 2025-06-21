@@ -1,5 +1,5 @@
 "use client"
-import { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { db } from '@/lib/firebase';
 import { ref, onValue } from 'firebase/database';
 
@@ -11,11 +11,12 @@ interface ProcessedPlayer {
     group: string;
     totalScore: number;
     rank: number;
+    hasAnyScore: boolean;
     coursesData: {
         [courseId: string]: {
             courseName: string;
             courseTotal: number;
-            holeScores: number[];
+            holeScores: (number | null)[];
         }
     };
     // For tie-breaking
@@ -55,6 +56,7 @@ const tieBreak = (a: any, b: any, activeCourses: any[]) => {
 };
 
 export default function ExternalScoreboard() {
+    const [loading, setLoading] = useState(true);
     const [players, setPlayers] = useState({});
     const [scores, setScores] = useState({});
     const [tournament, setTournament] = useState<any>({});
@@ -66,12 +68,18 @@ export default function ExternalScoreboard() {
 
         const unsubPlayers = onValue(playersRef, snap => setPlayers(snap.val() || {}));
         const unsubScores = onValue(scoresRef, snap => setScores(snap.val() || {}));
-        const unsubTournament = onValue(tournamentRef, snap => setTournament(snap.val() || {}));
+        const unsubTournament = onValue(tournamentRef, snap => {
+            setTournament(snap.val() || {});
+            setLoading(false);
+        });
+
+        const timer = setTimeout(() => setLoading(false), 5000);
 
         return () => {
             unsubPlayers();
             unsubScores();
             unsubTournament();
+            clearTimeout(timer);
         };
     }, []);
 
@@ -88,18 +96,22 @@ export default function ExternalScoreboard() {
             const coursesData: any = {};
             const courseScoresForTieBreak: { [courseId: string]: number } = {};
             const detailedScoresForTieBreak: { [courseId: string]: { [holeNumber: string]: number } } = {};
+            let hasAnyScore = false;
 
             activeCourses.forEach((course: any) => {
                 const courseId = course.id;
                 const scoresForCourse = playerScoresData[courseId] || {};
                 detailedScoresForTieBreak[courseId] = scoresForCourse;
 
-                const holeScores = Array(9).fill(0);
+                const holeScores: (number | null)[] = Array(9).fill(null);
                 let courseTotal = 0;
                 for (let i = 0; i < 9; i++) {
-                    const holeScore = scoresForCourse[(i + 1).toString()] || 0;
-                    holeScores[i] = holeScore;
-                    courseTotal += holeScore;
+                    const holeScore = scoresForCourse[(i + 1).toString()];
+                    if (holeScore !== undefined && holeScore !== null) {
+                        holeScores[i] = Number(holeScore);
+                        courseTotal += Number(holeScore);
+                        hasAnyScore = true;
+                    }
                 }
                 
                 totalScore += courseTotal;
@@ -115,7 +127,7 @@ export default function ExternalScoreboard() {
                 group: player.group,
                 totalScore,
                 coursesData,
-                // for tie-breaking
+                hasAnyScore,
                 total: totalScore,
                 courseScores: courseScoresForTieBreak,
                 detailedScores: detailedScoresForTieBreak
@@ -138,7 +150,7 @@ export default function ExternalScoreboard() {
             const rankedPlayers: ProcessedPlayer[] = [];
             groupPlayers.forEach((player, index) => {
                 let rank;
-                if (index > 0 && tieBreak(player, groupPlayers[index - 1], activeCourses) === 0) {
+                if (index > 0 && player.hasAnyScore && groupPlayers[index-1].hasAnyScore && tieBreak(player, groupPlayers[index - 1], activeCourses) === 0) {
                     rank = rankedPlayers[index - 1].rank;
                 } else {
                     rank = index + 1;
@@ -153,7 +165,7 @@ export default function ExternalScoreboard() {
     
     const progress = useMemo(() => {
         const totalHoles = activeCourses.length * 9;
-        if(totalHoles === 0 || Object.keys(scores).length === 0) return 0;
+        if(totalHoles === 0 || Object.keys(scores).length === 0 || Object.keys(players).length === 0) return 0;
         
         const totalScoresEntered = Object.values(scores).reduce((acc: number, courseScores: any) => {
            return acc + Object.values(courseScores).reduce((cAcc: number, holeScores: any) => cAcc + Object.keys(holeScores).length, 0);
@@ -166,9 +178,22 @@ export default function ExternalScoreboard() {
     }, [scores, players, activeCourses]);
 
 
+    if (loading) {
+        return (
+            <div className="bg-[#04091A] min-h-screen text-white p-8 flex items-center justify-center">
+                <p className="text-2xl font-bold">전광판 데이터를 불러오는 중입니다...</p>
+            </div>
+        );
+    }
+
     return (
         <div className="bg-[#04091A] min-h-screen text-white p-4 sm:p-6 md:p-8 font-sans">
-            {Object.entries(processedDataByGroup).map(([groupName, groupPlayers]) => {
+            {Object.keys(processedDataByGroup).length === 0 ? (
+                 <div className="text-center py-20">
+                    <h1 className="text-4xl font-bold">{tournament.name || '파크골프 토너먼트'}</h1>
+                    <p className="mt-4 text-2xl text-gray-400">표시할 선수 데이터가 없습니다. 선수를 먼저 등록해주세요.</p>
+                </div>
+            ) : Object.entries(processedDataByGroup).map(([groupName, groupPlayers]) => {
                 if (groupPlayers.length === 0) return null;
 
                 return (
@@ -210,18 +235,18 @@ export default function ExternalScoreboard() {
                                                 <tr key={`${player.id}-${course.id}`} className="bg-[#121A39] text-xl">
                                                     {courseIndex === 0 && (
                                                         <>
-                                                            <td rowSpan={activeCourses.length} className="p-2 align-middle border-y-4 border-l-4 border-transparent rounded-l-lg text-2xl font-bold">{player.jo}</td>
-                                                            <td rowSpan={activeCourses.length} className="p-2 align-middle text-left text-2xl font-semibold">{player.name}</td>
-                                                            <td rowSpan={activeCourses.length} className="p-2 align-middle text-left">{player.club}</td>
+                                                            <td rowSpan={activeCourses.length || 1} className="p-2 align-middle border-y-4 border-l-4 border-transparent rounded-l-lg text-2xl font-bold">{player.jo}</td>
+                                                            <td rowSpan={activeCourses.length || 1} className="p-2 align-middle text-left text-2xl font-semibold">{player.name}</td>
+                                                            <td rowSpan={activeCourses.length || 1} className="p-2 align-middle text-left">{player.club}</td>
                                                         </>
                                                     )}
                                                     <td className="p-2 text-left">{player.coursesData[course.id]?.courseName}</td>
-                                                    {player.coursesData[course.id]?.holeScores.map((score, i) => <td key={i} className="p-2 font-mono">{score || 0}</td>)}
-                                                    <td className="p-2 font-bold">{player.coursesData[course.id]?.courseTotal}</td>
+                                                    {player.coursesData[course.id]?.holeScores.map((score, i) => <td key={i} className="p-2 font-mono">{score === null ? '-' : score}</td>)}
+                                                    <td className="p-2 font-bold">{player.hasAnyScore ? player.coursesData[course.id]?.courseTotal : '-'}</td>
                                                     {courseIndex === 0 && (
                                                         <>
-                                                            <td rowSpan={activeCourses.length} className="p-2 align-middle text-2xl font-bold text-yellow-400">{player.totalScore > 0 ? player.totalScore : ''}</td>
-                                                            <td rowSpan={activeCourses.length} className="p-2 align-middle border-y-4 border-r-4 border-transparent rounded-r-lg text-2xl font-bold">{player.totalScore > 0 ? `${player.rank}위` : ''}</td>
+                                                            <td rowSpan={activeCourses.length || 1} className="p-2 align-middle text-2xl font-bold text-yellow-400">{player.hasAnyScore ? player.totalScore : ''}</td>
+                                                            <td rowSpan={activeCourses.length || 1} className="p-2 align-middle border-y-4 border-r-4 border-transparent rounded-r-lg text-2xl font-bold">{player.hasAnyScore ? `${player.rank}위` : ''}</td>
                                                         </>
                                                     )}
                                                 </tr>
