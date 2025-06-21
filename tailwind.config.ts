@@ -17,8 +17,8 @@ export default {
     },
     extend: {
       fontFamily: {
-        body: ['"PT Sans"', 'sans-serif'],
-        headline: ['"PT Sans"', 'sans-serif'],
+        body: ['"Noto Sans KR"', 'sans-serif'],
+        headline: ['"Noto Sans KR"', 'sans-serif'],
         code: ['monospace'],
       },
       colors: {
