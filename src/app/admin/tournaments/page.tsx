@@ -33,6 +33,8 @@ export default function TournamentManagementPage() {
   const [maxCourses, setMaxCourses] = useState(10);
   const [configLoading, setConfigLoading] = useState(true);
 
+  const pageTitle = "코스 관리";
+
   useEffect(() => {
     const tournamentRef = ref(db, 'tournaments/current');
     const unsubscribe = onValue(tournamentRef, (snapshot) => {
@@ -167,7 +169,7 @@ export default function TournamentManagementPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-2xl font-bold font-headline">코스 관리</CardTitle>
+          <CardTitle className="text-2xl font-bold font-headline">{pageTitle}</CardTitle>
           <CardDescription>코스 이름, 홀별 Par 값을 설정하고, 전광판에 표시할 코스를 활성화/비활성화합니다. 현재 {courses.length} / {maxCourses}개 코스가 생성되었습니다.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
