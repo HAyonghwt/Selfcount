@@ -18,7 +18,7 @@ interface Course {
   isActive: boolean;
 }
 
-const defaultPars: number[] = Array(9).fill(3);
+const defaultPars: number[] = [3, 4, 3, 4, 5, 3, 4, 3, 4]; // Total Par: 33
 const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
 const initialCourses: Course[] = [
