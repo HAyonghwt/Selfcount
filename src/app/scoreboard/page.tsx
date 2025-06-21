@@ -8,6 +8,7 @@ interface ProcessedPlayer {
     rank: number;
     name: string;
     club: string;
+    group: string;
     courseId: string;
     total: number;
     par: number;
@@ -53,22 +54,27 @@ export default function ExternalScoreboard() {
         };
     }, []);
 
-    const processedDataByGroup = useMemo(() => {
+    const coursesMap = useMemo(() => new Map(Object.values(tournament.courses || {}).map((c: any) => [c.id.toString(), c])), [tournament.courses]);
+
+    const processedDataByGroupAndCourse = useMemo(() => {
         const activeCourses = Object.values(tournament.courses || {}).filter((c: any) => c.isActive);
         if (Object.keys(players).length === 0 || activeCourses.length === 0) return {};
 
-        const allProcessedPlayers: Omit<ProcessedPlayer, 'rank'>[] = [];
+        type UnrankedPlayer = Omit<ProcessedPlayer, 'rank'>;
+        const allProcessedPlayers: UnrankedPlayer[] = [];
 
         Object.entries(players).forEach(([playerId, player]: [string, any]) => {
             const playerScores = scores[playerId] || {};
 
             activeCourses.forEach((course: any) => {
-                const courseId = course.id;
+                const courseId = course.id.toString();
                 const scoresForCourse = playerScores[courseId] || {};
-                const holeScores = Array(9).fill(0);
+                
+                const holeScores = Array(course.pars.length).fill(0);
                 course.pars.forEach((_par: any, index: number) => {
                     holeScores[index] = scoresForCourse[(index + 1).toString()] || 0;
                 });
+                
                 const total = holeScores.reduce((a, b) => a + b, 0);
                 
                 if (total > 0) { // Only show players with at least one score
@@ -76,36 +82,40 @@ export default function ExternalScoreboard() {
                         id: `${playerId}-${courseId}`,
                         name: player.type === 'team' ? `${player.p1_name} / ${player.p2_name}` : player.name,
                         club: player.type === 'team' ? player.p1_affiliation : player.affiliation,
+                        group: player.group,
                         courseId: courseId,
                         total,
                         par: course.pars.reduce((a:number, b:number) => a + b, 0),
                         scores: holeScores,
-                        // temp values, will be replaced after grouping
-                        group: player.group, 
                     });
                 }
             });
         });
 
-        const groupedAndRanked: { [groupName: string]: ProcessedPlayer[] } = {};
-        const allGroups = [...new Set(allProcessedPlayers.map((p: any) => p.group))];
+        // Group players by a composite key: `groupName-courseId`
+        const groupedData = allProcessedPlayers.reduce((acc, player) => {
+            const key = `${player.group}-${player.courseId}`;
+            if (!acc[key]) {
+                acc[key] = [];
+            }
+            acc[key].push(player);
+            return acc;
+        }, {} as Record<string, UnrankedPlayer[]>);
 
-        allGroups.forEach(groupName => {
-            if (!groupName) return;
-            const groupPlayers = allProcessedPlayers
-                .filter((p: any) => p.group === groupName)
-                .sort((a, b) => a.total - b.total); // Simplified sorting
+        // Sort and rank within each group-course combination
+        const rankedData: { [key: string]: ProcessedPlayer[] } = {};
+        for (const key in groupedData) {
+            const groupPlayers = groupedData[key];
+            const sortedPlayers = groupPlayers.sort((a, b) => a.total - b.total);
             
-            groupedAndRanked[groupName] = groupPlayers.map((player, index) => ({
+            rankedData[key] = sortedPlayers.map((player, index) => ({
                 ...player,
                 rank: index + 1
             }));
-        });
+        }
         
-        return groupedAndRanked;
+        return rankedData;
     }, [players, scores, tournament]);
-    
-    const coursesMap = useMemo(() => new Map(Object.values(tournament.courses || {}).map((c: any) => [c.id.toString(), c])), [tournament.courses]);
 
 
     return (
@@ -116,15 +126,17 @@ export default function ExternalScoreboard() {
             </header>
 
             <main className="mt-6 space-y-8">
-                {Object.entries(processedDataByGroup).map(([groupName, groupPlayers]) => {
+                {Object.entries(processedDataByGroupAndCourse).map(([key, groupPlayers]) => {
                     if (groupPlayers.length === 0) return null;
-                    // Assuming all players in a group are on the same course for this view, taking the first player's course.
-                    const courseId = groupPlayers[0].courseId;
-                    const course = coursesMap.get(courseId);
+                    
+                    const firstPlayer = groupPlayers[0];
+                    const course = coursesMap.get(firstPlayer.courseId);
+                    const groupName = firstPlayer.group;
+                    
                     if (!course) return null;
 
                     return (
-                        <div key={groupName}>
+                        <div key={key}>
                             <h2 className="text-4xl font-semibold mb-4 bg-white/10 py-2 px-4 rounded-t-lg">{groupName} ({course.name})</h2>
                             <div className="overflow-x-auto">
                                 <table className="w-full min-w-[1200px] text-center bg-[#1E2952]">
