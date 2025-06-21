@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Upload, Download, UserPlus, Trash2, Edit, AlertTriangle, RotateCcw, Users } from "lucide-react";
+import { Upload, Download, UserPlus, Trash2, Edit, AlertTriangle, RotateCcw, Users, PlusCircle, X } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/select"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { db } from "@/lib/firebase";
-import { ref, onValue, push, remove, update } from "firebase/database";
+import { ref, onValue, push, remove, update, set } from "firebase/database";
 import { useToast } from "@/hooks/use-toast";
 
 const initialIndividualState = Array(4).fill({ name: '', affiliation: '' });
@@ -39,30 +39,38 @@ export default function PlayerManagementPage() {
     const [maxPlayers, setMaxPlayers] = useState(200);
     const [configLoading, setConfigLoading] = useState(true);
 
-    useEffect(() => {
-        const playersRef = ref(db, 'players');
-        const unsubscribe = onValue(playersRef, (snapshot) => {
-            const data = snapshot.val();
-            if (data) {
-                const loadedPlayers = Object.entries(data).map(([id, player]) => ({ id, ...player as object }));
-                setAllPlayers(loadedPlayers);
-            } else {
-                setAllPlayers([]);
-            }
-        });
-        return () => unsubscribe();
-    }, []);
+    // Group management states
+    const [groups, setGroups] = useState<string[]>([]);
+    const [newGroupName, setNewGroupName] = useState("");
 
     useEffect(() => {
+        const playersRef = ref(db, 'players');
         const configRef = ref(db, 'config');
-        const unsubscribe = onValue(configRef, (snapshot) => {
+        const groupsRef = ref(db, 'tournaments/current/groups');
+        
+        const unsubPlayers = onValue(playersRef, (snapshot) => {
+            const data = snapshot.val();
+            setAllPlayers(data ? Object.entries(data).map(([id, player]) => ({ id, ...player as object })) : []);
+        });
+        
+        const unsubConfig = onValue(configRef, (snapshot) => {
             const data = snapshot.val();
             if (data && data.maxPlayers) {
                 setMaxPlayers(data.maxPlayers);
             }
             setConfigLoading(false);
         });
-        return () => unsubscribe();
+
+        const unsubGroups = onValue(groupsRef, (snapshot) => {
+            const data = snapshot.val();
+            setGroups(data ? Object.keys(data) : []);
+        });
+
+        return () => {
+            unsubPlayers();
+            unsubConfig();
+            unsubGroups();
+        };
     }, []);
 
     const individualPlayers = allPlayers.filter(p => p.type === 'individual');
@@ -171,17 +179,76 @@ export default function PlayerManagementPage() {
             .then(() => toast({ title: '초기화 완료', description: '모든 선수 명단이 삭제되었습니다.', className: 'bg-green-500 text-white'}))
             .catch(err => toast({ title: '초기화 실패', description: err.message, variant: 'destructive' }));
     };
+    
+    const handleAddGroup = () => {
+        const trimmedName = newGroupName.trim();
+        if (trimmedName === "") {
+            toast({ title: '오류', description: '그룹 이름을 입력해주세요.', variant: 'destructive' });
+            return;
+        }
+        const groupRef = ref(db, `tournaments/current/groups/${trimmedName}`);
+        set(groupRef, true)
+            .then(() => {
+                toast({ title: '성공', description: '새 그룹이 추가되었습니다.', className: 'bg-green-500 text-white' });
+                setNewGroupName("");
+            })
+            .catch(err => toast({ title: '오류', description: err.message, variant: 'destructive' }));
+    };
+
+    const handleDeleteGroup = (groupName: string) => {
+        const groupRef = ref(db, `tournaments/current/groups/${groupName}`);
+        remove(groupRef)
+            .then(() => toast({ title: '성공', description: `'${groupName}' 그룹이 삭제되었습니다.`, variant: 'destructive' }))
+            .catch(err => toast({ title: '오류', description: err.message, variant: 'destructive' }));
+    };
 
   return (
     <div className="space-y-6">
         <Card>
             <CardHeader>
                 <CardTitle className="text-2xl font-bold font-headline">선수 관리</CardTitle>
-                <CardDescription>개인전 또는 2인 1팀 선수를 등록하고 관리합니다. 수동으로 등록하거나 엑셀 파일로 일괄 업로드할 수 있습니다. <br />
+                <CardDescription>대회 그룹을 설정하고, 개인전 또는 2인 1팀 선수를 등록하고 관리합니다. <br />
                 <span className="font-bold text-primary">현재 총 등록 인원: {allPlayers.length} / {configLoading ? '...' : maxPlayers} 명</span>
                 </CardDescription>
             </CardHeader>
         </Card>
+
+        <Card>
+            <CardHeader>
+                <CardTitle>그룹 관리</CardTitle>
+                <CardDescription>대회에 사용할 그룹을 추가하거나 삭제합니다. 여기서 추가된 그룹을 선수 등록 시 선택할 수 있습니다.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+                <div className="flex gap-2">
+                    <Input value={newGroupName} onChange={(e) => setNewGroupName(e.target.value)} placeholder="새 그룹 이름 (예: A-1 그룹, 시니어부)" onKeyDown={(e) => e.key === 'Enter' && handleAddGroup()} />
+                    <Button onClick={handleAddGroup}><PlusCircle className="mr-2 h-4 w-4" />추가</Button>
+                </div>
+                <div className="space-y-2">
+                    <Label>현재 그룹 목록</Label>
+                    <div className="flex flex-wrap gap-2">
+                        {groups.length > 0 ? (
+                            groups.map(group => (
+                                <div key={group} className="flex items-center gap-1 bg-secondary text-secondary-foreground pl-3 pr-1 py-1 rounded-full text-sm font-medium">
+                                    <span>{group}</span>
+                                    <AlertDialog>
+                                        <AlertDialogTrigger asChild>
+                                             <Button variant="ghost" size="icon" className="h-6 w-6 rounded-full"><X className="h-4 w-4 text-muted-foreground hover:text-destructive" /></Button>
+                                        </AlertDialogTrigger>
+                                        <AlertDialogContent>
+                                            <AlertDialogHeader><AlertDialogTitle>그룹을 삭제하시겠습니까?</AlertDialogTitle><AlertDialogDescription>'{group}' 그룹을 삭제합니다. 이 그룹에 속한 선수는 그대로 유지되지만, 그룹 필터링 등에 영향을 줄 수 있습니다.</AlertDialogDescription></AlertDialogHeader>
+                                            <AlertDialogFooter><AlertDialogCancel>취소</AlertDialogCancel><AlertDialogAction onClick={() => handleDeleteGroup(group)}>삭제</AlertDialogAction></AlertDialogFooter>
+                                        </AlertDialogContent>
+                                    </AlertDialog>
+                                </div>
+                            ))
+                        ) : (
+                            <p className="text-sm text-muted-foreground pt-2">등록된 그룹이 없습니다. 위에서 새 그룹을 추가해주세요.</p>
+                        )}
+                    </div>
+                </div>
+            </CardContent>
+        </Card>
+
         <Tabs defaultValue="individual">
             <TabsList className="grid w-full grid-cols-2 h-12">
                 <TabsTrigger value="individual" className="h-10 text-base"><UserPlus className="mr-2"/>개인전 선수 등록</TabsTrigger>
@@ -191,7 +258,7 @@ export default function PlayerManagementPage() {
                 <Card>
                     <CardHeader>
                         <CardTitle>개인전 선수 등록</CardTitle>
-                        <CardDescription>새로운 개인전 선수를 등록합니다. 엑셀 업로드 또는 수동 등록이 가능합니다.</CardDescription>
+                        <CardDescription>엑셀 또는 수동으로 개인전 선수를 등록합니다.</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-6">
                         <Card className="bg-muted/30">
@@ -212,11 +279,10 @@ export default function PlayerManagementPage() {
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                      <div className="space-y-2">
                                         <Label>그룹</Label>
-                                        <Select value={individualGroup} onValueChange={setIndividualGroup}>
+                                        <Select value={individualGroup} onValueChange={setIndividualGroup} disabled={groups.length === 0}>
                                             <SelectTrigger><SelectValue placeholder="그룹 선택" /></SelectTrigger>
                                             <SelectContent>
-                                                <SelectItem value="남자 개인전">남자 개인전</SelectItem>
-                                                <SelectItem value="여자 개인전">여자 개인전</SelectItem>
+                                                {groups.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}
                                             </SelectContent>
                                         </Select>
                                     </div>
@@ -296,13 +362,10 @@ export default function PlayerManagementPage() {
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div className="space-y-2">
                                         <Label>그룹</Label>
-                                        <Select value={teamGroup} onValueChange={setTeamGroup}>
+                                        <Select value={teamGroup} onValueChange={setTeamGroup} disabled={groups.length === 0}>
                                             <SelectTrigger><SelectValue placeholder="그룹 선택" /></SelectTrigger>
                                             <SelectContent>
-                                                <SelectItem value="2인 1팀 혼성">2인 1팀 혼성</SelectItem>
-                                                <SelectItem value="2인 1팀 부부">2인 1팀 부부</SelectItem>
-                                                <SelectItem value="2인 1팀 남자">2인 1팀 남자</SelectItem>
-                                                <SelectItem value="2인 1팀 여자">2인 1팀 여자</SelectItem>
+                                                {groups.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}
                                             </SelectContent>
                                         </Select>
                                     </div>
