@@ -19,7 +19,7 @@ export default function SuperAdminPage() {
         appName: '',
         userDomain: '',
         firebaseConfig: '',
-        maxCourses: 4,
+        maxCourses: 10,
         maxPlayers: 200,
     });
 
@@ -34,7 +34,7 @@ export default function SuperAdminPage() {
                     appName: data.appName || '00파크골프',
                     userDomain: data.userDomain || 'parkgolf.com',
                     firebaseConfig: data.firebaseConfig ? JSON.stringify(data.firebaseConfig, null, 2) : firebaseConfigString,
-                    maxCourses: data.maxCourses || 4,
+                    maxCourses: data.maxCourses || 10,
                     maxPlayers: data.maxPlayers || 200,
                 });
             } else {
@@ -42,7 +42,7 @@ export default function SuperAdminPage() {
                     appName: '00파크골프',
                     userDomain: 'parkgolf.com',
                     firebaseConfig: firebaseConfigString,
-                    maxCourses: 4,
+                    maxCourses: 10,
                     maxPlayers: 200,
                 });
             }
@@ -52,7 +52,7 @@ export default function SuperAdminPage() {
                 appName: '00파크골프',
                 userDomain: 'parkgolf.com',
                 firebaseConfig: firebaseConfigString,
-                maxCourses: 4,
+                maxCourses: 10,
                 maxPlayers: 200,
             });
         }).finally(() => {
@@ -173,7 +173,7 @@ export default function SuperAdminPage() {
                         <CardContent className="space-y-4">
                             <div className="space-y-2">
                                 <Label htmlFor="maxCourses">최대 코스 수</Label>
-                                <Input id="maxCourses" type="number" value={config.maxCourses} onChange={handleInputChange} placeholder="예: 4" />
+                                <Input id="maxCourses" type="number" value={config.maxCourses} onChange={handleInputChange} placeholder="예: 10" />
                                 <p className="text-xs text-muted-foreground">대회에 생성할 수 있는 최대 코스 수를 설정합니다.</p>
                             </div>
                             <div className="space-y-2">

@@ -14,11 +14,11 @@ import { ref, onValue, set, remove } from 'firebase/database';
 interface Course {
   id: number;
   name: string;
-  pars: number[];
+  pars: (number | null)[];
   isActive: boolean;
 }
 
-const defaultPars = Array(9).fill(3);
+const defaultPars: number[] = Array(9).fill(3);
 
 const initialCourses: Course[] = [
   { id: 1, name: '햇살코스', pars: [...defaultPars], isActive: true },
@@ -83,15 +83,21 @@ export default function TournamentManagementPage() {
   };
   
   const handleParChange = (courseId: number, holeIndex: number, value: string) => {
-    const newCourses = courses.map(course => {
-      if (course.id === courseId) {
-        const newPars = [...course.pars];
-        newPars[holeIndex] = parseInt(value, 10) || 0;
-        return { ...course, pars: newPars };
-      }
-      return course;
-    });
-    setCourses(newCourses);
+    setCourses(courses.map(course => {
+        if (course.id === courseId) {
+            const newPars = [...course.pars];
+            if (value === '') {
+                newPars[holeIndex] = null;
+            } else {
+                const parsed = parseInt(value, 10);
+                if (!isNaN(parsed)) {
+                    newPars[holeIndex] = parsed;
+                }
+            }
+            return { ...course, pars: newPars };
+        }
+        return course;
+    }));
   };
   
   const handleCourseNameChange = (courseId: number, name: string) => {
@@ -104,10 +110,14 @@ export default function TournamentManagementPage() {
 
   const handleSaveChanges = () => {
     const tournamentRef = ref(db, 'tournaments/current');
+    
     const coursesObject = courses.reduce((acc, course) => {
-        acc[course.id] = course;
+        acc[course.id] = {
+            ...course,
+            pars: course.pars.map(p => p === null ? 0 : p)
+        };
         return acc;
-    }, {} as Record<string, Course>);
+    }, {} as Record<string, any>);
 
     set(tournamentRef, {
       name: tournamentName,
@@ -170,7 +180,7 @@ export default function TournamentManagementPage() {
                 </div>
               </CardHeader>
               <CardContent className="p-4">
-                 <p className="text-sm text-muted-foreground mb-4">홀별 기준 타수(Par)를 입력하세요. 총 Par: {course.pars.reduce((a, b) => a + b, 0)}</p>
+                 <p className="text-sm text-muted-foreground mb-4">홀별 기준 타수(Par)를 입력하세요. 총 Par: {course.pars.reduce((a, b) => a + (b || 0), 0)}</p>
                 <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-9 gap-4">
                   {course.pars.map((par, index) => (
                     <div key={index} className="space-y-1">
@@ -180,7 +190,7 @@ export default function TournamentManagementPage() {
                       <Input
                         id={`par-${course.id}-${index}`}
                         type="number"
-                        value={par}
+                        value={par === null ? '' : par}
                         onChange={(e) => handleParChange(course.id, index, e.target.value)}
                         className="text-center h-12 text-lg"
                       />
