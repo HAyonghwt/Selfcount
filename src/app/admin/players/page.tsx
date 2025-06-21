@@ -1,4 +1,5 @@
 "use client"
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -14,19 +15,128 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { db } from "@/lib/firebase";
+import { ref, onValue, push, remove, update } from "firebase/database";
+import { useToast } from "@/hooks/use-toast";
 
-const individualPlayers = [
-    { id: 'p1', group: '남자 개인전', jo: 1, name: '김철수', affiliation: '서울클럽' },
-    { id: 'p2', group: '남자 개인전', jo: 1, name: '이영민', affiliation: '부산클럽' },
-    { id: 'p3', group: '여자 개인전', jo: 2, name: '최지아', affiliation: '인천클럽' },
-];
-
-const teamPlayers = [
-    { id: 't1', group: '2인 1팀 혼성', jo: 1, p1_name: '나영희', p1_affiliation: '대전클럽', p2_name: '황인성', p2_affiliation: '대전클럽' },
-    { id: 't2', group: '2인 1팀 부부', jo: 2, p1_name: '이하나', p1_affiliation: '광주클럽', p2_name: '강민준', p2_affiliation: '광주클럽' },
-];
+const initialIndividualState = Array(4).fill({ name: '', affiliation: '' });
+const initialTeamState = Array(2).fill({ p1_name: '', p1_affiliation: '', p2_name: '', p2_affiliation: '' });
 
 export default function PlayerManagementPage() {
+    const { toast } = useToast();
+    const [allPlayers, setAllPlayers] = useState<any[]>([]);
+    
+    // Form states
+    const [individualGroup, setIndividualGroup] = useState('');
+    const [individualJo, setIndividualJo] = useState('');
+    const [individualFormData, setIndividualFormData] = useState(initialIndividualState);
+
+    const [teamGroup, setTeamGroup] = useState('');
+    const [teamJo, setTeamJo] = useState('');
+    const [teamFormData, setTeamFormData] = useState(initialTeamState);
+
+    useEffect(() => {
+        const playersRef = ref(db, 'players');
+        const unsubscribe = onValue(playersRef, (snapshot) => {
+            const data = snapshot.val();
+            if (data) {
+                const loadedPlayers = Object.entries(data).map(([id, player]) => ({ id, ...player as object }));
+                setAllPlayers(loadedPlayers);
+            } else {
+                setAllPlayers([]);
+            }
+        });
+        return () => unsubscribe();
+    }, []);
+
+    const individualPlayers = allPlayers.filter(p => p.type === 'individual');
+    const teamPlayers = allPlayers.filter(p => p.type === 'team');
+
+    const handleIndividualFormChange = (index: number, field: string, value: string) => {
+        const newForm = [...individualFormData];
+        newForm[index] = { ...newForm[index], [field]: value };
+        setIndividualFormData(newForm);
+    };
+
+    const handleTeamFormChange = (index: number, field: string, value: string) => {
+        const newForm = [...teamFormData];
+        newForm[index] = { ...newForm[index], [field]: value };
+        setTeamFormData(newForm);
+    };
+
+    const handleSaveIndividualPlayers = () => {
+        if (!individualGroup || !individualJo) {
+            toast({ title: '입력 오류', description: '그룹과 조 번호를 모두 입력해주세요.', variant: 'destructive' });
+            return;
+        }
+        const playersToSave = individualFormData.filter(p => p.name.trim() !== '' && p.affiliation.trim() !== '');
+        if (playersToSave.length === 0) {
+            toast({ title: '정보 없음', description: '저장할 선수 정보가 없습니다.', variant: 'destructive' });
+            return;
+        }
+
+        const updates: { [key: string]: any } = {};
+        playersToSave.forEach(player => {
+            const newPlayerKey = push(ref(db, 'players')).key;
+            updates[`/players/${newPlayerKey}`] = {
+                type: 'individual',
+                group: individualGroup,
+                jo: Number(individualJo),
+                name: player.name,
+                affiliation: player.affiliation,
+            };
+        });
+
+        update(ref(db), updates)
+            .then(() => {
+                toast({ title: '성공', description: '개인전 선수들이 저장되었습니다.', className: 'bg-green-500 text-white' });
+                setIndividualFormData(initialIndividualState);
+            })
+            .catch(err => toast({ title: '저장 실패', description: err.message, variant: 'destructive' }));
+    };
+
+    const handleSaveTeamPlayers = () => {
+        if (!teamGroup || !teamJo) {
+            toast({ title: '입력 오류', description: '그룹과 조 번호를 모두 입력해주세요.', variant: 'destructive' });
+            return;
+        }
+        const teamsToSave = teamFormData.filter(t => t.p1_name.trim() !== '' && t.p2_name.trim() !== '');
+         if (teamsToSave.length === 0) {
+            toast({ title: '정보 없음', description: '저장할 팀 정보가 없습니다.', variant: 'destructive' });
+            return;
+        }
+        const updates: { [key: string]: any } = {};
+        teamsToSave.forEach(team => {
+            const newTeamKey = push(ref(db, 'players')).key;
+            updates[`/players/${newTeamKey}`] = {
+                type: 'team',
+                group: teamGroup,
+                jo: Number(teamJo),
+                p1_name: team.p1_name,
+                p1_affiliation: team.p1_affiliation,
+                p2_name: team.p2_name,
+                p2_affiliation: team.p2_affiliation,
+            };
+        });
+
+        update(ref(db), updates)
+            .then(() => {
+                toast({ title: '성공', description: '2인 1팀 선수들이 저장되었습니다.', className: 'bg-green-500 text-white' });
+                setTeamFormData(initialTeamState);
+            })
+            .catch(err => toast({ title: '저장 실패', description: err.message, variant: 'destructive' }));
+    };
+
+    const handleDeletePlayer = (id: string) => {
+        remove(ref(db, `players/${id}`));
+    };
+    
+    const handleResetAllPlayers = () => {
+        remove(ref(db, 'players'))
+            .then(() => toast({ title: '초기화 완료', description: '모든 선수 명단이 삭제되었습니다.', className: 'bg-green-500 text-white'}))
+            .catch(err => toast({ title: '초기화 실패', description: err.message, variant: 'destructive' }));
+    };
+
   return (
     <div className="space-y-6">
         <Card>
@@ -53,7 +163,7 @@ export default function PlayerManagementPage() {
                             </CardHeader>
                             <CardContent className="flex flex-col sm:flex-row gap-4">
                                 <Button variant="outline"><Download className="mr-2 h-4 w-4" /> 엑셀 양식 다운로드 (.xlsx)</Button>
-                                <Button><Upload className="mr-2 h-4 w-4" /> 엑셀 파일 업로드</Button>
+                                <Button disabled><Upload className="mr-2 h-4 w-4" /> 엑셀 파일 업로드 (개발중)</Button>
                             </CardContent>
                         </Card>
                         <Card>
@@ -65,34 +175,34 @@ export default function PlayerManagementPage() {
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                      <div className="space-y-2">
                                         <Label>그룹</Label>
-                                        <Select>
+                                        <Select value={individualGroup} onValueChange={setIndividualGroup}>
                                             <SelectTrigger><SelectValue placeholder="그룹 선택" /></SelectTrigger>
                                             <SelectContent>
-                                                <SelectItem value="men-s">남자 개인전</SelectItem>
-                                                <SelectItem value="women-s">여자 개인전</SelectItem>
+                                                <SelectItem value="남자 개인전">남자 개인전</SelectItem>
+                                                <SelectItem value="여자 개인전">여자 개인전</SelectItem>
                                             </SelectContent>
                                         </Select>
                                     </div>
                                     <div className="space-y-2">
                                         <Label htmlFor="jo-individual">조 번호</Label>
-                                        <Input id="jo-individual" type="number" placeholder="예: 1" />
+                                        <Input id="jo-individual" type="number" placeholder="예: 1" value={individualJo} onChange={e => setIndividualJo(e.target.value)} />
                                     </div>
                                 </div>
                                 <div className="space-y-4 pt-4">
-                                    {[1, 2, 3, 4].map(i => (
+                                    {individualFormData.map((p, i) => (
                                         <div key={i} className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t pt-4">
                                             <div className="space-y-2">
-                                                <Label htmlFor={`p${i}-name`}>선수 {i} 이름</Label>
-                                                <Input id={`p${i}-name`} placeholder="홍길동" />
+                                                <Label htmlFor={`p${i}-name`}>선수 {i + 1} 이름</Label>
+                                                <Input id={`p${i}-name`} placeholder="홍길동" value={p.name} onChange={e => handleIndividualFormChange(i, 'name', e.target.value)} />
                                             </div>
                                             <div className="space-y-2">
-                                                <Label htmlFor={`p${i}-affiliation`}>선수 {i} 소속</Label>
-                                                <Input id={`p${i}-affiliation`} placeholder="소속 클럽" />
+                                                <Label htmlFor={`p${i}-affiliation`}>선수 {i + 1} 소속</Label>
+                                                <Input id={`p${i}-affiliation`} placeholder="소속 클럽" value={p.affiliation} onChange={e => handleIndividualFormChange(i, 'affiliation', e.target.value)} />
                                             </div>
                                         </div>
                                     ))}
                                 </div>
-                                <Button size="lg" className="mt-4"><UserPlus className="mr-2 h-4 w-4" /> 선수 저장</Button>
+                                <Button size="lg" className="mt-4" onClick={handleSaveIndividualPlayers}><UserPlus className="mr-2 h-4 w-4" /> 선수 저장</Button>
                             </CardContent>
                         </Card>
                          <Card>
@@ -109,8 +219,16 @@ export default function PlayerManagementPage() {
                                             <TableRow key={p.id}>
                                                 <TableCell>{p.group}</TableCell><TableCell>{p.jo}</TableCell><TableCell>{p.name}</TableCell><TableCell>{p.affiliation}</TableCell>
                                                 <TableCell className="text-right space-x-2">
-                                                    <Button variant="outline" size="icon"><Edit className="h-4 w-4" /></Button>
-                                                    <Button variant="destructive" size="icon"><Trash2 className="h-4 w-4" /></Button>
+                                                    <Button variant="outline" size="icon" disabled><Edit className="h-4 w-4" /></Button>
+                                                    <AlertDialog>
+                                                        <AlertDialogTrigger asChild>
+                                                            <Button variant="destructive" size="icon"><Trash2 className="h-4 w-4" /></Button>
+                                                        </AlertDialogTrigger>
+                                                        <AlertDialogContent>
+                                                            <AlertDialogHeader><AlertDialogTitle>정말 삭제하시겠습니까?</AlertDialogTitle><AlertDialogDescription>{p.name} 선수의 정보를 삭제합니다.</AlertDialogDescription></AlertDialogHeader>
+                                                            <AlertDialogFooter><AlertDialogCancel>취소</AlertDialogCancel><AlertDialogAction onClick={() => handleDeletePlayer(p.id)}>삭제</AlertDialogAction></AlertDialogFooter>
+                                                        </AlertDialogContent>
+                                                    </AlertDialog>
                                                 </TableCell>
                                             </TableRow>
                                         ))}
@@ -129,7 +247,7 @@ export default function PlayerManagementPage() {
                             <CardHeader><CardTitle className="text-lg">엑셀로 일괄 등록</CardTitle></CardHeader>
                             <CardContent className="flex flex-col sm:flex-row gap-4">
                                <Button variant="outline"><Download className="mr-2 h-4 w-4" /> 엑셀 양식 다운로드 (.xlsx)</Button>
-                                <Button><Upload className="mr-2 h-4 w-4" /> 엑셀 파일 업로드</Button>
+                                <Button disabled><Upload className="mr-2 h-4 w-4" /> 엑셀 파일 업로드 (개발중)</Button>
                             </CardContent>
                         </Card>
                          <Card>
@@ -138,31 +256,33 @@ export default function PlayerManagementPage() {
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div className="space-y-2">
                                         <Label>그룹</Label>
-                                        <Select>
+                                        <Select value={teamGroup} onValueChange={setTeamGroup}>
                                             <SelectTrigger><SelectValue placeholder="그룹 선택" /></SelectTrigger>
                                             <SelectContent>
-                                                <SelectItem value="mixed">2인 1팀 혼성</SelectItem>
-                                                <SelectItem value="couple">2인 1팀 부부</SelectItem>
-                                                <SelectItem value="male">2인 1팀 남자</SelectItem>
-                                                <SelectItem value="female">2인 1팀 여자</SelectItem>
+                                                <SelectItem value="2인 1팀 혼성">2인 1팀 혼성</SelectItem>
+                                                <SelectItem value="2인 1팀 부부">2인 1팀 부부</SelectItem>
+                                                <SelectItem value="2인 1팀 남자">2인 1팀 남자</SelectItem>
+                                                <SelectItem value="2인 1팀 여자">2인 1팀 여자</SelectItem>
                                             </SelectContent>
                                         </Select>
                                     </div>
                                     <div className="space-y-2">
                                         <Label htmlFor="jo-team">조 번호</Label>
-                                        <Input id="jo-team" type="number" placeholder="예: 1" />
+                                        <Input id="jo-team" type="number" placeholder="예: 1" value={teamJo} onChange={e => setTeamJo(e.target.value)} />
                                     </div>
                                 </div>
-                                {[1, 2].map(teamNum => (
-                                    <div key={teamNum} className="space-y-4 border-t pt-4">
-                                        <h4 className="font-semibold text-primary">{teamNum}팀 정보</h4>
+                                {teamFormData.map((team, i) => (
+                                    <div key={i} className="space-y-4 border-t pt-4">
+                                        <h4 className="font-semibold text-primary">{i + 1}팀 정보</h4>
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            <Input placeholder="선수 1 이름" /><Input placeholder="선수 1 소속" />
-                                            <Input placeholder="선수 2 이름" /><Input placeholder="선수 2 소속" />
+                                            <Input placeholder="선수 1 이름" value={team.p1_name} onChange={e => handleTeamFormChange(i, 'p1_name', e.target.value)} />
+                                            <Input placeholder="선수 1 소속" value={team.p1_affiliation} onChange={e => handleTeamFormChange(i, 'p1_affiliation', e.target.value)} />
+                                            <Input placeholder="선수 2 이름" value={team.p2_name} onChange={e => handleTeamFormChange(i, 'p2_name', e.target.value)} />
+                                            <Input placeholder="선수 2 소속" value={team.p2_affiliation} onChange={e => handleTeamFormChange(i, 'p2_affiliation', e.target.value)} />
                                         </div>
                                     </div>
                                 ))}
-                                <Button size="lg" className="mt-4"><UserPlus className="mr-2 h-4 w-4" /> 팀 저장</Button>
+                                <Button size="lg" className="mt-4" onClick={handleSaveTeamPlayers}><UserPlus className="mr-2 h-4 w-4" /> 팀 저장</Button>
                             </CardContent>
                         </Card>
                         <Card>
@@ -181,8 +301,16 @@ export default function PlayerManagementPage() {
                                                 <TableCell>{t.p1_name}, {t.p2_name}</TableCell>
                                                 <TableCell>{t.p1_affiliation}</TableCell>
                                                 <TableCell className="text-right space-x-2">
-                                                    <Button variant="outline" size="icon"><Edit className="h-4 w-4" /></Button>
-                                                    <Button variant="destructive" size="icon"><Trash2 className="h-4 w-4" /></Button>
+                                                    <Button variant="outline" size="icon" disabled><Edit className="h-4 w-4" /></Button>
+                                                     <AlertDialog>
+                                                        <AlertDialogTrigger asChild>
+                                                            <Button variant="destructive" size="icon"><Trash2 className="h-4 w-4" /></Button>
+                                                        </AlertDialogTrigger>
+                                                        <AlertDialogContent>
+                                                            <AlertDialogHeader><AlertDialogTitle>정말 삭제하시겠습니까?</AlertDialogTitle><AlertDialogDescription>{t.p1_name}, {t.p2_name} 팀의 정보를 삭제합니다.</AlertDialogDescription></AlertDialogHeader>
+                                                            <AlertDialogFooter><AlertDialogCancel>취소</AlertDialogCancel><AlertDialogAction onClick={() => handleDeletePlayer(t.id)}>삭제</AlertDialogAction></AlertDialogFooter>
+                                                        </AlertDialogContent>
+                                                    </AlertDialog>
                                                 </TableCell>
                                             </TableRow>
                                         ))}
@@ -216,7 +344,7 @@ export default function PlayerManagementPage() {
                         </AlertDialogHeader>
                         <AlertDialogFooter>
                             <AlertDialogCancel>취소</AlertDialogCancel>
-                            <AlertDialogAction className="bg-destructive hover:bg-destructive/90">초기화</AlertDialogAction>
+                            <AlertDialogAction onClick={handleResetAllPlayers} className="bg-destructive hover:bg-destructive/90">초기화</AlertDialogAction>
                         </AlertDialogFooter>
                     </AlertDialogContent>
                 </AlertDialog>

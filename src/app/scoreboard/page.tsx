@@ -1,19 +1,21 @@
 "use client"
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
+import { db } from '@/lib/firebase';
+import { ref, onValue } from 'firebase/database';
 
-// This scoreboard is designed to mimic the requested image style:
-// clean, high-contrast, and suitable for a large TV display.
-
-const mockData = [
-    { rank: 1, name: '김철수', club: '서울', course: 'A', total: 33, par: 33, scores: [4,3,4,5,3,4,4,3,3] },
-    { rank: 2, name: '박현우', club: '대구', course: 'A', total: 34, par: 33, scores: [4,3,5,5,3,4,4,3,3] },
-    { rank: 3, name: '이영민', club: '부산', course: 'A', total: 35, par: 33, scores: [5,4,4,5,4,4,4,2,3] },
-    { rank: 4, name: '강성훈', club: '대전', course: 'A', total: 36, par: 33, scores: [4,3,4,5,3,4,4,5,4] },
-    { rank: 5, name: '최지아 / 박서준', club: '인천', course: 'B', total: 33, par: 33, scores: [4,3,4,5,3,4,4,3,3] },
-    { rank: 6, name: '한지민 / 정해인', club: '광주', course: 'B', total: 38, par: 33, scores: [4,3,4,5,4,5,4,5,4] },
-];
+interface ProcessedPlayer {
+    id: string;
+    rank: number;
+    name: string;
+    club: string;
+    courseId: string;
+    total: number;
+    par: number;
+    scores: number[];
+}
 
 const ScoreCell = ({ score, par }: { score: number, par: number }) => {
+    if (score === 0) return <div className="w-12 h-12 flex items-center justify-center text-2xl font-bold rounded-full bg-gray-600/50">-</div>;
     const diff = score - par;
     let className = "w-12 h-12 flex items-center justify-center text-2xl font-bold rounded-full ";
     if (diff < -1) className += "bg-blue-500 text-white"; // Eagle
@@ -26,81 +28,133 @@ const ScoreCell = ({ score, par }: { score: number, par: number }) => {
 
 export default function ExternalScoreboard() {
     const [time, setTime] = useState('');
+    const [players, setPlayers] = useState({});
+    const [scores, setScores] = useState({});
+    const [tournament, setTournament] = useState<any>({});
     
     useEffect(() => {
         const timer = setInterval(() => {
-            setTime(new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }));
+            setTime(new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false }));
         }, 1000);
-        return () => clearInterval(timer);
+
+        const playersRef = ref(db, 'players');
+        const scoresRef = ref(db, 'scores');
+        const tournamentRef = ref(db, 'tournaments/current');
+
+        const unsubPlayers = onValue(playersRef, snap => setPlayers(snap.val() || {}));
+        const unsubScores = onValue(scoresRef, snap => setScores(snap.val() || {}));
+        const unsubTournament = onValue(tournamentRef, snap => setTournament(snap.val() || {}));
+
+        return () => {
+            clearInterval(timer);
+            unsubPlayers();
+            unsubScores();
+            unsubTournament();
+        };
     }, []);
+
+    const processedDataByGroup = useMemo(() => {
+        const activeCourses = Object.values(tournament.courses || {}).filter((c: any) => c.isActive);
+        if (Object.keys(players).length === 0 || activeCourses.length === 0) return {};
+
+        const allProcessedPlayers: Omit<ProcessedPlayer, 'rank'>[] = [];
+
+        Object.entries(players).forEach(([playerId, player]: [string, any]) => {
+            const playerScores = scores[playerId] || {};
+
+            activeCourses.forEach((course: any) => {
+                const courseId = course.id;
+                const scoresForCourse = playerScores[courseId] || {};
+                const holeScores = Array(9).fill(0);
+                course.pars.forEach((_par: any, index: number) => {
+                    holeScores[index] = scoresForCourse[(index + 1).toString()] || 0;
+                });
+                const total = holeScores.reduce((a, b) => a + b, 0);
+                
+                if (total > 0) { // Only show players with at least one score
+                    allProcessedPlayers.push({
+                        id: `${playerId}-${courseId}`,
+                        name: player.type === 'team' ? `${player.p1_name} / ${player.p2_name}` : player.name,
+                        club: player.type === 'team' ? player.p1_affiliation : player.affiliation,
+                        courseId: courseId,
+                        total,
+                        par: course.pars.reduce((a:number, b:number) => a + b, 0),
+                        scores: holeScores,
+                        // temp values, will be replaced after grouping
+                        group: player.group, 
+                    });
+                }
+            });
+        });
+
+        const groupedAndRanked: { [groupName: string]: ProcessedPlayer[] } = {};
+        const allGroups = [...new Set(allProcessedPlayers.map((p: any) => p.group))];
+
+        allGroups.forEach(groupName => {
+            if (!groupName) return;
+            const groupPlayers = allProcessedPlayers
+                .filter((p: any) => p.group === groupName)
+                .sort((a, b) => a.total - b.total); // Simplified sorting
+            
+            groupedAndRanked[groupName] = groupPlayers.map((player, index) => ({
+                ...player,
+                rank: index + 1
+            }));
+        });
+        
+        return groupedAndRanked;
+    }, [players, scores, tournament]);
+    
+    const coursesMap = useMemo(() => new Map(Object.values(tournament.courses || {}).map((c: any) => [c.id.toString(), c])), [tournament.courses]);
+
 
     return (
         <div className="bg-[#0A1744] min-h-screen text-white p-4 sm:p-6 md:p-8 font-sans">
             <header className="flex justify-between items-center pb-6 border-b-4 border-amber-400">
-                <h1 className="text-5xl md:text-7xl font-bold tracking-wider">PARKGOLF SCOREBOARD</h1>
+                <h1 className="text-5xl md:text-7xl font-bold tracking-wider uppercase">{tournament.name || 'PARKGOLF SCOREBOARD'}</h1>
                 <div className="text-4xl md:text-6xl font-mono bg-black/30 px-4 py-2 rounded-lg">{time}</div>
             </header>
 
             <main className="mt-6 space-y-8">
-                {/* This would be mapped from actual groups */}
-                <div>
-                    <h2 className="text-4xl font-semibold mb-4 bg-white/10 py-2 px-4 rounded-t-lg">남자 개인전 (A 코스)</h2>
-                    <div className="overflow-x-auto">
-                        <table className="w-full min-w-[1200px] text-center bg-[#1E2952]">
-                            <thead className="bg-black/30 text-2xl">
-                                <tr>
-                                    <th className="p-4 w-24">순위</th>
-                                    <th className="p-4 text-left w-64">선수명</th>
-                                    <th className="p-4 text-left w-48">소속</th>
-                                    {[...Array(9)].map((_, i) => <th key={i} className="p-4 w-20">{i + 1}</th>)}
-                                    <th className="p-4 w-32">TOTAL</th>
-                                    <th className="p-4 w-32">PAR</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {mockData.filter(p => p.course === 'A').map((player, idx) => (
-                                    <tr key={idx} className="border-b-2 border-slate-600 last:border-b-0 text-3xl">
-                                        <td className="p-4 font-bold text-amber-400">{player.rank}</td>
-                                        <td className="p-4 text-left font-semibold">{player.name}</td>
-                                        <td className="p-4 text-left text-2xl text-slate-300">{player.club}</td>
-                                        {player.scores.map((score, i) => <td key={i} className="p-2"><ScoreCell score={score} par={3} /></td>)}
-                                        <td className="p-4 font-bold text-4xl">{player.total}</td>
-                                        <td className="p-4 text-2xl text-slate-400">{player.par}</td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-                 <div>
-                    <h2 className="text-4xl font-semibold mb-4 bg-white/10 py-2 px-4 rounded-t-lg">2인 1팀 (B 코스)</h2>
-                    <div className="overflow-x-auto">
-                        <table className="w-full min-w-[1200px] text-center bg-[#1E2952]">
-                             <thead className="bg-black/30 text-2xl">
-                                <tr>
-                                    <th className="p-4 w-24">순위</th>
-                                    <th className="p-4 text-left w-64">팀명</th>
-                                    <th className="p-4 text-left w-48">소속</th>
-                                    {[...Array(9)].map((_, i) => <th key={i} className="p-4 w-20">{i + 1}</th>)}
-                                    <th className="p-4 w-32">TOTAL</th>
-                                    <th className="p-4 w-32">PAR</th>
-                                </tr>
-                            </thead>
-                           <tbody>
-                                {mockData.filter(p => p.course === 'B').map((player, idx) => (
-                                    <tr key={idx} className="border-b-2 border-slate-600 last:border-b-0 text-3xl">
-                                        <td className="p-4 font-bold text-amber-400">{player.rank}</td>
-                                        <td className="p-4 text-left font-semibold">{player.name}</td>
-                                        <td className="p-4 text-left text-2xl text-slate-300">{player.club}</td>
-                                        {player.scores.map((score, i) => <td key={i} className="p-2"><ScoreCell score={score} par={3} /></td>)}
-                                        <td className="p-4 font-bold text-4xl">{player.total}</td>
-                                        <td className="p-4 text-2xl text-slate-400">{player.par}</td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
+                {Object.entries(processedDataByGroup).map(([groupName, groupPlayers]) => {
+                    if (groupPlayers.length === 0) return null;
+                    // Assuming all players in a group are on the same course for this view, taking the first player's course.
+                    const courseId = groupPlayers[0].courseId;
+                    const course = coursesMap.get(courseId);
+                    if (!course) return null;
+
+                    return (
+                        <div key={groupName}>
+                            <h2 className="text-4xl font-semibold mb-4 bg-white/10 py-2 px-4 rounded-t-lg">{groupName} ({course.name})</h2>
+                            <div className="overflow-x-auto">
+                                <table className="w-full min-w-[1200px] text-center bg-[#1E2952]">
+                                    <thead className="bg-black/30 text-2xl">
+                                        <tr>
+                                            <th className="p-4 w-24">순위</th>
+                                            <th className="p-4 text-left w-64">선수/팀명</th>
+                                            <th className="p-4 text-left w-48">소속</th>
+                                            {course.pars.map((_par: number, i: number) => <th key={i} className="p-4 w-20">{i + 1}</th>)}
+                                            <th className="p-4 w-32">TOTAL</th>
+                                            <th className="p-4 w-32">PAR</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {groupPlayers.map((player) => (
+                                            <tr key={player.id} className="border-b-2 border-slate-600 last:border-b-0 text-3xl">
+                                                <td className="p-4 font-bold text-amber-400">{player.rank}</td>
+                                                <td className="p-4 text-left font-semibold">{player.name}</td>
+                                                <td className="p-4 text-left text-2xl text-slate-300">{player.club}</td>
+                                                {player.scores.map((score, i) => <td key={i} className="p-2"><ScoreCell score={score} par={course.pars[i]} /></td>)}
+                                                <td className="p-4 font-bold text-4xl">{player.total}</td>
+                                                <td className="p-4 text-2xl text-slate-400">{player.par}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )
+                })}
             </main>
         </div>
     );

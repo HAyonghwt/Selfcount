@@ -1,4 +1,5 @@
 "use client"
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,17 +7,78 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Save, LogOut } from "lucide-react";
 import Link from 'next/link';
+import { useToast } from "@/hooks/use-toast";
+import { db, firebaseConfig as localFirebaseConfig } from "@/lib/firebase";
+import { ref, set, get } from "firebase/database";
 
 export default function SuperAdminPage() {
-    // In a real app, these values would be fetched from and saved to a secure database.
-    const firebaseConfigExample = `{
-  "apiKey": "AIzaSyAM6GtB8HB8pw0VPSmZxk7xOxB2n1iXFP8",
-  "authDomain": "dehoi-1.firebaseapp.com",
-  "projectId": "dehoi-1",
-  "storageBucket": "dehoi-1.firebasestorage.app",
-  "messagingSenderId": "81139018391",
-  "appId": "1:81139018391:web:88d8e15e245181c2c557d2"
-}`;
+    const { toast } = useToast();
+    const [config, setConfig] = useState({
+        appName: '',
+        userDomain: '',
+        maxPlayers: '',
+        maxCourses: '',
+        firebaseConfig: '',
+    });
+
+    const firebaseConfigString = JSON.stringify(localFirebaseConfig, null, 2);
+
+    useEffect(() => {
+        const configRef = ref(db, 'config');
+        get(configRef).then((snapshot) => {
+            if (snapshot.exists()) {
+                const data = snapshot.val();
+                setConfig({
+                    appName: data.appName || '00파크골프',
+                    userDomain: data.userDomain || 'parkgolf.com',
+                    maxPlayers: data.maxPlayers?.toString() || '200',
+                    maxCourses: data.maxCourses?.toString() || '4',
+                    firebaseConfig: data.firebaseConfig ? JSON.stringify(data.firebaseConfig, null, 2) : firebaseConfigString,
+                });
+            } else {
+                 setConfig({
+                    appName: '00파크골프',
+                    userDomain: 'parkgolf.com',
+                    maxPlayers: '200',
+                    maxCourses: '4',
+                    firebaseConfig: firebaseConfigString,
+                });
+            }
+        }).catch(() => {
+             toast({ title: "오류", description: "설정 정보를 불러오는데 실패했습니다.", variant: "destructive" });
+        });
+    }, [firebaseConfigString, toast]);
+    
+    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+        const { id, value } = e.target;
+        setConfig(prev => ({ ...prev, [id]: value }));
+    };
+
+    const handleSaveChanges = () => {
+        try {
+            const parsedConfig = JSON.parse(config.firebaseConfig);
+            const configRef = ref(db, 'config');
+            set(configRef, {
+                appName: config.appName,
+                userDomain: config.userDomain,
+                maxPlayers: Number(config.maxPlayers),
+                maxCourses: Number(config.maxCourses),
+                firebaseConfig: parsedConfig,
+            }).then(() => {
+                toast({
+                    title: "성공",
+                    description: "모든 설정이 성공적으로 저장되었습니다. 변경사항을 적용하려면 페이지를 새로고침하세요.",
+                    className: "bg-green-500 text-white",
+                });
+            });
+        } catch (error) {
+            toast({
+                title: "오류",
+                description: "Firebase 구성이 유효한 JSON 형식이 아닙니다.",
+                variant: "destructive",
+            });
+        }
+    };
 
     return (
         <div className="min-h-screen bg-slate-100 p-4 sm:p-8">
@@ -43,14 +105,14 @@ export default function SuperAdminPage() {
                         <CardContent className="space-y-4">
                             <div className="space-y-2">
                                 <Label htmlFor="appName">단체 이름</Label>
-                                <Input id="appName" defaultValue="00파크골프" placeholder="예: 행복 파크골프" />
+                                <Input id="appName" value={config.appName} onChange={handleInputChange} placeholder="예: 행복 파크골프" />
                                 <p className="text-xs text-muted-foreground">이 이름은 앱의 여러 곳에 표시됩니다.</p>
                             </div>
                              <div className="space-y-2">
                                 <Label htmlFor="userDomain">사용자 이메일 도메인 (XXX)</Label>
                                 <div className="flex items-center">
                                     <span className="p-2 bg-muted rounded-l-md text-muted-foreground">admin@</span>
-                                    <Input id="userDomain" defaultValue="parkgolf.com" className="rounded-l-none" />
+                                    <Input id="userDomain" value={config.userDomain} onChange={handleInputChange} className="rounded-l-none" />
                                 </div>
                                  <p className="text-xs text-muted-foreground">admin@XXX.com 및 refereeN@XXX.com의 XXX 부분을 설정합니다.</p>
                             </div>
@@ -65,12 +127,12 @@ export default function SuperAdminPage() {
                         <CardContent className="space-y-4">
                             <div className="space-y-2">
                                 <Label htmlFor="maxPlayers">최대 등록 선수</Label>
-                                <Input id="maxPlayers" type="number" defaultValue="200" />
+                                <Input id="maxPlayers" type="number" value={config.maxPlayers} onChange={handleInputChange} />
                                 <p className="text-xs text-muted-foreground">한 대회에 등록할 수 있는 총 선수 인원을 제한합니다.</p>
                             </div>
                              <div className="space-y-2">
                                 <Label htmlFor="maxCourses">최대 코스 수</Label>
-                                <Input id="maxCourses" type="number" defaultValue="4" />
+                                <Input id="maxCourses" type="number" value={config.maxCourses} onChange={handleInputChange} />
                                 <p className="text-xs text-muted-foreground">관리자가 추가할 수 있는 최대 코스 수를 제한합니다.</p>
                             </div>
                         </CardContent>
@@ -85,9 +147,9 @@ export default function SuperAdminPage() {
                     <CardContent className="space-y-4">
                         <div className="space-y-2">
                             <Label htmlFor="firebaseConfig">Firebase 구성 (JSON 형식)</Label>
-                            <Textarea id="firebaseConfig" rows={12} defaultValue={firebaseConfigExample} className="font-mono text-sm" />
+                            <Textarea id="firebaseConfig" rows={12} value={config.firebaseConfig} onChange={handleInputChange} className="font-mono text-sm" />
                         </div>
-                        <Button size="lg" className="w-full">
+                        <Button size="lg" className="w-full" onClick={handleSaveChanges}>
                             <Save className="mr-2 h-5 w-5" />
                             모든 설정 저장
                         </Button>

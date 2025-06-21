@@ -1,5 +1,5 @@
 "use client"
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,6 +8,8 @@ import { Switch } from '@/components/ui/switch';
 import { Trash2, PlusCircle, Save, RotateCcw, AlertTriangle } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useToast } from '@/hooks/use-toast';
+import { db } from '@/lib/firebase';
+import { ref, onValue, set, remove } from 'firebase/database';
 
 interface Course {
   id: number;
@@ -16,7 +18,7 @@ interface Course {
   isActive: boolean;
 }
 
-const defaultPars = [4, 3, 4, 5, 3, 4, 4, 5, 3];
+const defaultPars = Array(9).fill(3);
 
 const initialCourses: Course[] = [
   { id: 1, name: '햇살코스', pars: [...defaultPars], isActive: true },
@@ -24,16 +26,31 @@ const initialCourses: Course[] = [
 ];
 
 export default function TournamentManagementPage() {
-  const [tournamentName, setTournamentName] = useState('제1회 전국 파크골프 대회');
-  const [courses, setCourses] = useState<Course[]>(initialCourses);
+  const [tournamentName, setTournamentName] = useState('');
+  const [courses, setCourses] = useState<Course[]>([]);
   const { toast } = useToast();
+
+  useEffect(() => {
+    const tournamentRef = ref(db, 'tournaments/current');
+    const unsubscribe = onValue(tournamentRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        setTournamentName(data.name || '새로운 대회');
+        setCourses(data.courses ? Object.values(data.courses) : []);
+      } else {
+        setTournamentName('제1회 전국 파크골프 대회');
+        setCourses(initialCourses);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
 
   const handleAddCourse = () => {
     const newCourse: Course = {
       id: courses.length > 0 ? Math.max(...courses.map(c => c.id)) + 1 : 1,
       name: `코스 ${courses.length + 1}`,
       pars: [...defaultPars],
-      isActive: false,
+      isActive: true,
     };
     setCourses([...courses, newCourse]);
   };
@@ -63,22 +80,35 @@ export default function TournamentManagementPage() {
   }
 
   const handleSaveChanges = () => {
-    // In a real app, this would save to a database.
-    toast({
-      title: "성공",
-      description: "대회 및 코스 정보가 저장되었습니다.",
-      className: "bg-green-500 text-white",
+    const tournamentRef = ref(db, 'tournaments/current');
+    const coursesObject = courses.reduce((acc, course) => {
+        acc[course.id] = course;
+        return acc;
+    }, {} as Record<string, Course>);
+
+    set(tournamentRef, {
+      name: tournamentName,
+      courses: coursesObject
+    }).then(() => {
+      toast({
+        title: "성공",
+        description: "대회 및 코스 정보가 저장되었습니다.",
+        className: "bg-green-500 text-white",
+      });
+    }).catch(err => {
+        toast({ title: "오류", description: err.message, variant: "destructive"});
     });
   };
   
   const handleResetData = () => {
-      setTournamentName('새로운 대회');
-      setCourses(initialCourses);
+    remove(ref(db, 'tournaments/current')).then(() => {
+      // The onValue listener will automatically update the state
       toast({
         title: "초기화 완료",
         description: "대회 코스 데이터가 초기화되었습니다.",
         variant: "destructive",
       });
+    });
   }
 
   return (

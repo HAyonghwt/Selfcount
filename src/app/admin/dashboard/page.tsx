@@ -1,39 +1,107 @@
 "use client";
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Download, Filter } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { db } from '@/lib/firebase';
+import { ref, onValue } from 'firebase/database';
 
-// Mock Data - In a real app, this would come from Firebase/Firestore
-const mockPlayers = [
-    { id: 1, group: '남자 개인전', jo: 1, name: '김철수', affiliation: '서울클럽', scores: { 'A': [4,3,4,5,3,4,4,5,3], 'B': [3,3,4,4,3,4,5,4,3] }, total: 69, rank: 1 },
-    { id: 2, group: '남자 개인전', jo: 1, name: '이영민', affiliation: '부산클럽', scores: { 'A': [5,4,4,5,4,4,4,5,4], 'B': [4,3,4,4,3,5,5,4,3] }, total: 73, rank: 3 },
-    { id: 3, group: '남자 개인전', jo: 2, name: '박현우', affiliation: '대구클럽', scores: { 'A': [4,3,5,5,3,4,4,5,3], 'B': [3,4,4,4,3,4,5,4,3] }, total: 70, rank: 2 },
-    { id: 4, group: '여자 개인전', jo: 3, name: '최지아', affiliation: '인천클럽', scores: { 'A': [4,3,4,5,3,4,4,5,3], 'B': [3,3,4,4,3,4,5,4,3] }, total: 69, rank: 1 },
-    { id: 5, group: '2인 1팀', jo: 4, name: '나영희 / 황인성', affiliation: '대전클럽', scores: { 'A': [4,3,4,5,3,4,4,5,3], 'B': [3,3,4,4,3,4,5,4,3] }, total: 69, rank: 1 },
-];
-
-const mockCourses = [
-    { id: 'A', name: '햇살코스', pars: [4,3,4,5,3,4,4,5,3] },
-    { id: 'B', name: '바람코스', pars: [3,3,4,4,3,4,5,4,3] }
-];
+interface ProcessedPlayer {
+    id: string;
+    group: string;
+    jo: number;
+    name: string;
+    affiliation: string;
+    courseScores: { [courseId: string]: number };
+    total: number;
+    rank: number;
+}
 
 export default function AdminDashboard() {
-    const [activeCourses, setActiveCourses] = useState(['A', 'B']);
-    const [progress, setProgress] = useState(85); // Mock progress
+    const [players, setPlayers] = useState({});
+    const [scores, setScores] = useState({});
+    const [courses, setCourses] = useState({});
+    const [filterGroup, setFilterGroup] = useState('all');
 
-    const getScoreDisplay = (score: number, par: number) => {
-        const diff = score - par;
-        if (diff < -1) return <Badge variant="default" className="bg-blue-500 hover:bg-blue-600">이글</Badge>;
-        if (diff === -1) return <Badge variant="default" className="bg-sky-500 hover:bg-sky-600">버디</Badge>;
-        if (diff === 0) return <Badge variant="secondary">파</Badge>;
-        if (diff === 1) return <Badge variant="destructive" className="bg-red-400 hover:bg-red-500">보기</Badge>;
-        if (diff > 1) return <Badge variant="destructive">더블보기+</Badge>;
-        return score;
-    };
+    useEffect(() => {
+        const playersRef = ref(db, 'players');
+        const scoresRef = ref(db, 'scores');
+        const coursesRef = ref(db, 'tournaments/current/courses');
+
+        const unsubPlayers = onValue(playersRef, snap => setPlayers(snap.val() || {}));
+        const unsubScores = onValue(scoresRef, snap => setScores(snap.val() || {}));
+        const unsubCourses = onValue(coursesRef, snap => setCourses(snap.val() || {}));
+        
+        return () => {
+            unsubPlayers();
+            unsubScores();
+            unsubCourses();
+        }
+    }, []);
+
+    const processedData = useMemo(() => {
+        const activeCourses = Object.values(courses).filter((c: any) => c.isActive);
+        const processedPlayers: Omit<ProcessedPlayer, 'rank'>[] = Object.entries(players).map(([id, player]: [string, any]) => {
+            const playerScores = scores[id] || {};
+            let total = 0;
+            const courseScores: { [courseId: string]: number } = {};
+
+            activeCourses.forEach((course: any) => {
+                const courseId = course.id;
+                const scoresForCourse = playerScores[courseId] ? Object.values(playerScores[courseId]) as number[] : [];
+                const courseSum = scoresForCourse.reduce((a, b) => a + b, 0);
+                courseScores[courseId] = courseSum;
+                total += courseSum;
+            });
+            
+            return {
+                id,
+                group: player.group,
+                jo: player.jo,
+                name: player.type === 'team' ? `${player.p1_name} / ${player.p2_name}` : player.name,
+                affiliation: player.type === 'team' ? player.p1_affiliation : player.affiliation,
+                courseScores,
+                total,
+            };
+        });
+
+        const groupedAndRanked: { [groupName: string]: ProcessedPlayer[] } = {};
+        const allGroups = [...new Set(processedPlayers.map(p => p.group))];
+
+        allGroups.forEach(groupName => {
+            if (!groupName) return;
+            const groupPlayers = processedPlayers
+                .filter(p => p.group === groupName)
+                .sort((a, b) => a.total - b.total); // Add back-count tie-breaking later
+            
+            groupedAndRanked[groupName] = groupPlayers.map((player, index) => ({
+                ...player,
+                rank: index + 1 // Simplified ranking
+            }));
+        });
+        
+        return groupedAndRanked;
+    }, [players, scores, courses]);
+    
+    const activeCoursesList = Object.values(courses).filter((c: any) => c.isActive);
+    const allGroupsList = Object.keys(processedData);
+    const progress = useMemo(() => {
+        const totalHoles = activeCoursesList.length * 9;
+        if(totalHoles === 0 || Object.keys(scores).length === 0) return 0;
+        
+        const totalScores = Object.values(scores).reduce((acc: number, courseScores: any) => {
+           return acc + Object.values(courseScores).reduce((cAcc: number, holeScores: any) => cAcc + Object.keys(holeScores).length, 0);
+        }, 0);
+        
+        const totalPossibleScores = Object.keys(players).length * totalHoles;
+        if (totalPossibleScores === 0) return 0;
+
+        return Math.round((totalScores / totalPossibleScores) * 100);
+
+    }, [scores, players, activeCoursesList]);
+
 
     return (
         <div className="space-y-6">
@@ -46,27 +114,25 @@ export default function AdminDashboard() {
                     <div className="flex flex-col sm:flex-row gap-4 justify-between items-center p-4 bg-muted/50 rounded-lg">
                         <div className="flex gap-4 items-center">
                             <Filter className="w-5 h-5 text-muted-foreground" />
-                             <Select defaultValue="all">
+                             <Select value={filterGroup} onValueChange={setFilterGroup}>
                                 <SelectTrigger className="w-[180px]">
                                     <SelectValue placeholder="그룹 필터" />
                                 </SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="all">모든 그룹</SelectItem>
-                                    <SelectItem value="men">남자 개인전</SelectItem>
-                                    <SelectItem value="women">여자 개인전</SelectItem>
-                                    <SelectItem value="team">2인 1팀</SelectItem>
+                                    {allGroupsList.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}
                                 </SelectContent>
                             </Select>
                         </div>
-                        <Button>
+                        <Button disabled>
                             <Download className="mr-2 h-4 w-4" />
-                            엑셀로 다운로드
+                            엑셀로 다운로드 (개발중)
                         </Button>
                     </div>
                 </CardContent>
             </Card>
 
-            {['남자 개인전', '여자 개인전', '2인 1팀'].map(groupName => (
+            {(filterGroup === 'all' ? allGroupsList : [filterGroup]).map(groupName => (
                 <Card key={groupName}>
                     <CardHeader className="flex flex-row items-center justify-between">
                         <div>
@@ -83,27 +149,22 @@ export default function AdminDashboard() {
                                         <TableHead>선수명</TableHead>
                                         <TableHead>소속</TableHead>
                                         <TableHead>조</TableHead>
-                                        {activeCourses.map(courseId => {
-                                            const course = mockCourses.find(c => c.id === courseId);
-                                            return <TableHead key={courseId} className="text-center">{course?.name}</TableHead>
-                                        })}
+                                        {activeCoursesList.map((course: any) => (
+                                            <TableHead key={course.id} className="text-center">{course.name}</TableHead>
+                                        ))}
                                         <TableHead className="text-center">합계</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {mockPlayers.filter(p => p.group === groupName).map(player => (
+                                    {(processedData[groupName] || []).map(player => (
                                         <TableRow key={player.id}>
                                             <TableCell className="text-center font-bold text-lg">{player.rank}</TableCell>
                                             <TableCell className="font-medium">{player.name}</TableCell>
                                             <TableCell>{player.affiliation}</TableCell>
                                             <TableCell className="text-center">{player.jo}</TableCell>
-                                            {activeCourses.map(courseId => {
-                                                const course = mockCourses.find(c => c.id === courseId);
-                                                // @ts-ignore
-                                                const courseScores = player.scores[courseId] || [];
-                                                const courseSum = courseScores.reduce((a: number, b: number) => a + b, 0);
-                                                return <TableCell key={courseId} className="text-center">{courseSum}</TableCell>
-                                            })}
+                                            {activeCoursesList.map((course: any) => (
+                                                <TableCell key={course.id} className="text-center">{player.courseScores[course.id] || '-'}</TableCell>
+                                            ))}
                                             <TableCell className="text-center font-bold text-primary">{player.total}</TableCell>
                                         </TableRow>
                                     ))}
