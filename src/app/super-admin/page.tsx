@@ -157,7 +157,7 @@ export default function SuperAdminPage() {
                              <div className="space-y-2">
                                 <Label htmlFor="userDomain">사용자 이메일 도메인 (XXX)</Label>
                                 <div className="flex items-center">
-                                    <span className="p-2 bg-muted rounded-l-md text-muted-foreground">admin@</span>
+                                    <span className="p-2 bg-muted rounded-l-md text-muted-foreground text-sm">admin@</span>
                                     <Input id="userDomain" value={config.userDomain} onChange={handleInputChange} className="rounded-l-none" />
                                 </div>
                                  <p className="text-xs text-muted-foreground">admin@XXX.com 및 refereeN@XXX.com의 XXX 부분을 설정합니다.</p>
