@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
@@ -7,29 +7,40 @@ import { Download, Filter } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { db } from '@/lib/firebase';
 import { ref, onValue } from 'firebase/database';
+import * as XLSX from 'xlsx';
+import { useToast } from '@/hooks/use-toast';
 
 interface ProcessedPlayer {
     id: string;
-    group: string;
     jo: number;
     name: string;
     affiliation: string;
-    courseScores: { [courseId: string]: number };
-    total: number;
+    group: string;
+    totalScore: number;
     rank: number;
+    hasAnyScore: boolean;
+    coursesData: {
+        [courseId: string]: {
+            courseName: string;
+            courseTotal: number;
+            holeScores: (number | null)[];
+        }
+    };
+    total: number; // For tie-breaking
+    courseScores: { [courseId: string]: number };
+    detailedScores: { [courseId: string]: { [holeNumber: string]: number } };
 }
 
 // Helper function for tie-breaking using back-count method
 const tieBreak = (a: any, b: any, activeCourses: any[]) => {
-    // 1. Total score (lower is better)
+    if (!a.hasAnyScore && !b.hasAnyScore) return 0;
+    if (!a.hasAnyScore) return 1;
+    if (!b.hasAnyScore) return -1;
+    
     if (a.total !== b.total) {
         return a.total - b.total;
     }
-
-    // Sort courses by ID descending to check last course first
     const sortedCourses = [...activeCourses].sort((c1, c2) => c2.id - c1.id);
-
-    // 2. Compare course by course totals, from last to first
     for (const course of sortedCourses) {
         const courseId = course.id;
         const aCourseScore = a.courseScores[courseId] || 0;
@@ -38,13 +49,10 @@ const tieBreak = (a: any, b: any, activeCourses: any[]) => {
             return aCourseScore - bCourseScore;
         }
     }
-
-    // 3. If still tied, compare hole by hole, from last hole of last course to first hole of first course
     for (const course of sortedCourses) {
         const courseId = course.id;
         const aHoleScores = a.detailedScores[courseId] || {};
         const bHoleScores = b.detailedScores[courseId] || {};
-        
         for (let i = 9; i >= 1; i--) {
             const hole = i.toString();
             const aHole = aHoleScores[hole] || 0;
@@ -54,13 +62,12 @@ const tieBreak = (a: any, b: any, activeCourses: any[]) => {
             }
         }
     }
-
-    // If still tied, they are equal.
     return 0;
 };
 
 
 export default function AdminDashboard() {
+    const { toast } = useToast();
     const [players, setPlayers] = useState({});
     const [scores, setScores] = useState({});
     const [courses, setCourses] = useState({});
@@ -81,78 +88,175 @@ export default function AdminDashboard() {
             unsubCourses();
         }
     }, []);
+    
+    const activeCoursesList = useMemo(() => 
+        Object.values(courses).filter((c: any) => c.isActive)
+    , [courses]);
 
-    const processedData = useMemo(() => {
-        const activeCourses = Object.values(courses).filter((c: any) => c.isActive);
-        const processedPlayers = Object.entries(players).map(([id, player]: [string, any]) => {
-            const playerScoresData = scores[id] || {};
-            let total = 0;
-            const courseScores: { [courseId: string]: number } = {};
-            const detailedScores: { [courseId: string]: { [holeNumber: string]: number } } = {};
+    const processedDataByGroup = useMemo(() => {
+        if (Object.keys(players).length === 0 || activeCoursesList.length === 0) return {};
 
-            activeCourses.forEach((course: any) => {
+        const allProcessedPlayers: any[] = Object.entries(players).map(([playerId, player]: [string, any]) => {
+            const playerScoresData = scores[playerId] || {};
+            let totalScore = 0;
+            const coursesData: any = {};
+            const courseScoresForTieBreak: { [courseId: string]: number } = {};
+            const detailedScoresForTieBreak: { [courseId: string]: { [holeNumber: string]: number } } = {};
+            let hasAnyScore = false;
+
+            activeCoursesList.forEach((course: any) => {
                 const courseId = course.id;
                 const scoresForCourse = playerScoresData[courseId] || {};
-                detailedScores[courseId] = scoresForCourse;
-                const courseSum = Object.values(scoresForCourse).reduce((a, b) => (a as number) + (b as number), 0) as number;
-                courseScores[courseId] = courseSum;
-                total += courseSum;
+                detailedScoresForTieBreak[courseId] = scoresForCourse;
+
+                const holeScores: (number | null)[] = Array(9).fill(null);
+                let courseTotal = 0;
+                for (let i = 0; i < 9; i++) {
+                    const holeScore = scoresForCourse[(i + 1).toString()];
+                    if (holeScore !== undefined && holeScore !== null) {
+                        holeScores[i] = Number(holeScore);
+                        courseTotal += Number(holeScore);
+                        hasAnyScore = true;
+                    }
+                }
+                
+                totalScore += courseTotal;
+                courseScoresForTieBreak[courseId] = courseTotal;
+                coursesData[courseId] = { courseName: course.name, courseTotal, holeScores };
             });
-            
+
             return {
-                id,
-                group: player.group,
+                id: playerId,
                 jo: player.jo,
                 name: player.type === 'team' ? `${player.p1_name} / ${player.p2_name}` : player.name,
                 affiliation: player.type === 'team' ? player.p1_affiliation : player.affiliation,
-                courseScores,
-                total,
-                detailedScores
+                group: player.group,
+                totalScore,
+                coursesData,
+                hasAnyScore,
+                total: totalScore,
+                courseScores: courseScoresForTieBreak,
+                detailedScores: detailedScoresForTieBreak
             };
         });
 
-        const groupedAndRanked: { [groupName: string]: ProcessedPlayer[] } = {};
-        const allGroups = [...new Set(processedPlayers.map(p => p.group))].filter(g => g);
+        const groupedData = allProcessedPlayers.reduce((acc, player) => {
+            const groupName = player.group || '미지정';
+            if (!acc[groupName]) {
+                acc[groupName] = [];
+            }
+            acc[groupName].push(player);
+            return acc;
+        }, {} as Record<string, any[]>);
 
-        allGroups.forEach(groupName => {
-            const groupPlayers = processedPlayers
-                .filter(p => p.group === groupName)
-                .sort((a, b) => tieBreak(a, b, activeCourses));
+        const rankedData: { [key: string]: ProcessedPlayer[] } = {};
+        for (const groupName in groupedData) {
+            const groupPlayers = groupedData[groupName].sort((a,b) => tieBreak(a, b, activeCoursesList));
             
             const rankedPlayers: ProcessedPlayer[] = [];
             groupPlayers.forEach((player, index) => {
                 let rank;
-                if (index > 0 && tieBreak(player, groupPlayers[index - 1], activeCourses) === 0) {
+                if (index > 0 && player.hasAnyScore && groupPlayers[index-1].hasAnyScore && tieBreak(player, groupPlayers[index - 1], activeCoursesList) === 0) {
                     rank = rankedPlayers[index - 1].rank;
                 } else {
                     rank = index + 1;
                 }
-                const { detailedScores, ...restOfPlayer } = player;
-                rankedPlayers.push({ ...restOfPlayer, rank });
+                rankedPlayers.push({ ...player, rank });
             });
-            groupedAndRanked[groupName] = rankedPlayers;
-        });
+            rankedData[groupName] = rankedPlayers;
+        }
         
-        return groupedAndRanked;
-    }, [players, scores, courses]);
+        return rankedData;
+    }, [players, scores, courses, activeCoursesList]);
     
-    const activeCoursesList = Object.values(courses).filter((c: any) => c.isActive);
-    const allGroupsList = Object.keys(processedData);
+    const allGroupsList = Object.keys(processedDataByGroup);
+
     const progress = useMemo(() => {
         const totalHoles = activeCoursesList.length * 9;
-        if(totalHoles === 0 || Object.keys(scores).length === 0) return 0;
+        if(totalHoles === 0 || Object.keys(scores).length === 0 || Object.keys(players).length === 0) return 0;
         
-        const totalScores = Object.values(scores).reduce((acc: number, courseScores: any) => {
+        const totalScoresEntered = Object.values(scores).reduce((acc: number, courseScores: any) => {
            return acc + Object.values(courseScores).reduce((cAcc: number, holeScores: any) => cAcc + Object.keys(holeScores).length, 0);
         }, 0);
         
         const totalPossibleScores = Object.keys(players).length * totalHoles;
         if (totalPossibleScores === 0) return 0;
 
-        return Math.round((totalScores / totalPossibleScores) * 100);
-
+        return Math.round((totalScoresEntered / totalPossibleScores) * 100);
     }, [scores, players, activeCoursesList]);
 
+    const handleExportToExcel = () => {
+        const wb = XLSX.utils.book_new();
+
+        const dataToExport = (filterGroup === 'all') 
+            ? processedDataByGroup 
+            : { [filterGroup]: processedDataByGroup[filterGroup] };
+
+        for (const groupName in dataToExport) {
+            const groupPlayers = dataToExport[groupName];
+            if (!groupPlayers || groupPlayers.length === 0) continue;
+
+            const headers = [
+                '순위', '조', '선수명(팀명)', '소속', '코스', 
+                '1', '2', '3', '4', '5', '6', '7', '8', '9',
+                '코스 합계', '총타수'
+            ];
+            
+            const sheetData = [headers];
+
+            groupPlayers.forEach(player => {
+                activeCoursesList.forEach((course: any, courseIndex: number) => {
+                    const courseData = player.coursesData[course.id];
+                    const row: (string|number)[] = [];
+
+                    if (courseIndex === 0) {
+                        row.push(
+                            player.hasAnyScore ? player.rank : '',
+                            player.jo,
+                            player.name,
+                            player.affiliation
+                        );
+                    } else {
+                        row.push('', '', '', '');
+                    }
+
+                    row.push(
+                        courseData?.courseName || course.name,
+                        ...(courseData?.holeScores.map(s => s === null ? '-' : s) || Array(9).fill('-')),
+                        player.hasAnyScore ? (courseData?.courseTotal || 0) : '-',
+                    );
+
+                    if (courseIndex === 0) {
+                        row.push(player.hasAnyScore ? player.totalScore : '-');
+                    } else {
+                        row.push('');
+                    }
+                    sheetData.push(row);
+                });
+            });
+
+            const ws = XLSX.utils.aoa_to_sheet(sheetData);
+
+            ws['!cols'] = [
+                { wch: 5 }, { wch: 5 }, { wch: 25 }, { wch: 25 }, { wch: 10 },
+                ...Array(9).fill({ wch: 4 }),
+                { wch: 10 }, { wch: 10 },
+            ];
+            
+            XLSX.utils.book_append_sheet(wb, ws, groupName);
+        }
+
+        if (wb.SheetNames.length === 0) {
+            toast({
+                title: "내보내기 실패",
+                description: "엑셀로 내보낼 데이터가 없습니다.",
+                variant: "destructive"
+            });
+            return;
+        }
+
+        XLSX.writeFile(wb, `ParkScore_전체결과_${new Date().toISOString().slice(0,10)}.xlsx`);
+    };
 
     return (
         <div className="space-y-6">
@@ -175,56 +279,82 @@ export default function AdminDashboard() {
                                 </SelectContent>
                             </Select>
                         </div>
-                        <Button disabled>
+                        <Button onClick={handleExportToExcel} disabled={Object.keys(players).length === 0}>
                             <Download className="mr-2 h-4 w-4" />
-                            엑셀로 다운로드 (개발중)
+                            엑셀로 다운로드
                         </Button>
                     </div>
                 </CardContent>
             </Card>
 
-            {(filterGroup === 'all' ? allGroupsList : [filterGroup]).map(groupName => (
-                <Card key={groupName}>
-                    <CardHeader className="flex flex-row items-center justify-between">
-                        <div>
-                            <CardTitle className="text-xl font-bold font-headline">{groupName}</CardTitle>
-                            <CardDescription>진행률: {progress}%</CardDescription>
-                        </div>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="overflow-x-auto">
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead className="text-center">순위</TableHead>
-                                        <TableHead>선수명</TableHead>
-                                        <TableHead>소속</TableHead>
-                                        <TableHead>조</TableHead>
-                                        {activeCoursesList.map((course: any) => (
-                                            <TableHead key={course.id} className="text-center">{course.name}</TableHead>
-                                        ))}
-                                        <TableHead className="text-center">합계</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {(processedData[groupName] || []).map(player => (
-                                        <TableRow key={player.id}>
-                                            <TableCell className="text-center font-bold text-lg">{player.rank}</TableCell>
-                                            <TableCell className="font-medium">{player.name}</TableCell>
-                                            <TableCell>{player.affiliation}</TableCell>
-                                            <TableCell className="text-center">{player.jo}</TableCell>
-                                            {activeCoursesList.map((course: any) => (
-                                                <TableCell key={course.id} className="text-center">{player.courseScores[course.id] || '-'}</TableCell>
-                                            ))}
-                                            <TableCell className="text-center font-bold text-primary">{player.total}</TableCell>
+            {(filterGroup === 'all' ? allGroupsList : [filterGroup]).map(groupName => {
+                const groupPlayers = processedDataByGroup[groupName];
+                if (!groupPlayers || groupPlayers.length === 0) return null;
+
+                return (
+                    <Card key={groupName}>
+                        <CardHeader className="flex flex-row items-center justify-between">
+                            <div>
+                                <CardTitle className="text-xl font-bold font-headline">{groupName}</CardTitle>
+                            </div>
+                            <div className="text-right">
+                                <p className="font-bold text-primary">{progress}%</p>
+                                <p className="text-sm text-muted-foreground">진행률</p>
+                            </div>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="overflow-x-auto">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead className="w-16 text-center">순위</TableHead>
+                                            <TableHead className="w-16 text-center">조</TableHead>
+                                            <TableHead className="w-48">선수명(팀명)</TableHead>
+                                            <TableHead className="w-48">소속</TableHead>
+                                            <TableHead className="w-24">코스</TableHead>
+                                            {Array.from({length: 9}).map((_, i) => <TableHead key={i} className="text-center">{i + 1}</TableHead>)}
+                                            <TableHead className="w-24 text-center">합계</TableHead>
+                                            <TableHead className="w-24 text-center">총타수</TableHead>
                                         </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
-                        </div>
-                    </CardContent>
-                </Card>
-            ))}
+                                    </TableHeader>
+                                    <TableBody>
+                                        {groupPlayers.map((player) => (
+                                            <React.Fragment key={player.id}>
+                                                {activeCoursesList.map((course: any, courseIndex: number) => (
+                                                    <TableRow key={`${player.id}-${course.id}`} className="text-base">
+                                                        {courseIndex === 0 && (
+                                                            <TableCell rowSpan={activeCoursesList.length || 1} className="text-center align-middle font-bold text-lg">{player.hasAnyScore ? `${player.rank}위` : '-'}</TableCell>
+                                                        )}
+                                                         {courseIndex === 0 && (
+                                                            <TableCell rowSpan={activeCoursesList.length || 1} className="text-center align-middle font-medium">{player.jo}</TableCell>
+                                                        )}
+                                                         {courseIndex === 0 && (
+                                                            <TableCell rowSpan={activeCoursesList.length || 1} className="align-middle font-semibold">{player.name}</TableCell>
+                                                        )}
+                                                         {courseIndex === 0 && (
+                                                            <TableCell rowSpan={activeCoursesList.length || 1} className="align-middle text-muted-foreground">{player.affiliation}</TableCell>
+                                                        )}
+                                                        
+                                                        <TableCell className="font-medium">{player.coursesData[course.id]?.courseName}</TableCell>
+                                                        
+                                                        {player.coursesData[course.id]?.holeScores.map((score, i) => <TableCell key={i} className="text-center font-mono">{score === null ? '-' : score}</TableCell>)}
+                                                        
+                                                        <TableCell className="text-center font-bold">{player.hasAnyScore ? player.coursesData[course.id]?.courseTotal : '-'}</TableCell>
+
+                                                        {courseIndex === 0 && (
+                                                            <TableCell rowSpan={activeCoursesList.length || 1} className="text-center align-middle font-bold text-primary text-lg">{player.hasAnyScore ? player.totalScore : '-'}</TableCell>
+                                                        )}
+                                                    </TableRow>
+                                                ))}
+                                            </React.Fragment>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </div>
+                        </CardContent>
+                    </Card>
+                )
+            })}
         </div>
     );
 }
