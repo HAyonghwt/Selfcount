@@ -18,6 +18,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { db } from "@/lib/firebase";
 import { ref, onValue, push, remove, update, set } from "firebase/database";
 import { useToast } from "@/hooks/use-toast";
+import * as XLSX from 'xlsx';
 
 const initialIndividualState = Array(4).fill({ name: '', affiliation: '' });
 const initialTeamState = Array(2).fill({ p1_name: '', p1_affiliation: '', p2_name: '', p2_affiliation: '' });
@@ -76,6 +77,34 @@ export default function PlayerManagementPage() {
             unsubGroups();
         };
     }, []);
+    
+    const handleDownloadTemplate = (type: 'individual' | 'team') => {
+        const wb = XLSX.utils.book_new();
+        let ws_data, filename;
+
+        if (type === 'individual') {
+            ws_data = [
+                ["조", "이름", "소속"],
+                ["1", "홍길동", "중앙 파크골프"],
+                ["1", "김철수", "강남 클럽"],
+                ["1", "이영희", "행복 파크골프"],
+                ["1", "박지성", "대한 파크골프"],
+                ["2", "손흥민", "월드클래스 클럽"],
+            ];
+            filename = "개인전_선수등록_양식.xlsx";
+        } else { // team
+            ws_data = [
+                ["조", "선수1 이름", "선수1 소속", "선수2 이름", "선수2 소속"],
+                ["1", "홍길동", "중앙 파크골프", "김철수", "중앙 파크골프"],
+                ["1", "이영희", "강남 클럽", "박지성", "대한 파크골프"],
+            ];
+            filename = "2인1팀_선수등록_양식.xlsx";
+        }
+
+        const ws = XLSX.utils.aoa_to_sheet(ws_data);
+        XLSX.utils.book_append_sheet(wb, ws, "여기에 그룹명 입력 (예_ A그룹)");
+        XLSX.writeFile(wb, filename);
+    };
 
     const individualPlayers = allPlayers.filter(p => p.type === 'individual');
     const teamPlayers = allPlayers.filter(p => p.type === 'team');
@@ -301,7 +330,7 @@ export default function PlayerManagementPage() {
                                 <CardTitle className="text-lg">엑셀로 일괄 등록</CardTitle>
                             </CardHeader>
                             <CardContent className="flex flex-col sm:flex-row gap-4">
-                                <Button variant="outline"><Download className="mr-2 h-4 w-4" /> 엑셀 양식 다운로드 (.xlsx)</Button>
+                                <Button variant="outline" onClick={() => handleDownloadTemplate('individual')}><Download className="mr-2 h-4 w-4" /> 엑셀 양식 다운로드</Button>
                                 <Button disabled><Upload className="mr-2 h-4 w-4" /> 엑셀 파일 업로드 (개발중)</Button>
                             </CardContent>
                         </Card>
@@ -405,7 +434,7 @@ export default function PlayerManagementPage() {
                         <Card className="bg-muted/30">
                             <CardHeader><CardTitle className="text-lg">엑셀로 일괄 등록</CardTitle></CardHeader>
                             <CardContent className="flex flex-col sm:flex-row gap-4">
-                               <Button variant="outline"><Download className="mr-2 h-4 w-4" /> 엑셀 양식 다운로드 (.xlsx)</Button>
+                               <Button variant="outline" onClick={() => handleDownloadTemplate('team')}><Download className="mr-2 h-4 w-4" /> 엑셀 양식 다운로드</Button>
                                 <Button disabled><Upload className="mr-2 h-4 w-4" /> 엑셀 파일 업로드 (개발중)</Button>
                             </CardContent>
                         </Card>
