@@ -7,7 +7,6 @@ import { Download, Filter } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { db } from '@/lib/firebase';
 import { ref, onValue } from 'firebase/database';
-import * as XLSX from 'xlsx';
 import { useToast } from '@/hooks/use-toast';
 
 interface ProcessedPlayer {
@@ -185,7 +184,8 @@ export default function AdminDashboard() {
         return Math.round((totalScoresEntered / totalPossibleScores) * 100);
     }, [scores, players, activeCoursesList]);
 
-    const handleExportToExcel = () => {
+    const handleExportToExcel = async () => {
+        const XLSX = await import('xlsx');
         const wb = XLSX.utils.book_new();
 
         const dataToExport = (filterGroup === 'all') 
