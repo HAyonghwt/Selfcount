@@ -9,7 +9,6 @@ import {
   Users,
   ClipboardList,
   Tv,
-  ChevronLeft,
   Settings,
   LogOut,
   Target
@@ -26,9 +25,8 @@ import {
   SidebarMenuItem,
   SidebarMenuButton,
   SidebarFooter,
-  SidebarTrigger,
-  SidebarInset,
 } from "@/components/ui/sidebar"
+import { Skeleton } from "@/components/ui/skeleton"
 
 const navItems = [
   { href: "/admin/dashboard", icon: BarChart2, label: "홈 전광판" },
@@ -39,7 +37,35 @@ const navItems = [
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
+  const [isClient, setIsClient] = React.useState(false)
 
+  React.useEffect(() => {
+    setIsClient(true)
+  }, [])
+
+  // Render a skeleton layout on the server and during initial client render
+  // to prevent hydration mismatch.
+  if (!isClient) {
+    return (
+      <div className="flex h-screen bg-background">
+        <div className="w-16 md:w-64 border-r p-4 hidden md:flex flex-col gap-2">
+          <div className="p-2">
+            <Skeleton className="w-full h-10 mb-4" />
+          </div>
+          <div className="flex flex-col gap-1 p-2">
+            <Skeleton className="w-full h-8" />
+            <Skeleton className="w-full h-8" />
+            <Skeleton className="w-full h-8" />
+            <Skeleton className="w-full h-8" />
+          </div>
+        </div>
+        <main className="flex-1 p-6 bg-secondary/40">
+          <Skeleton className="w-full h-full" />
+        </main>
+      </div>
+    )
+  }
+  
   return (
     <SidebarProvider>
       <div className="flex h-screen bg-background">
@@ -102,11 +128,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               </SidebarMenu>
           </SidebarFooter>
         </Sidebar>
-        <SidebarInset className="bg-secondary/40">
-           <div className="p-4 sm:p-6 h-full overflow-y-auto">
+        <main className="flex-1 bg-secondary/40 overflow-y-auto">
+           <div className="p-4 sm:p-6">
             {children}
           </div>
-        </SidebarInset>
+        </main>
       </div>
     </SidebarProvider>
   )
