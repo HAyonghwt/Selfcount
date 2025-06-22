@@ -223,11 +223,10 @@ export default function RefereePage() {
                 <>
                     <Card className="mb-4">
                         <CardHeader className="p-3">
-                            <div className="flex justify-between items-center">
-                                <div>
-                                    <h2 className="text-lg font-bold">{selectedGroup} / {selectedCourseName}</h2>
-                                    <p className="text-sm text-muted-foreground">{selectedJo}조</p>
-                                </div>
+                            <div className="flex flex-col items-center gap-2">
+                                <h2 className="text-lg sm:text-xl font-bold text-center break-keep">
+                                    {selectedGroup} / {selectedCourseName} - {selectedJo}조
+                                </h2>
                                 <Button variant="outline" size="sm" onClick={handleResetSelection}>
                                     <Edit className="mr-2 h-4 w-4" />
                                     선택 변경
@@ -247,39 +246,39 @@ export default function RefereePage() {
 
                             return (
                             <div key={player.id} className="bg-white rounded-lg shadow p-3">
-                                <div className="grid grid-cols-[1fr_auto_auto] items-center gap-3">
-                                    <div>
-                                        <p className="font-bold text-2xl truncate">{getPlayerName(player)}</p>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                        <Button variant="outline" size="icon" className="w-14 h-14 rounded-lg border-2" onClick={() => updateScore(player.id, -1)} disabled={!isEditing}>
-                                            <Minus className="h-8 w-8" />
+                                <div className="flex items-center gap-2 w-full">
+                                    <p className="font-bold text-xl sm:text-2xl truncate flex-1 min-w-0">{getPlayerName(player)}</p>
+                                    
+                                    <div className="flex items-center gap-2 flex-shrink-0">
+                                        <Button variant="outline" size="icon" className="w-12 h-12 rounded-lg border-2" onClick={() => updateScore(player.id, -1)} disabled={!isEditing}>
+                                            <Minus className="h-7 w-7" />
                                         </Button>
-                                        <div className="relative w-20 text-center" onDoubleClick={() => handleScoreDoubleClick(player)}>
-                                            <span className={`text-6xl font-bold tabular-nums ${isSaved ? 'cursor-pointer' : ''}`}>
+                                        <div className="relative w-16 text-center" onDoubleClick={() => handleScoreDoubleClick(player)}>
+                                            <span className={`text-5xl sm:text-6xl font-bold tabular-nums ${isSaved ? 'cursor-pointer' : ''}`}>
                                                 {scoreData.score}
                                             </span>
                                         </div>
-                                        <Button variant="outline" size="icon" className="w-14 h-14 rounded-lg border-2" onClick={() => updateScore(player.id, 1)} disabled={!isEditing}>
-                                            <Plus className="h-8 w-8" />
+                                        <Button variant="outline" size="icon" className="w-12 h-12 rounded-lg border-2" onClick={() => updateScore(player.id, 1)} disabled={!isEditing}>
+                                            <Plus className="h-7 w-7" />
                                         </Button>
                                     </div>
-                                    <div className="w-14 h-14">
+
+                                    <div className="w-12 h-12 flex-shrink-0">
                                         {isEditing && (
                                             <Button variant="default" size="icon" className="w-full h-full rounded-lg" onClick={() => handleSavePress(player)}>
-                                                <Save className="h-7 w-7" />
+                                                <Save className="h-6 w-6" />
                                             </Button>
                                         )}
                                         {isSaved && (
                                             <div className="flex flex-col items-center justify-center h-full text-center relative" onDoubleClick={() => handleScoreDoubleClick(player)}>
-                                                    <Edit className="absolute top-0 right-0 w-4 h-4 text-primary animate-pulse" />
-                                                    <p className="text-xs text-primary font-bold">저장됨</p>
+                                                    <Edit className="absolute top-0 right-0 w-3 h-3 text-primary animate-pulse" />
+                                                    <p className="text-[10px] sm:text-xs text-primary font-bold">저장됨</p>
                                                     <Progress value={(now % 10000) / 100} className="h-1 mt-1 w-full" />
                                             </div>
                                         )}
                                         {isLocked && (
                                             <div className="flex items-center justify-center h-full bg-muted text-muted-foreground rounded-lg">
-                                                <Lock className="w-7 h-7" />
+                                                <Lock className="w-6 h-6" />
                                             </div>
                                         )}
                                     </div>
