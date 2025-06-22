@@ -157,7 +157,7 @@ export default function RefereePage() {
                             <SelectTrigger className="h-16 text-xl"><SelectValue placeholder="2. 코스 선택" /></SelectTrigger>
                             <SelectContent>{availableCoursesForGroup.map(c => <SelectItem key={c.id} value={c.id.toString()} className="text-xl">{c.name}</SelectItem>)}</SelectContent>
                         </Select>
-                        <Select value={selectedJo} onValueChange={setSelectedJo} disabled={!selectedCourse}>
+                        <Select value={selectedJo} onValueChange={setSelectedJo} disabled={!selectedGroup}>
                             <SelectTrigger className="h-16 text-xl"><SelectValue placeholder="3. 조 선택" /></SelectTrigger>
                             <SelectContent>{availableJos.map(j => <SelectItem key={j} value={j.toString()} className="text-xl">{j}조</SelectItem>)}</SelectContent>
                         </Select>
