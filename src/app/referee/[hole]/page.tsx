@@ -13,7 +13,7 @@ import { db } from '@/lib/firebase';
 import { ref, onValue, update } from 'firebase/database';
 
 interface Player { id: string; name?: string; type: 'individual' | 'team'; players?: any[]; jo: number; group: string; p1_name?: string; p2_name?: string }
-interface Course { id: number; name: string; }
+interface Course { id: number; name: string; isActive: boolean; }
 
 export default function RefereePage() {
     const params = useParams();
@@ -22,6 +22,8 @@ export default function RefereePage() {
 
     const [allPlayers, setAllPlayers] = useState<Player[]>([]);
     const [courses, setCourses] = useState<Course[]>([]);
+    const [groupsData, setGroupsData] = useState<any>({});
+
 
     const [selectedCourse, setSelectedCourse] = useState<string>('');
     const [selectedGroup, setSelectedGroup] = useState<string>('');
@@ -34,24 +36,37 @@ export default function RefereePage() {
 
     useEffect(() => {
         const playersRef = ref(db, 'players');
+        const tournamentRef = ref(db, 'tournaments/current');
+
         const unsubscribePlayers = onValue(playersRef, (snapshot) => {
             const data = snapshot.val() || {};
             setAllPlayers(Object.entries(data).map(([id, player]) => ({ id, ...player as object } as Player)));
         });
 
-        const coursesRef = ref(db, 'tournaments/current/courses');
-        const unsubscribeCourses = onValue(coursesRef, (snapshot) => {
+        const unsubscribeTournament = onValue(tournamentRef, (snapshot) => {
             const data = snapshot.val() || {};
-            setCourses(Object.values(data).filter((c: any) => c.isActive));
+            setCourses(data.courses ? Object.values(data.courses) : []);
+            setGroupsData(data.groups || {});
         });
 
         return () => {
             unsubscribePlayers();
-            unsubscribeCourses();
+            unsubscribeTournament();
         };
     }, []);
 
-    const availableGroups = useMemo(() => [...new Set(allPlayers.map(p => p.group))], [allPlayers]);
+    const availableGroups = useMemo(() => Object.keys(groupsData).sort(), [groupsData]);
+    
+    const availableCoursesForGroup = useMemo(() => {
+        if (!selectedGroup) return [];
+
+        const group = groupsData[selectedGroup];
+        if (!group || !group.courses) return [];
+
+        const assignedCourseIds = Object.keys(group.courses).filter(id => group.courses[id]);
+        return courses.filter(c => c.isActive && assignedCourseIds.includes(c.id.toString()));
+    }, [selectedGroup, groupsData, courses]);
+
     const availableJos = useMemo(() => {
         if (!selectedGroup) return [];
         return [...new Set(allPlayers.filter(p => p.group === selectedGroup).map(p => p.jo))].sort((a,b) => a - b);
@@ -125,18 +140,18 @@ export default function RefereePage() {
             <Card className="flex-1 flex flex-col">
                 <CardHeader>
                     <CardTitle>조 선택</CardTitle>
-                    <CardDescription>점수를 기록할 코스, 그룹, 조를 선택하세요.</CardDescription>
+                    <CardDescription>점수를 기록할 그룹, 코스, 조를 선택하세요.</CardDescription>
                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4">
-                        <Select value={selectedCourse} onValueChange={setSelectedCourse}>
-                            <SelectTrigger className="h-14 text-lg"><SelectValue placeholder="코스 선택" /></SelectTrigger>
-                            <SelectContent>{courses.map(c => <SelectItem key={c.id} value={c.id.toString()}>{c.name}</SelectItem>)}</SelectContent>
-                        </Select>
-                        <Select value={selectedGroup} onValueChange={setSelectedGroup} disabled={!selectedCourse}>
-                            <SelectTrigger className="h-14 text-lg"><SelectValue placeholder="그룹 선택" /></SelectTrigger>
+                        <Select value={selectedGroup} onValueChange={val => { setSelectedGroup(val); setSelectedCourse(''); setSelectedJo(''); }}>
+                            <SelectTrigger className="h-14 text-lg"><SelectValue placeholder="1. 그룹 선택" /></SelectTrigger>
                             <SelectContent>{availableGroups.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}</SelectContent>
                         </Select>
-                        <Select value={selectedJo} onValueChange={setSelectedJo} disabled={!selectedGroup}>
-                            <SelectTrigger className="h-14 text-lg"><SelectValue placeholder="조 선택" /></SelectTrigger>
+                        <Select value={selectedCourse} onValueChange={setSelectedCourse} disabled={!selectedGroup || availableCoursesForGroup.length === 0}>
+                            <SelectTrigger className="h-14 text-lg"><SelectValue placeholder="2. 코스 선택" /></SelectTrigger>
+                            <SelectContent>{availableCoursesForGroup.map(c => <SelectItem key={c.id} value={c.id.toString()}>{c.name}</SelectItem>)}</SelectContent>
+                        </Select>
+                        <Select value={selectedJo} onValueChange={setSelectedJo} disabled={!selectedCourse}>
+                            <SelectTrigger className="h-14 text-lg"><SelectValue placeholder="3. 조 선택" /></SelectTrigger>
                             <SelectContent>{availableJos.map(j => <SelectItem key={j} value={j.toString()}>{j}조</SelectItem>)}</SelectContent>
                         </Select>
                     </div>
@@ -145,7 +160,7 @@ export default function RefereePage() {
                     {!isReady ? (
                          <div className="text-center text-muted-foreground py-16">
                             <ChevronDown className="mx-auto h-12 w-12 animate-bounce"/>
-                            <p className="mt-4 text-lg">상단에서 코스, 그룹, 조를 선택해주세요.</p>
+                            <p className="mt-4 text-lg">상단에서 그룹, 코스, 조를 순서대로 선택해주세요.</p>
                         </div>
                     ) : (
                         <div className="space-y-6">

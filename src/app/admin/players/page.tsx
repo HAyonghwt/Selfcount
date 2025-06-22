@@ -1,12 +1,12 @@
 "use client"
 import { useState, useEffect, useRef, useMemo } from "react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Upload, Download, UserPlus, Trash2, Edit, AlertTriangle, RotateCcw, Users, PlusCircle, X, Save } from "lucide-react";
+import { Upload, Download, UserPlus, Trash2, Edit, AlertTriangle, RotateCcw, Users, PlusCircle, X, Save, Settings, Check, Columns } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -14,6 +14,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { db } from "@/lib/firebase";
 import { ref, onValue, push, remove, update, set } from "firebase/database";
@@ -41,8 +43,15 @@ export default function PlayerManagementPage() {
     const [configLoading, setConfigLoading] = useState(true);
 
     // Group management states
-    const [groups, setGroups] = useState<string[]>([]);
+    const [groupsData, setGroupsData] = useState<any>({});
     const [newGroupName, setNewGroupName] = useState("");
+    const [courses, setCourses] = useState<any[]>([]);
+    
+    // Course assignment modal states
+    const [isGroupCourseModalOpen, setGroupCourseModalOpen] = useState(false);
+    const [currentEditingGroup, setCurrentEditingGroup] = useState<any>(null);
+    const [assignedCourses, setAssignedCourses] = useState<{[key: string]: boolean}>({});
+
 
     // Editing states
     const [editingPlayerId, setEditingPlayerId] = useState<string | null>(null);
@@ -54,7 +63,7 @@ export default function PlayerManagementPage() {
     useEffect(() => {
         const playersRef = ref(db, 'players');
         const configRef = ref(db, 'config');
-        const groupsRef = ref(db, 'tournaments/current/groups');
+        const tournamentRef = ref(db, 'tournaments/current');
         
         const unsubPlayers = onValue(playersRef, (snapshot) => {
             const data = snapshot.val();
@@ -69,15 +78,16 @@ export default function PlayerManagementPage() {
             setConfigLoading(false);
         });
 
-        const unsubGroups = onValue(groupsRef, (snapshot) => {
-            const data = snapshot.val();
-            setGroups(data ? Object.keys(data) : []);
+        const unsubTournament = onValue(tournamentRef, (snapshot) => {
+            const data = snapshot.val() || {};
+            setGroupsData(data.groups || {});
+            setCourses(data.courses ? Object.values(data.courses).filter((c:any) => c.isActive) : []);
         });
 
         return () => {
             unsubPlayers();
             unsubConfig();
-            unsubGroups();
+            unsubTournament();
         };
     }, []);
     
@@ -358,10 +368,22 @@ export default function PlayerManagementPage() {
             toast({ title: '오류', description: '그룹 이름을 입력해주세요.', variant: 'destructive' });
             return;
         }
+        if (groupsData[trimmedName]) {
+            toast({ title: '오류', description: '이미 존재하는 그룹 이름입니다.', variant: 'destructive' });
+            return;
+        }
+
         const groupRef = ref(db, `tournaments/current/groups/${trimmedName}`);
-        set(groupRef, true)
+        
+        //
+        const defaultCourses = courses.reduce((acc, course) => {
+            acc[course.id] = true;
+            return acc;
+        }, {});
+
+        set(groupRef, { name: trimmedName, courses: defaultCourses })
             .then(() => {
-                toast({ title: '성공', description: '새 그룹이 추가되었습니다.', className: 'bg-green-500 text-white' });
+                toast({ title: '성공', description: `새 그룹 '${trimmedName}'이 추가되었습니다.`, className: 'bg-green-500 text-white' });
                 setNewGroupName("");
             })
             .catch(err => toast({ title: '오류', description: err.message, variant: 'destructive' }));
@@ -405,6 +427,27 @@ export default function PlayerManagementPage() {
             .catch(err => toast({ title: '수정 실패', description: err.message, variant: 'destructive' }));
     };
 
+    const handleOpenCourseModal = (group: any) => {
+        setCurrentEditingGroup(group);
+        setAssignedCourses(group.courses || {});
+        setGroupCourseModalOpen(true);
+    };
+
+    const handleSaveGroupCourses = () => {
+        if (!currentEditingGroup) return;
+        const groupCoursesRef = ref(db, `tournaments/current/groups/${currentEditingGroup.name}/courses`);
+        set(groupCoursesRef, assignedCourses)
+            .then(() => {
+                toast({ title: "저장 완료", description: `${currentEditingGroup.name} 그룹의 코스 설정이 저장되었습니다.`, className: "bg-green-500 text-white" });
+                setGroupCourseModalOpen(false);
+                setCurrentEditingGroup(null);
+            })
+            .catch((err) => toast({ title: "저장 실패", description: err.message, variant: "destructive" }));
+    };
+
+    const groupList = Object.values(groupsData).sort((a:any, b:any) => a.name.localeCompare(b.name));
+    const groupNameList = groupList.map((g: any) => g.name);
+
   return (
     <div className="space-y-6">
         <Card>
@@ -419,38 +462,89 @@ export default function PlayerManagementPage() {
         <Card>
             <CardHeader>
                 <CardTitle>그룹 관리</CardTitle>
-                <CardDescription>대회에 사용할 그룹을 추가하거나 삭제합니다. 여기서 추가된 그룹을 선수 등록 시 선택할 수 있습니다.</CardDescription>
+                <CardDescription>대회에 사용할 그룹을 추가하거나 삭제하고, 그룹별 경기 코스를 설정합니다.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
                 <div className="flex gap-2">
                     <Input value={newGroupName} onChange={(e) => setNewGroupName(e.target.value)} placeholder="새 그룹 이름 (예: A-1 그룹, 시니어부)" onKeyDown={(e) => e.key === 'Enter' && handleAddGroup()} />
                     <Button onClick={handleAddGroup}><PlusCircle className="mr-2 h-4 w-4" />추가</Button>
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-2 pt-4">
                     <Label>현재 그룹 목록</Label>
-                    <div className="flex flex-wrap gap-2">
-                        {groups.length > 0 ? (
-                            groups.map(group => (
-                                <div key={group} className="flex items-center gap-1 bg-secondary text-secondary-foreground pl-3 pr-1 py-1 rounded-full text-sm font-medium">
-                                    <span>{group}</span>
-                                    <AlertDialog>
-                                        <AlertDialogTrigger asChild>
-                                             <Button variant="ghost" size="icon" className="h-6 w-6 rounded-full"><X className="h-4 w-4 text-muted-foreground hover:text-destructive" /></Button>
-                                        </AlertDialogTrigger>
-                                        <AlertDialogContent>
-                                            <AlertDialogHeader><AlertDialogTitle>그룹을 삭제하시겠습니까?</AlertDialogTitle><AlertDialogDescription>'{group}' 그룹을 삭제합니다. 이 그룹에 속한 선수는 그대로 유지되지만, 그룹 필터링 등에 영향을 줄 수 있습니다.</AlertDialogDescription></AlertDialogHeader>
-                                            <AlertDialogFooter><AlertDialogCancel>취소</AlertDialogCancel><AlertDialogAction onClick={() => handleDeleteGroup(group)}>삭제</AlertDialogAction></AlertDialogFooter>
-                                        </AlertDialogContent>
-                                    </AlertDialog>
-                                </div>
-                            ))
-                        ) : (
-                            <p className="text-sm text-muted-foreground pt-2">등록된 그룹이 없습니다. 위에서 새 그룹을 추가해주세요.</p>
-                        )}
+                     <div className="border rounded-md">
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>그룹명</TableHead>
+                                    <TableHead>배정된 코스</TableHead>
+                                    <TableHead className="text-right">관리</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {groupList.length > 0 ? (
+                                    groupList.map((group: any) => (
+                                        <TableRow key={group.name}>
+                                            <TableCell className="font-medium">{group.name}</TableCell>
+                                            <TableCell className="text-muted-foreground text-xs">
+                                                {group.courses ? 
+                                                    Object.keys(group.courses).filter(cid => group.courses[cid]).map(cid => courses.find(c => c.id.toString() === cid)?.name).join(', ')
+                                                    : '없음'
+                                                }
+                                            </TableCell>
+                                            <TableCell className="text-right space-x-2">
+                                                <Button variant="outline" size="sm" onClick={() => handleOpenCourseModal(group)}><Settings className="mr-2 h-4 w-4"/>코스 설정</Button>
+                                                <AlertDialog>
+                                                    <AlertDialogTrigger asChild>
+                                                        <Button variant="destructive" size="sm"><Trash2 className="mr-2 h-4 w-4"/>삭제</Button>
+                                                    </AlertDialogTrigger>
+                                                    <AlertDialogContent>
+                                                        <AlertDialogHeader><AlertDialogTitle>그룹을 삭제하시겠습니까?</AlertDialogTitle><AlertDialogDescription>'{group.name}' 그룹을 삭제합니다. 이 그룹에 속한 선수는 그대로 유지되지만, 그룹 필터링 등에 영향을 줄 수 있습니다.</AlertDialogDescription></AlertDialogHeader>
+                                                        <AlertDialogFooter><AlertDialogCancel>취소</AlertDialogCancel><AlertDialogAction onClick={() => handleDeleteGroup(group.name)}>삭제</AlertDialogAction></AlertDialogFooter>
+                                                    </AlertDialogContent>
+                                                </AlertDialog>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))
+                                ) : (
+                                    <TableRow><TableCell colSpan={3} className="text-center h-24 text-muted-foreground">등록된 그룹이 없습니다.</TableCell></TableRow>
+                                )}
+                            </TableBody>
+                        </Table>
                     </div>
                 </div>
             </CardContent>
         </Card>
+        
+        <Dialog open={isGroupCourseModalOpen} onOpenChange={setGroupCourseModalOpen}>
+            <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                    <DialogTitle>'{currentEditingGroup?.name}' 코스 설정</DialogTitle>
+                    <DialogDescription>이 그룹이 경기할 코스를 선택하세요. 코스 목록은 대회/코스 관리 페이지에서 관리할 수 있습니다.</DialogDescription>
+                </DialogHeader>
+                <div className="py-4 space-y-4">
+                    {courses.length > 0 ? courses.map(course => (
+                        <div key={course.id} className="flex items-center space-x-3">
+                            <Checkbox 
+                                id={`course-${course.id}`}
+                                checked={!!assignedCourses[course.id]}
+                                onCheckedChange={(checked) => {
+                                    setAssignedCourses(prev => ({...prev, [course.id]: !!checked}))
+                                }}
+                            />
+                            <Label htmlFor={`course-${course.id}`} className="text-base font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                                {course.name}
+                            </Label>
+                        </div>
+                    )) : (
+                        <p className="text-sm text-center text-muted-foreground py-8">설정 가능한 코스가 없습니다.<br/>코스 관리 페이지에서 코스를 먼저 추가하고 활성화해주세요.</p>
+                    )}
+                </div>
+                <DialogFooter>
+                    <DialogClose asChild><Button variant="outline">취소</Button></DialogClose>
+                    <Button onClick={handleSaveGroupCourses}><Save className="mr-2 h-4 w-4"/>저장</Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
 
         <Tabs defaultValue="individual">
             <TabsList className="grid w-full grid-cols-2 h-12">
@@ -483,10 +577,10 @@ export default function PlayerManagementPage() {
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                      <div className="space-y-2">
                                         <Label>그룹</Label>
-                                        <Select value={individualGroup} onValueChange={setIndividualGroup} disabled={groups.length === 0}>
+                                        <Select value={individualGroup} onValueChange={setIndividualGroup} disabled={groupList.length === 0}>
                                             <SelectTrigger><SelectValue placeholder="그룹 선택" /></SelectTrigger>
                                             <SelectContent>
-                                                {groups.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}
+                                                {groupNameList.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}
                                             </SelectContent>
                                         </Select>
                                     </div>
@@ -541,7 +635,7 @@ export default function PlayerManagementPage() {
                                                         <TableCell className="px-4 py-2">
                                                             <Select value={editingPlayerData.group} onValueChange={(value) => handleEditingFormChange('group', value)}>
                                                                 <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                                                                <SelectContent>{groups.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}</SelectContent>
+                                                                <SelectContent>{groupNameList.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}</SelectContent>
                                                             </Select>
                                                         </TableCell>
                                                         <TableCell className="px-4 py-2"><Input value={editingPlayerData.jo} type="number" onChange={(e) => handleEditingFormChange('jo', e.target.value)} className="h-9 w-20" /></TableCell>
@@ -600,10 +694,10 @@ export default function PlayerManagementPage() {
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div className="space-y-2">
                                         <Label>그룹</Label>
-                                        <Select value={teamGroup} onValueChange={setTeamGroup} disabled={groups.length === 0}>
+                                        <Select value={teamGroup} onValueChange={setTeamGroup} disabled={groupList.length === 0}>
                                             <SelectTrigger><SelectValue placeholder="그룹 선택" /></SelectTrigger>
                                             <SelectContent>
-                                                {groups.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}
+                                                {groupNameList.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}
                                             </SelectContent>
                                         </Select>
                                     </div>
@@ -655,7 +749,7 @@ export default function PlayerManagementPage() {
                                                         <TableCell className="px-4 py-2 align-top">
                                                             <Select value={editingPlayerData.group} onValueChange={(value) => handleEditingFormChange('group', value)}>
                                                                 <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                                                                <SelectContent>{groups.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}</SelectContent>
+                                                                <SelectContent>{groupNameList.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}</SelectContent>
                                                             </Select>
                                                         </TableCell>
                                                         <TableCell className="px-4 py-2 align-top"><Input value={editingPlayerData.jo} type="number" onChange={(e) => handleEditingFormChange('jo', e.target.value)} className="h-9 w-20" /></TableCell>

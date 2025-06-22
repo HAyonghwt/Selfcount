@@ -28,10 +28,11 @@ interface ProcessedPlayer {
     total: number; // For tie-breaking
     courseScores: { [courseId: string]: number };
     detailedScores: { [courseId: string]: { [holeNumber: string]: number } };
+    assignedCourses: any[];
 }
 
 // Helper function for tie-breaking using back-count method
-const tieBreak = (a: any, b: any, activeCourses: any[]) => {
+const tieBreak = (a: any, b: any, coursesForGroup: any[]) => {
     if (!a.hasAnyScore && !b.hasAnyScore) return 0;
     if (!a.hasAnyScore) return 1;
     if (!b.hasAnyScore) return -1;
@@ -39,7 +40,7 @@ const tieBreak = (a: any, b: any, activeCourses: any[]) => {
     if (a.total !== b.total) {
         return a.total - b.total;
     }
-    const sortedCourses = [...activeCourses].sort((c1, c2) => c2.id - c1.id);
+    const sortedCourses = [...coursesForGroup].sort((c1, c2) => c2.id - c1.id);
     for (const course of sortedCourses) {
         const courseId = course.id;
         const aCourseScore = a.courseScores[courseId] || 0;
@@ -70,21 +71,26 @@ export default function AdminDashboard() {
     const [players, setPlayers] = useState({});
     const [scores, setScores] = useState({});
     const [courses, setCourses] = useState({});
+    const [groupsData, setGroupsData] = useState({});
     const [filterGroup, setFilterGroup] = useState('all');
 
     useEffect(() => {
         const playersRef = ref(db, 'players');
         const scoresRef = ref(db, 'scores');
-        const coursesRef = ref(db, 'tournaments/current/courses');
+        const tournamentRef = ref(db, 'tournaments/current');
 
         const unsubPlayers = onValue(playersRef, snap => setPlayers(snap.val() || {}));
         const unsubScores = onValue(scoresRef, snap => setScores(snap.val() || {}));
-        const unsubCourses = onValue(coursesRef, snap => setCourses(snap.val() || {}));
+        const unsubTournament = onValue(tournamentRef, snap => {
+            const data = snap.val() || {};
+            setCourses(data.courses || {});
+            setGroupsData(data.groups || {});
+        });
         
         return () => {
             unsubPlayers();
             unsubScores();
-            unsubCourses();
+            unsubTournament();
         }
     }, []);
     
@@ -96,6 +102,13 @@ export default function AdminDashboard() {
         if (Object.keys(players).length === 0 || activeCoursesList.length === 0) return {};
 
         const allProcessedPlayers: any[] = Object.entries(players).map(([playerId, player]: [string, any]) => {
+            const playerGroupData = groupsData[player.group];
+            const assignedCourseIds = playerGroupData?.courses 
+                ? Object.keys(playerGroupData.courses).filter(id => playerGroupData.courses[id]) 
+                : [];
+            
+            const coursesForPlayer = activeCoursesList.filter(c => assignedCourseIds.includes(c.id.toString()));
+
             const playerScoresData = scores[playerId] || {};
             let totalScore = 0;
             const coursesData: any = {};
@@ -103,7 +116,7 @@ export default function AdminDashboard() {
             const detailedScoresForTieBreak: { [courseId: string]: { [holeNumber: string]: number } } = {};
             let hasAnyScore = false;
 
-            activeCoursesList.forEach((course: any) => {
+            coursesForPlayer.forEach((course: any) => {
                 const courseId = course.id;
                 const scoresForCourse = playerScoresData[courseId] || {};
                 detailedScoresForTieBreak[courseId] = scoresForCourse;
@@ -135,7 +148,8 @@ export default function AdminDashboard() {
                 hasAnyScore,
                 total: totalScore,
                 courseScores: courseScoresForTieBreak,
-                detailedScores: detailedScoresForTieBreak
+                detailedScores: detailedScoresForTieBreak,
+                assignedCourses: coursesForPlayer
             };
         });
 
@@ -150,12 +164,13 @@ export default function AdminDashboard() {
 
         const rankedData: { [key: string]: ProcessedPlayer[] } = {};
         for (const groupName in groupedData) {
-            const groupPlayers = groupedData[groupName].sort((a,b) => tieBreak(a, b, activeCoursesList));
+            const coursesForGroup = groupedData[groupName][0]?.assignedCourses || activeCoursesList;
+            const groupPlayers = groupedData[groupName].sort((a,b) => tieBreak(a, b, coursesForGroup));
             
             const rankedPlayers: ProcessedPlayer[] = [];
             groupPlayers.forEach((player, index) => {
                 let rank;
-                if (index > 0 && player.hasAnyScore && groupPlayers[index-1].hasAnyScore && tieBreak(player, groupPlayers[index - 1], activeCoursesList) === 0) {
+                if (index > 0 && player.hasAnyScore && groupPlayers[index-1].hasAnyScore && tieBreak(player, groupPlayers[index - 1], coursesForGroup) === 0) {
                     rank = rankedPlayers[index - 1].rank;
                 } else {
                     rank = index + 1;
@@ -166,23 +181,31 @@ export default function AdminDashboard() {
         }
         
         return rankedData;
-    }, [players, scores, courses, activeCoursesList]);
+    }, [players, scores, courses, groupsData, activeCoursesList]);
     
     const allGroupsList = Object.keys(processedDataByGroup);
 
     const progress = useMemo(() => {
-        const totalHoles = activeCoursesList.length * 9;
-        if(totalHoles === 0 || Object.keys(scores).length === 0 || Object.keys(players).length === 0) return 0;
+        if (Object.keys(scores).length === 0 || Object.keys(players).length === 0) return 0;
         
-        const totalScoresEntered = Object.values(scores).reduce((acc: number, courseScores: any) => {
-           return acc + Object.values(courseScores).reduce((cAcc: number, holeScores: any) => cAcc + Object.keys(holeScores).length, 0);
-        }, 0);
+        let totalPossibleScores = 0;
+        let totalScoresEntered = 0;
+
+        Object.values(processedDataByGroup).forEach((groupPlayers: any) => {
+            if (groupPlayers.length > 0) {
+                const numCourses = groupPlayers[0].assignedCourses.length;
+                totalPossibleScores += groupPlayers.length * numCourses * 9;
+            }
+        });
         
-        const totalPossibleScores = Object.keys(players).length * totalHoles;
         if (totalPossibleScores === 0) return 0;
 
+        totalScoresEntered = Object.values(scores).reduce((acc: number, courseScores: any) => {
+           return acc + Object.values(courseScores).reduce((cAcc: number, holeScores: any) => cAcc + Object.keys(holeScores).length, 0);
+        }, 0);
+
         return Math.round((totalScoresEntered / totalPossibleScores) * 100);
-    }, [scores, players, activeCoursesList]);
+    }, [scores, players, processedDataByGroup]);
 
     const handleExportToExcel = async () => {
         const XLSX = await import('xlsx');
@@ -205,40 +228,51 @@ export default function AdminDashboard() {
             const sheetData = [headers];
 
             groupPlayers.forEach(player => {
-                activeCoursesList.forEach((course: any, courseIndex: number) => {
-                    const courseData = player.coursesData[course.id];
-                    const row: (string|number)[] = [];
+                if (player.assignedCourses.length === 0) {
+                     sheetData.push([
+                        player.hasAnyScore ? player.rank : '',
+                        player.jo,
+                        player.name,
+                        player.affiliation,
+                        '배정된 코스 없음', '', '', '', '', '', '', '', '', '', '',
+                        player.hasAnyScore ? player.totalScore : '-'
+                     ]);
+                } else {
+                    player.assignedCourses.forEach((course: any, courseIndex: number) => {
+                        const courseData = player.coursesData[course.id];
+                        const row: (string|number)[] = [];
 
-                    if (courseIndex === 0) {
+                        if (courseIndex === 0) {
+                            row.push(
+                                player.hasAnyScore ? player.rank : '',
+                                player.jo,
+                                player.name,
+                                player.affiliation
+                            );
+                        } else {
+                            row.push('', '', '', '');
+                        }
+
                         row.push(
-                            player.hasAnyScore ? player.rank : '',
-                            player.jo,
-                            player.name,
-                            player.affiliation
+                            courseData?.courseName || course.name,
+                            ...(courseData?.holeScores.map(s => s === null ? '-' : s) || Array(9).fill('-')),
+                            player.hasAnyScore ? (courseData?.courseTotal || 0) : '-',
                         );
-                    } else {
-                        row.push('', '', '', '');
-                    }
 
-                    row.push(
-                        courseData?.courseName || course.name,
-                        ...(courseData?.holeScores.map(s => s === null ? '-' : s) || Array(9).fill('-')),
-                        player.hasAnyScore ? (courseData?.courseTotal || 0) : '-',
-                    );
-
-                    if (courseIndex === 0) {
-                        row.push(player.hasAnyScore ? player.totalScore : '-');
-                    } else {
-                        row.push('');
-                    }
-                    sheetData.push(row);
-                });
+                        if (courseIndex === 0) {
+                            row.push(player.hasAnyScore ? player.totalScore : '-');
+                        } else {
+                            row.push('');
+                        }
+                        sheetData.push(row);
+                    });
+                }
             });
 
             const ws = XLSX.utils.aoa_to_sheet(sheetData);
 
             ws['!cols'] = [
-                { wch: 5 }, { wch: 5 }, { wch: 25 }, { wch: 25 }, { wch: 10 },
+                { wch: 5 }, { wch: 5 }, { wch: 25 }, { wch: 25 }, { wch: 15 },
                 ...Array(9).fill({ wch: 4 }),
                 { wch: 10 }, { wch: 10 },
             ];
@@ -320,19 +354,15 @@ export default function AdminDashboard() {
                                     <TableBody>
                                         {groupPlayers.map((player) => (
                                             <React.Fragment key={player.id}>
-                                                {activeCoursesList.map((course: any, courseIndex: number) => (
+                                                {player.assignedCourses.length > 0 ? player.assignedCourses.map((course: any, courseIndex: number) => (
                                                     <TableRow key={`${player.id}-${course.id}`} className="text-base">
                                                         {courseIndex === 0 && (
-                                                            <TableCell rowSpan={activeCoursesList.length || 1} className="text-center align-middle font-bold text-lg">{player.hasAnyScore ? `${player.rank}위` : '-'}</TableCell>
-                                                        )}
-                                                         {courseIndex === 0 && (
-                                                            <TableCell rowSpan={activeCoursesList.length || 1} className="text-center align-middle font-medium">{player.jo}</TableCell>
-                                                        )}
-                                                         {courseIndex === 0 && (
-                                                            <TableCell rowSpan={activeCoursesList.length || 1} className="align-middle font-semibold">{player.name}</TableCell>
-                                                        )}
-                                                         {courseIndex === 0 && (
-                                                            <TableCell rowSpan={activeCoursesList.length || 1} className="align-middle text-muted-foreground">{player.affiliation}</TableCell>
+                                                            <>
+                                                                <TableCell rowSpan={player.assignedCourses.length || 1} className="text-center align-middle font-bold text-lg">{player.hasAnyScore ? `${player.rank}위` : '-'}</TableCell>
+                                                                <TableCell rowSpan={player.assignedCourses.length || 1} className="text-center align-middle font-medium">{player.jo}</TableCell>
+                                                                <TableCell rowSpan={player.assignedCourses.length || 1} className="align-middle font-semibold">{player.name}</TableCell>
+                                                                <TableCell rowSpan={player.assignedCourses.length || 1} className="align-middle text-muted-foreground">{player.affiliation}</TableCell>
+                                                            </>
                                                         )}
                                                         
                                                         <TableCell className="font-medium">{player.coursesData[course.id]?.courseName}</TableCell>
@@ -342,10 +372,19 @@ export default function AdminDashboard() {
                                                         <TableCell className="text-center font-bold">{player.hasAnyScore ? player.coursesData[course.id]?.courseTotal : '-'}</TableCell>
 
                                                         {courseIndex === 0 && (
-                                                            <TableCell rowSpan={activeCoursesList.length || 1} className="text-center align-middle font-bold text-primary text-lg">{player.hasAnyScore ? player.totalScore : '-'}</TableCell>
+                                                            <TableCell rowSpan={player.assignedCourses.length || 1} className="text-center align-middle font-bold text-primary text-lg">{player.hasAnyScore ? player.totalScore : '-'}</TableCell>
                                                         )}
                                                     </TableRow>
-                                                ))}
+                                                )) : (
+                                                    <TableRow key={`${player.id}-no-course`} className="text-base text-muted-foreground">
+                                                         <TableCell className="text-center align-middle font-bold text-lg">{player.hasAnyScore ? `${player.rank}위` : '-'}</TableCell>
+                                                         <TableCell className="text-center align-middle font-medium">{player.jo}</TableCell>
+                                                         <TableCell className="align-middle font-semibold">{player.name}</TableCell>
+                                                         <TableCell className="align-middle">{player.affiliation}</TableCell>
+                                                         <TableCell colSpan={11} className="text-center">이 그룹에 배정된 코스가 없습니다.</TableCell>
+                                                         <TableCell className="text-center align-middle font-bold text-primary text-lg">{player.hasAnyScore ? player.totalScore : '-'}</TableCell>
+                                                    </TableRow>
+                                                )}
                                             </React.Fragment>
                                         ))}
                                     </TableBody>
