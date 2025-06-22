@@ -160,9 +160,9 @@ export default function TournamentManagementPage() {
           <CardDescription>대회의 공식 명칭을 설정합니다.</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="max-w-lg space-y-2">
+          <div className="space-y-2">
             <Label htmlFor="tournament-name">대회명</Label>
-            <Input id="tournament-name" value={tournamentName} onChange={e => setTournamentName(e.target.value)} className="text-lg h-12" />
+            <Input id="tournament-name" value={tournamentName} onChange={e => setTournamentName(e.target.value)} onFocus={(e) => e.target.select()} className="text-lg h-12" />
           </div>
         </CardContent>
       </Card>
@@ -176,7 +176,7 @@ export default function TournamentManagementPage() {
           {courses.map((course) => (
             <Card key={course.id} className="overflow-hidden">
               <CardHeader className="bg-muted/50 flex flex-row items-center justify-between py-3 px-4">
-                <Input value={course.name} onChange={e => handleCourseNameChange(course.id, e.target.value)} className="text-lg font-bold w-auto border-0 shadow-none focus-visible:ring-1 bg-transparent" />
+                <Input value={course.name} onChange={e => handleCourseNameChange(course.id, e.target.value)} onFocus={(e) => e.target.select()} className="text-lg font-bold w-auto border-0 shadow-none focus-visible:ring-1 bg-transparent" />
                 <div className="flex items-center gap-4">
                    <div className="flex items-center space-x-2">
                         <Label htmlFor={`active-switch-${course.id}`}>전광판 표시</Label>
