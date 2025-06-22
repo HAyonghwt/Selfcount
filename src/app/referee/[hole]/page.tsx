@@ -154,11 +154,11 @@ export default function RefereePage() {
                             <SelectContent>{availableGroups.map(g => <SelectItem key={g} value={g} className="text-xl">{g}</SelectItem>)}</SelectContent>
                         </Select>
                         <Select value={selectedCourse} onValueChange={setSelectedCourse} disabled={!selectedGroup || availableCoursesForGroup.length === 0}>
-                            <SelectTrigger className="h-16 text-xl"><SelectValue placeholder="2. 코스 선택" /></SelectTrigger>
+                            <SelectTrigger className="h-16 text-xl"><SelectValue placeholder={selectedGroup && availableCoursesForGroup.length === 0 ? "배정된 코스 없음" : "2. 코스 선택"} /></SelectTrigger>
                             <SelectContent>{availableCoursesForGroup.map(c => <SelectItem key={c.id} value={c.id.toString()} className="text-xl">{c.name}</SelectItem>)}</SelectContent>
                         </Select>
-                        <Select value={selectedJo} onValueChange={setSelectedJo} disabled={!selectedGroup}>
-                            <SelectTrigger className="h-16 text-xl"><SelectValue placeholder="3. 조 선택" /></SelectTrigger>
+                        <Select value={selectedJo} onValueChange={setSelectedJo} disabled={!selectedGroup || availableJos.length === 0}>
+                            <SelectTrigger className="h-16 text-xl"><SelectValue placeholder={selectedGroup && availableJos.length === 0 ? "배정된 조 없음" : "3. 조 선택"} /></SelectTrigger>
                             <SelectContent>{availableJos.map(j => <SelectItem key={j} value={j.toString()} className="text-xl">{j}조</SelectItem>)}</SelectContent>
                         </Select>
                     </div>
