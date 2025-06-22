@@ -12,7 +12,17 @@ import { Progress } from '@/components/ui/progress';
 import { db } from '@/lib/firebase';
 import { ref, onValue, update } from 'firebase/database';
 
-interface Player { id: string; name?: string; type: 'individual' | 'team'; jo: number; group: string; p1_name?: string; p2_name?: string }
+interface Player { 
+    id: string; 
+    name?: string; 
+    type: 'individual' | 'team'; 
+    jo: number; 
+    group: string; 
+    p1_name?: string; 
+    p2_name?: string;
+    affiliation?: string;
+    p1_affiliation?: string;
+}
 interface Course { id: number; name: string; isActive: boolean; }
 interface ScoreData {
     score: number;
@@ -103,10 +113,12 @@ export default function RefereePage() {
         Object.entries(scores).forEach(([playerId, scoreData]) => {
             if (scoreData.status === 'saved') {
                 const timer = setTimeout(() => {
-                    setScores(prev => ({
-                        ...prev,
-                        [playerId]: { ...prev[playerId], status: 'locked' }
-                    }));
+                    setScores(prev => {
+                        if (prev[playerId]?.status === 'saved') { // Check if still 'saved'
+                           return { ...prev, [playerId]: { ...prev[playerId], status: 'locked' } }
+                        }
+                        return prev;
+                    });
                 }, 10000); 
                 timers.push(timer);
             }
@@ -124,6 +136,7 @@ export default function RefereePage() {
     };
     
     const getPlayerName = (player: Player) => player.type === 'team' ? `${player.p1_name} / ${player.p2_name}` : player.name;
+    const getPlayerAffiliation = (player: Player) => player.type === 'team' ? player.p1_affiliation : player.affiliation;
 
     const handleSavePress = (player: Player) => {
         if (scores[player.id]?.status === 'editing') {
@@ -163,37 +176,37 @@ export default function RefereePage() {
     return (
         <div className="bg-slate-50 min-h-screen p-4 flex flex-col font-body">
             <header className="text-center mb-4">
-                <h1 className="text-4xl md:text-5xl font-extrabold text-primary break-keep">{hole}번홀 점수 기록</h1>
-                <p className="text-muted-foreground text-lg">담당 심판용 페이지</p>
+                <h1 className="text-4xl font-extrabold text-primary break-keep leading-tight">{hole}번홀 점수 기록</h1>
+                <p className="text-muted-foreground text-base">담당 심판용 페이지</p>
             </header>
 
             <Card className="flex-1 flex flex-col">
                 <CardHeader>
-                    <CardTitle className="text-2xl">조 선택</CardTitle>
-                    <CardDescription className="text-base">점수를 기록할 그룹, 코스, 조를 선택하세요.</CardDescription>
-                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4">
+                    <CardTitle className="text-xl">조 선택</CardTitle>
+                    <CardDescription className="text-sm">점수를 기록할 그룹, 코스, 조를 선택하세요.</CardDescription>
+                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-2">
                         <Select value={selectedGroup} onValueChange={val => { setSelectedGroup(val); setSelectedCourse(''); setSelectedJo(''); }}>
-                            <SelectTrigger className="h-16 text-xl"><SelectValue placeholder="1. 그룹 선택" /></SelectTrigger>
-                            <SelectContent>{availableGroups.map(g => <SelectItem key={g} value={g} className="text-xl">{g}</SelectItem>)}</SelectContent>
+                            <SelectTrigger className="h-12 text-base"><SelectValue placeholder="1. 그룹 선택" /></SelectTrigger>
+                            <SelectContent>{availableGroups.map(g => <SelectItem key={g} value={g} className="text-base">{g}</SelectItem>)}</SelectContent>
                         </Select>
                         <Select value={selectedCourse} onValueChange={setSelectedCourse} disabled={!selectedGroup || availableCoursesForGroup.length === 0}>
-                            <SelectTrigger className="h-16 text-xl"><SelectValue placeholder={selectedGroup && availableCoursesForGroup.length === 0 ? "배정된 코스 없음" : "2. 코스 선택"} /></SelectTrigger>
-                            <SelectContent>{availableCoursesForGroup.map(c => <SelectItem key={c.id} value={c.id.toString()} className="text-xl">{c.name}</SelectItem>)}</SelectContent>
+                            <SelectTrigger className="h-12 text-base"><SelectValue placeholder={selectedGroup && availableCoursesForGroup.length === 0 ? "배정된 코스 없음" : "2. 코스 선택"} /></SelectTrigger>
+                            <SelectContent>{availableCoursesForGroup.map(c => <SelectItem key={c.id} value={c.id.toString()} className="text-base">{c.name}</SelectItem>)}</SelectContent>
                         </Select>
                         <Select value={selectedJo} onValueChange={setSelectedJo} disabled={!selectedGroup || availableJos.length === 0}>
-                            <SelectTrigger className="h-16 text-xl"><SelectValue placeholder={selectedGroup && availableJos.length === 0 ? "배정된 조 없음" : "3. 조 선택"} /></SelectTrigger>
-                            <SelectContent>{availableJos.map(j => <SelectItem key={j} value={j.toString()} className="text-xl">{j}조</SelectItem>)}</SelectContent>
+                            <SelectTrigger className="h-12 text-base"><SelectValue placeholder={selectedGroup && availableJos.length === 0 ? "배정된 조 없음" : "3. 조 선택"} /></SelectTrigger>
+                            <SelectContent>{availableJos.map(j => <SelectItem key={j} value={j.toString()} className="text-base">{j}조</SelectItem>)}</SelectContent>
                         </Select>
                     </div>
                 </CardHeader>
-                <CardContent className="flex-1 flex flex-col justify-center">
+                <CardContent className="flex-1 flex flex-col pt-4">
                     {!isReady ? (
-                         <div className="text-center text-muted-foreground py-16">
-                            <ChevronDown className="mx-auto h-16 w-16 animate-bounce"/>
-                            <p className="mt-4 text-2xl">상단에서 그룹, 코스, 조를 순서대로 선택해주세요.</p>
+                         <div className="text-center text-muted-foreground py-10 flex-1 flex flex-col justify-center items-center">
+                            <ChevronDown className="mx-auto h-12 w-12 animate-bounce"/>
+                            <p className="mt-4 text-lg">상단에서 그룹, 코스, 조를 순서대로 선택해주세요.</p>
                         </div>
                     ) : (
-                        <div className="space-y-6">
+                        <div className="space-y-3">
                             {currentPlayers.map(player => {
                                 const scoreData = scores[player.id];
                                 if (!scoreData) return null;
@@ -203,44 +216,54 @@ export default function RefereePage() {
                                 const isLocked = scoreData.status === 'locked';
 
                                 return (
-                                <Card key={player.id} className="p-4 shadow-lg overflow-hidden">
-                                    <div className="grid grid-cols-[1fr_auto] gap-4 items-center">
-                                        <div>
-                                            <p className="font-bold text-3xl sm:text-4xl break-words">{getPlayerName(player)}</p>
-                                            <p className="text-xl sm:text-2xl text-muted-foreground mt-1">{player.group}</p>
-                                        </div>
-                                        <div className="flex items-center gap-2 sm:gap-4">
-                                            <Button size="icon" className="w-16 h-16 sm:w-20 sm:h-20 rounded-full" variant="outline" onClick={() => updateScore(player.id, -1)} disabled={!isEditing}>
-                                                <Minus className="h-10 w-10"/>
-                                            </Button>
-                                            <div className="relative" onDoubleClick={() => handleScoreDoubleClick(player)}>
-                                                <span className={`text-8xl sm:text-9xl font-bold w-28 text-center tabular-nums ${isSaved ? 'cursor-pointer' : ''}`}>{scoreData.score}</span>
-                                                {isSaved && <Edit className="absolute top-0 right-0 w-6 h-6 text-primary animate-pulse" />}
-                                            </div>
-                                             <Button size="icon" className="w-16 h-16 sm:w-20 sm:h-20 rounded-full" variant="outline" onClick={() => updateScore(player.id, 1)} disabled={!isEditing}>
-                                                <Plus className="h-10 w-10"/>
-                                            </Button>
-                                        </div>
-                                    </div>
-                                    <div className="mt-4">
-                                        {isEditing && (
-                                            <Button className="w-full h-16 text-2xl" onClick={() => handleSavePress(player)}>
-                                                <Save className="mr-3 h-8 w-8" /> 저장
-                                            </Button>
-                                        )}
-                                        {isSaved && (
+                                <div key={player.id} className="bg-white rounded-lg shadow p-2">
+                                    <div className="grid grid-cols-[1fr_auto] items-center gap-2">
+                                        
+                                        <div className="grid grid-cols-[1fr_auto] items-center gap-2">
+                                            {/* Player Info */}
                                             <div>
-                                                <p className="text-center text-primary font-bold">저장됨 (10초간 수정 가능)</p>
-                                                <Progress value={now % 1000 * 0.1} className="h-2 mt-1" />
+                                                <p className="font-bold text-xl truncate">{getPlayerName(player)}</p>
+                                                <p className="text-sm text-muted-foreground truncate">{getPlayerAffiliation(player)}</p>
                                             </div>
-                                        )}
-                                        {isLocked && (
-                                            <div className="flex items-center justify-center gap-2 text-xl h-16 bg-muted text-muted-foreground rounded-lg">
-                                                <Lock className="w-6 h-6" /> 점수 확정됨
+
+                                            {/* Score Controls */}
+                                            <div className="flex items-center gap-1">
+                                                <Button variant="outline" size="icon" className="w-12 h-12 border-2 rounded-md" onClick={() => updateScore(player.id, -1)} disabled={!isEditing}>
+                                                    <Minus className="h-7 w-7" />
+                                                </Button>
+                                                <div className="relative w-16 text-center" onDoubleClick={() => handleScoreDoubleClick(player)}>
+                                                    <span className={`text-5xl font-bold tabular-nums ${isSaved ? 'cursor-pointer' : ''}`}>
+                                                        {scoreData.score}
+                                                    </span>
+                                                </div>
+                                                <Button variant="outline" size="icon" className="w-12 h-12 border-2 rounded-md" onClick={() => updateScore(player.id, 1)} disabled={!isEditing}>
+                                                    <Plus className="h-7 w-7" />
+                                                </Button>
                                             </div>
-                                        )}
+                                        </div>
+                                        
+                                        {/* Action Button/Status */}
+                                        <div className="w-12 h-12">
+                                            {isEditing && (
+                                                <Button variant="default" size="icon" className="w-full h-full rounded-md" onClick={() => handleSavePress(player)}>
+                                                    <Save className="h-6 w-6" />
+                                                </Button>
+                                            )}
+                                            {isSaved && (
+                                                <div className="flex flex-col items-center justify-center h-full text-center relative" onDoubleClick={() => handleScoreDoubleClick(player)}>
+                                                     <Edit className="absolute top-0 right-0 w-4 h-4 text-primary animate-pulse" />
+                                                     <p className="text-xs text-primary font-bold">저장됨</p>
+                                                     <Progress value={(now % 10000) / 100} className="h-1 mt-1 w-full" />
+                                                </div>
+                                            )}
+                                            {isLocked && (
+                                                <div className="flex items-center justify-center h-full bg-muted text-muted-foreground rounded-md">
+                                                    <Lock className="w-6 h-6" />
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
-                                </Card>
+                                </div>
                             )})}
                         </div>
                     )}
