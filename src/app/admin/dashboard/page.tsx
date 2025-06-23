@@ -365,10 +365,10 @@ export default function AdminDashboard() {
                                         <TableRow>
                                             <TableHead className="w-16 text-center px-2 py-2 border-r">순위</TableHead>
                                             <TableHead className="w-16 text-center px-2 py-2 border-r">조</TableHead>
-                                            <TableHead className="w-40 px-2 py-2 border-r">선수명(팀명)</TableHead>
-                                            <TableHead className="w-40 px-2 py-2 border-r">소속</TableHead>
-                                            <TableHead className="w-40 px-2 py-2 border-r">코스</TableHead>
-                                            {Array.from({length: 9}).map((_, i) => <TableHead key={i} className="text-center px-2 py-2 border-r">{i + 1}</TableHead>)}
+                                            <TableHead className="w-28 px-2 py-2 border-r">선수명(팀명)</TableHead>
+                                            <TableHead className="w-28 px-2 py-2 border-r">소속</TableHead>
+                                            <TableHead className="w-28 px-2 py-2 border-r">코스</TableHead>
+                                            {Array.from({length: 9}).map((_, i) => <TableHead key={i} className="w-10 text-center px-2 py-2 border-r">{i + 1}</TableHead>)}
                                             <TableHead className="w-24 text-center px-2 py-2 border-r">합계</TableHead>
                                             <TableHead className="w-24 text-center px-2 py-2">총타수</TableHead>
                                         </TableRow>
@@ -419,3 +419,4 @@ export default function AdminDashboard() {
         </div>
     );
 }
+
