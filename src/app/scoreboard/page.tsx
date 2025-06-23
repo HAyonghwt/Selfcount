@@ -90,19 +90,17 @@ export default function ExternalScoreboard() {
         };
     }, []);
 
-    const activeCourses = useMemo(() => 
-        Object.values(tournament.courses || {}).filter((c: any) => c.isActive)
-    , [tournament.courses]);
-
     const processedDataByGroup = useMemo(() => {
-        if (Object.keys(players).length === 0 || activeCourses.length === 0) return {};
+        const allCourses = Object.values(tournament.courses || {});
+        if (Object.keys(players).length === 0) return {};
 
         const allProcessedPlayers: any[] = Object.entries(players).map(([playerId, player]: [string, any]) => {
             const playerGroupData = groupsData[player.group];
             const assignedCourseIds = playerGroupData?.courses 
                 ? Object.keys(playerGroupData.courses).filter(id => playerGroupData.courses[id]) 
                 : [];
-            const coursesForPlayer = activeCourses.filter(c => assignedCourseIds.includes(c.id.toString()));
+            
+            const allAssignedCoursesForPlayer = allCourses.filter((c:any) => assignedCourseIds.includes(c.id.toString()));
 
             const playerScoresData = scores[playerId] || {};
             
@@ -113,7 +111,7 @@ export default function ExternalScoreboard() {
             const courseScoresForTieBreak: { [courseId: string]: number } = {};
             const detailedScoresForTieBreak: { [courseId: string]: { [holeNumber: string]: number } } = {};
 
-            coursesForPlayer.forEach((course: any) => {
+            allAssignedCoursesForPlayer.forEach((course: any) => {
                 const courseId = course.id;
                 const scoresForCourse = playerScoresData[courseId] || {};
                 detailedScoresForTieBreak[courseId] = scoresForCourse;
@@ -145,7 +143,7 @@ export default function ExternalScoreboard() {
                 total: totalScore,
                 courseScores: courseScoresForTieBreak,
                 detailedScores: detailedScoresForTieBreak,
-                assignedCourses: coursesForPlayer
+                assignedCourses: allAssignedCoursesForPlayer.filter((c: any) => c.isActive)
             };
         });
 
@@ -160,13 +158,16 @@ export default function ExternalScoreboard() {
 
         const rankedData: { [key: string]: ProcessedPlayer[] } = {};
         for (const groupName in groupedData) {
-            const coursesForGroup = groupedData[groupName][0]?.assignedCourses || activeCourses;
-            const groupPlayers = groupedData[groupName].sort((a,b) => tieBreak(a, b, coursesForGroup));
+            const playerGroupData = groupsData[groupName];
+            const assignedCourseIds = playerGroupData?.courses ? Object.keys(playerGroupData.courses).filter(id => playerGroupData.courses[id]) : [];
+            const allAssignedCoursesForGroup = allCourses.filter((c:any) => assignedCourseIds.includes(c.id.toString()));
+
+            const groupPlayers = groupedData[groupName].sort((a,b) => tieBreak(a, b, allAssignedCoursesForGroup));
             
             const rankedPlayers: ProcessedPlayer[] = [];
             groupPlayers.forEach((player, index) => {
                 let rank;
-                if (index > 0 && player.hasAnyScore && groupPlayers[index-1].hasAnyScore && tieBreak(player, groupPlayers[index - 1], coursesForGroup) === 0) {
+                if (index > 0 && player.hasAnyScore && groupPlayers[index-1].hasAnyScore && tieBreak(player, groupPlayers[index - 1], allAssignedCoursesForGroup) === 0) {
                     rank = rankedPlayers[index - 1].rank;
                 } else {
                     rank = index + 1;
@@ -177,10 +178,11 @@ export default function ExternalScoreboard() {
         }
         
         return rankedData;
-    }, [players, scores, tournament, groupsData, activeCourses]);
+    }, [players, scores, tournament, groupsData]);
     
     const groupProgress = useMemo(() => {
         const progressByGroup: { [key: string]: number } = {};
+        const allCourses = Object.values(tournament.courses || {});
 
         for (const groupName in processedDataByGroup) {
             const groupPlayers = processedDataByGroup[groupName];
@@ -190,7 +192,11 @@ export default function ExternalScoreboard() {
                 continue;
             }
 
-            const coursesForGroup = groupPlayers[0]?.assignedCourses;
+            const playerGroupData = groupsData[groupName];
+            const assignedCourseIds = playerGroupData?.courses ? Object.keys(playerGroupData.courses).filter(id => playerGroupData.courses[id]) : [];
+            const coursesForGroup = allCourses.filter((c: any) => assignedCourseIds.includes(c.id.toString()));
+
+
             if (!coursesForGroup || coursesForGroup.length === 0) {
                 progressByGroup[groupName] = 0;
                 continue;
@@ -206,9 +212,9 @@ export default function ExternalScoreboard() {
             let totalScoresEnteredInGroup = 0;
             groupPlayers.forEach((player: any) => {
                  if (scores[player.id]) {
-                    const assignedCourseIds = coursesForGroup.map((c: any) => c.id.toString());
+                    const allAssignedCourseIds = coursesForGroup.map((c: any) => c.id.toString());
                     for (const courseId in scores[player.id]) {
-                        if (assignedCourseIds.includes(courseId)) {
+                        if (allAssignedCourseIds.includes(courseId)) {
                              totalScoresEnteredInGroup += Object.keys(scores[player.id][courseId]).length;
                         }
                     }
@@ -220,7 +226,7 @@ export default function ExternalScoreboard() {
         }
 
         return progressByGroup;
-    }, [processedDataByGroup, scores]);
+    }, [processedDataByGroup, scores, groupsData, tournament.courses]);
 
 
     if (loading) {
@@ -238,7 +244,7 @@ export default function ExternalScoreboard() {
                 <p className="mt-4 text-2xl text-gray-400">
                     {Object.keys(players).length === 0 
                         ? "표시할 선수 데이터가 없습니다. 선수를 먼저 등록해주세요."
-                        : "활성화된 코스가 없거나 그룹에 배정된 코스가 없습니다."}
+                        : "그룹에 배정된 코스가 없습니다."}
                 </p>
             </div>
         </div>
@@ -320,7 +326,7 @@ export default function ExternalScoreboard() {
                                                         <td className="py-0.5 px-1 align-middle font-bold border-r border-gray-800">{player.jo}</td>
                                                         <td className="py-0.5 px-1 w-32 text-center align-middle font-semibold border-r border-gray-800">{player.name}</td>
                                                         <td className="py-0.5 px-1 w-32 text-center align-middle text-gray-400 border-r border-gray-800">{player.club}</td>
-                                                        <td colSpan={11} className="py-0.5 px-1 align-middle text-center text-gray-500 border-r border-gray-800">배정된 코스가 없습니다.</td>
+                                                        <td colSpan={11} className="py-0.5 px-1 align-middle text-center text-gray-500 border-r border-gray-800">표시하도록 설정된 코스가 없습니다.</td>
                                                         <td className="py-0.5 px-1 align-middle font-bold text-yellow-400 text-xl border-r border-gray-800">{player.hasAnyScore ? player.totalScore : '-'}</td>
                                                         <td className="py-0.5 px-1 align-middle font-bold text-xl">{player.hasAnyScore ? `${player.rank}위` : ''}</td>
                                                     </tr>

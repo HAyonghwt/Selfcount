@@ -95,12 +95,9 @@ export default function AdminDashboard() {
         }
     }, []);
     
-    const activeCoursesList = useMemo(() => 
-        Object.values(courses).filter((c: any) => c.isActive)
-    , [courses]);
-
     const processedDataByGroup = useMemo(() => {
-        if (Object.keys(players).length === 0 || activeCoursesList.length === 0) return {};
+        const allCoursesList = Object.values(courses);
+        if (Object.keys(players).length === 0 || allCoursesList.length === 0) return {};
 
         const allProcessedPlayers: any[] = Object.entries(players).map(([playerId, player]: [string, any]) => {
             const playerGroupData = groupsData[player.group];
@@ -108,7 +105,7 @@ export default function AdminDashboard() {
                 ? Object.keys(playerGroupData.courses).filter(id => playerGroupData.courses[id]) 
                 : [];
             
-            const coursesForPlayer = activeCoursesList.filter(c => assignedCourseIds.includes(c.id.toString()));
+            const coursesForPlayer = allCoursesList.filter(c => assignedCourseIds.includes(c.id.toString()));
 
             const playerScoresData = scores[playerId] || {};
             let totalScore = 0;
@@ -165,7 +162,8 @@ export default function AdminDashboard() {
 
         const rankedData: { [key: string]: ProcessedPlayer[] } = {};
         for (const groupName in groupedData) {
-            const coursesForGroup = groupedData[groupName][0]?.assignedCourses || activeCoursesList;
+            const allCoursesList = Object.values(courses);
+            const coursesForGroup = groupedData[groupName][0]?.assignedCourses || allCoursesList;
             const groupPlayers = groupedData[groupName].sort((a,b) => tieBreak(a, b, coursesForGroup));
             
             const rankedPlayers: ProcessedPlayer[] = [];
@@ -182,7 +180,7 @@ export default function AdminDashboard() {
         }
         
         return rankedData;
-    }, [players, scores, courses, groupsData, activeCoursesList]);
+    }, [players, scores, courses, groupsData]);
     
     const allGroupsList = Object.keys(processedDataByGroup);
 
