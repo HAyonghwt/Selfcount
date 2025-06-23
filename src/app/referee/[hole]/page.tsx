@@ -312,9 +312,7 @@ export default function RefereePage() {
 
             {!groupLocked ? (
                 renderInitialSelection()
-             ) : !selectedJo ? (
-                renderJoSelection()
-             ) : (
+            ) : (
                 <>
                     <Card className="mb-4">
                         <CardHeader className="p-3">
@@ -329,7 +327,11 @@ export default function RefereePage() {
                             </div>
                         </CardHeader>
                     </Card>
-                    {renderScoring()}
+                    {!selectedJo ? (
+                        renderJoSelection()
+                    ) : (
+                        renderScoring()
+                    )}
                 </>
             )}
             
