@@ -6,7 +6,7 @@ import { useParams } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Minus, Plus, Save, Lock, Edit, CheckCircle2, Users, ArrowLeft } from 'lucide-react';
+import { Minus, Plus, Save, Lock, Edit, CheckCircle2, ArrowLeft } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useToast } from '@/hooks/use-toast';
 import { Progress } from '@/components/ui/progress';
@@ -76,7 +76,7 @@ export default function RefereePage() {
         };
     }, []);
 
-    // Timer for "saved" state progress bar.
+    // Timer for "saved" state progress bar, only runs in scoring view.
     useEffect(() => {
         let interval: NodeJS.Timeout | undefined;
         if (view === 'scoring' && Object.values(scores).some(s => s.status === 'saved')) {
@@ -105,6 +105,28 @@ export default function RefereePage() {
         return [...new Set(groupPlayers.map(p => p.jo))].sort((a, b) => a - b);
     }, [allPlayers, selectedGroup]);
     
+    const completedJos = useMemo(() => {
+        if (!selectedGroup || !selectedCourse || !hole) return new Set<number>();
+    
+        const completed = new Set<number>();
+    
+        availableJos.forEach(joNum => {
+            const joPlayers = allPlayers.filter(p => p.group === selectedGroup && p.jo === joNum);
+    
+            if (joPlayers.length === 0) return;
+    
+            const allScored = joPlayers.every(player => {
+                return allScores[player.id]?.[selectedCourse]?.[hole] !== undefined;
+            });
+    
+            if (allScored) {
+                completed.add(joNum);
+            }
+        });
+    
+        return completed;
+    }, [allPlayers, allScores, availableJos, selectedGroup, selectedCourse, hole]);
+
     const currentPlayers = useMemo(() => {
         if (!selectedJo) return [];
         return allPlayers.filter(p => p.group === selectedGroup && p.jo.toString() === selectedJo);
@@ -185,7 +207,7 @@ export default function RefereePage() {
             toast({ 
                 title: "점수 저장 완료", 
                 description: "10초 내에 점수를 더블클릭하여 수정할 수 있습니다.",
-                duration: 3000
+                duration: 3000,
             });
         }).catch(err => toast({ title: "저장 실패", description: err.message, variant: "destructive" }))
         .finally(() => setConfirmingPlayer(null));
@@ -212,15 +234,27 @@ export default function RefereePage() {
             <CardContent className="space-y-4">
                 <Select value={selectedGroup} onValueChange={v => {setSelectedGroup(v); setSelectedCourse(''); setSelectedJo('');}}>
                     <SelectTrigger className="h-12 text-base"><SelectValue placeholder="1. 그룹 선택" /></SelectTrigger>
-                    <SelectContent position="item-aligned">{availableGroups.map(g => <SelectItem key={g} value={g} className="text-base">{g}</SelectItem>)}</SelectContent>
+                    <SelectContent>{availableGroups.map(g => <SelectItem key={g} value={g} className="text-base">{g}</SelectItem>)}</SelectContent>
                 </Select>
                 <Select value={selectedCourse} onValueChange={v => {setSelectedCourse(v); setSelectedJo('');}} disabled={!selectedGroup || availableCoursesForGroup.length === 0}>
                     <SelectTrigger className="h-12 text-base"><SelectValue placeholder={!selectedGroup ? "그룹 먼저 선택" : (availableCoursesForGroup.length === 0 ? "배정된 코스 없음" : "2. 코스 선택")} /></SelectTrigger>
-                    <SelectContent position="item-aligned">{availableCoursesForGroup.map(c => <SelectItem key={c.id} value={c.id.toString()} className="text-base">{c.name}</SelectItem>)}</SelectContent>
+                    <SelectContent>{availableCoursesForGroup.map(c => <SelectItem key={c.id} value={c.id.toString()} className="text-base">{c.name}</SelectItem>)}</SelectContent>
                 </Select>
                  <Select value={selectedJo} onValueChange={setSelectedJo} disabled={!selectedCourse || availableJos.length === 0}>
                     <SelectTrigger className="h-12 text-base"><SelectValue placeholder={!selectedCourse ? "코스 먼저 선택" : (availableJos.length === 0 ? "배정된 선수 없음" : "3. 조 선택")} /></SelectTrigger>
-                    <SelectContent position="item-aligned">{availableJos.map(jo => <SelectItem key={jo} value={jo.toString()} className="text-base">{jo}조</SelectItem>)}</SelectContent>
+                    <SelectContent>
+                        {availableJos.map(jo => {
+                            const isCompleted = completedJos.has(jo);
+                            return (
+                                <SelectItem key={jo} value={jo.toString()} disabled={isCompleted}>
+                                    <div className="flex items-center justify-between w-full">
+                                        <span>{jo}조</span>
+                                        {isCompleted && <Lock className="h-4 w-4 text-muted-foreground" />}
+                                    </div>
+                                </SelectItem>
+                            );
+                        })}
+                    </SelectContent>
                 </Select>
             </CardContent>
             <CardFooter>
@@ -327,7 +361,7 @@ export default function RefereePage() {
             </div>
             
             <AlertDialog open={!!confirmingPlayer} onOpenChange={(open) => !open && setConfirmingPlayer(null)}>
-                <AlertDialogContent className="bg-card border-2 border-foreground">
+                <AlertDialogContent className="bg-card border">
                     <AlertDialogHeader>
                         <AlertDialogTitle className="text-center text-3xl sm:text-4xl font-bold leading-tight truncate text-foreground">
                             {confirmingPlayer?.player ? getPlayerName(confirmingPlayer.player) : ''}
