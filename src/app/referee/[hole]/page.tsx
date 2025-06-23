@@ -137,13 +137,12 @@ export default function RefereePage() {
         currentPlayers.forEach((player) => {
             const existingScore = allScores[player.id]?.[selectedCourse]?.[hole];
             newScoresState[player.id] = {
-                score: scores[player.id]?.score || existingScore || 3, // Keep local score if it exists
-                status: existingScore !== undefined ? 'locked' : (scores[player.id]?.status || 'editing'),
+                score: existingScore || 3,
+                status: existingScore !== undefined ? 'locked' : 'editing',
             };
         });
         setScores(newScoresState);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [allPlayers, allScores, selectedCourse, selectedJo, hole]);
+    }, [currentPlayers, allScores, selectedCourse, hole]);
 
     useEffect(() => {
         const timers: NodeJS.Timeout[] = [];
@@ -151,7 +150,7 @@ export default function RefereePage() {
             if (scoreData.status === 'saved') {
                 const timer = setTimeout(() => {
                     setScores(prev => (prev[playerId]?.status === 'saved') ? { ...prev, [playerId]: { ...prev[playerId], status: 'locked' } } : prev);
-                }, 10000);
+                }, 3000);
                 timers.push(timer);
             }
         });
@@ -202,7 +201,7 @@ export default function RefereePage() {
 
         update(ref(db, `/scores/${player.id}/${selectedCourse}/${hole}`), score).then(() => {
             setScores(prev => ({ ...prev, [player.id]: { score, status: 'saved' } }));
-            toast({ title: "점수 저장 완료", description: "10초 내에 점수를 더블클릭하여 수정할 수 있습니다.", className: "bg-primary text-primary-foreground" });
+            toast({ title: "점수 저장 완료", description: "3초 내에 점수를 더블클릭하여 수정할 수 있습니다.", className: "bg-primary text-primary-foreground" });
         }).catch(err => toast({ title: "저장 실패", description: err.message, variant: "destructive" }))
         .finally(() => setConfirmingPlayer(null));
     };
@@ -325,7 +324,7 @@ export default function RefereePage() {
                                     <div className="flex flex-col items-center justify-center h-full w-full text-center relative border border-dashed border-primary/50 rounded-lg cursor-pointer" onDoubleClick={() => handleScoreDoubleClick(player)}>
                                         <Edit className="absolute top-0.5 right-0.5 w-2 h-2 text-primary animate-pulse" />
                                         <p className="text-[8px] text-primary font-bold leading-tight">수정가능</p>
-                                        <Progress value={(now % 10000) / 100} className="h-0.5 mt-0.5 w-10/12 mx-auto" />
+                                        <Progress value={(now % 3000) / 30} className="h-0.5 mt-0.5 w-10/12 mx-auto" />
                                     </div>
                                 )}
                                 {isLocked && (
@@ -376,7 +375,7 @@ export default function RefereePage() {
                     <AlertDialogHeader>
                         <AlertDialogTitle className="text-center text-2xl sm:text-3xl leading-tight">{confirmingPlayer?.player ? getPlayerName(confirmingPlayer.player) : ''}님</AlertDialogTitle>
                          <AlertDialogDescription className="text-center !mt-4">
-                            <span className="font-extrabold text-8xl sm:text-9xl text-destructive">{confirmingPlayer?.score}</span>
+                            <span className="font-extrabold text-8xl sm:text-9xl text-foreground">{confirmingPlayer?.score}</span>
                             <span className="text-4xl sm:text-5xl text-foreground ml-2">점</span>
                          </AlertDialogDescription>
                          <p className="text-center text-lg sm:text-xl text-muted-foreground pt-2">이 점수로 저장하시겠습니까?</p>
