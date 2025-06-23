@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { LogIn, Tv } from 'lucide-react';
@@ -36,7 +36,8 @@ export default function LoginPage() {
     const configRef = ref(db, 'config');
     get(configRef).then((snapshot) => {
       if (snapshot.exists()) {
-        setConfig(snapshot.val());
+        const data = snapshot.val();
+        setConfig(data);
       } else {
         setConfig({ appName: '파크골프대회', userDomain: 'parkgolf.com' });
       }
@@ -134,10 +135,23 @@ export default function LoginPage() {
             {loading ? <Skeleton className="h-9 w-48 mx-auto" /> : (config?.appName || '파크골프대회')}
           </CardTitle>
           <CardDescription className="text-muted-foreground pt-2">
-            {loading ? ' ' : `${config?.appName || '파크골프대회'}의 관리자 또는 심판으로 로그인 하세요.`}
+            {loading ? ' ' : `실시간 점수 확인 또는 관리자/심판으로 로그인 하세요.`}
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-6 pt-2">
+           <Button variant="secondary" className="w-full h-12 text-base font-bold" asChild>
+              <Link href="/scoreboard" target="_blank" rel="noopener noreferrer">
+                  <Tv className="mr-2 h-5 w-5" />
+                  실시간 전광판
+              </Link>
+          </Button>
+
+          <div className="relative flex w-full items-center my-6">
+              <div className="flex-grow border-t border-muted"></div>
+              <span className="flex-shrink mx-4 text-xs uppercase text-muted-foreground">로그인</span>
+              <div className="flex-grow border-t border-muted"></div>
+          </div>
+
           <form onSubmit={handleLogin} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email">이메일</Label>
@@ -174,19 +188,6 @@ export default function LoginPage() {
             </Button>
           </form>
         </CardContent>
-        <CardFooter className="flex-col gap-4 pt-4">
-            <div className="relative flex w-full items-center">
-                <div className="flex-grow border-t border-muted"></div>
-                <span className="flex-shrink mx-4 text-xs text-muted-foreground">또는</span>
-                <div className="flex-grow border-t border-muted"></div>
-            </div>
-             <Button variant="secondary" className="w-full h-12 text-base font-bold" asChild>
-                <Link href="/scoreboard" target="_blank" rel="noopener noreferrer">
-                    <Tv className="mr-2 h-5 w-5" />
-                    실시간 전광판
-                </Link>
-            </Button>
-        </CardFooter>
       </Card>
       <footer className="mt-8 text-center text-sm text-muted-foreground">
         <p>&copy; {year} {config?.appName || '파크골프대회'}. All rights reserved.</p>
