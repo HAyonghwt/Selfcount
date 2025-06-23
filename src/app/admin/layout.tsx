@@ -26,6 +26,8 @@ import {
   SidebarFooter,
 } from "@/components/ui/sidebar"
 import { Skeleton } from "@/components/ui/skeleton"
+import { get, ref } from "firebase/database"
+import { db } from "@/lib/firebase"
 
 const navItems = [
   { href: "/admin/dashboard", icon: BarChart2, label: "홈 전광판" },
@@ -37,9 +39,18 @@ const navItems = [
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const [isClient, setIsClient] = React.useState(false)
+  const [appName, setAppName] = React.useState('');
 
   React.useEffect(() => {
     setIsClient(true)
+    const configRef = ref(db, 'config');
+    get(configRef).then((snapshot) => {
+        if (snapshot.exists() && snapshot.val().appName) {
+            setAppName(snapshot.val().appName);
+        } else {
+            setAppName('파크골프대회');
+        }
+    });
   }, [])
 
   // Render a skeleton layout on the server and during initial client render
@@ -73,13 +84,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <div className="flex items-center gap-3">
               <Image 
                 src="/logo.png" 
-                alt="파크골프대회 로고"
+                alt={`${appName} 로고`}
                 width={40}
                 height={40}
                 className="h-10 w-10"
               />
               <div className="group-data-[collapsible=icon]:hidden transition-opacity duration-200">
-                <h1 className="text-xl font-bold font-headline">파크골프대회</h1>
+                <h1 className="text-xl font-bold font-headline">{appName || <Skeleton className="h-6 w-32" />}</h1>
                 <p className="text-xs text-muted-foreground">관리자 패널</p>
               </div>
             </div>

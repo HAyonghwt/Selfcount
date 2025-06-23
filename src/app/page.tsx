@@ -13,6 +13,7 @@ import { auth, db } from '@/lib/firebase';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { ref, get } from 'firebase/database';
 import { useToast } from '@/hooks/use-toast';
+import { Skeleton } from '@/components/ui/skeleton';
 
 interface AppConfig {
   appName: string;
@@ -122,15 +123,17 @@ export default function LoginPage() {
           <div className="mx-auto w-fit mb-4">
             <Image 
                 src="/logo.png"
-                alt="파크골프대회 로고"
+                alt={`${config?.appName || '파크골프대회'} 로고`}
                 width={80}
                 height={80}
                 className="h-20 w-20"
             />
           </div>
-          <CardTitle className="text-3xl font-bold font-headline">파크골프대회</CardTitle>
+          <CardTitle className="text-3xl font-bold font-headline">
+            {config ? config.appName : <Skeleton className="h-9 w-48 mx-auto" />}
+          </CardTitle>
           <CardDescription className="text-muted-foreground pt-2">
-            파크골프 대회의 관리자 또는 심판으로 로그인 하세요.
+            {loading || !config ? ' ' : `${config.appName}의 관리자 또는 심판으로 로그인 하세요.`}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -161,7 +164,7 @@ export default function LoginPage() {
               />
             </div>
             {error && <p className="text-sm font-medium text-destructive">{error}</p>}
-            <Button type="submit" className="w-full h-12 text-lg font-bold" disabled={loading}>
+            <Button type="submit" className="w-full h-12 text-lg font-bold" disabled={loading || !config}>
               {loading && !config
                 ? '설정 로딩 중...' 
                 : loading && config
