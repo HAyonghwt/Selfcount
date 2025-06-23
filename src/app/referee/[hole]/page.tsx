@@ -116,24 +116,23 @@ export default function RefereePage() {
         const completed = new Set<number>();
     
         availableJos.forEach(joNum => {
-            const joPlayers = allPlayers.filter(p => p.group === selectedGroup && p.jo === joNum);
+            // Get players for the specific 'jo' being iterated over.
+            const playersInThisJo = allPlayers.filter(p => p.group === selectedGroup && p.jo === joNum);
     
-            if (joPlayers.length === 0) return;
+            if (playersInThisJo.length === 0) return;
     
-            const allScored = joPlayers.every(player => {
-                const coursePlayers = currentPlayers.filter(p => p.group === selectedGroup && p.jo === joNum);
-                if (coursePlayers.length === 0) return false; // If no players for the course, it's not completed
-                
-                return coursePlayers.every(p => allScores[p.id]?.[selectedCourse]?.[hole] !== undefined);
+            // Check if every player in this jo has a score for the selected course and hole.
+            const allInJoAreScored = playersInThisJo.every(player => {
+                return allScores[player.id]?.[selectedCourse]?.[hole] !== undefined;
             });
     
-            if (allScored) {
+            if (allInJoAreScored) {
                 completed.add(joNum);
             }
         });
     
         return completed;
-    }, [allPlayers, allScores, availableJos, selectedGroup, selectedCourse, hole, currentPlayers]);
+    }, [allPlayers, allScores, availableJos, selectedGroup, selectedCourse, hole]);
 
 
     const selectedCourseName = useMemo(() => courses.find(c => c.id.toString() === selectedCourse)?.name || '', [courses, selectedCourse]);
@@ -210,7 +209,7 @@ export default function RefereePage() {
             setScores(prev => ({ ...prev, [player.id]: { score, status: 'saved', savedAt: Date.now() } }));
             toast({
                 title: "점수 저장 완료", 
-                description: "10초 내에 점수를 더블클릭하여 수정할 수 있습니다.",
+                description: "점수가 저장되었습니다. 10초 내에 수정 가능합니다.",
                 duration: 3000,
             });
         }).catch(err => toast({ title: "저장 실패", description: err.message, variant: "destructive" }))
