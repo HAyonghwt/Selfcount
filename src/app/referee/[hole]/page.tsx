@@ -208,7 +208,7 @@ export default function RefereePage() {
         const scoreRef = ref(db, `/scores/${player.id}/${selectedCourse}/${hole}`);
         set(scoreRef, score).then(() => {
             setScores(prev => ({ ...prev, [player.id]: { score, status: 'saved', savedAt: Date.now() } }));
-            toast({ 
+            toast({
                 title: "점수 저장 완료", 
                 description: "10초 내에 점수를 더블클릭하여 수정할 수 있습니다.",
                 duration: 3000,
@@ -369,19 +369,21 @@ export default function RefereePage() {
             </div>
             
             <AlertDialog open={!!confirmingPlayer} onOpenChange={(open) => !open && setConfirmingPlayer(null)}>
-                <AlertDialogContent className="bg-card border-2 border-primary">
+                <AlertDialogContent>
                     <AlertDialogHeader>
-                        <AlertDialogTitle className="text-center text-3xl sm:text-4xl font-bold leading-tight truncate text-primary">
+                        <AlertDialogTitle className="text-center text-4xl sm:text-5xl font-extrabold leading-tight truncate text-foreground">
                             {confirmingPlayer?.player ? getPlayerName(confirmingPlayer.player) : ''}
                         </AlertDialogTitle>
-                        <AlertDialogDescription className="text-center !mt-2">
-                             <p className="text-sm text-primary mb-2">점수 확인</p>
-                             <span className="font-extrabold text-8xl sm:text-9xl text-primary">
-                                {confirmingPlayer?.score}
-                            </span>
-                            <span className="text-4xl sm:text-5xl text-primary ml-2">
-                                점
-                            </span>
+                        <AlertDialogDescription className="text-center !mt-4 space-y-2">
+                             <p className="text-base text-muted-foreground">점수 확인</p>
+                             <div>
+                                 <span className="font-extrabold text-8xl sm:text-9xl text-primary">
+                                    {confirmingPlayer?.score}
+                                </span>
+                                <span className="text-4xl sm:text-5xl text-foreground ml-2">
+                                    점
+                                </span>
+                             </div>
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter className="grid grid-cols-2 gap-4 !mt-8">
@@ -393,5 +395,3 @@ export default function RefereePage() {
         </div>
     );
 }
-
-    
