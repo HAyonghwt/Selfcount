@@ -102,17 +102,15 @@ export default function RefereePage() {
 
     useEffect(() => {
         const newScores: { [key: string]: ScoreData } = {};
-        let needsUpdate = false;
         currentPlayers.forEach((p: Player) => {
-            if (!scores[p.id]) {
+            if (!scores[p.id] || scores[p.id].status !== 'editing') {
                 newScores[p.id] = { score: 1, status: 'editing' };
-                needsUpdate = true;
             }
         });
-        if (needsUpdate) {
+        if(Object.keys(newScores).length > 0) {
             setScores(prev => ({...prev, ...newScores}));
         }
-    }, [currentPlayers, scores]);
+    }, [currentPlayers]);
 
     useEffect(() => {
         const timers: NodeJS.Timeout[] = [];
@@ -246,20 +244,20 @@ export default function RefereePage() {
 
                             return (
                             <div key={player.id} className="bg-white rounded-lg shadow p-3">
-                                <div className="flex items-center gap-2 w-full">
-                                    <p className="font-bold text-xl sm:text-2xl truncate flex-1 min-w-0">{getPlayerName(player)}</p>
+                                <div className="flex items-center gap-3 w-full">
+                                    <p className="font-bold text-xl sm:text-2xl truncate w-32 flex-shrink-0">{getPlayerName(player)}</p>
                                     
-                                    <div className="flex items-center gap-2 flex-shrink-0">
+                                    <div className="flex-1 flex justify-center items-center gap-2">
                                         <Button variant="outline" size="icon" className="w-12 h-12 rounded-lg border-2" onClick={() => updateScore(player.id, -1)} disabled={!isEditing}>
-                                            <Minus className="h-7 w-7" />
+                                            <Minus className="h-8 w-8" />
                                         </Button>
-                                        <div className="relative w-16 text-center" onDoubleClick={() => handleScoreDoubleClick(player)}>
-                                            <span className={`text-5xl sm:text-6xl font-bold tabular-nums ${isSaved ? 'cursor-pointer' : ''}`}>
+                                        <div className="relative w-20 text-center" onDoubleClick={() => handleScoreDoubleClick(player)}>
+                                            <span className={`text-6xl font-bold tabular-nums ${isSaved ? 'cursor-pointer' : ''}`}>
                                                 {scoreData.score}
                                             </span>
                                         </div>
                                         <Button variant="outline" size="icon" className="w-12 h-12 rounded-lg border-2" onClick={() => updateScore(player.id, 1)} disabled={!isEditing}>
-                                            <Plus className="h-7 w-7" />
+                                            <Plus className="h-8 w-8" />
                                         </Button>
                                     </div>
 
