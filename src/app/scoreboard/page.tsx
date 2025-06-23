@@ -248,7 +248,7 @@ export default function ExternalScoreboard() {
 
                 return (
                     <div key={groupName} className="mb-8">
-                        <header className="flex justify-between items-baseline pb-2 mb-3 border-b-2 border-gray-700">
+                        <header className="flex justify-between items-baseline pb-2 border-b-2 border-gray-700">
                             <h1 className="text-xl md:text-2xl font-bold text-yellow-300">
                                 {tournament.name || '파크골프 토너먼트'} ({groupName})
                             </h1>
@@ -258,24 +258,24 @@ export default function ExternalScoreboard() {
                             <table className="w-full text-center border-collapse">
                                 <thead className="text-gray-400 text-sm">
                                     <tr className="border-b-2 border-gray-600">
-                                        <th className="py-0.5 px-1 w-12 align-middle">조</th>
-                                        <th className="py-0.5 px-1 w-32 text-left align-middle">선수명(팀명)</th>
-                                        <th className="py-0.5 px-1 w-32 text-center align-middle">소속</th>
-                                        <th className="py-0.5 px-1 w-24 text-center align-middle">코스</th>
-                                        <th colSpan={9} className="py-0.5 px-1 align-middle">HOLE</th>
-                                        <th className="py-0.5 px-1 w-16 align-middle">합계</th>
-                                        <th className="py-0.5 px-1 w-16 align-middle">총타수</th>
-                                        <th className="py-0.5 px-1 w-16 align-middle">순위</th>
+                                        <th className="py-1 px-1 w-12 align-middle">조</th>
+                                        <th className="py-1 px-1 w-32 text-left align-middle">선수명(팀명)</th>
+                                        <th className="py-1 px-1 w-32 text-center align-middle">소속</th>
+                                        <th className="py-1 px-1 w-24 text-center align-middle">코스</th>
+                                        <th colSpan={9} className="py-1 px-1 align-middle">HOLE</th>
+                                        <th className="py-1 px-1 w-16 align-middle">합계</th>
+                                        <th className="py-1 px-1 w-16 align-middle">총타수</th>
+                                        <th className="py-1 px-1 w-16 align-middle">순위</th>
                                     </tr>
                                     <tr className="border-b border-gray-600">
-                                        <th className="py-0.5 px-1 align-middle"></th>
-                                        <th className="py-0.5 px-1 align-middle"></th>
-                                        <th className="py-0.5 px-1 align-middle"></th>
-                                        <th className="py-0.5 px-1 align-middle"></th>
+                                        <th className="p-0.5 align-middle"></th>
+                                        <th className="p-0.5 align-middle"></th>
+                                        <th className="p-0.5 align-middle"></th>
+                                        <th className="p-0.5 align-middle"></th>
                                         {Array.from({length: 9}).map((_, i) => <th key={i} className="p-0.5 font-bold text-sm align-middle">{i + 1}</th>)}
-                                        <th className="py-0.5 px-1 align-middle"></th>
-                                        <th className="py-0.5 px-1 align-middle"></th>
-                                        <th className="py-0.5 px-1 align-middle"></th>
+                                        <th className="p-0.5 align-middle"></th>
+                                        <th className="p-0.5 align-middle"></th>
+                                        <th className="p-0.5 align-middle"></th>
                                     </tr>
                                 </thead>
                                 <tbody className="text-base">
