@@ -278,14 +278,14 @@ export default function ExternalScoreboard() {
                                             <th className="py-1 px-1 w-16 text-center align-middle">순위</th>
                                         </tr>
                                         <tr className="border-b border-gray-600">
-                                            <th className="p-0.5 align-middle border-r border-gray-700"></th>
-                                            <th className="p-0.5 align-middle border-r border-gray-700"></th>
-                                            <th className="p-0.5 align-middle border-r border-gray-700"></th>
-                                            <th className="p-0.5 align-middle border-r border-gray-700"></th>
-                                            {Array.from({length: 9}).map((_, i) => <th key={i} className="p-0.5 font-bold text-sm align-middle border-r border-gray-700">{i + 1}</th>)}
-                                            <th className="p-0.5 align-middle border-r border-gray-700"></th>
-                                            <th className="p-0.5 align-middle border-r border-gray-700"></th>
-                                            <th className="p-0.5 align-middle"></th>
+                                            <th className="py-1 px-1 align-middle border-r border-gray-700"></th>
+                                            <th className="py-1 px-1 align-middle border-r border-gray-700"></th>
+                                            <th className="py-1 px-1 align-middle border-r border-gray-700"></th>
+                                            <th className="py-1 px-1 align-middle border-r border-gray-700"></th>
+                                            {Array.from({length: 9}).map((_, i) => <th key={i} className={`py-1 px-1 font-bold text-sm align-middle border-r border-gray-700 ${i % 2 !== 0 ? 'bg-gray-800/50' : ''}`}>{i + 1}</th>)}
+                                            <th className="py-1 px-1 align-middle border-r border-gray-700"></th>
+                                            <th className="py-1 px-1 align-middle border-r border-gray-700"></th>
+                                            <th className="py-1 px-1 align-middle"></th>
                                         </tr>
                                     </thead>
                                     <tbody className="text-base">
@@ -301,12 +301,12 @@ export default function ExternalScoreboard() {
                                                             </>
                                                         )}
                                                         <td className="py-0.5 px-1 w-32 align-middle text-center border-r border-gray-800">{player.coursesData[course.id]?.courseName}</td>
-                                                        {player.coursesData[course.id]?.holeScores.map((score, i) => <td key={i} className="py-0.5 px-1 align-middle font-mono font-bold text-xl border-r border-gray-800">{score === null ? '-' : score}</td>)}
+                                                        {player.coursesData[course.id]?.holeScores.map((score, i) => <td key={i} className={`py-0.5 px-1 align-middle font-mono font-bold text-xl border-r border-gray-800 ${i % 2 !== 0 ? 'bg-gray-800/50' : ''}`}>{score === null ? '-' : score}</td>)}
                                                         <td className="py-0.5 px-1 align-middle font-bold text-gray-300 text-xl border-r border-gray-800">{player.hasAnyScore ? player.coursesData[course.id]?.courseTotal : '-'}</td>
                                                         {courseIndex === 0 && (
                                                             <>
                                                                 <td rowSpan={player.assignedCourses.length || 1} className="py-0.5 px-1 align-middle font-bold text-yellow-400 text-xl border-r border-gray-800">{player.hasAnyScore ? player.totalScore : '-'}</td>
-                                                                <td rowSpan={player.assignedCourses.length || 1} className="py-0.5 px-1 align-middle font-bold text-xl">{player.hasAnyScore ? player.rank : ''}</td>
+                                                                <td rowSpan={player.assignedCourses.length || 1} className="py-0.5 px-1 align-middle font-bold text-xl">{player.hasAnyScore ? `${player.rank}위` : ''}</td>
                                                             </>
                                                         )}
                                                     </tr>
@@ -317,7 +317,7 @@ export default function ExternalScoreboard() {
                                                         <td className="py-0.5 px-1 w-32 text-center align-middle text-gray-400 border-r border-gray-800">{player.club}</td>
                                                         <td colSpan={11} className="py-0.5 px-1 align-middle text-center text-gray-500 border-r border-gray-800">배정된 코스가 없습니다.</td>
                                                         <td className="py-0.5 px-1 align-middle font-bold text-yellow-400 text-xl border-r border-gray-800">{player.hasAnyScore ? player.totalScore : '-'}</td>
-                                                        <td className="py-0.5 px-1 align-middle font-bold text-xl">{player.hasAnyScore ? player.rank : ''}</td>
+                                                        <td className="py-0.5 px-1 align-middle font-bold text-xl">{player.hasAnyScore ? `${player.rank}위` : ''}</td>
                                                     </tr>
                                                 )}
                                             </React.Fragment>

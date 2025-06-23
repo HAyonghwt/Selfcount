@@ -252,7 +252,7 @@ export default function AdminDashboard() {
             groupPlayers.forEach(player => {
                 if (player.assignedCourses.length === 0) {
                      sheetData.push([
-                        player.hasAnyScore ? player.rank : '',
+                        player.hasAnyScore ? `${player.rank}위` : '',
                         player.jo,
                         player.name,
                         player.affiliation,
@@ -266,7 +266,7 @@ export default function AdminDashboard() {
 
                         if (courseIndex === 0) {
                             row.push(
-                                player.hasAnyScore ? player.rank : '',
+                                player.hasAnyScore ? `${player.rank}위` : '',
                                 player.jo,
                                 player.name,
                                 player.affiliation
@@ -380,7 +380,7 @@ export default function AdminDashboard() {
                                                     <TableRow key={`${player.id}-${course.id}`} className="text-base">
                                                         {courseIndex === 0 && (
                                                             <>
-                                                                <TableCell rowSpan={player.assignedCourses.length || 1} className="text-center align-middle font-bold text-lg">{player.hasAnyScore ? player.rank : '-'}</TableCell>
+                                                                <TableCell rowSpan={player.assignedCourses.length || 1} className="text-center align-middle font-bold text-lg">{player.hasAnyScore ? `${player.rank}위` : '-'}</TableCell>
                                                                 <TableCell rowSpan={player.assignedCourses.length || 1} className="text-center align-middle font-medium">{player.jo}</TableCell>
                                                                 <TableCell rowSpan={player.assignedCourses.length || 1} className="align-middle font-semibold">{player.name}</TableCell>
                                                                 <TableCell rowSpan={player.assignedCourses.length || 1} className="align-middle text-muted-foreground">{player.affiliation}</TableCell>
@@ -399,7 +399,7 @@ export default function AdminDashboard() {
                                                     </TableRow>
                                                 )) : (
                                                     <TableRow key={`${player.id}-no-course`} className="text-base text-muted-foreground">
-                                                         <TableCell className="text-center align-middle font-bold text-lg">{player.hasAnyScore ? player.rank : '-'}</TableCell>
+                                                         <TableCell className="text-center align-middle font-bold text-lg">{player.hasAnyScore ? `${player.rank}위` : '-'}</TableCell>
                                                          <TableCell className="text-center align-middle font-medium">{player.jo}</TableCell>
                                                          <TableCell className="align-middle font-semibold">{player.name}</TableCell>
                                                          <TableCell className="align-middle">{player.affiliation}</TableCell>
