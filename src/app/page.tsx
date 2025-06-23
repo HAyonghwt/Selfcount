@@ -84,24 +84,32 @@ export default function LoginPage() {
                 auth.signOut();
              }
         } else {
-            setError('이 앱에 대한 접근 권한이 없습니다.');
+            setError(`'${userEmail}' 계정은 이 앱에 대한 접근 권한이 없습니다.`);
             auth.signOut();
         }
       }
     } catch (authError: any) {
+      let errorMessage = '로그인 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.';
       switch (authError.code) {
         case 'auth/user-not-found':
         case 'auth/wrong-password':
         case 'auth/invalid-credential':
-          setError('잘못된 이메일 또는 비밀번호입니다.');
+          errorMessage = '잘못된 이메일 또는 비밀번호입니다.';
           break;
-        default:
-          setError('로그인 중 오류가 발생했습니다.');
+        case 'auth/user-disabled':
+          errorMessage = '이 사용자 계정은 비활성화되었습니다.';
+          break;
+        case 'auth/invalid-email':
+          errorMessage = '유효하지 않은 이메일 주소 형식입니다.';
+          break;
+        case 'auth/too-many-requests':
+          errorMessage = '로그인 시도가 너무 많습니다. 잠시 후 다시 시도해주세요.';
           break;
       }
+      setError(errorMessage);
       toast({
         title: "로그인 실패",
-        description: "이메일 또는 비밀번호를 확인해주세요.",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {
