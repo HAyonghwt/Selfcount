@@ -183,7 +183,7 @@ export default function LoginPage() {
              <Button variant="secondary" className="w-full h-12 text-base font-bold" asChild>
                 <Link href="/scoreboard" target="_blank" rel="noopener noreferrer">
                     <Tv className="mr-2 h-5 w-5" />
-                    실시간 전광판 보기
+                    실시간 전광판
                 </Link>
             </Button>
         </CardFooter>
