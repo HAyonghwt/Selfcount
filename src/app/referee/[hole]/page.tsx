@@ -75,7 +75,6 @@ export default function RefereePage() {
         };
     }, []);
     
-    // ---- Memoized selectors (SIMPLIFIED) ----
     const availableGroups = useMemo(() => Object.keys(groupsData).sort(), [groupsData]);
 
     const availableCoursesForGroup = useMemo(() => {
@@ -86,7 +85,7 @@ export default function RefereePage() {
         return courses.filter(c => assignedCourseIds.includes(c.id.toString()));
     }, [selectedGroup, groupsData, courses]);
 
-    // This is the key simplification. We no longer filter out completed jos.
+    // Simplified logic: Always show all jos for the selected group.
     const availableJos = useMemo(() => {
         if (!selectedGroup) return [];
         const groupPlayers = allPlayers.filter(p => p.group === selectedGroup);
@@ -100,36 +99,34 @@ export default function RefereePage() {
     }, [allPlayers, selectedGroup, selectedJo]);
     
     const selectedCourseName = useMemo(() => courses.find(c => c.id.toString() === selectedCourse)?.name || '', [courses, selectedCourse]);
-
-    // ---- Timers and Side Effects for UI ----
     
-    // Reset the "jo" selection and scores when group/course changes to prevent stale data.
+    // When group or course changes, reset the Jo selection.
     useEffect(() => {
-        if (groupLocked) {
-          setSelectedJo('');
-          setScores({});
-        }
-    }, [selectedGroup, selectedCourse, groupLocked]);
+        setSelectedJo('');
+        setScores({});
+    }, [selectedGroup, selectedCourse]);
 
+    // When a Jo is selected (currentPlayers changes), initialize their scores.
     useEffect(() => {
         const newScoresState: { [key: string]: ScoreData } = {};
         currentPlayers.forEach((player) => {
             const existingScore = allScores[player.id]?.[selectedCourse]?.[hole];
             newScoresState[player.id] = {
-                score: existingScore || 3,
+                score: existingScore || 3, // Default to Par 3 if no score exists
                 status: existingScore !== undefined ? 'locked' : 'editing',
             };
         });
         setScores(newScoresState);
     }, [currentPlayers, allScores, selectedCourse, hole]);
 
+    // Timer to lock scores after saving.
     useEffect(() => {
         const timers: NodeJS.Timeout[] = [];
         Object.entries(scores).forEach(([playerId, scoreData]) => {
             if (scoreData.status === 'saved') {
                 const timer = setTimeout(() => {
                     setScores(prev => (prev[playerId]?.status === 'saved') ? { ...prev, [playerId]: { ...prev[playerId], status: 'locked' } } : prev);
-                }, 3000);
+                }, 3000); // 3 seconds
                 timers.push(timer);
             }
         });
@@ -196,7 +193,7 @@ export default function RefereePage() {
 
     const getPlayerName = (player: Player) => player.type === 'team' ? `${player.p1_name}/${player.p2_name}` : player.name;
     
-    // ---- Render components (SIMPLIFIED LOGIC) ----
+    // ---- Render components ----
     const renderInitialSelection = () => (
         <Card className="flex-1 flex flex-col">
             <CardHeader>
@@ -313,7 +310,11 @@ export default function RefereePage() {
                 <p className="text-muted-foreground text-base">담당 심판용 페이지</p>
             </header>
 
-            {!groupLocked ? renderInitialSelection() : (
+            {!groupLocked ? (
+                renderInitialSelection()
+             ) : !selectedJo ? (
+                renderJoSelection()
+             ) : (
                 <>
                     <Card className="mb-4">
                         <CardHeader className="p-3">
@@ -328,8 +329,7 @@ export default function RefereePage() {
                             </div>
                         </CardHeader>
                     </Card>
-
-                    {!selectedJo ? renderJoSelection() : renderScoring()}
+                    {renderScoring()}
                 </>
             )}
             
@@ -352,3 +352,5 @@ export default function RefereePage() {
         </div>
     );
 }
+
+    
