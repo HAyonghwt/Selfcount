@@ -11,7 +11,6 @@ import {
   Tv,
   Settings,
   LogOut,
-  Target
 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -73,7 +72,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <SidebarHeader className="p-4">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-primary/20 text-primary rounded-lg">
-                <Target className="w-8 h-8"/>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-8 h-8"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg>
               </div>
               <div className="group-data-[collapsible=icon]:hidden transition-opacity duration-200">
                 <h1 className="text-xl font-bold font-headline">ParkScore</h1>
@@ -100,8 +99,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                <SidebarMenuItem>
                   <SidebarMenuButton asChild tooltip={{ children: "외부 전광판" }}>
                      <Link href="/scoreboard" target="_blank" rel="noopener noreferrer">
-                        <Tv className="h-5 w-5 text-accent" />
-                        <span className="text-accent">외부 전광판</span>
+                        <Tv className="h-5 w-5 text-primary" />
+                        <span className="text-primary font-semibold">외부 전광판</span>
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
