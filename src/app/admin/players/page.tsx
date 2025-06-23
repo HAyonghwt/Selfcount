@@ -155,12 +155,14 @@ export default function PlayerManagementPage() {
                     if (type === 'individual') {
                         jsonData.forEach((row: any) => {
                             const name = row['이름']?.toString().trim();
-                            const affiliation = row['소속']?.toString().trim();
-                            if (name && affiliation && row['조']) {
+                            const jo = row['조'];
+                            const affiliation = row['소속']?.toString().trim() || '';
+
+                            if (name && jo) { // '소속' 필드는 선택사항으로 변경
                                 newPlayers.push({
                                     type: 'individual',
                                     group: groupName,
-                                    jo: Number(row['조']),
+                                    jo: Number(jo),
                                     name: name,
                                     affiliation: affiliation,
                                 });
@@ -276,7 +278,7 @@ export default function PlayerManagementPage() {
             toast({ title: '입력 오류', description: '그룹과 조 번호를 모두 입력해주세요.', variant: 'destructive' });
             return;
         }
-        const playersToSave = individualFormData.filter(p => p.name.trim() !== '' && p.affiliation.trim() !== '');
+        const playersToSave = individualFormData.filter(p => p.name.trim() !== '');
         if (playersToSave.length === 0) {
             toast({ title: '정보 없음', description: '저장할 선수 정보가 없습니다.', variant: 'destructive' });
             return;
@@ -833,5 +835,3 @@ export default function PlayerManagementPage() {
     </div>
   )
 }
-
-    
