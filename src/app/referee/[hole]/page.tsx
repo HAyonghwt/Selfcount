@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Minus, Plus, Save, Lock, Edit } from 'lucide-react';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useToast } from '@/hooks/use-toast';
 import { Progress } from '@/components/ui/progress';
 import { db } from '@/lib/firebase';
@@ -245,42 +245,42 @@ export default function RefereePage() {
 
                             return (
                             <div key={player.id} className="bg-white rounded-lg shadow p-2">
-                                <div className="flex items-center justify-between gap-2 w-full">
+                                <div className="flex items-center justify-between gap-1 w-full">
                                     
                                     <div className="flex items-center gap-2">
                                         <p className="font-bold text-xl truncate w-24 flex-shrink-0">{getPlayerName(player)}</p>
                                         
-                                        <div className="flex items-center gap-1.5">
-                                            <Button variant="outline" size="icon" className="w-14 h-14 rounded-lg border-2" onClick={() => updateScore(player.id, -1)} disabled={!isEditing}>
-                                                <Minus className="h-8 w-8" />
+                                        <div className="flex items-center gap-1">
+                                            <Button variant="outline" size="icon" className="w-11 h-11 rounded-lg border-2" onClick={() => updateScore(player.id, -1)} disabled={!isEditing}>
+                                                <Minus className="h-6 w-6" />
                                             </Button>
-                                            <div className="relative w-12 text-center" onDoubleClick={() => handleScoreDoubleClick(player)}>
-                                                <span className={`text-5xl font-bold tabular-nums ${isSaved ? 'cursor-pointer' : ''}`}>
+                                            <div className="relative w-10 text-center" onDoubleClick={() => handleScoreDoubleClick(player)}>
+                                                <span className={`text-4xl font-bold tabular-nums ${isSaved ? 'cursor-pointer' : ''}`}>
                                                     {scoreData.score}
                                                 </span>
                                             </div>
-                                            <Button variant="outline" size="icon" className="w-14 h-14 rounded-lg border-2" onClick={() => updateScore(player.id, 1)} disabled={!isEditing}>
-                                                <Plus className="h-8 w-8" />
+                                            <Button variant="outline" size="icon" className="w-11 h-11 rounded-lg border-2" onClick={() => updateScore(player.id, 1)} disabled={!isEditing}>
+                                                <Plus className="h-6 w-6" />
                                             </Button>
                                         </div>
                                     </div>
 
-                                    <div className="w-14 h-14 flex-shrink-0">
+                                    <div className="w-11 h-11 flex-shrink-0">
                                         {isEditing && (
                                             <Button variant="default" size="icon" className="w-full h-full rounded-lg" onClick={() => handleSavePress(player)}>
-                                                <Save className="h-7 w-7" />
+                                                <Save className="h-6 w-6" />
                                             </Button>
                                         )}
                                         {isSaved && (
                                             <div className="flex flex-col items-center justify-center h-full w-full text-center relative border border-dashed border-primary/50 rounded-lg cursor-pointer" onDoubleClick={() => handleScoreDoubleClick(player)}>
-                                                    <Edit className="absolute top-1 right-1 w-3 h-3 text-primary animate-pulse" />
-                                                    <p className="text-xs text-primary font-bold leading-tight">저장됨</p>
-                                                    <Progress value={(now % 10000) / 100} className="h-1 mt-1 w-10/12 mx-auto" />
+                                                    <Edit className="absolute top-1 right-1 w-2.5 h-2.5 text-primary animate-pulse" />
+                                                    <p className="text-[10px] text-primary font-bold leading-tight">저장됨</p>
+                                                    <Progress value={(now % 10000) / 100} className="h-0.5 mt-0.5 w-10/12 mx-auto" />
                                             </div>
                                         )}
                                         {isLocked && (
                                             <div className="flex items-center justify-center h-full w-full bg-muted text-muted-foreground rounded-lg">
-                                                <Lock className="w-7 w-7" />
+                                                <Lock className="w-6 h-6" />
                                             </div>
                                         )}
                                     </div>
@@ -311,5 +311,4 @@ export default function RefereePage() {
             </AlertDialog>
         </div>
     );
-
-    
+}
