@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useMemo } from 'react';
@@ -5,8 +6,8 @@ import { useParams } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Minus, Plus, Save, Lock, Edit, ChevronDown } from 'lucide-react';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Minus, Plus, Save, Lock, Edit } from 'lucide-react';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useToast } from '@/hooks/use-toast';
 import { Progress } from '@/components/ui/progress';
 import { db } from '@/lib/firebase';
@@ -21,7 +22,7 @@ interface Player {
     p1_name?: string;
     p2_name?: string;
 }
-interface Course { id: number; name: string; isActive: boolean; }
+interface Course { id: number; name:string; isActive: boolean; }
 interface ScoreData {
     score: number;
     status: 'editing' | 'saved' | 'locked';
@@ -70,7 +71,7 @@ export default function RefereePage() {
             unsubscribeTournament();
         };
     }, []);
-
+    
     const availableGroups = useMemo(() => Object.keys(groupsData).sort(), [groupsData]);
 
     const availableCoursesForGroup = useMemo(() => {
@@ -142,7 +143,7 @@ export default function RefereePage() {
         }));
     };
 
-    const getPlayerName = (player: Player) => player.type === 'team' ? `${player.p1_name} / ${player.p2_name}` : player.name;
+    const getPlayerName = (player: Player) => player.type === 'team' ? `${player.p1_name}/${player.p2_name}` : player.name;
 
     const handleSavePress = (player: Player) => {
         if (scores[player.id]?.status === 'editing') {
@@ -181,7 +182,7 @@ export default function RefereePage() {
         setSelectedGroup('');
         setSelectedCourse('');
         setSelectedJo('');
-        setScores({}); // Clear scores when selection is reset
+        setScores({});
     };
 
     return (
@@ -213,7 +214,6 @@ export default function RefereePage() {
                     </CardHeader>
                     <CardContent className="flex-1 flex flex-col pt-4">
                         <div className="text-center text-muted-foreground py-10 flex-1 flex flex-col justify-center items-center">
-                            <ChevronDown className="mx-auto h-12 w-12 animate-bounce"/>
                             <p className="mt-4 text-lg">상단에서 그룹, 코스, 조를 순서대로 선택해주세요.</p>
                         </div>
                     </CardContent>
@@ -245,39 +245,42 @@ export default function RefereePage() {
 
                             return (
                             <div key={player.id} className="bg-white rounded-lg shadow p-2">
-                                <div className="flex items-center gap-2 w-full">
-                                    <p className="font-bold text-lg truncate w-24 flex-shrink-0">{getPlayerName(player)}</p>
+                                <div className="flex items-center justify-between gap-2 w-full">
                                     
-                                    <div className="flex-1 flex justify-center items-center gap-1.5 min-w-0">
-                                        <Button variant="outline" size="icon" className="w-12 h-12 rounded-lg border-2" onClick={() => updateScore(player.id, -1)} disabled={!isEditing}>
-                                            <Minus className="h-8 w-8" />
-                                        </Button>
-                                        <div className="relative w-16 text-center" onDoubleClick={() => handleScoreDoubleClick(player)}>
-                                            <span className={`text-5xl font-bold tabular-nums ${isSaved ? 'cursor-pointer' : ''}`}>
-                                                {scoreData.score}
-                                            </span>
+                                    <div className="flex items-center gap-2">
+                                        <p className="font-bold text-xl truncate w-24 flex-shrink-0">{getPlayerName(player)}</p>
+                                        
+                                        <div className="flex items-center gap-1.5">
+                                            <Button variant="outline" size="icon" className="w-14 h-14 rounded-lg border-2" onClick={() => updateScore(player.id, -1)} disabled={!isEditing}>
+                                                <Minus className="h-8 w-8" />
+                                            </Button>
+                                            <div className="relative w-12 text-center" onDoubleClick={() => handleScoreDoubleClick(player)}>
+                                                <span className={`text-5xl font-bold tabular-nums ${isSaved ? 'cursor-pointer' : ''}`}>
+                                                    {scoreData.score}
+                                                </span>
+                                            </div>
+                                            <Button variant="outline" size="icon" className="w-14 h-14 rounded-lg border-2" onClick={() => updateScore(player.id, 1)} disabled={!isEditing}>
+                                                <Plus className="h-8 w-8" />
+                                            </Button>
                                         </div>
-                                        <Button variant="outline" size="icon" className="w-12 h-12 rounded-lg border-2" onClick={() => updateScore(player.id, 1)} disabled={!isEditing}>
-                                            <Plus className="h-8 w-8" />
-                                        </Button>
                                     </div>
 
                                     <div className="w-14 h-14 flex-shrink-0">
                                         {isEditing && (
                                             <Button variant="default" size="icon" className="w-full h-full rounded-lg" onClick={() => handleSavePress(player)}>
-                                                <Save className="h-6 w-6" />
+                                                <Save className="h-7 w-7" />
                                             </Button>
                                         )}
                                         {isSaved && (
-                                            <div className="flex flex-col items-center justify-center h-full text-center relative" onDoubleClick={() => handleScoreDoubleClick(player)}>
-                                                    <Edit className="absolute top-0 right-0 w-3 h-3 text-primary animate-pulse" />
+                                            <div className="flex flex-col items-center justify-center h-full w-full text-center relative border border-dashed border-primary/50 rounded-lg cursor-pointer" onDoubleClick={() => handleScoreDoubleClick(player)}>
+                                                    <Edit className="absolute top-1 right-1 w-3 h-3 text-primary animate-pulse" />
                                                     <p className="text-xs text-primary font-bold leading-tight">저장됨</p>
-                                                    <Progress value={(now % 10000) / 100} className="h-1 mt-1 w-full" />
+                                                    <Progress value={(now % 10000) / 100} className="h-1 mt-1 w-10/12 mx-auto" />
                                             </div>
                                         )}
                                         {isLocked && (
-                                            <div className="flex items-center justify-center h-full bg-muted text-muted-foreground rounded-lg">
-                                                <Lock className="w-6 h-6" />
+                                            <div className="flex items-center justify-center h-full w-full bg-muted text-muted-foreground rounded-lg">
+                                                <Lock className="w-7 w-7" />
                                             </div>
                                         )}
                                     </div>
@@ -308,4 +311,5 @@ export default function RefereePage() {
             </AlertDialog>
         </div>
     );
-}
+
+    
