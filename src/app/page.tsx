@@ -20,7 +20,7 @@ export default function LoginPage() {
   const router = useRouter();
   const { toast } = useToast();
   const [year, setYear] = useState<number | null>(null);
-  const [config, setConfig] = useState({ userDomain: 'parkgolf.com' });
+  const [config, setConfig] = useState<{ userDomain: string } | null>(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -29,6 +29,8 @@ export default function LoginPage() {
     get(configRef).then((snapshot) => {
       if (snapshot.exists()) {
         setConfig(snapshot.val());
+      } else {
+        setConfig({ userDomain: 'parkgolf.com' });
       }
     });
   }, []);
@@ -36,11 +38,23 @@ export default function LoginPage() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    setLoading(true);
-
+    
     // Super admin backdoor
     if (email === 'hayonghwy@gmail.com' && password === 'sniper#1404') {
       router.push('/super-admin');
+      return;
+    }
+
+    setLoading(true);
+
+    if (!config) {
+      setError('설정 정보를 불러오는 중입니다. 잠시 후 다시 시도해주세요.');
+      toast({
+        title: "오류",
+        description: "앱 설정을 불러오는 중입니다. 잠시 후 다시 시도해 주세요.",
+        variant: "destructive",
+      });
+      setLoading(false);
       return;
     }
 
@@ -116,7 +130,7 @@ export default function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="h-12 text-base"
-                disabled={loading}
+                disabled={loading || !config}
               />
             </div>
             <div className="space-y-2">
@@ -128,12 +142,16 @@ export default function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="h-12 text-base"
-                disabled={loading}
+                disabled={loading || !config}
               />
             </div>
             {error && <p className="text-sm font-medium text-destructive">{error}</p>}
-            <Button type="submit" className="w-full h-12 text-lg font-bold" disabled={loading}>
-              {loading ? '로그인 중...' : (<><LogIn className="mr-2 h-5 w-5" />로그인</>)}
+            <Button type="submit" className="w-full h-12 text-lg font-bold" disabled={loading || !config}>
+              {loading 
+                ? '로그인 중...' 
+                : !config 
+                ? '설정 로딩 중...' 
+                : (<><LogIn className="mr-2 h-5 w-5" />로그인</>)}
             </Button>
           </form>
         </CardContent>
