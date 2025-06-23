@@ -317,14 +317,20 @@ export default function RefereePage() {
             </div>
             
             <AlertDialog open={!!confirmingPlayer} onOpenChange={(open) => !open && setConfirmingPlayer(null)}>
-                <AlertDialogContent className="bg-card border-primary border-2">
+                <AlertDialogContent className="border">
                     <AlertDialogHeader>
-                        <AlertDialogTitle className="text-primary text-center text-2xl sm:text-3xl leading-tight">점수 확인</AlertDialogTitle>
-                         <AlertDialogDescription className="text-center !mt-4">
-                            <p className="text-base text-primary/80 mb-2">{confirmingPlayer?.player ? getPlayerName(confirmingPlayer.player) : ''}</p>
-                            <span className="font-extrabold text-8xl sm:text-9xl text-primary">{confirmingPlayer?.score}</span>
-                            <span className="text-4xl sm:text-5xl text-primary ml-2">점</span>
-                         </AlertDialogDescription>
+                        <AlertDialogTitle className="text-center text-3xl sm:text-4xl font-bold leading-tight truncate">
+                            {confirmingPlayer?.player ? getPlayerName(confirmingPlayer.player) : ''}
+                        </AlertDialogTitle>
+                        <AlertDialogDescription className="text-center !mt-4">
+                            <p className="text-base text-muted-foreground mb-2">점수 확인</p>
+                            <span className="font-extrabold text-8xl sm:text-9xl text-primary">
+                                {confirmingPlayer?.score}
+                            </span>
+                            <span className="text-4xl sm:text-5xl text-foreground ml-2">
+                                점
+                            </span>
+                        </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter className="grid grid-cols-2 gap-4 !mt-8">
                         <AlertDialogCancel onClick={() => setConfirmingPlayer(null)} className="h-14 sm:h-16 text-xl sm:text-2xl font-bold">취소</AlertDialogCancel>
