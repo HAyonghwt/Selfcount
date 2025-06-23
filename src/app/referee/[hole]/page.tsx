@@ -219,12 +219,12 @@ export default function RefereePage() {
         <Card className="flex-1 flex flex-col">
             <CardHeader>
                 <CardTitle className="text-xl">다음 조를 선택하세요</CardTitle>
-                {availableJos.length > 0 && (
+                {availableJos && availableJos.length > 0 && (
                     <CardDescription>{availableJos.length}개 조가 있습니다.</CardDescription>
                 )}
             </CardHeader>
             <CardContent className="flex-1 flex flex-col justify-center items-center">
-                {availableJos.length > 0 ? (
+                {availableJos && availableJos.length > 0 ? (
                      <Select value={selectedJo} onValueChange={setSelectedJo}>
                         <SelectTrigger className="h-14 text-lg w-full max-w-xs"><SelectValue placeholder="조 선택" /></SelectTrigger>
                         <SelectContent>
@@ -236,11 +236,14 @@ export default function RefereePage() {
                         </SelectContent>
                     </Select>
                 ) : (
-                    <div className="text-center text-muted-foreground p-4">
-                        <Users className="mx-auto h-12 w-12" />
-                        <p className="mt-4 text-base font-semibold text-foreground">배정된 선수 없음</p>
-                        <p className="mt-1 text-sm">
-                            '{selectedGroup}' 그룹에<br/>등록된 선수가 없습니다.
+                    <div className="text-center text-muted-foreground p-8 border-2 border-dashed rounded-lg">
+                        <Users className="mx-auto h-16 w-16 text-primary" />
+                        <p className="mt-4 text-lg font-semibold text-foreground">배정된 선수가 없습니다.</p>
+                        <p className="mt-2 text-base">
+                            현재 선택하신 '<strong className="text-primary">{selectedGroup}</strong>' 그룹에는<br/>아직 등록되거나 배정된 선수가 없습니다.
+                        </p>
+                        <p className="mt-4 text-sm">
+                            선수 관리 페이지에서 선수를 추가하거나, <br/> 다른 그룹을 선택해주세요.
                         </p>
                     </div>
                 )}
