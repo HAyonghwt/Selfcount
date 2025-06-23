@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useMemo } from 'react';
@@ -6,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Minus, Plus, Save, Lock, Edit, ChevronDown } from 'lucide-react';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useToast } from '@/hooks/use-toast';
 import { Progress } from '@/components/ui/progress';
 import { db } from '@/lib/firebase';
@@ -43,7 +44,6 @@ export default function RefereePage() {
     const [scores, setScores] = useState<{ [key: string]: ScoreData }>({});
     const [confirmingPlayer, setConfirmingPlayer] = useState<{ player: Player; score: number; } | null>(null);
 
-    // For countdown display
     const [now, setNow] = useState(Date.now());
 
     useEffect(() => {
@@ -101,6 +101,7 @@ export default function RefereePage() {
     }, [courses, selectedCourse]);
 
     useEffect(() => {
+        if (!isReady) return;
         const newScores: { [key: string]: ScoreData } = {};
         currentPlayers.forEach((p: Player) => {
             if (!scores[p.id]) {
@@ -110,7 +111,8 @@ export default function RefereePage() {
         if(Object.keys(newScores).length > 0) {
             setScores(prev => ({...prev, ...newScores}));
         }
-    }, [currentPlayers]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [currentPlayers, isReady]);
 
     useEffect(() => {
         const timers: NodeJS.Timeout[] = [];
@@ -245,38 +247,38 @@ export default function RefereePage() {
                             return (
                             <div key={player.id} className="bg-white rounded-lg shadow p-3">
                                 <div className="flex items-center gap-2 w-full">
-                                    <p className="font-bold text-xl truncate w-28 flex-shrink-0">{getPlayerName(player)}</p>
+                                    <p className="font-bold text-xl truncate w-24 flex-shrink-0">{getPlayerName(player)}</p>
                                     
                                     <div className="flex-1 flex justify-center items-center gap-1.5">
-                                        <Button variant="outline" size="icon" className="w-10 h-10 rounded-lg border-2" onClick={() => updateScore(player.id, -1)} disabled={!isEditing}>
-                                            <Minus className="h-6 w-6" />
+                                        <Button variant="outline" size="icon" className="w-9 h-9 rounded-lg border-2" onClick={() => updateScore(player.id, -1)} disabled={!isEditing}>
+                                            <Minus className="h-5 w-5" />
                                         </Button>
-                                        <div className="relative w-16 text-center" onDoubleClick={() => handleScoreDoubleClick(player)}>
-                                            <span className={`text-5xl font-bold tabular-nums ${isSaved ? 'cursor-pointer' : ''}`}>
+                                        <div className="relative w-12 text-center" onDoubleClick={() => handleScoreDoubleClick(player)}>
+                                            <span className={`text-4xl font-bold tabular-nums ${isSaved ? 'cursor-pointer' : ''}`}>
                                                 {scoreData.score}
                                             </span>
                                         </div>
-                                        <Button variant="outline" size="icon" className="w-10 h-10 rounded-lg border-2" onClick={() => updateScore(player.id, 1)} disabled={!isEditing}>
-                                            <Plus className="h-6 w-6" />
+                                        <Button variant="outline" size="icon" className="w-9 h-9 rounded-lg border-2" onClick={() => updateScore(player.id, 1)} disabled={!isEditing}>
+                                            <Plus className="h-5 w-5" />
                                         </Button>
                                     </div>
 
-                                    <div className="w-10 h-10 flex-shrink-0">
+                                    <div className="w-9 h-9 flex-shrink-0">
                                         {isEditing && (
                                             <Button variant="default" size="icon" className="w-full h-full rounded-lg" onClick={() => handleSavePress(player)}>
-                                                <Save className="h-5 w-5" />
+                                                <Save className="h-4 w-4" />
                                             </Button>
                                         )}
                                         {isSaved && (
                                             <div className="flex flex-col items-center justify-center h-full text-center relative" onDoubleClick={() => handleScoreDoubleClick(player)}>
-                                                    <Edit className="absolute top-0 right-0 w-3 h-3 text-primary animate-pulse" />
-                                                    <p className="text-[10px] text-primary font-bold">저장됨</p>
-                                                    <Progress value={(now % 10000) / 100} className="h-1 mt-1 w-full" />
+                                                    <Edit className="absolute top-0 right-0 w-2.5 h-2.5 text-primary animate-pulse" />
+                                                    <p className="text-[9px] text-primary font-bold leading-tight">저장됨</p>
+                                                    <Progress value={(now % 10000) / 100} className="h-0.5 mt-0.5 w-full" />
                                             </div>
                                         )}
                                         {isLocked && (
                                             <div className="flex items-center justify-center h-full bg-muted text-muted-foreground rounded-lg">
-                                                <Lock className="w-5 h-5" />
+                                                <Lock className="w-4 h-4" />
                                             </div>
                                         )}
                                     </div>
@@ -308,3 +310,5 @@ export default function RefereePage() {
         </div>
     );
 }
+
+    
