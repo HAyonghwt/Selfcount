@@ -296,27 +296,28 @@ export default function ExternalScoreboard() {
                                                         {courseIndex === 0 && (
                                                             <>
                                                                 <td rowSpan={player.assignedCourses.length || 1} className="py-0.5 px-1 align-middle font-bold border-r border-gray-800">{player.jo}</td>
-                                                                <td rowSpan={player.assignedCourses.length || 1} className="py-0.5 px-1 align-middle text-center font-semibold border-r border-gray-800">{player.name}</td>
-                                                                <td rowSpan={player.assignedCourses.length || 1} className="py-0.5 px-1 align-middle text-center text-gray-400 border-r border-gray-800">{player.club}</td>
+                                                                <td rowSpan={player.assignedCourses.length || 1} className="py-0.5 px-1 w-32 text-center align-middle font-semibold border-r border-gray-800">{player.name}</td>
+                                                                <td rowSpan={player.assignedCourses.length || 1} className="py-0.5 px-1 w-32 text-center align-middle text-gray-400 border-r border-gray-800">{player.club}</td>
                                                             </>
                                                         )}
-                                                        <td className="py-0.5 px-1 align-middle text-center border-r border-gray-800">{player.coursesData[course.id]?.courseName}</td>
+                                                        <td className="py-0.5 px-1 w-32 align-middle text-center border-r border-gray-800">{player.coursesData[course.id]?.courseName}</td>
                                                         {player.coursesData[course.id]?.holeScores.map((score, i) => <td key={i} className="py-0.5 px-1 align-middle font-mono font-bold text-xl border-r border-gray-800">{score === null ? '-' : score}</td>)}
                                                         <td className="py-0.5 px-1 align-middle font-bold text-gray-300 text-xl border-r border-gray-800">{player.hasAnyScore ? player.coursesData[course.id]?.courseTotal : '-'}</td>
                                                         {courseIndex === 0 && (
                                                             <>
-                                                                <td rowSpan={player.assignedCourses.length || 1} className="py-0.5 px-1 align-middle font-bold text-yellow-400 text-2xl border-r border-gray-800">{player.hasAnyScore ? player.totalScore : '-'}</td>
-                                                                <td rowSpan={player.assignedCourses.length || 1} className="py-0.5 px-1 align-middle font-bold text-2xl">{player.hasAnyScore ? player.rank : '-'}</td>
+                                                                <td rowSpan={player.assignedCourses.length || 1} className="py-0.5 px-1 align-middle font-bold text-yellow-400 text-xl border-r border-gray-800">{player.hasAnyScore ? player.totalScore : '-'}</td>
+                                                                <td rowSpan={player.assignedCourses.length || 1} className="py-0.5 px-1 align-middle font-bold text-xl">{player.hasAnyScore ? player.rank : ''}</td>
                                                             </>
                                                         )}
                                                     </tr>
                                                 )) : (
                                                     <tr className="border-b border-gray-800 last:border-0">
                                                         <td className="py-0.5 px-1 align-middle font-bold border-r border-gray-800">{player.jo}</td>
-                                                        <td className="py-0.5 px-1 align-middle text-center font-semibold border-r border-gray-800">{player.name}</td>
-                                                        <td className="py-0.5 px-1 align-middle text-center text-gray-400 border-r border-gray-800">{player.club}</td>
-                                                        <td colSpan={12} className="py-0.5 px-1 align-middle text-center text-gray-500 border-r border-gray-800">배정된 코스가 없습니다.</td>
-                                                        <td className="py-0.5 px-1 align-middle font-bold text-2xl">{player.hasAnyScore ? player.rank : '-'}</td>
+                                                        <td className="py-0.5 px-1 w-32 text-center align-middle font-semibold border-r border-gray-800">{player.name}</td>
+                                                        <td className="py-0.5 px-1 w-32 text-center align-middle text-gray-400 border-r border-gray-800">{player.club}</td>
+                                                        <td colSpan={11} className="py-0.5 px-1 align-middle text-center text-gray-500 border-r border-gray-800">배정된 코스가 없습니다.</td>
+                                                        <td className="py-0.5 px-1 align-middle font-bold text-yellow-400 text-xl border-r border-gray-800">{player.hasAnyScore ? player.totalScore : '-'}</td>
+                                                        <td className="py-0.5 px-1 align-middle font-bold text-xl">{player.hasAnyScore ? player.rank : ''}</td>
                                                     </tr>
                                                 )}
                                             </React.Fragment>
