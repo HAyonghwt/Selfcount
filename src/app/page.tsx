@@ -99,14 +99,11 @@ export default function LoginPage() {
       <Card className="w-full max-w-md shadow-2xl">
         <CardHeader className="text-center">
           <div className="mx-auto bg-primary/20 text-primary rounded-lg p-3 w-fit mb-4">
-            <svg viewBox="0 0 200 150" xmlns="http://www.w3.org/2000/svg" className="h-12 w-12">
-              <path d="M20,135 C20,125 180,125 180,135 C180,145 20,145 20,145Z" fill="#e2e8f0" />
-              <path d="M175.7,83.9c-2.4-23-22.7-41.1-45.8-41.1c-16.1,0-30.2,7.5-38.9,18.9c-5.9,7.8-9.4,17.5-9.4,28.2 c0,23.3,17.9,42.2,40,42.2c16.1,0,30.2-7.5,38.9-18.9C166.4,105.4,173.3,95.7,175.7,83.9z M48,79.9 c0-21,17-38,38-38s38,17,38,38s-17,38-38,38S48,100.9,48,79.9z" fill="#4ade80" transform="translate(0, -10)" />
-              <ellipse cx="65" cy="110" rx="14" ry="5" fill="#1e293b"/>
-              <rect x="64" y="30" width="3" height="80" fill="#94a3b8" />
-              <polygon points="67,32 97,32 89,43 67,43" fill="currentColor"/>
-              <circle cx="115" cy="100" r="9" fill="#FFFFFF" />
-              <path d="M 110,95 A 7,7 0 0,0 120,105" fill="none" stroke="#e2e8f0" strokeWidth="2" />
+            <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" className="h-20 w-20">
+              <path d="M 0,90 C 20,70 80,70 100,90 L 100,100 L 0,100 Z" fill="#4ade80" />
+              <rect x="49" y="20" width="2" height="70" fill="#a1a1aa" />
+              <polygon points="51,22 81,22 73,33 51,33" fill="currentColor"/>
+              <ellipse cx="50" cy="90" rx="7" ry="2.5" fill="#3f3f46"/>
             </svg>
           </div>
           <CardTitle className="text-3xl font-bold font-headline">ParkScore</CardTitle>
