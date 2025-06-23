@@ -10,7 +10,7 @@ import { Trash2, PlusCircle, Save, RotateCcw, AlertTriangle } from 'lucide-react
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useToast } from '@/hooks/use-toast';
 import { db } from '@/lib/firebase';
-import { ref, onValue, set, remove } from 'firebase/database';
+import { ref, onValue, set, remove, update } from 'firebase/database';
 
 interface Course {
   id: number;
@@ -129,14 +129,11 @@ export default function TournamentManagementPage() {
     const tournamentRef = ref(db, 'tournaments/current');
     
     const coursesObject = courses.reduce((acc, course) => {
-        acc[course.id] = {
-            ...course,
-            pars: course.pars.map(p => p === null ? 0 : p)
-        };
+        acc[course.id] = course;
         return acc;
     }, {} as Record<string, any>);
 
-    set(tournamentRef, {
+    update(tournamentRef, {
       name: tournamentName,
       courses: coursesObject
     }).then(() => {
@@ -256,5 +253,3 @@ export default function TournamentManagementPage() {
     </div>
   );
 }
-
-    
