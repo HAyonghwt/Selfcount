@@ -271,7 +271,7 @@ export default function ExternalScoreboard() {
                                             <th className="py-1 px-1 w-12 text-center align-middle border-r border-gray-700">조</th>
                                             <th className="py-1 px-1 w-32 text-center align-middle border-r border-gray-700">선수명(팀명)</th>
                                             <th className="py-1 px-1 w-32 text-center align-middle border-r border-gray-700">소속</th>
-                                            <th className="py-1 px-1 w-24 text-center align-middle border-r border-gray-700">코스</th>
+                                            <th className="py-1 px-1 w-32 text-center align-middle border-r border-gray-700">코스</th>
                                             <th colSpan={9} className="py-1 px-1 text-center align-middle border-r border-gray-700">HOLE</th>
                                             <th className="py-1 px-1 w-16 text-center align-middle border-r border-gray-700">합계</th>
                                             <th className="py-1 px-1 w-16 text-center align-middle border-r border-gray-700">총타수</th>
