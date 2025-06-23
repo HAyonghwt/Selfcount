@@ -359,18 +359,18 @@ export default function AdminDashboard() {
                             </div>
                         </CardHeader>
                         <CardContent>
-                            <div className="overflow-x-auto">
+                            <div className="overflow-x-auto border rounded-lg">
                                 <Table>
                                     <TableHeader>
                                         <TableRow>
-                                            <TableHead className="w-16 text-center">순위</TableHead>
-                                            <TableHead className="w-16 text-center">조</TableHead>
-                                            <TableHead className="w-48">선수명(팀명)</TableHead>
-                                            <TableHead className="w-48">소속</TableHead>
-                                            <TableHead className="w-24">코스</TableHead>
-                                            {Array.from({length: 9}).map((_, i) => <TableHead key={i} className="text-center">{i + 1}</TableHead>)}
-                                            <TableHead className="w-24 text-center">합계</TableHead>
-                                            <TableHead className="w-24 text-center">총타수</TableHead>
+                                            <TableHead className="w-16 text-center px-2 py-2 border-r">순위</TableHead>
+                                            <TableHead className="w-16 text-center px-2 py-2 border-r">조</TableHead>
+                                            <TableHead className="w-40 px-2 py-2 border-r">선수명(팀명)</TableHead>
+                                            <TableHead className="w-40 px-2 py-2 border-r">소속</TableHead>
+                                            <TableHead className="w-40 px-2 py-2 border-r">코스</TableHead>
+                                            {Array.from({length: 9}).map((_, i) => <TableHead key={i} className="text-center px-2 py-2 border-r">{i + 1}</TableHead>)}
+                                            <TableHead className="w-24 text-center px-2 py-2 border-r">합계</TableHead>
+                                            <TableHead className="w-24 text-center px-2 py-2">총타수</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
@@ -380,31 +380,31 @@ export default function AdminDashboard() {
                                                     <TableRow key={`${player.id}-${course.id}`} className="text-base">
                                                         {courseIndex === 0 && (
                                                             <>
-                                                                <TableCell rowSpan={player.assignedCourses.length || 1} className="text-center align-middle font-bold text-lg">{player.hasAnyScore ? `${player.rank}위` : '-'}</TableCell>
-                                                                <TableCell rowSpan={player.assignedCourses.length || 1} className="text-center align-middle font-medium">{player.jo}</TableCell>
-                                                                <TableCell rowSpan={player.assignedCourses.length || 1} className="align-middle font-semibold">{player.name}</TableCell>
-                                                                <TableCell rowSpan={player.assignedCourses.length || 1} className="align-middle text-muted-foreground">{player.affiliation}</TableCell>
+                                                                <TableCell rowSpan={player.assignedCourses.length || 1} className="text-center align-middle font-bold text-lg px-2 py-1 border-r">{player.hasAnyScore ? `${player.rank}위` : '-'}</TableCell>
+                                                                <TableCell rowSpan={player.assignedCourses.length || 1} className="text-center align-middle font-medium px-2 py-1 border-r">{player.jo}</TableCell>
+                                                                <TableCell rowSpan={player.assignedCourses.length || 1} className="align-middle font-semibold px-2 py-1 border-r">{player.name}</TableCell>
+                                                                <TableCell rowSpan={player.assignedCourses.length || 1} className="align-middle text-muted-foreground px-2 py-1 border-r">{player.affiliation}</TableCell>
                                                             </>
                                                         )}
                                                         
-                                                        <TableCell className="font-medium">{player.coursesData[course.id]?.courseName}</TableCell>
+                                                        <TableCell className="font-medium px-2 py-1 border-r">{player.coursesData[course.id]?.courseName}</TableCell>
                                                         
-                                                        {player.coursesData[course.id]?.holeScores.map((score, i) => <TableCell key={i} className="text-center font-mono">{score === null ? '-' : score}</TableCell>)}
+                                                        {player.coursesData[course.id]?.holeScores.map((score, i) => <TableCell key={i} className="text-center font-mono px-2 py-1 border-r">{score === null ? '-' : score}</TableCell>)}
                                                         
-                                                        <TableCell className="text-center font-bold">{player.hasAnyScore ? player.coursesData[course.id]?.courseTotal : '-'}</TableCell>
+                                                        <TableCell className="text-center font-bold px-2 py-1 border-r">{player.hasAnyScore ? player.coursesData[course.id]?.courseTotal : '-'}</TableCell>
 
                                                         {courseIndex === 0 && (
-                                                            <TableCell rowSpan={player.assignedCourses.length || 1} className="text-center align-middle font-bold text-primary text-lg">{player.hasAnyScore ? player.totalScore : '-'}</TableCell>
+                                                            <TableCell rowSpan={player.assignedCourses.length || 1} className="text-center align-middle font-bold text-primary text-lg px-2 py-1">{player.hasAnyScore ? player.totalScore : '-'}</TableCell>
                                                         )}
                                                     </TableRow>
                                                 )) : (
                                                     <TableRow key={`${player.id}-no-course`} className="text-base text-muted-foreground">
-                                                         <TableCell className="text-center align-middle font-bold text-lg">{player.hasAnyScore ? `${player.rank}위` : '-'}</TableCell>
-                                                         <TableCell className="text-center align-middle font-medium">{player.jo}</TableCell>
-                                                         <TableCell className="align-middle font-semibold">{player.name}</TableCell>
-                                                         <TableCell className="align-middle">{player.affiliation}</TableCell>
-                                                         <TableCell colSpan={11} className="text-center">이 그룹에 배정된 코스가 없습니다.</TableCell>
-                                                         <TableCell className="text-center align-middle font-bold text-primary text-lg">{player.hasAnyScore ? player.totalScore : '-'}</TableCell>
+                                                         <TableCell className="text-center align-middle font-bold text-lg px-2 py-1 border-r">{player.hasAnyScore ? `${player.rank}위` : '-'}</TableCell>
+                                                         <TableCell className="text-center align-middle font-medium px-2 py-1 border-r">{player.jo}</TableCell>
+                                                         <TableCell className="align-middle font-semibold px-2 py-1 border-r">{player.name}</TableCell>
+                                                         <TableCell className="align-middle px-2 py-1 border-r">{player.affiliation}</TableCell>
+                                                         <TableCell colSpan={11} className="text-center px-2 py-1 border-r">이 그룹에 배정된 코스가 없습니다.</TableCell>
+                                                         <TableCell className="text-center align-middle font-bold text-primary text-lg px-2 py-1">{player.hasAnyScore ? player.totalScore : '-'}</TableCell>
                                                     </TableRow>
                                                 )}
                                             </React.Fragment>
@@ -419,5 +419,3 @@ export default function AdminDashboard() {
         </div>
     );
 }
-
-    
