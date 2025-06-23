@@ -27,6 +27,7 @@ interface Course { id: number; name:string; isActive: boolean; }
 interface ScoreData {
     score: number;
     status: 'editing' | 'saved' | 'locked';
+    savedAt?: number;
 }
 
 export default function RefereePage() {
@@ -78,13 +79,14 @@ export default function RefereePage() {
     // Timer for "saved" state progress bar.
     useEffect(() => {
         let interval: NodeJS.Timeout | undefined;
-        if (view === 'scoring') {
+        if (view === 'scoring' && Object.values(scores).some(s => s.status === 'saved')) {
             interval = setInterval(() => setNow(Date.now()), 50);
         }
         return () => {
             if (interval) clearInterval(interval);
         };
-    }, [view]);
+    }, [view, scores]);
+
 
     // Derived data
     const availableGroups = useMemo(() => Object.keys(groupsData).sort(), [groupsData]);
@@ -179,7 +181,7 @@ export default function RefereePage() {
 
         const scoreRef = ref(db, `/scores/${player.id}/${selectedCourse}/${hole}`);
         set(scoreRef, score).then(() => {
-            setScores(prev => ({ ...prev, [player.id]: { score, status: 'saved' } }));
+            setScores(prev => ({ ...prev, [player.id]: { score, status: 'saved', savedAt: Date.now() } }));
             toast({ title: "점수 저장 완료", description: "10초 내에 점수를 더블클릭하여 수정할 수 있습니다.", className: "bg-primary text-primary-foreground" });
         }).catch(err => toast({ title: "저장 실패", description: err.message, variant: "destructive" }))
         .finally(() => setConfirmingPlayer(null));
@@ -233,6 +235,10 @@ export default function RefereePage() {
                 const isSaved = scoreData.status === 'saved';
                 const isLocked = scoreData.status === 'locked';
 
+                const progressValue = isSaved && scoreData.savedAt 
+                    ? ((Date.now() - scoreData.savedAt) / 10000) * 100
+                    : 0;
+
                 return (
                     <Card key={player.id} className="overflow-hidden">
                       <CardContent className="p-2">
@@ -253,7 +259,7 @@ export default function RefereePage() {
                                     <div className="flex flex-col items-center justify-center h-full w-full text-center relative border border-dashed border-primary/50 rounded-lg cursor-pointer" onDoubleClick={() => handleScoreDoubleClick(player)}>
                                         <Edit className="absolute top-1 right-1 w-3 h-3 text-primary animate-pulse" />
                                         <p className="text-xs text-primary font-bold leading-tight">수정</p>
-                                        <Progress value={(now % 10000) / 100} className="h-0.5 mt-0.5 w-10/12 mx-auto" />
+                                        <Progress value={progressValue} className="h-0.5 mt-0.5 w-10/12 mx-auto" />
                                     </div>
                                 )}
                                 {isLocked && (
@@ -319,7 +325,7 @@ export default function RefereePage() {
             <AlertDialog open={!!confirmingPlayer} onOpenChange={(open) => !open && setConfirmingPlayer(null)}>
                 <AlertDialogContent className="border">
                     <AlertDialogHeader>
-                        <AlertDialogTitle className="text-center text-3xl sm:text-4xl font-bold leading-tight truncate">
+                        <AlertDialogTitle className="text-center text-3xl sm:text-4xl font-bold leading-tight truncate text-foreground">
                             {confirmingPlayer?.player ? getPlayerName(confirmingPlayer.player) : ''}
                         </AlertDialogTitle>
                         <AlertDialogDescription className="text-center !mt-4">
