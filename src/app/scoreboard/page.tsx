@@ -249,7 +249,7 @@ export default function ExternalScoreboard() {
                 return (
                     <div key={groupName} className="mb-8">
                         <header className="flex justify-between items-baseline pb-2 mb-3 border-b-2 border-gray-700">
-                            <h1 className="text-2xl md:text-3xl font-bold text-yellow-300">
+                            <h1 className="text-xl md:text-2xl font-bold text-yellow-300">
                                 {tournament.name || '파크골프 토너먼트'} ({groupName})
                             </h1>
                             <div className="text-xl md:text-2xl font-bold text-green-400">{groupProgress[groupName]}% 진행</div>
@@ -258,14 +258,14 @@ export default function ExternalScoreboard() {
                             <table className="w-full text-center border-collapse">
                                 <thead className="text-gray-400 text-sm">
                                     <tr className="border-b-2 border-gray-600">
-                                        <th className="py-2 px-1 w-12">조</th>
-                                        <th className="py-2 px-1 w-32 text-left">선수명(팀명)</th>
-                                        <th className="py-2 px-1 w-32 text-left">소속</th>
-                                        <th className="py-2 px-1 w-24 text-left">코스</th>
-                                        <th colSpan={9} className="py-2 px-1">HOLE</th>
-                                        <th className="py-2 px-1 w-16">합계</th>
-                                        <th className="py-2 px-1 w-16">총타수</th>
-                                        <th className="py-2 px-1 w-16">순위</th>
+                                        <th className="py-1 px-1 w-12">조</th>
+                                        <th className="py-1 px-1 w-32 text-left">선수명(팀명)</th>
+                                        <th className="py-1 px-1 w-32 text-center">소속</th>
+                                        <th className="py-1 px-1 w-24 text-center">코스</th>
+                                        <th colSpan={9} className="py-1 px-1">HOLE</th>
+                                        <th className="py-1 px-1 w-16">합계</th>
+                                        <th className="py-1 px-1 w-16">총타수</th>
+                                        <th className="py-1 px-1 w-16">순위</th>
                                     </tr>
                                     <tr className="border-b border-gray-600">
                                         <th></th>
@@ -320,5 +320,3 @@ export default function ExternalScoreboard() {
         </div>
     );
 }
-
-    
