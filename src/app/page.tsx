@@ -1,8 +1,8 @@
-
 "use client";
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -90,13 +90,14 @@ export default function LoginPage() {
     <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md shadow-2xl">
         <CardHeader className="text-center">
-          <div className="mx-auto bg-primary/20 text-primary rounded-lg p-3 w-fit mb-4">
-            <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" className="h-20 w-20">
-              <path d="M 0,90 C 20,70 80,70 100,90 L 100,100 L 0,100 Z" fill="#4ade80" />
-              <rect x="49" y="20" width="2" height="70" fill="#a1a1aa" />
-              <polygon points="51,22 81,22 73,33 51,33" fill="currentColor"/>
-              <ellipse cx="50" cy="90" rx="7" ry="2.5" fill="#3f3f46"/>
-            </svg>
+          <div className="mx-auto w-fit mb-4">
+            <Image 
+                src="/logo.png"
+                alt="파크골프대회 로고"
+                width={80}
+                height={80}
+                className="h-20 w-20"
+            />
           </div>
           <CardTitle className="text-3xl font-bold font-headline">파크골프대회</CardTitle>
           <CardDescription className="text-muted-foreground pt-2">

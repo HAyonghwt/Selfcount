@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
+import Image from "next/image"
 import { usePathname } from "next/navigation"
 import {
   BarChart2,
@@ -70,16 +71,15 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <Sidebar collapsible="icon" className="border-r">
           <SidebarHeader className="p-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-primary/20 text-primary rounded-lg">
-                <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" className="w-10 h-10">
-                  <path d="M 0,90 C 20,70 80,70 100,90 L 100,100 L 0,100 Z" fill="#4ade80" />
-                  <rect x="49" y="20" width="2" height="70" fill="#a1a1aa" />
-                  <polygon points="51,22 81,22 73,33 51,33" fill="currentColor"/>
-                  <ellipse cx="50" cy="90" rx="7" ry="2.5" fill="#3f3f46"/>
-                </svg>
-              </div>
+              <Image 
+                src="/logo.png" 
+                alt="파크골프대회 로고"
+                width={40}
+                height={40}
+                className="h-10 w-10"
+              />
               <div className="group-data-[collapsible=icon]:hidden transition-opacity duration-200">
-                <h1 className="text-xl font-bold font-headline">용인파크골프대회</h1>
+                <h1 className="text-xl font-bold font-headline">파크골프대회</h1>
                 <p className="text-xs text-muted-foreground">관리자 패널</p>
               </div>
             </div>
