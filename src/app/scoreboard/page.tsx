@@ -198,91 +198,93 @@ export default function ExternalScoreboard() {
 
     if (loading) {
         return (
-            <div className="bg-[#04091A] min-h-screen text-white p-8 flex items-center justify-center">
+            <div className="bg-black min-h-screen text-white p-8 flex items-center justify-center">
                 <p className="text-2xl font-bold">전광판 데이터를 불러오는 중입니다...</p>
             </div>
         );
     }
     
     const NoDataContent = () => (
-        <div className="text-center py-20">
-            <h1 className="text-4xl font-bold">{tournament.name || '파크골프 토너먼트'}</h1>
-            <p className="mt-4 text-2xl text-gray-400">
-                {Object.keys(players).length === 0 
-                    ? "표시할 선수 데이터가 없습니다. 선수를 먼저 등록해주세요."
-                    : "활성화된 코스가 없거나 그룹에 배정된 코스가 없습니다."}
-            </p>
+        <div className="bg-black min-h-screen text-white p-8">
+            <div className="text-center py-20">
+                <h1 className="text-4xl font-bold">{tournament.name || '파크골프 토너먼트'}</h1>
+                <p className="mt-4 text-2xl text-gray-400">
+                    {Object.keys(players).length === 0 
+                        ? "표시할 선수 데이터가 없습니다. 선수를 먼저 등록해주세요."
+                        : "활성화된 코스가 없거나 그룹에 배정된 코스가 없습니다."}
+                </p>
+            </div>
         </div>
     );
 
     return (
-        <div className="bg-[#04091A] min-h-screen text-white p-4 sm:p-6 md:p-8 font-sans">
+        <div className="bg-black min-h-screen text-gray-200 p-2 sm:p-4 md:p-6 font-sans">
             {Object.keys(processedDataByGroup).length === 0 ? (
                  <NoDataContent />
             ) : Object.entries(processedDataByGroup).map(([groupName, groupPlayers]) => {
                 if (groupPlayers.length === 0) return null;
 
                 return (
-                    <div key={groupName} className="mb-12">
-                        <header className="flex justify-between items-center pb-3 mb-4 border-b-2 border-gray-600">
-                            <h1 className="text-4xl font-bold">
+                    <div key={groupName} className="mb-8">
+                        <header className="flex justify-between items-baseline pb-2 mb-3 border-b-2 border-gray-700">
+                            <h1 className="text-2xl md:text-3xl font-bold text-yellow-300">
                                 {tournament.name || '파크골프 토너먼트'} ({groupName})
                             </h1>
-                            <div className="text-3xl font-bold text-green-400">{progress}% 진행</div>
+                            <div className="text-xl md:text-2xl font-bold text-green-400">{progress}% 진행</div>
                         </header>
                         <div className="overflow-x-auto">
-                            <table className="w-full min-w-[1200px] text-center border-separate border-spacing-y-1">
-                                <thead className="text-gray-400 text-lg">
-                                    <tr>
-                                        <th className="p-2 w-20">조</th>
-                                        <th className="p-2 w-48 text-left">선수명(팀명)</th>
-                                        <th className="p-2 w-48 text-left">소속</th>
-                                        <th className="p-2 w-32 text-left">코스</th>
-                                        <th colSpan={9} className="p-2">HOLE</th>
-                                        <th className="p-2 w-24">합계</th>
-                                        <th className="p-2 w-24">총타수</th>
-                                        <th className="p-2 w-20">순위</th>
+                            <table className="w-full text-center border-collapse">
+                                <thead className="text-gray-400 text-sm">
+                                    <tr className="border-b-2 border-gray-600">
+                                        <th className="py-2 px-1 w-12">조</th>
+                                        <th className="py-2 px-1 w-32 text-left">선수명(팀명)</th>
+                                        <th className="py-2 px-1 w-32 text-left">소속</th>
+                                        <th className="py-2 px-1 w-24 text-left">코스</th>
+                                        <th colSpan={9} className="py-2 px-1">HOLE</th>
+                                        <th className="py-2 px-1 w-16">합계</th>
+                                        <th className="py-2 px-1 w-16">총타수</th>
+                                        <th className="py-2 px-1 w-16">순위</th>
                                     </tr>
-                                    <tr>
+                                    <tr className="border-b border-gray-600">
                                         <th></th>
                                         <th></th>
                                         <th></th>
                                         <th></th>
-                                        {Array.from({length: 9}).map((_, i) => <th key={i} className="p-1 font-normal">{i + 1}</th>)}
+                                        {Array.from({length: 9}).map((_, i) => <th key={i} className="p-1 font-normal text-xs">{i + 1}</th>)}
                                         <th></th>
                                         <th></th>
                                         <th></th>
                                     </tr>
                                 </thead>
-                                <tbody>
+                                <tbody className="text-base">
                                     {groupPlayers.map((player) => (
                                         <React.Fragment key={player.id}>
                                              {player.assignedCourses.length > 0 ? player.assignedCourses.map((course, courseIndex) => (
-                                                <tr key={`${player.id}-${course.id}`} className="bg-[#121A39] text-xl">
+                                                <tr key={`${player.id}-${course.id}`} className="border-b border-gray-800 last:border-0">
                                                     {courseIndex === 0 && (
                                                         <>
-                                                            <td rowSpan={player.assignedCourses.length || 1} className="p-2 align-middle border-y-4 border-l-4 border-transparent rounded-l-lg text-2xl font-bold">{player.jo}</td>
-                                                            <td rowSpan={player.assignedCourses.length || 1} className="p-2 align-middle text-left text-2xl font-semibold">{player.name}</td>
-                                                            <td rowSpan={player.assignedCourses.length || 1} className="p-2 align-middle text-left">{player.club}</td>
+                                                            <td rowSpan={player.assignedCourses.length || 1} className="py-1 px-1 align-middle font-bold">{player.jo}</td>
+                                                            <td rowSpan={player.assignedCourses.length || 1} className="py-1 px-1 align-middle text-left font-semibold">{player.name}</td>
+                                                            <td rowSpan={player.assignedCourses.length || 1} className="py-1 px-1 align-middle text-left text-gray-400">{player.club}</td>
                                                         </>
                                                     )}
-                                                    <td className="p-2 text-left">{player.coursesData[course.id]?.courseName}</td>
-                                                    {player.coursesData[course.id]?.holeScores.map((score, i) => <td key={i} className="p-2 font-mono">{score === null ? '-' : score}</td>)}
-                                                    <td className="p-2 font-bold">{player.hasAnyScore ? player.coursesData[course.id]?.courseTotal : '-'}</td>
+                                                    <td className="py-1 px-1 text-left">{player.coursesData[course.id]?.courseName}</td>
+                                                    {player.coursesData[course.id]?.holeScores.map((score, i) => <td key={i} className="py-1 px-1 font-mono text-sm">{score === null ? '-' : score}</td>)}
+                                                    <td className="py-1 px-1 font-bold text-gray-300">{player.hasAnyScore ? player.coursesData[course.id]?.courseTotal : '-'}</td>
                                                     {courseIndex === 0 && (
                                                         <>
-                                                            <td rowSpan={player.assignedCourses.length || 1} className="p-2 align-middle text-2xl font-bold text-yellow-400">{player.hasAnyScore ? player.totalScore : '-'}</td>
-                                                            <td rowSpan={player.assignedCourses.length || 1} className="p-2 align-middle border-y-4 border-r-4 border-transparent rounded-r-lg text-2xl font-bold">{player.hasAnyScore ? `${player.rank}위` : '-'}</td>
+                                                            <td rowSpan={player.assignedCourses.length || 1} className="py-1 px-1 align-middle font-bold text-yellow-400">{player.hasAnyScore ? player.totalScore : '-'}</td>
+                                                            <td rowSpan={player.assignedCourses.length || 1} className="py-1 px-1 align-middle font-bold">{player.hasAnyScore ? `${player.rank}위` : '-'}</td>
                                                         </>
                                                     )}
                                                 </tr>
                                             )) : (
-                                                <tr className="bg-[#121A39] text-xl">
-                                                    <td className="p-2 align-middle border-y-4 border-l-4 border-transparent rounded-l-lg text-2xl font-bold">{player.jo}</td>
-                                                    <td className="p-2 align-middle text-left text-2xl font-semibold">{player.name}</td>
-                                                    <td className="p-2 align-middle text-left">{player.club}</td>
-                                                    <td colSpan={12} className="text-center text-gray-400">배정된 코스가 없습니다.</td>
-                                                    <td className="p-2 align-middle border-y-4 border-r-4 border-transparent rounded-r-lg text-2xl font-bold">{player.hasAnyScore ? `${player.rank}위` : '-'}</td>
+                                                <tr className="border-b border-gray-800 last:border-0">
+                                                    <td className="py-1 px-1 align-middle font-bold">{player.jo}</td>
+                                                    <td className="py-1 px-1 align-middle text-left font-semibold">{player.name}</td>
+                                                    <td className="py-1 px-1 align-middle text-left text-gray-400">{player.club}</td>
+                                                    <td colSpan={12} className="py-1 px-1 text-center text-gray-500">배정된 코스가 없습니다.</td>
+                                                    <td className="py-1 px-1 align-middle font-bold">{player.hasAnyScore ? `${player.rank}위` : '-'}</td>
                                                 </tr>
                                             )}
                                         </React.Fragment>
