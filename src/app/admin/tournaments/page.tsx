@@ -46,7 +46,7 @@ export default function TournamentManagementPage() {
             const loadedCourses = Object.values(data.courses).map((course: any) => ({
                 ...course,
                 pars: course.pars || defaultPars,
-                isActive: course.isActive !== false, // Default to true if undefined or true
+                isActive: course.isActive !== false,
             }));
             setCourses(loadedCourses);
         } else {
@@ -77,7 +77,6 @@ export default function TournamentManagementPage() {
         toast({
             title: '코스 추가 제한',
             description: `최대 코스 수(${maxCourses}개)에 도달했습니다. 최고 관리자 설정에서 제한을 늘려주세요.`,
-            variant: 'destructive',
         });
         return;
     }
@@ -144,10 +143,9 @@ export default function TournamentManagementPage() {
       toast({
         title: "성공",
         description: "대회 및 코스 정보가 저장되었습니다.",
-        className: "bg-primary text-primary-foreground",
       });
     }).catch(err => {
-        toast({ title: "오류", description: err.message, variant: "destructive"});
+        toast({ title: "오류", description: err.message});
     });
   };
   
@@ -157,7 +155,6 @@ export default function TournamentManagementPage() {
       toast({
         title: "초기화 완료",
         description: "대회 코스 데이터가 초기화되었습니다.",
-        variant: "destructive",
       });
     });
   }

@@ -59,7 +59,6 @@ export default function LoginPage() {
       toast({
         title: "오류",
         description: "앱 설정을 불러오는 중입니다. 잠시 후 다시 시도해 주세요.",
-        variant: "destructive",
       });
       setLoading(false);
       return;
@@ -110,7 +109,6 @@ export default function LoginPage() {
       toast({
         title: "로그인 실패",
         description: errorMessage,
-        variant: "destructive",
       });
     } finally {
         setLoading(false);

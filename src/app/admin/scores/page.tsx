@@ -120,12 +120,11 @@ export default function ScoreManagementPage() {
             toast({
                 title: "점수 수정 완료",
                 description: `${scoreToUpdate.group} ${scoreToUpdate.jo}조 ${scoreToUpdate.name} 선수의 ${scoreToUpdate.course} ${scoreToUpdate.hole}홀 점수가 ${scoreToUpdate.score}점으로 수정되었습니다.`,
-                className: "bg-primary text-primary-foreground",
             });
             setEditingCell(null);
             setScoreToUpdate(null);
         }).catch(err => {
-            toast({ title: "수정 실패", description: err.message, variant: 'destructive' });
+            toast({ title: "수정 실패", description: err.message });
         });
     };
 

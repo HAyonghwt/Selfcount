@@ -116,12 +116,10 @@ export default function RefereePage() {
         const completed = new Set<number>();
     
         availableJos.forEach(joNum => {
-            // Get players for the specific 'jo' being iterated over.
             const playersInThisJo = allPlayers.filter(p => p.group === selectedGroup && p.jo === joNum);
     
             if (playersInThisJo.length === 0) return;
     
-            // Check if every player in this jo has a score for the selected course and hole.
             const allInJoAreScored = playersInThisJo.every(player => {
                 return allScores[player.id]?.[selectedCourse]?.[hole] !== undefined;
             });
@@ -175,7 +173,6 @@ export default function RefereePage() {
             toast({
                 title: "선택 필요",
                 description: "그룹, 코스, 조를 모두 선택해주세요.",
-                variant: "destructive"
             });
         }
     };
@@ -212,7 +209,7 @@ export default function RefereePage() {
                 description: "점수가 저장되었습니다. 10초 내에 수정 가능합니다.",
                 duration: 3000,
             });
-        }).catch(err => toast({ title: "저장 실패", description: err.message, variant: "destructive" }))
+        }).catch(err => toast({ title: "저장 실패", description: err.message }))
         .finally(() => setConfirmingPlayer(null));
     };
 
@@ -368,7 +365,7 @@ export default function RefereePage() {
             </div>
             
             <AlertDialog open={!!confirmingPlayer} onOpenChange={(open) => !open && setConfirmingPlayer(null)}>
-                <AlertDialogContent>
+                <AlertDialogContent className="border-foreground/20">
                     <AlertDialogHeader>
                         <AlertDialogTitle className="text-center text-4xl sm:text-5xl font-extrabold leading-tight truncate text-foreground">
                             {confirmingPlayer?.player ? getPlayerName(confirmingPlayer.player) : ''}

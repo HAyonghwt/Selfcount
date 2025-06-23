@@ -304,7 +304,6 @@ export default function AdminDashboard() {
             toast({
                 title: "내보내기 실패",
                 description: "엑셀로 내보낼 데이터가 없습니다.",
-                variant: "destructive"
             });
             return;
         }
@@ -417,4 +416,5 @@ export default function AdminDashboard() {
         </div>
     );
 }
+
 

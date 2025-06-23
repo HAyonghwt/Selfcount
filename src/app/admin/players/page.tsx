@@ -193,7 +193,7 @@ export default function PlayerManagementPage() {
                 });
 
                 if (newPlayers.length === 0) {
-                    toast({ title: '오류', description: '파일에서 유효한 선수 정보를 찾을 수 없습니다.', variant: 'destructive' });
+                    toast({ title: '오류', description: '파일에서 유효한 선수 정보를 찾을 수 없습니다.' });
                     return;
                 }
 
@@ -201,7 +201,6 @@ export default function PlayerManagementPage() {
                     toast({
                         title: '선수 등록 제한',
                         description: `엑셀 파일의 선수(${newPlayers.length}명)를 추가하면 최대 인원(${maxPlayers}명)을 초과합니다. 현재 ${allPlayers.length}명 등록됨.`,
-                        variant: 'destructive'
                     });
                     return;
                 }
@@ -216,13 +215,13 @@ export default function PlayerManagementPage() {
 
                 update(ref(db), updates)
                     .then(() => {
-                        toast({ title: '성공', description: `${newPlayers.length}명의 선수가 성공적으로 등록되었습니다.`, className: 'bg-primary text-primary-foreground' });
+                        toast({ title: '성공', description: `${newPlayers.length}명의 선수가 성공적으로 등록되었습니다.` });
                     })
-                    .catch(err => toast({ title: '저장 실패', description: err.message, variant: 'destructive' }));
+                    .catch(err => toast({ title: '저장 실패', description: err.message }));
 
             } catch (error) {
                 console.error("Excel upload error:", error);
-                toast({ title: '파일 처리 오류', description: '엑셀 파일을 처리하는 중 오류가 발생했습니다. 파일 형식이 올바른지 확인해주세요.', variant: 'destructive' });
+                toast({ title: '파일 처리 오류', description: '엑셀 파일을 처리하는 중 오류가 발생했습니다. 파일 형식이 올바른지 확인해주세요.' });
             } finally {
                 if(e.target) e.target.value = '';
             }
@@ -321,12 +320,12 @@ export default function PlayerManagementPage() {
 
     const handleSaveIndividualPlayers = () => {
         if (!individualGroup || !individualJo) {
-            toast({ title: '입력 오류', description: '그룹과 조 번호를 모두 입력해주세요.', variant: 'destructive' });
+            toast({ title: '입력 오류', description: '그룹과 조 번호를 모두 입력해주세요.' });
             return;
         }
         const playersToSave = individualFormData.filter(p => p.name.trim() !== '');
         if (playersToSave.length === 0) {
-            toast({ title: '정보 없음', description: '저장할 선수 정보가 없습니다.', variant: 'destructive' });
+            toast({ title: '정보 없음', description: '저장할 선수 정보가 없습니다.' });
             return;
         }
 
@@ -334,7 +333,6 @@ export default function PlayerManagementPage() {
             toast({
                 title: '선수 등록 제한',
                 description: `최대 참가 인원(${maxPlayers}명)을 초과합니다. 현재 ${allPlayers.length}명 등록됨.`,
-                variant: 'destructive'
             });
             return;
         }
@@ -353,20 +351,20 @@ export default function PlayerManagementPage() {
 
         update(ref(db), updates)
             .then(() => {
-                toast({ title: '성공', description: '개인전 선수들이 저장되었습니다.', className: 'bg-primary text-primary-foreground' });
+                toast({ title: '성공', description: '개인전 선수들이 저장되었습니다.' });
                 setIndividualFormData(initialIndividualState);
             })
-            .catch(err => toast({ title: '저장 실패', description: err.message, variant: 'destructive' }));
+            .catch(err => toast({ title: '저장 실패', description: err.message }));
     };
 
     const handleSaveTeamPlayers = () => {
         if (!teamGroup || !teamJo) {
-            toast({ title: '입력 오류', description: '그룹과 조 번호를 모두 입력해주세요.', variant: 'destructive' });
+            toast({ title: '입력 오류', description: '그룹과 조 번호를 모두 입력해주세요.' });
             return;
         }
         const teamsToSave = teamFormData.filter(t => t.p1_name.trim() !== '' && t.p2_name.trim() !== '');
          if (teamsToSave.length === 0) {
-            toast({ title: '정보 없음', description: '저장할 팀 정보가 없습니다.', variant: 'destructive' });
+            toast({ title: '정보 없음', description: '저장할 팀 정보가 없습니다.' });
             return;
         }
 
@@ -374,7 +372,6 @@ export default function PlayerManagementPage() {
             toast({
                 title: '팀 등록 제한',
                 description: `최대 참가 인원(${maxPlayers}명)을 초과합니다. 현재 ${allPlayers.length}팀/명 등록됨.`,
-                variant: 'destructive'
             });
             return;
         }
@@ -395,10 +392,10 @@ export default function PlayerManagementPage() {
 
         update(ref(db), updates)
             .then(() => {
-                toast({ title: '성공', description: '2인 1팀 선수들이 저장되었습니다.', className: 'bg-primary text-primary-foreground' });
+                toast({ title: '성공', description: '2인 1팀 선수들이 저장되었습니다.' });
                 setTeamFormData(initialTeamState);
             })
-            .catch(err => toast({ title: '저장 실패', description: err.message, variant: 'destructive' }));
+            .catch(err => toast({ title: '저장 실패', description: err.message }));
     };
 
     const handleDeletePlayer = (id: string) => {
@@ -407,18 +404,18 @@ export default function PlayerManagementPage() {
     
     const handleResetAllPlayers = () => {
         remove(ref(db, 'players'))
-            .then(() => toast({ title: '초기화 완료', description: '모든 선수 명단이 삭제되었습니다.', className: 'bg-primary text-primary-foreground'}))
-            .catch(err => toast({ title: '초기화 실패', description: err.message, variant: 'destructive' }));
+            .then(() => toast({ title: '초기화 완료', description: '모든 선수 명단이 삭제되었습니다.'}))
+            .catch(err => toast({ title: '초기화 실패', description: err.message }));
     };
     
     const handleAddGroup = () => {
         const trimmedName = newGroupName.trim();
         if (trimmedName === "") {
-            toast({ title: '오류', description: '그룹 이름을 입력해주세요.', variant: 'destructive' });
+            toast({ title: '오류', description: '그룹 이름을 입력해주세요.' });
             return;
         }
         if (groupsData[trimmedName]) {
-            toast({ title: '오류', description: '이미 존재하는 그룹 이름입니다.', variant: 'destructive' });
+            toast({ title: '오류', description: '이미 존재하는 그룹 이름입니다.' });
             return;
         }
 
@@ -431,17 +428,17 @@ export default function PlayerManagementPage() {
 
         set(groupRef, { name: trimmedName, courses: defaultCourses })
             .then(() => {
-                toast({ title: '성공', description: `새 그룹 '${trimmedName}'이 추가되었습니다.`, className: 'bg-primary text-primary-foreground' });
+                toast({ title: '성공', description: `새 그룹 '${trimmedName}'이 추가되었습니다.` });
                 setNewGroupName("");
             })
-            .catch(err => toast({ title: '오류', description: err.message, variant: 'destructive' }));
+            .catch(err => toast({ title: '오류', description: err.message }));
     };
 
     const handleDeleteGroup = (groupName: string) => {
         const groupRef = ref(db, `tournaments/current/groups/${groupName}`);
         remove(groupRef)
-            .then(() => toast({ title: '성공', description: `'${groupName}' 그룹이 삭제되었습니다.`, variant: 'destructive' }))
-            .catch(err => toast({ title: '오류', description: err.message, variant: 'destructive' }));
+            .then(() => toast({ title: '성공', description: `'${groupName}' 그룹이 삭제되었습니다.` }))
+            .catch(err => toast({ title: '오류', description: err.message }));
     };
 
     const handleEditClick = (player: any) => {
@@ -469,10 +466,10 @@ export default function PlayerManagementPage() {
 
         update(ref(db, `players/${editingPlayerId}`), dataToUpdate)
             .then(() => {
-                toast({ title: '성공', description: '선수 정보가 수정되었습니다.', className: 'bg-primary text-primary-foreground' });
+                toast({ title: '성공', description: '선수 정보가 수정되었습니다.' });
                 handleCancelEdit();
             })
-            .catch(err => toast({ title: '수정 실패', description: err.message, variant: 'destructive' }));
+            .catch(err => toast({ title: '수정 실패', description: err.message }));
     };
 
     const handleOpenCourseModal = (group: any) => {
@@ -486,11 +483,11 @@ export default function PlayerManagementPage() {
         const groupCoursesRef = ref(db, `tournaments/current/groups/${currentEditingGroup.name}/courses`);
         set(groupCoursesRef, assignedCourses)
             .then(() => {
-                toast({ title: "저장 완료", description: `${currentEditingGroup.name} 그룹의 코스 설정이 저장되었습니다.`, className: "bg-primary text-primary-foreground" });
+                toast({ title: "저장 완료", description: `${currentEditingGroup.name} 그룹의 코스 설정이 저장되었습니다.` });
                 setGroupCourseModalOpen(false);
                 setCurrentEditingGroup(null);
             })
-            .catch((err) => toast({ title: "저장 실패", description: err.message, variant: "destructive" }));
+            .catch((err) => toast({ title: "저장 실패", description: err.message }));
     };
 
     const groupList = Object.values(groupsData).sort((a:any, b:any) => a.name.localeCompare(b.name));
@@ -898,4 +895,5 @@ export default function PlayerManagementPage() {
     </div>
   )
 }
+
 

@@ -48,7 +48,7 @@ export default function SuperAdminPage() {
                 });
             }
         }).catch(() => {
-             toast({ title: "오류", description: "설정 정보를 불러오는데 실패했습니다.", variant: "destructive" });
+             toast({ title: "오류", description: "설정 정보를 불러오는데 실패했습니다." });
              setConfig({
                 appName: '00파크골프',
                 userDomain: 'parkgolf.com',
@@ -80,14 +80,12 @@ export default function SuperAdminPage() {
                 toast({
                     title: "성공",
                     description: "모든 설정이 성공적으로 저장되었습니다. 변경사항을 적용하려면 페이지를 새로고침하세요.",
-                    className: "bg-primary text-primary-foreground",
                 });
             });
         } catch (error) {
             toast({
                 title: "오류",
                 description: "Firebase 구성이 유효한 JSON 형식이 아닙니다.",
-                variant: "destructive",
             });
         }
     };
