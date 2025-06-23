@@ -251,13 +251,16 @@ export default function RefereePage() {
 
         setView('selection');
         setScores({});
+        setSelectedGroup('');
+        setSelectedCourse('');
+        setSelectedJo('');
     };
 
     const updateScore = (id: string, delta: number) => {
         if (scores[id]?.status === 'editing') {
             setScores(prev => ({
                 ...prev,
-                [id]: { ...prev[id], score: Math.max(1, prev[id].score + delta) }
+                [id]: { ...prev[id], score: Math.max(0, prev[id].score + delta) }
             }));
         }
     };
@@ -441,16 +444,18 @@ export default function RefereePage() {
                         <AlertDialogTitle className="text-center text-4xl sm:text-5xl font-extrabold leading-tight truncate text-foreground">
                             {confirmingPlayer?.player ? getPlayerName(confirmingPlayer.player) : ''}
                         </AlertDialogTitle>
-                        <AlertDialogDescription className="text-center !mt-4 space-y-2">
-                             <span className="text-base text-muted-foreground block">점수 확인</span>
-                             <span className="block">
-                                 <span className="font-extrabold text-8xl sm:text-9xl text-primary">
-                                    {confirmingPlayer?.score}
-                                </span>
-                                <span className="text-4xl sm:text-5xl text-foreground ml-2">
-                                    점
-                                </span>
-                             </span>
+                        <AlertDialogDescription asChild>
+                             <div className="text-center !mt-4 space-y-2">
+                                <span className="text-base text-muted-foreground block">점수 확인</span>
+                                 <span className="block">
+                                     <span className="font-extrabold text-8xl sm:text-9xl text-primary">
+                                        {confirmingPlayer?.score}
+                                    </span>
+                                    <span className="text-4xl sm:text-5xl text-foreground ml-2">
+                                        점
+                                    </span>
+                                 </span>
+                            </div>
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter className="grid grid-cols-2 gap-4 !mt-8">
