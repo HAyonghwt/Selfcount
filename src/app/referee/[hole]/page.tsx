@@ -61,7 +61,7 @@ export default function RefereePage() {
         const tournamentRef = ref(db, 'tournaments/current');
 
         const unsubPlayers = onValue(playersRef, (snapshot) => setAllPlayers(Object.entries(snapshot.val() || {}).map(([id, player]) => ({ id, ...player as object } as Player))));
-        const unsubscribeScores = onValue(scoresRef, (snapshot) => setAllScores(snapshot.val() || {}));
+        const unsubScores = onValue(scoresRef, (snapshot) => setAllScores(snapshot.val() || {}));
         const unsubscribeTournament = onValue(tournamentRef, (snapshot) => {
             const data = snapshot.val() || {};
             setCourses(data.courses ? Object.values(data.courses).filter((c: any) => c.isActive) : []);
