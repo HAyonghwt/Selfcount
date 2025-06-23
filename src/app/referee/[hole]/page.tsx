@@ -50,36 +50,9 @@ export default function RefereePage() {
     const [confirmingPlayer, setConfirmingPlayer] = useState<{ player: Player; score: number; } | null>(null);
     const [now, setNow] = useState(Date.now());
 
-    // Timer for "saved" state
-    useEffect(() => {
-        const interval = setInterval(() => setNow(Date.now()), 1000);
-        return () => clearInterval(interval);
-    }, []);
-
-    // Data fetching
-    useEffect(() => {
-        const playersRef = ref(db, 'players');
-        const scoresRef = ref(db, 'scores');
-        const tournamentRef = ref(db, 'tournaments/current');
-
-        const unsubPlayers = onValue(playersRef, (snapshot) => setAllPlayers(Object.entries(snapshot.val() || {}).map(([id, player]) => ({ id, ...player as object } as Player))));
-        const unsubScores = onValue(scoresRef, (snapshot) => setAllScores(snapshot.val() || {}));
-        const unsubTournament = onValue(tournamentRef, (snapshot) => {
-            const data = snapshot.val() || {};
-            setCourses(data.courses ? Object.values(data.courses).filter((c: any) => c.isActive) : []);
-            setGroupsData(data.groups || {});
-        });
-
-        return () => {
-            unsubPlayers();
-            unsubScores();
-            unsubTournament();
-        };
-    }, []);
-
     // Derived data
     const availableGroups = useMemo(() => Object.keys(groupsData).sort(), [groupsData]);
-
+    
     const availableCoursesForGroup = useMemo(() => {
         if (!selectedGroup) return [];
         const group = groupsData[selectedGroup];
@@ -101,6 +74,42 @@ export default function RefereePage() {
     }, [allPlayers, selectedGroup, selectedJo]);
     
     const selectedCourseName = useMemo(() => courses.find(c => c.id.toString() === selectedCourse)?.name || '', [courses, selectedCourse]);
+
+
+    // Data fetching
+    useEffect(() => {
+        const playersRef = ref(db, 'players');
+        const scoresRef = ref(db, 'scores');
+        const tournamentRef = ref(db, 'tournaments/current');
+
+        const unsubPlayers = onValue(playersRef, (snapshot) => setAllPlayers(Object.entries(snapshot.val() || {}).map(([id, player]) => ({ id, ...player as object } as Player))));
+        const unsubScores = onValue(scoresRef, (snapshot) => setAllScores(snapshot.val() || {}));
+        const unsubTournament = onValue(tournamentRef, (snapshot) => {
+            const data = snapshot.val() || {};
+            setCourses(data.courses ? Object.values(data.courses).filter((c: any) => c.isActive) : []);
+            setGroupsData(data.groups || {});
+        });
+
+        return () => {
+            unsubPlayers();
+            unsubScores();
+            unsubTournament();
+        };
+    }, []);
+    
+    // Timer for "saved" state progress bar. Only runs in scoring view to prevent re-renders.
+    useEffect(() => {
+        let interval: NodeJS.Timeout | undefined;
+        if (view === 'scoring') {
+            // A more frequent interval for a smoother progress bar
+            interval = setInterval(() => setNow(Date.now()), 50);
+        }
+        return () => {
+            if (interval) {
+                clearInterval(interval);
+            }
+        };
+    }, [view]);
 
     // When view changes to 'scoring', initialize the scores state
     useEffect(() => {
