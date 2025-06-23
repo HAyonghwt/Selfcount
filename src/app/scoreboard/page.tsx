@@ -258,24 +258,24 @@ export default function ExternalScoreboard() {
                             <table className="w-full text-center border-collapse">
                                 <thead className="text-gray-400 text-sm">
                                     <tr className="border-b-2 border-gray-600">
-                                        <th className="py-1 px-1 w-12">조</th>
-                                        <th className="py-1 px-1 w-32 text-left">선수명(팀명)</th>
-                                        <th className="py-1 px-1 w-32 text-center">소속</th>
-                                        <th className="py-1 px-1 w-24 text-center">코스</th>
-                                        <th colSpan={9} className="py-1 px-1">HOLE</th>
-                                        <th className="py-1 px-1 w-16">합계</th>
-                                        <th className="py-1 px-1 w-16">총타수</th>
-                                        <th className="py-1 px-1 w-16">순위</th>
+                                        <th className="py-0.5 px-1 w-12 align-middle">조</th>
+                                        <th className="py-0.5 px-1 w-32 text-left align-middle">선수명(팀명)</th>
+                                        <th className="py-0.5 px-1 w-32 text-center align-middle">소속</th>
+                                        <th className="py-0.5 px-1 w-24 text-center align-middle">코스</th>
+                                        <th colSpan={9} className="py-0.5 px-1 align-middle">HOLE</th>
+                                        <th className="py-0.5 px-1 w-16 align-middle">합계</th>
+                                        <th className="py-0.5 px-1 w-16 align-middle">총타수</th>
+                                        <th className="py-0.5 px-1 w-16 align-middle">순위</th>
                                     </tr>
                                     <tr className="border-b border-gray-600">
-                                        <th></th>
-                                        <th></th>
-                                        <th></th>
-                                        <th></th>
-                                        {Array.from({length: 9}).map((_, i) => <th key={i} className="p-1 font-normal text-xs">{i + 1}</th>)}
-                                        <th></th>
-                                        <th></th>
-                                        <th></th>
+                                        <th className="py-0.5 px-1 align-middle"></th>
+                                        <th className="py-0.5 px-1 align-middle"></th>
+                                        <th className="py-0.5 px-1 align-middle"></th>
+                                        <th className="py-0.5 px-1 align-middle"></th>
+                                        {Array.from({length: 9}).map((_, i) => <th key={i} className="p-0.5 font-bold text-sm align-middle">{i + 1}</th>)}
+                                        <th className="py-0.5 px-1 align-middle"></th>
+                                        <th className="py-0.5 px-1 align-middle"></th>
+                                        <th className="py-0.5 px-1 align-middle"></th>
                                     </tr>
                                 </thead>
                                 <tbody className="text-base">
@@ -285,28 +285,28 @@ export default function ExternalScoreboard() {
                                                 <tr key={`${player.id}-${course.id}`} className="border-b border-gray-800 last:border-0">
                                                     {courseIndex === 0 && (
                                                         <>
-                                                            <td rowSpan={player.assignedCourses.length || 1} className="py-1 px-1 align-middle font-bold">{player.jo}</td>
-                                                            <td rowSpan={player.assignedCourses.length || 1} className="py-1 px-1 align-middle text-left font-semibold">{player.name}</td>
-                                                            <td rowSpan={player.assignedCourses.length || 1} className="py-1 px-1 align-middle text-left text-gray-400">{player.club}</td>
+                                                            <td rowSpan={player.assignedCourses.length || 1} className="py-0.5 px-1 align-middle font-bold">{player.jo}</td>
+                                                            <td rowSpan={player.assignedCourses.length || 1} className="py-0.5 px-1 align-middle text-left font-semibold">{player.name}</td>
+                                                            <td rowSpan={player.assignedCourses.length || 1} className="py-0.5 px-1 align-middle text-left text-gray-400">{player.club}</td>
                                                         </>
                                                     )}
-                                                    <td className="py-1 px-1 text-left">{player.coursesData[course.id]?.courseName}</td>
-                                                    {player.coursesData[course.id]?.holeScores.map((score, i) => <td key={i} className="py-1 px-1 font-mono text-sm">{score === null ? '-' : score}</td>)}
-                                                    <td className="py-1 px-1 font-bold text-gray-300">{player.hasAnyScore ? player.coursesData[course.id]?.courseTotal : '-'}</td>
+                                                    <td className="py-0.5 px-1 align-middle text-left">{player.coursesData[course.id]?.courseName}</td>
+                                                    {player.coursesData[course.id]?.holeScores.map((score, i) => <td key={i} className="py-0.5 px-1 align-middle font-mono font-bold text-base">{score === null ? '-' : score}</td>)}
+                                                    <td className="py-0.5 px-1 align-middle font-bold text-gray-300 text-base">{player.hasAnyScore ? player.coursesData[course.id]?.courseTotal : '-'}</td>
                                                     {courseIndex === 0 && (
                                                         <>
-                                                            <td rowSpan={player.assignedCourses.length || 1} className="py-1 px-1 align-middle font-bold text-yellow-400">{player.hasAnyScore ? player.totalScore : '-'}</td>
-                                                            <td rowSpan={player.assignedCourses.length || 1} className="py-1 px-1 align-middle font-bold">{player.hasAnyScore ? `${player.rank}위` : '-'}</td>
+                                                            <td rowSpan={player.assignedCourses.length || 1} className="py-0.5 px-1 align-middle font-bold text-yellow-400 text-lg">{player.hasAnyScore ? player.totalScore : '-'}</td>
+                                                            <td rowSpan={player.assignedCourses.length || 1} className="py-0.5 px-1 align-middle font-bold text-lg">{player.hasAnyScore ? `${player.rank}위` : '-'}</td>
                                                         </>
                                                     )}
                                                 </tr>
                                             )) : (
                                                 <tr className="border-b border-gray-800 last:border-0">
-                                                    <td className="py-1 px-1 align-middle font-bold">{player.jo}</td>
-                                                    <td className="py-1 px-1 align-middle text-left font-semibold">{player.name}</td>
-                                                    <td className="py-1 px-1 align-middle text-left text-gray-400">{player.club}</td>
-                                                    <td colSpan={12} className="py-1 px-1 text-center text-gray-500">배정된 코스가 없습니다.</td>
-                                                    <td className="py-1 px-1 align-middle font-bold">{player.hasAnyScore ? `${player.rank}위` : '-'}</td>
+                                                    <td className="py-0.5 px-1 align-middle font-bold">{player.jo}</td>
+                                                    <td className="py-0.5 px-1 align-middle text-left font-semibold">{player.name}</td>
+                                                    <td className="py-0.5 px-1 align-middle text-left text-gray-400">{player.club}</td>
+                                                    <td colSpan={12} className="py-0.5 px-1 align-middle text-center text-gray-500">배정된 코스가 없습니다.</td>
+                                                    <td className="py-0.5 px-1 align-middle font-bold text-lg">{player.hasAnyScore ? `${player.rank}위` : '-'}</td>
                                                 </tr>
                                             )}
                                         </React.Fragment>
