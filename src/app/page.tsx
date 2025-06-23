@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect } from 'react';
@@ -13,6 +14,11 @@ import { signInWithEmailAndPassword } from 'firebase/auth';
 import { ref, get } from 'firebase/database';
 import { useToast } from '@/hooks/use-toast';
 
+interface AppConfig {
+  appName: string;
+  userDomain: string;
+}
+
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -20,8 +26,8 @@ export default function LoginPage() {
   const router = useRouter();
   const { toast } = useToast();
   const [year, setYear] = useState<number | null>(null);
-  const [config, setConfig] = useState<{ userDomain: string } | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [config, setConfig] = useState<AppConfig | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     setYear(new Date().getFullYear());
@@ -30,8 +36,10 @@ export default function LoginPage() {
       if (snapshot.exists()) {
         setConfig(snapshot.val());
       } else {
-        setConfig({ userDomain: 'parkgolf.com' });
+        setConfig({ appName: '파크골프대회', userDomain: 'parkgolf.com' });
       }
+    }).finally(() => {
+        setLoading(false);
     });
   }, []);
 
@@ -39,7 +47,6 @@ export default function LoginPage() {
     e.preventDefault();
     setError('');
     
-    // Super admin backdoor
     if (email === 'hayonghwy@gmail.com' && password === 'sniper#1404') {
       router.push('/super-admin');
       return;
@@ -47,7 +54,7 @@ export default function LoginPage() {
 
     setLoading(true);
 
-    if (!config) {
+    if (!config || !config.userDomain) {
       setError('설정 정보를 불러오는 중입니다. 잠시 후 다시 시도해주세요.');
       toast({
         title: "오류",
@@ -64,17 +71,19 @@ export default function LoginPage() {
       
       if (user) {
         const userEmail = user.email || '';
-        if (userEmail === `admin@${config.userDomain}`) {
+        const userDomain = config.userDomain.trim();
+
+        if (userEmail === `admin@${userDomain}`) {
             router.push('/admin');
-        } else if (userEmail.startsWith('referee') && userEmail.endsWith(`@${config.userDomain}`)) {
+        } else if (userEmail.startsWith('referee') && userEmail.endsWith(`@${userDomain}`)) {
              const holeNumber = userEmail.match(/referee(\d+)/)?.[1];
              if (holeNumber) {
                 router.push(`/referee/${holeNumber}`);
              } else {
                 setError('심판 번호를 식별할 수 없습니다.');
+                auth.signOut();
              }
         } else {
-            // Logged in but not a recognized role
             setError('이 앱에 대한 접근 권한이 없습니다.');
             auth.signOut();
         }
@@ -130,7 +139,7 @@ export default function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="h-12 text-base"
-                disabled={loading || !config}
+                disabled={loading}
               />
             </div>
             <div className="space-y-2">
@@ -142,22 +151,22 @@ export default function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="h-12 text-base"
-                disabled={loading || !config}
+                disabled={loading}
               />
             </div>
             {error && <p className="text-sm font-medium text-destructive">{error}</p>}
-            <Button type="submit" className="w-full h-12 text-lg font-bold" disabled={loading || !config}>
-              {loading 
-                ? '로그인 중...' 
-                : !config 
+            <Button type="submit" className="w-full h-12 text-lg font-bold" disabled={loading}>
+              {loading && !config
                 ? '설정 로딩 중...' 
+                : loading && config
+                ? '로그인 중...'
                 : (<><LogIn className="mr-2 h-5 w-5" />로그인</>)}
             </Button>
           </form>
         </CardContent>
       </Card>
       <footer className="mt-8 text-center text-sm text-muted-foreground">
-        <p>&copy; {year} 파크골프대회. All rights reserved.</p>
+        <p>&copy; {year} {config?.appName || '파크골프대회'}. All rights reserved.</p>
       </footer>
     </div>
   );

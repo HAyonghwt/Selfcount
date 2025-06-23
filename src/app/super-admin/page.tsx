@@ -71,8 +71,8 @@ export default function SuperAdminPage() {
             const parsedConfig = JSON.parse(config.firebaseConfig);
             const configRef = ref(db, 'config');
             set(configRef, {
-                appName: config.appName,
-                userDomain: config.userDomain,
+                appName: config.appName.trim(),
+                userDomain: config.userDomain.trim(),
                 firebaseConfig: parsedConfig,
                 maxCourses: Number(config.maxCourses),
                 maxPlayers: Number(config.maxPlayers),
@@ -193,8 +193,8 @@ export default function SuperAdminPage() {
                         <CardContent className="space-y-4 text-sm text-muted-foreground">
                             <p>보안을 위해 사용자 계정 생성 및 비밀번호 관리는 Firebase 프로젝트의 Authentication 섹션에서 직접 수행해야 합니다.</p>
                             <p>
-                                <strong>관리자 계정:</strong> <code className="bg-muted px-1.5 py-0.5 rounded-sm">admin@{config.userDomain}</code><br/>
-                                <strong>심판 계정 예시:</strong> <code className="bg-muted px-1.5 py-0.5 rounded-sm">referee1@{config.userDomain}</code>
+                                <strong>관리자 계정:</strong> <code className="bg-muted px-1.5 py-0.5 rounded-sm">admin@{config.userDomain.trim()}</code><br/>
+                                <strong>심판 계정 예시:</strong> <code className="bg-muted px-1.5 py-0.5 rounded-sm">referee1@{config.userDomain.trim()}</code>
                             </p>
                              <Button asChild variant="secondary">
                                 <a href={`https://console.firebase.google.com/project/${localFirebaseConfig.projectId}/authentication/users`} target="_blank" rel="noopener noreferrer">
@@ -225,5 +225,3 @@ export default function SuperAdminPage() {
         </div>
     );
 }
-
-    
