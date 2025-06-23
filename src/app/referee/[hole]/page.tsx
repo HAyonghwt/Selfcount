@@ -135,18 +135,36 @@ export default function RefereePage() {
 
     const selectedCourseName = useMemo(() => courses.find(c => c.id.toString() === selectedCourse)?.name || '', [courses, selectedCourse]);
     
-    // When view changes to 'scoring', initialize the scores state
+    // When view changes to 'scoring', initialize or intelligently update the scores state
     useEffect(() => {
         if (view === 'scoring') {
-            const newScoresState: { [key: string]: ScoreData } = {};
-            currentPlayers.forEach((player) => {
-                const existingScore = allScores[player.id]?.[selectedCourse]?.[hole];
-                newScoresState[player.id] = {
-                    score: existingScore || 1,
-                    status: existingScore !== undefined ? 'locked' : 'editing',
-                };
+            setScores(prevScores => {
+                const newScoresState = { ...prevScores };
+                let hasChanges = false;
+
+                currentPlayers.forEach((player) => {
+                    const existingScoreFromDb = allScores[player.id]?.[selectedCourse]?.[hole];
+                    const localPlayerData = newScoresState[player.id];
+
+                    // This is the key logic: Only update from DB if the local state is not currently being edited or in the 'saved' grace period.
+                    if (!localPlayerData || localPlayerData.status === 'locked') {
+                        const dbScore = existingScoreFromDb === undefined ? 1 : existingScoreFromDb;
+                        const dbStatus = existingScoreFromDb === undefined ? 'editing' : 'locked';
+
+                        // Initialize if not present, or update if DB has changed
+                        if (!localPlayerData || localPlayerData.score !== dbScore || localPlayerData.status !== dbStatus) {
+                            newScoresState[player.id] = {
+                                ...localPlayerData,
+                                score: dbScore,
+                                status: dbStatus,
+                            };
+                            hasChanges = true;
+                        }
+                    }
+                });
+
+                return hasChanges ? newScoresState : prevScores;
             });
-            setScores(newScoresState);
         }
     }, [view, currentPlayers, allScores, selectedCourse, hole]);
 
