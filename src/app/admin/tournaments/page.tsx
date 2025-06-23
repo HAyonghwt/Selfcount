@@ -126,17 +126,16 @@ export default function TournamentManagementPage() {
   }
 
   const handleSaveChanges = () => {
-    const tournamentRef = ref(db, 'tournaments/current');
-    
     const coursesObject = courses.reduce((acc, course) => {
         acc[course.id] = course;
         return acc;
     }, {} as Record<string, any>);
 
-    update(tournamentRef, {
-      name: tournamentName,
-      courses: coursesObject
-    }).then(() => {
+    const updates: { [key: string]: any } = {};
+    updates[`/tournaments/current/name`] = tournamentName;
+    updates[`/tournaments/current/courses`] = coursesObject;
+    
+    update(ref(db), updates).then(() => {
       toast({
         title: "성공",
         description: "대회 및 코스 정보가 저장되었습니다.",

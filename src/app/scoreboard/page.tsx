@@ -244,11 +244,14 @@ export default function ExternalScoreboard() {
                 <p className="mt-4 text-2xl text-gray-400">
                     {Object.keys(players).length === 0 
                         ? "표시할 선수 데이터가 없습니다. 선수를 먼저 등록해주세요."
-                        : "그룹에 배정된 코스가 없습니다."}
+                        : "그룹에 배정된 코스가 없거나, 표시하도록 설정된 코스가 없습니다."}
                 </p>
             </div>
         </div>
     );
+
+    const visibleGroups = Object.keys(processedDataByGroup).filter(groupName => processedDataByGroup[groupName]?.some(player => player.assignedCourses.length > 0));
+
 
     return (
         <>
@@ -262,9 +265,10 @@ export default function ExternalScoreboard() {
                 }
             `}</style>
             <div className="scoreboard-container bg-black h-screen overflow-y-auto text-gray-200 p-2 sm:p-4 md:p-6 font-sans">
-                {Object.keys(processedDataByGroup).length === 0 ? (
+                {visibleGroups.length === 0 ? (
                      <NoDataContent />
-                ) : Object.entries(processedDataByGroup).map(([groupName, groupPlayers]) => {
+                ) : visibleGroups.map((groupName) => {
+                    const groupPlayers = processedDataByGroup[groupName];
                     if (groupPlayers.length === 0) return null;
 
                     return (
