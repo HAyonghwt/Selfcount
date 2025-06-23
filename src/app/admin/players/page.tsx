@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Upload, Download, UserPlus, Trash2, Edit, AlertTriangle, RotateCcw, Users, PlusCircle, X, Save, Settings, Check, Columns } from "lucide-react";
+import { Upload, Download, UserPlus, Trash2, Edit, AlertTriangle, RotateCcw, Users, PlusCircle, X, Save, Settings, Check, Columns, Search } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -61,6 +61,11 @@ export default function PlayerManagementPage() {
     const individualFileInputRef = useRef<HTMLInputElement>(null);
     const teamFileInputRef = useRef<HTMLInputElement>(null);
 
+    // Search states
+    const [individualSearchTerm, setIndividualSearchTerm] = useState('');
+    const [teamSearchTerm, setTeamSearchTerm] = useState('');
+
+
     useEffect(() => {
         const playersRef = ref(db, 'players');
         const configRef = ref(db, 'config');
@@ -101,7 +106,7 @@ export default function PlayerManagementPage() {
                 ["조", "이름", "소속"],
                 ["1", "홍길동", "중앙 파크골프"],
                 ["1", "김철수", "강남 클럽"],
-                ["2", "이영희", "행복 파크골프"],
+                ["2", "이영희", ""],
                 ["2", "박지성", "대한 파크골프"],
             ];
             const ws2_data = [
@@ -118,7 +123,7 @@ export default function PlayerManagementPage() {
             const ws1_data = [
                 ["조", "선수1 이름", "선수1 소속", "선수2 이름", "선수2 소속"],
                 ["1", "홍길동", "중앙 파크골프", "김철수", "중앙 파크골프"],
-                ["2", "이영희", "강남 클럽", "박지성", "대한 파크골프"],
+                ["2", "이영희", "강남 클럽", "박지성", ""],
             ];
             const ws2_data = [
                 ["조", "선수1 이름", "선수1 소속", "선수2 이름", "선수2 소속"],
@@ -156,9 +161,9 @@ export default function PlayerManagementPage() {
                         jsonData.forEach((row: any) => {
                             const name = row['이름']?.toString().trim();
                             const jo = row['조'];
-                            const affiliation = row['소속']?.toString().trim() || '';
+                            const affiliation = row['소속']?.toString().trim() || '무소속';
 
-                            if (name && jo) { // '소속' 필드는 선택사항으로 변경
+                            if (name && jo) {
                                 newPlayers.push({
                                     type: 'individual',
                                     group: groupName,
@@ -178,9 +183,9 @@ export default function PlayerManagementPage() {
                                     group: groupName,
                                     jo: Number(row['조']),
                                     p1_name: p1_name,
-                                    p1_affiliation: row['선수1 소속']?.toString().trim() || '',
+                                    p1_affiliation: row['선수1 소속']?.toString().trim() || '무소속',
                                     p2_name: p2_name,
-                                    p2_affiliation: row['선수2 소속']?.toString().trim() || '',
+                                    p2_affiliation: row['선수2 소속']?.toString().trim() || '무소속',
                                 });
                             }
                         });
@@ -257,6 +262,47 @@ export default function PlayerManagementPage() {
         };
     }, [allPlayers]);
 
+    const filteredGroupedIndividualPlayers = useMemo(() => {
+        if (!individualSearchTerm) return groupedIndividualPlayers;
+        
+        const lowercasedFilter = individualSearchTerm.toLowerCase();
+        const filtered: { [key: string]: any[] } = {};
+        
+        for (const groupName in groupedIndividualPlayers) {
+            const players = groupedIndividualPlayers[groupName].filter(p => 
+                p.name.toLowerCase().includes(lowercasedFilter) ||
+                p.affiliation.toLowerCase().includes(lowercasedFilter) ||
+                p.jo.toString().includes(individualSearchTerm)
+            );
+            if (players.length > 0) {
+                filtered[groupName] = players;
+            }
+        }
+        return filtered;
+    }, [groupedIndividualPlayers, individualSearchTerm]);
+
+    const filteredGroupedTeamPlayers = useMemo(() => {
+        if (!teamSearchTerm) return groupedTeamPlayers;
+    
+        const lowercasedFilter = teamSearchTerm.toLowerCase();
+        const filtered: { [key: string]: any[] } = {};
+        
+        for (const groupName in groupedTeamPlayers) {
+            const players = groupedTeamPlayers[groupName].filter(t => 
+                t.p1_name.toLowerCase().includes(lowercasedFilter) ||
+                (t.p2_name && t.p2_name.toLowerCase().includes(lowercasedFilter)) ||
+                t.p1_affiliation.toLowerCase().includes(lowercasedFilter) ||
+                (t.p2_affiliation && t.p2_affiliation.toLowerCase().includes(lowercasedFilter)) ||
+                t.jo.toString().includes(teamSearchTerm)
+            );
+            if (players.length > 0) {
+                filtered[groupName] = players;
+            }
+        }
+        return filtered;
+    }, [groupedTeamPlayers, teamSearchTerm]);
+
+
     const individualPlayersCount = allPlayers.filter(p => p.type === 'individual').length;
     const teamPlayersCount = allPlayers.filter(p => p.type === 'team').length;
 
@@ -301,7 +347,7 @@ export default function PlayerManagementPage() {
                 group: individualGroup,
                 jo: Number(individualJo),
                 name: player.name,
-                affiliation: player.affiliation,
+                affiliation: player.affiliation || '무소속',
             };
         });
 
@@ -341,9 +387,9 @@ export default function PlayerManagementPage() {
                 group: teamGroup,
                 jo: Number(teamJo),
                 p1_name: team.p1_name,
-                p1_affiliation: team.p1_affiliation,
+                p1_affiliation: team.p1_affiliation || '무소속',
                 p2_name: team.p2_name,
-                p2_affiliation: team.p2_affiliation,
+                p2_affiliation: team.p2_affiliation || '무소속',
             };
         });
 
@@ -378,7 +424,6 @@ export default function PlayerManagementPage() {
 
         const groupRef = ref(db, `tournaments/current/groups/${trimmedName}`);
         
-        //
         const defaultCourses = courses.reduce((acc, course) => {
             acc[course.id] = true;
             return acc;
@@ -601,7 +646,7 @@ export default function PlayerManagementPage() {
                                             </div>
                                             <div className="space-y-2">
                                                 <Label htmlFor={`p${i}-affiliation`}>선수 {i + 1} 소속</Label>
-                                                <Input id={`p${i}-affiliation`} placeholder="소속 클럽" value={p.affiliation} onChange={e => handleIndividualFormChange(i, 'affiliation', e.target.value)} />
+                                                <Input id={`p${i}-affiliation`} placeholder="소속 클럽 (없으면 '무소속')" value={p.affiliation} onChange={e => handleIndividualFormChange(i, 'affiliation', e.target.value)} />
                                             </div>
                                         </div>
                                     ))}
@@ -618,6 +663,15 @@ export default function PlayerManagementPage() {
                                 </CardDescription>
                             </CardHeader>
                             <CardContent>
+                                <div className="relative mb-4">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                    <Input
+                                        placeholder="선수명, 소속, 조 번호로 검색"
+                                        value={individualSearchTerm}
+                                        onChange={(e) => setIndividualSearchTerm(e.target.value)}
+                                        className="pl-10"
+                                    />
+                                </div>
                                 <Table>
                                     <TableHeader>
                                         <TableRow>
@@ -630,8 +684,8 @@ export default function PlayerManagementPage() {
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
-                                        {Object.keys(groupedIndividualPlayers).sort().map(groupName => 
-                                            groupedIndividualPlayers[groupName].map((p, index) => (
+                                        {Object.keys(filteredGroupedIndividualPlayers).sort().map(groupName => 
+                                            filteredGroupedIndividualPlayers[groupName].map((p, index) => (
                                                 editingPlayerId === p.id ? (
                                                     <TableRow key={p.id} className="bg-muted/30">
                                                         <TableCell className="px-4 py-2 text-center font-medium">{index + 1}</TableCell>
@@ -714,9 +768,9 @@ export default function PlayerManagementPage() {
                                         <h4 className="font-semibold text-primary">{i + 1}팀 정보</h4>
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                             <Input placeholder="선수 1 이름" value={team.p1_name} onChange={e => handleTeamFormChange(i, 'p1_name', e.target.value)} />
-                                            <Input placeholder="선수 1 소속" value={team.p1_affiliation} onChange={e => handleTeamFormChange(i, 'p1_affiliation', e.target.value)} />
+                                            <Input placeholder="선수 1 소속 (없으면 '무소속')" value={team.p1_affiliation} onChange={e => handleTeamFormChange(i, 'p1_affiliation', e.target.value)} />
                                             <Input placeholder="선수 2 이름" value={team.p2_name} onChange={e => handleTeamFormChange(i, 'p2_name', e.target.value)} />
-                                            <Input placeholder="선수 2 소속" value={team.p2_affiliation} onChange={e => handleTeamFormChange(i, 'p2_affiliation', e.target.value)} />
+                                            <Input placeholder="선수 2 소속 (없으면 '무소속')" value={team.p2_affiliation} onChange={e => handleTeamFormChange(i, 'p2_affiliation', e.target.value)} />
                                         </div>
                                     </div>
                                 ))}
@@ -732,6 +786,15 @@ export default function PlayerManagementPage() {
                                 </CardDescription>
                             </CardHeader>
                             <CardContent>
+                                <div className="relative mb-4">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                    <Input
+                                        placeholder="팀원명, 소속, 조 번호로 검색"
+                                        value={teamSearchTerm}
+                                        onChange={(e) => setTeamSearchTerm(e.target.value)}
+                                        className="pl-10"
+                                    />
+                                </div>
                                 <Table>
                                     <TableHeader>
                                         <TableRow>
@@ -744,8 +807,8 @@ export default function PlayerManagementPage() {
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
-                                        {Object.keys(groupedTeamPlayers).sort().map(groupName =>
-                                            groupedTeamPlayers[groupName].map((t, index) => (
+                                        {Object.keys(filteredGroupedTeamPlayers).sort().map(groupName =>
+                                            filteredGroupedTeamPlayers[groupName].map((t, index) => (
                                                 editingPlayerId === t.id ? (
                                                     <TableRow key={t.id} className="bg-muted/30">
                                                         <TableCell className="px-4 py-2 text-center font-medium">{index + 1}</TableCell>
@@ -779,7 +842,7 @@ export default function PlayerManagementPage() {
                                                         <TableCell className="px-4 py-2">{t.group}</TableCell>
                                                         <TableCell className="px-4 py-2">{t.jo}</TableCell>
                                                         <TableCell className="px-4 py-2">{t.p1_name}, {t.p2_name}</TableCell>
-                                                        <TableCell className="px-4 py-2">{t.p1_affiliation}{t.p2_affiliation ? ` / ${t.p2_affiliation}` : ''}</TableCell>
+                                                        <TableCell className="px-4 py-2">{t.p1_affiliation}{t.p2_affiliation && t.p1_affiliation !== t.p2_affiliation ? ` / ${t.p2_affiliation}` : ''}</TableCell>
                                                         <TableCell className="text-right space-x-2 px-4 py-2">
                                                             <Button variant="outline" size="icon" onClick={() => handleEditClick(t)}><Edit className="h-4 w-4" /></Button>
                                                             <AlertDialog>
@@ -835,3 +898,4 @@ export default function PlayerManagementPage() {
     </div>
   )
 }
+
