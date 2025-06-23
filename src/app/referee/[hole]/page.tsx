@@ -96,13 +96,10 @@ export default function RefereePage() {
     
     const selectedCourseName = useMemo(() => courses.find(c => c.id.toString() === selectedCourse)?.name || '', [courses, selectedCourse]);
 
-
-    
     // Timer for "saved" state progress bar. Only runs in scoring view to prevent re-renders.
     useEffect(() => {
         let interval: NodeJS.Timeout | undefined;
         if (view === 'scoring') {
-            // A more frequent interval for a smoother progress bar
             interval = setInterval(() => setNow(Date.now()), 50);
         }
         return () => {
@@ -210,15 +207,21 @@ export default function RefereePage() {
             <CardContent className="space-y-4">
                 <Select value={selectedGroup} onValueChange={handleGroupChange}>
                     <SelectTrigger className="h-12 text-base"><SelectValue placeholder="1. 그룹 선택" /></SelectTrigger>
-                    <SelectContent>{availableGroups.map(g => <SelectItem key={g} value={g} className="text-base">{g}</SelectItem>)}</SelectContent>
+                    <SelectContent position="item-aligned">{availableGroups.map(g => <SelectItem key={g} value={g} className="text-base">{g}</SelectItem>)}</SelectContent>
                 </Select>
                 <Select value={selectedCourse} onValueChange={setSelectedCourse} disabled={!selectedGroup || availableCoursesForGroup.length === 0}>
                     <SelectTrigger className="h-12 text-base"><SelectValue placeholder={!selectedGroup ? "그룹 먼저 선택" : (availableCoursesForGroup.length === 0 ? "배정된 코스 없음" : "2. 코스 선택")} /></SelectTrigger>
-                    <SelectContent>{availableCoursesForGroup.map(c => <SelectItem key={c.id} value={c.id.toString()} className="text-base">{c.name}</SelectItem>)}</SelectContent>
+                    <SelectContent position="item-aligned">{availableCoursesForGroup.map(c => <SelectItem key={c.id} value={c.id.toString()} className="text-base">{c.name}</SelectItem>)}</SelectContent>
                 </Select>
                 <Select value={selectedJo} onValueChange={setSelectedJo} disabled={!selectedGroup || availableJos.length === 0}>
                     <SelectTrigger className="h-12 text-base"><SelectValue placeholder={!selectedGroup ? "그룹 먼저 선택" : (availableJos.length === 0 ? "배정된 선수 없음" : "3. 조 선택")} /></SelectTrigger>
-                    <SelectContent>{availableJos.map(j => <SelectItem key={j} value={j.toString()} className="text-base">{j}조</SelectItem>)}</SelectContent>
+                    <SelectContent position="item-aligned">
+                      {availableJos.length > 0 ? (
+                          availableJos.map(j => <SelectItem key={j} value={j.toString()} className="text-base">{j}조</SelectItem>)
+                      ) : (
+                          <SelectItem value="no-jo" disabled>배정된 선수가 없습니다.</SelectItem>
+                      )}
+                    </SelectContent>
                 </Select>
             </CardContent>
             <CardFooter>
