@@ -265,26 +265,26 @@ export default function ExternalScoreboard() {
                                 <div className="text-xl md:text-2xl font-bold text-green-400">{groupProgress[groupName]}% 진행</div>
                             </header>
                             <div className="overflow-x-auto">
-                                <table className="w-full text-center border-collapse">
+                                <table className="w-full text-center border-collapse border-l border-r border-gray-800">
                                     <thead className="text-gray-400 text-sm">
                                         <tr className="border-b-2 border-gray-600">
-                                            <th className="py-1 px-1 w-12 align-middle">조</th>
-                                            <th className="py-1 px-1 w-32 text-left align-middle">선수명(팀명)</th>
-                                            <th className="py-1 px-1 w-32 text-center align-middle">소속</th>
-                                            <th className="py-1 px-1 w-24 text-center align-middle">코스</th>
-                                            <th colSpan={9} className="py-1 px-1 align-middle">HOLE</th>
-                                            <th className="py-1 px-1 w-16 align-middle">합계</th>
-                                            <th className="py-1 px-1 w-16 align-middle">총타수</th>
+                                            <th className="py-1 px-1 w-12 align-middle border-r border-gray-700">조</th>
+                                            <th className="py-1 px-1 w-32 text-left align-middle border-r border-gray-700">선수명(팀명)</th>
+                                            <th className="py-1 px-1 w-32 text-center align-middle border-r border-gray-700">소속</th>
+                                            <th className="py-1 px-1 w-24 text-center align-middle border-r border-gray-700">코스</th>
+                                            <th colSpan={9} className="py-1 px-1 align-middle border-r border-gray-700">HOLE</th>
+                                            <th className="py-1 px-1 w-16 align-middle border-r border-gray-700">합계</th>
+                                            <th className="py-1 px-1 w-16 align-middle border-r border-gray-700">총타수</th>
                                             <th className="py-1 px-1 w-16 align-middle">순위</th>
                                         </tr>
                                         <tr className="border-b border-gray-600">
-                                            <th className="p-0.5 align-middle"></th>
-                                            <th className="p-0.5 align-middle"></th>
-                                            <th className="p-0.5 align-middle"></th>
-                                            <th className="p-0.5 align-middle"></th>
-                                            {Array.from({length: 9}).map((_, i) => <th key={i} className="p-0.5 font-bold text-sm align-middle">{i + 1}</th>)}
-                                            <th className="p-0.5 align-middle"></th>
-                                            <th className="p-0.5 align-middle"></th>
+                                            <th className="p-0.5 align-middle border-r border-gray-700"></th>
+                                            <th className="p-0.5 align-middle border-r border-gray-700"></th>
+                                            <th className="p-0.5 align-middle border-r border-gray-700"></th>
+                                            <th className="p-0.5 align-middle border-r border-gray-700"></th>
+                                            {Array.from({length: 9}).map((_, i) => <th key={i} className="p-0.5 font-bold text-sm align-middle border-r border-gray-700">{i + 1}</th>)}
+                                            <th className="p-0.5 align-middle border-r border-gray-700"></th>
+                                            <th className="p-0.5 align-middle border-r border-gray-700"></th>
                                             <th className="p-0.5 align-middle"></th>
                                         </tr>
                                     </thead>
@@ -295,28 +295,28 @@ export default function ExternalScoreboard() {
                                                     <tr key={`${player.id}-${course.id}`} className="border-b border-gray-800 last:border-0">
                                                         {courseIndex === 0 && (
                                                             <>
-                                                                <td rowSpan={player.assignedCourses.length || 1} className="py-0.5 px-1 align-middle font-bold">{player.jo}</td>
-                                                                <td rowSpan={player.assignedCourses.length || 1} className="py-0.5 px-1 align-middle text-left font-semibold">{player.name}</td>
-                                                                <td rowSpan={player.assignedCourses.length || 1} className="py-0.5 px-1 align-middle text-left text-gray-400">{player.club}</td>
+                                                                <td rowSpan={player.assignedCourses.length || 1} className="py-0.5 px-1 align-middle font-bold border-r border-gray-800">{player.jo}</td>
+                                                                <td rowSpan={player.assignedCourses.length || 1} className="py-0.5 px-1 align-middle text-left font-semibold border-r border-gray-800">{player.name}</td>
+                                                                <td rowSpan={player.assignedCourses.length || 1} className="py-0.5 px-1 align-middle text-left text-gray-400 border-r border-gray-800">{player.club}</td>
                                                             </>
                                                         )}
-                                                        <td className="py-0.5 px-1 align-middle text-left">{player.coursesData[course.id]?.courseName}</td>
-                                                        {player.coursesData[course.id]?.holeScores.map((score, i) => <td key={i} className="py-0.5 px-1 align-middle font-mono font-bold text-xl">{score === null ? '-' : score}</td>)}
-                                                        <td className="py-0.5 px-1 align-middle font-bold text-gray-300 text-xl">{player.hasAnyScore ? player.coursesData[course.id]?.courseTotal : '-'}</td>
+                                                        <td className="py-0.5 px-1 align-middle text-left border-r border-gray-800">{player.coursesData[course.id]?.courseName}</td>
+                                                        {player.coursesData[course.id]?.holeScores.map((score, i) => <td key={i} className="py-0.5 px-1 align-middle font-mono font-bold text-xl border-r border-gray-800">{score === null ? '-' : score}</td>)}
+                                                        <td className="py-0.5 px-1 align-middle font-bold text-gray-300 text-xl border-r border-gray-800">{player.hasAnyScore ? player.coursesData[course.id]?.courseTotal : '-'}</td>
                                                         {courseIndex === 0 && (
                                                             <>
-                                                                <td rowSpan={player.assignedCourses.length || 1} className="py-0.5 px-1 align-middle font-bold text-yellow-400 text-2xl">{player.hasAnyScore ? player.totalScore : '-'}</td>
+                                                                <td rowSpan={player.assignedCourses.length || 1} className="py-0.5 px-1 align-middle font-bold text-yellow-400 text-2xl border-r border-gray-800">{player.hasAnyScore ? player.totalScore : '-'}</td>
                                                                 <td rowSpan={player.assignedCourses.length || 1} className="py-0.5 px-1 align-middle font-bold text-2xl">{player.hasAnyScore ? `${player.rank}위` : '-'}</td>
                                                             </>
                                                         )}
                                                     </tr>
                                                 )) : (
                                                     <tr className="border-b border-gray-800 last:border-0">
-                                                        <td className="py-0.5 px-1 align-middle font-bold">{player.jo}</td>
-                                                        <td className="py-0.5 px-1 align-middle text-left font-semibold">{player.name}</td>
-                                                        <td className="py-0.5 px-1 align-middle text-left text-gray-400">{player.club}</td>
-                                                        <td colSpan={12} className="py-0.5 px-1 align-middle text-center text-gray-500">배정된 코스가 없습니다.</td>
-                                                        <td className="py-0.5 px-1 align-middle font-bold text-lg">{player.hasAnyScore ? `${player.rank}위` : '-'}</td>
+                                                        <td className="py-0.5 px-1 align-middle font-bold border-r border-gray-800">{player.jo}</td>
+                                                        <td className="py-0.5 px-1 align-middle text-left font-semibold border-r border-gray-800">{player.name}</td>
+                                                        <td className="py-0.5 px-1 align-middle text-left text-gray-400 border-r border-gray-800">{player.club}</td>
+                                                        <td colSpan={12} className="py-0.5 px-1 align-middle text-center text-gray-500 border-r border-gray-800">배정된 코스가 없습니다.</td>
+                                                        <td className="py-0.5 px-1 align-middle font-bold text-2xl">{player.hasAnyScore ? `${player.rank}위` : '-'}</td>
                                                     </tr>
                                                 )}
                                             </React.Fragment>
