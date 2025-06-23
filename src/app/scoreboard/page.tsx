@@ -143,7 +143,7 @@ export default function ExternalScoreboard() {
                 total: totalScore,
                 courseScores: courseScoresForTieBreak,
                 detailedScores: detailedScoresForTieBreak,
-                assignedCourses: allAssignedCoursesForPlayer.filter((c: any) => c.isActive)
+                assignedCourses: allAssignedCoursesForPlayer.filter((c: any) => c.isActive !== false)
             };
         });
 
