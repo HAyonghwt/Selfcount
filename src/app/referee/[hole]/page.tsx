@@ -6,7 +6,7 @@ import { useParams } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Minus, Plus, Save, Lock, Edit, CheckCircle2, Trophy } from 'lucide-react';
+import { Minus, Plus, Save, Lock, Edit, CheckCircle2, Trophy, Users } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useToast } from '@/hooks/use-toast';
 import { Progress } from '@/components/ui/progress';
@@ -132,9 +132,7 @@ export default function RefereePage() {
 
     // ---- Timers and Side Effects for UI ----
     
-    // This effect initializes or resets the local score state when the selected players change.
     useEffect(() => {
-        // If no group of players is selected, clear the scores.
         if (!selectedJo || currentPlayers.length === 0) {
             setScores({});
             return;
@@ -142,25 +140,20 @@ export default function RefereePage() {
 
         const newScoresState: { [key: string]: ScoreData } = {};
         currentPlayers.forEach((player) => {
-            // Check if a score for this player/course/hole already exists in the master scores from Firebase.
             const existingScore = allScores[player.id]?.[selectedCourse]?.[hole];
             
             if (existingScore !== undefined && existingScore !== null) {
-                // If a score has already been saved to the database, display it as locked.
                 newScoresState[player.id] = { score: Number(existingScore), status: 'locked' };
             } else {
-                // If no score exists, initialize it for editing with a default value of Par 3.
+                // The previous logic for initializing scores was unstable.
+                // It now resets scores for the new group, using Par 3 as a default
+                // if no score has been previously recorded.
                 newScoresState[player.id] = { score: 3, status: 'editing' };
             }
         });
 
-        // Replace the entire local scores state with the newly generated state for the current players.
-        // This avoids accumulating scores from previously viewed groups.
         setScores(newScoresState);
         
-    // This effect should ONLY re-run when the selected players change (new `jo` selected).
-    // It uses `allScores` to initialize, but we don't want it to re-run on every `allScores` update,
-    // as that would overwrite the referee's local edits before they are saved.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [currentPlayers, selectedJo]);
 
@@ -294,22 +287,34 @@ export default function RefereePage() {
         <Card className="flex-1 flex flex-col">
             <CardHeader>
                 <CardTitle className="text-xl">다음 조를 선택하세요</CardTitle>
-                <CardDescription>{availableJos.length - completedJos.size}개 조가 남았습니다.</CardDescription>
+                {availableJos.length > 0 && (
+                    <CardDescription>{availableJos.length - completedJos.size}개 조가 남았습니다.</CardDescription>
+                )}
             </CardHeader>
-            <CardContent className="flex-1 flex flex-col justify-center space-y-4">
-                 <Select value={selectedJo} onValueChange={setSelectedJo} disabled={availableJos.length === 0}>
-                    <SelectTrigger className="h-14 text-lg"><SelectValue placeholder="조 선택" /></SelectTrigger>
-                    <SelectContent>
-                        {availableJos.map(j => (
-                            <SelectItem key={j} value={j.toString()} disabled={completedJos.has(j)} className="text-lg">
-                                <div className="flex items-center justify-between w-full">
-                                    <span>{j}조</span>
-                                    {completedJos.has(j) && <span className="text-xs text-muted-foreground">(완료)</span>}
-                                </div>
-                            </SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
+            <CardContent className="flex-1 flex flex-col justify-center items-center">
+                {availableJos.length > 0 ? (
+                     <Select value={selectedJo} onValueChange={setSelectedJo}>
+                        <SelectTrigger className="h-14 text-lg w-full max-w-xs"><SelectValue placeholder="조 선택" /></SelectTrigger>
+                        <SelectContent>
+                            {availableJos.map(j => (
+                                <SelectItem key={j} value={j.toString()} disabled={completedJos.has(j)} className="text-lg">
+                                    <div className="flex items-center justify-between w-full">
+                                        <span>{j}조</span>
+                                        {completedJos.has(j) && <span className="text-xs text-muted-foreground">(완료)</span>}
+                                    </div>
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                ) : (
+                    <div className="text-center text-muted-foreground p-4">
+                        <Users className="mx-auto h-12 w-12" />
+                        <p className="mt-4 text-base font-semibold text-foreground">배정된 선수 없음</p>
+                        <p className="mt-1 text-sm">
+                            '{selectedGroup}' 그룹에<br/>등록된 선수가 없습니다.
+                        </p>
+                    </div>
+                )}
             </CardContent>
         </Card>
     );
@@ -410,4 +415,3 @@ export default function RefereePage() {
         </div>
     );
 }
-
