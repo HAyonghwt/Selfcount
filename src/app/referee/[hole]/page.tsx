@@ -382,7 +382,7 @@ export default function RefereePage() {
                          <p className="text-center text-lg sm:text-xl text-muted-foreground pt-2">이 점수로 저장하시겠습니까?</p>
                     </AlertDialogHeader>
                     <AlertDialogFooter className="grid grid-cols-2 gap-4 !mt-8">
-                        <AlertDialogCancel className="h-14 sm:h-16 text-xl sm:text-2xl font-bold">취소</AlertDialogCancel>
+                        <AlertDialogCancel onClick={() => setConfirmingPlayer(null)} className="h-14 sm:h-16 text-xl sm:text-2xl font-bold">취소</AlertDialogCancel>
                         <AlertDialogAction onClick={handleConfirmFinalSave} className="h-14 sm:h-16 text-xl sm:text-2xl font-bold">확인</AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
