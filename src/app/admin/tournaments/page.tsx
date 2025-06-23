@@ -122,7 +122,27 @@ export default function TournamentManagementPage() {
   }
   
   const handleActiveChange = (courseId: number, checked: boolean) => {
-     setCourses(courses.map(c => c.id === courseId ? {...c, isActive: checked} : c));
+    const originalCourses = [...courses];
+    // Optimistically update UI
+    setCourses(prevCourses => prevCourses.map(c => c.id === courseId ? { ...c, isActive: checked } : c));
+
+    const courseActiveRef = ref(db, `tournaments/current/courses/${courseId}/isActive`);
+    set(courseActiveRef, checked)
+        .then(() => {
+            toast({
+                title: "상태 변경 완료",
+                description: `코스가 전광판에 ${checked ? '표시됩니다' : '숨겨집니다'}.`
+            });
+        })
+        .catch((err) => {
+            // Revert UI on failure and notify user
+            setCourses(originalCourses);
+            toast({
+                title: "오류",
+                description: `상태 변경에 실패했습니다: ${err.message}`,
+                variant: "destructive"
+            });
+        });
   }
 
   const handleSaveChanges = () => {
@@ -135,13 +155,14 @@ export default function TournamentManagementPage() {
     updates[`/tournaments/current/name`] = tournamentName;
     updates[`/tournaments/current/courses`] = coursesObject;
     
+    // Using update to only change specified paths and not touch others (like groups)
     update(ref(db), updates).then(() => {
       toast({
         title: "성공",
-        description: "대회 및 코스 정보가 저장되었습니다.",
+        description: "대회명 및 코스 정보가 저장되었습니다.",
       });
     }).catch(err => {
-        toast({ title: "오류", description: err.message});
+        toast({ title: "오류", description: err.message, variant: "destructive"});
     });
   };
   
@@ -182,7 +203,7 @@ export default function TournamentManagementPage() {
                 <Input value={course.name} onChange={e => handleCourseNameChange(course.id, e.target.value)} onFocus={(e) => e.target.select()} className="text-lg font-bold w-auto border-0 shadow-none focus-visible:ring-1 bg-transparent" />
                 <div className="flex items-center gap-4">
                    <div className="flex items-center space-x-2">
-                        <Label htmlFor={`active-switch-${course.id}`}>전광판 표시</Label>
+                        <Label htmlFor={`active-switch-${course.id}`} className="cursor-pointer">전광판 표시</Label>
                         <Switch id={`active-switch-${course.id}`} checked={course.isActive} onCheckedChange={(checked) => handleActiveChange(course.id, checked)} />
                     </div>
                   <Button variant="ghost" size="icon" onClick={() => handleRemoveCourse(course.id)}>
@@ -221,6 +242,7 @@ export default function TournamentManagementPage() {
       <Card>
         <CardHeader>
           <CardTitle>설정 저장 및 초기화</CardTitle>
+          <CardDescription>대회명, 코스 이름, Par 값 등 이 페이지에서 수정한 내용을 저장합니다.</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col sm:flex-row gap-4">
            <Button size="lg" onClick={handleSaveChanges}>
@@ -238,7 +260,7 @@ export default function TournamentManagementPage() {
                     <AlertDialogHeader>
                         <AlertDialogTitle className="flex items-center gap-2"><AlertTriangle className="text-destructive"/>정말 초기화하시겠습니까?</AlertDialogTitle>
                         <AlertDialogDescription>
-                            이 작업은 되돌릴 수 없습니다. 모든 대회 이름과 코스 설정이 기본값으로 초기화됩니다. 선수 데이터는 영향을 받지 않습니다.
+                            이 작업은 되돌릴 수 없습니다. 모든 대회 이름과 코스 설정이 기본값으로 초기화됩니다. 그룹 데이터는 영향을 받지 않습니다.
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
