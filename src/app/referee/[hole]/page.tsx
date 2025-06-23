@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useMemo } from 'react';
@@ -100,6 +99,8 @@ export default function RefereePage() {
         return course ? course.name : '';
     }, [courses, selectedCourse]);
 
+    const isReady = selectedCourse && selectedGroup && selectedJo && currentPlayers.length > 0;
+
     useEffect(() => {
         if (!isReady) return;
         const newScores: { [key: string]: ScoreData } = {};
@@ -153,7 +154,7 @@ export default function RefereePage() {
         if (!confirmingPlayer || !selectedCourse) return;
         const { player, score } = confirmingPlayer;
 
-        const updates: { [key: string]: any } = {};
+        const updates: { [key:string]: any } = {};
         updates[`/scores/${player.id}/${selectedCourse}/${hole}`] = score;
 
         update(ref(db), updates).then(() => {
@@ -183,10 +184,8 @@ export default function RefereePage() {
         setScores({}); // Clear scores when selection is reset
     };
 
-    const isReady = selectedCourse && selectedGroup && selectedJo && currentPlayers.length > 0;
-
     return (
-        <div className="bg-slate-50 min-h-screen p-4 flex flex-col font-body">
+        <div className="bg-slate-50 min-h-screen p-2 sm:p-4 flex flex-col font-body">
             <header className="text-center mb-4">
                 <h1 className="text-3xl font-extrabold text-primary break-keep leading-tight">{hole}번홀 점수 기록</h1>
                 <p className="text-muted-foreground text-base">담당 심판용 페이지</p>
@@ -224,7 +223,7 @@ export default function RefereePage() {
                     <Card className="mb-4">
                         <CardHeader className="p-3">
                             <div className="flex flex-col items-center gap-2">
-                                <h2 className="text-lg sm:text-xl font-bold text-center break-keep">
+                                <h2 className="text-base sm:text-lg font-bold text-center break-keep">
                                     {selectedGroup} / {selectedCourseName} - {selectedJo}조
                                 </h2>
                                 <Button variant="outline" size="sm" onClick={handleResetSelection}>
@@ -235,7 +234,7 @@ export default function RefereePage() {
                         </CardHeader>
                     </Card>
 
-                    <div className="flex-1 space-y-3">
+                    <div className="flex-1 space-y-2">
                         {currentPlayers.map(player => {
                             const scoreData = scores[player.id];
                             if (!scoreData) return null;
@@ -245,40 +244,40 @@ export default function RefereePage() {
                             const isLocked = scoreData.status === 'locked';
 
                             return (
-                            <div key={player.id} className="bg-white rounded-lg shadow p-3">
+                            <div key={player.id} className="bg-white rounded-lg shadow p-2">
                                 <div className="flex items-center gap-2 w-full">
-                                    <p className="font-bold text-xl truncate w-24 flex-shrink-0">{getPlayerName(player)}</p>
+                                    <p className="font-bold text-lg truncate w-24 flex-shrink-0">{getPlayerName(player)}</p>
                                     
-                                    <div className="flex-1 flex justify-center items-center gap-1.5">
-                                        <Button variant="outline" size="icon" className="w-9 h-9 rounded-lg border-2" onClick={() => updateScore(player.id, -1)} disabled={!isEditing}>
-                                            <Minus className="h-5 w-5" />
+                                    <div className="flex-1 flex justify-center items-center gap-1.5 min-w-0">
+                                        <Button variant="outline" size="icon" className="w-12 h-12 rounded-lg border-2" onClick={() => updateScore(player.id, -1)} disabled={!isEditing}>
+                                            <Minus className="h-8 w-8" />
                                         </Button>
-                                        <div className="relative w-12 text-center" onDoubleClick={() => handleScoreDoubleClick(player)}>
-                                            <span className={`text-4xl font-bold tabular-nums ${isSaved ? 'cursor-pointer' : ''}`}>
+                                        <div className="relative w-16 text-center" onDoubleClick={() => handleScoreDoubleClick(player)}>
+                                            <span className={`text-5xl font-bold tabular-nums ${isSaved ? 'cursor-pointer' : ''}`}>
                                                 {scoreData.score}
                                             </span>
                                         </div>
-                                        <Button variant="outline" size="icon" className="w-9 h-9 rounded-lg border-2" onClick={() => updateScore(player.id, 1)} disabled={!isEditing}>
-                                            <Plus className="h-5 w-5" />
+                                        <Button variant="outline" size="icon" className="w-12 h-12 rounded-lg border-2" onClick={() => updateScore(player.id, 1)} disabled={!isEditing}>
+                                            <Plus className="h-8 w-8" />
                                         </Button>
                                     </div>
 
-                                    <div className="w-9 h-9 flex-shrink-0">
+                                    <div className="w-14 h-14 flex-shrink-0">
                                         {isEditing && (
                                             <Button variant="default" size="icon" className="w-full h-full rounded-lg" onClick={() => handleSavePress(player)}>
-                                                <Save className="h-4 w-4" />
+                                                <Save className="h-6 w-6" />
                                             </Button>
                                         )}
                                         {isSaved && (
                                             <div className="flex flex-col items-center justify-center h-full text-center relative" onDoubleClick={() => handleScoreDoubleClick(player)}>
-                                                    <Edit className="absolute top-0 right-0 w-2.5 h-2.5 text-primary animate-pulse" />
-                                                    <p className="text-[9px] text-primary font-bold leading-tight">저장됨</p>
-                                                    <Progress value={(now % 10000) / 100} className="h-0.5 mt-0.5 w-full" />
+                                                    <Edit className="absolute top-0 right-0 w-3 h-3 text-primary animate-pulse" />
+                                                    <p className="text-xs text-primary font-bold leading-tight">저장됨</p>
+                                                    <Progress value={(now % 10000) / 100} className="h-1 mt-1 w-full" />
                                             </div>
                                         )}
                                         {isLocked && (
                                             <div className="flex items-center justify-center h-full bg-muted text-muted-foreground rounded-lg">
-                                                <Lock className="w-4 h-4" />
+                                                <Lock className="w-6 h-6" />
                                             </div>
                                         )}
                                     </div>
@@ -310,5 +309,3 @@ export default function RefereePage() {
         </div>
     );
 }
-
-    
