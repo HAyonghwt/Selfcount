@@ -197,7 +197,7 @@ export default function RefereePage() {
 
         update(ref(db, `/scores/${player.id}/${selectedCourse}/${hole}`), score).then(() => {
             setScores(prev => ({ ...prev, [player.id]: { score, status: 'saved' } }));
-            toast({ title: "점수 저장 완료", description: "10초 내에 점수를 더블클릭하여 수정할 수 있습니다.", className: "bg-green-500 text-white" });
+            toast({ title: "점수 저장 완료", description: "10초 내에 점수를 더블클릭하여 수정할 수 있습니다.", className: "bg-primary text-primary-foreground" });
         }).catch(err => toast({ title: "저장 실패", description: err.message, variant: "destructive" }))
         .finally(() => setConfirmingPlayer(null));
     };
@@ -370,3 +370,5 @@ export default function RefereePage() {
         </div>
     );
 }
+
+    

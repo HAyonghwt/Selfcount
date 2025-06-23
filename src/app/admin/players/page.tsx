@@ -1,3 +1,4 @@
+
 "use client"
 import { useState, useEffect, useRef, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
@@ -208,7 +209,7 @@ export default function PlayerManagementPage() {
 
                 update(ref(db), updates)
                     .then(() => {
-                        toast({ title: '성공', description: `${newPlayers.length}명의 선수가 성공적으로 등록되었습니다.`, className: 'bg-green-500 text-white' });
+                        toast({ title: '성공', description: `${newPlayers.length}명의 선수가 성공적으로 등록되었습니다.`, className: 'bg-primary text-primary-foreground' });
                     })
                     .catch(err => toast({ title: '저장 실패', description: err.message, variant: 'destructive' }));
 
@@ -304,7 +305,7 @@ export default function PlayerManagementPage() {
 
         update(ref(db), updates)
             .then(() => {
-                toast({ title: '성공', description: '개인전 선수들이 저장되었습니다.', className: 'bg-green-500 text-white' });
+                toast({ title: '성공', description: '개인전 선수들이 저장되었습니다.', className: 'bg-primary text-primary-foreground' });
                 setIndividualFormData(initialIndividualState);
             })
             .catch(err => toast({ title: '저장 실패', description: err.message, variant: 'destructive' }));
@@ -346,7 +347,7 @@ export default function PlayerManagementPage() {
 
         update(ref(db), updates)
             .then(() => {
-                toast({ title: '성공', description: '2인 1팀 선수들이 저장되었습니다.', className: 'bg-green-500 text-white' });
+                toast({ title: '성공', description: '2인 1팀 선수들이 저장되었습니다.', className: 'bg-primary text-primary-foreground' });
                 setTeamFormData(initialTeamState);
             })
             .catch(err => toast({ title: '저장 실패', description: err.message, variant: 'destructive' }));
@@ -358,7 +359,7 @@ export default function PlayerManagementPage() {
     
     const handleResetAllPlayers = () => {
         remove(ref(db, 'players'))
-            .then(() => toast({ title: '초기화 완료', description: '모든 선수 명단이 삭제되었습니다.', className: 'bg-green-500 text-white'}))
+            .then(() => toast({ title: '초기화 완료', description: '모든 선수 명단이 삭제되었습니다.', className: 'bg-primary text-primary-foreground'}))
             .catch(err => toast({ title: '초기화 실패', description: err.message, variant: 'destructive' }));
     };
     
@@ -383,7 +384,7 @@ export default function PlayerManagementPage() {
 
         set(groupRef, { name: trimmedName, courses: defaultCourses })
             .then(() => {
-                toast({ title: '성공', description: `새 그룹 '${trimmedName}'이 추가되었습니다.`, className: 'bg-green-500 text-white' });
+                toast({ title: '성공', description: `새 그룹 '${trimmedName}'이 추가되었습니다.`, className: 'bg-primary text-primary-foreground' });
                 setNewGroupName("");
             })
             .catch(err => toast({ title: '오류', description: err.message, variant: 'destructive' }));
@@ -421,7 +422,7 @@ export default function PlayerManagementPage() {
 
         update(ref(db, `players/${editingPlayerId}`), dataToUpdate)
             .then(() => {
-                toast({ title: '성공', description: '선수 정보가 수정되었습니다.', className: 'bg-green-500 text-white' });
+                toast({ title: '성공', description: '선수 정보가 수정되었습니다.', className: 'bg-primary text-primary-foreground' });
                 handleCancelEdit();
             })
             .catch(err => toast({ title: '수정 실패', description: err.message, variant: 'destructive' }));
@@ -438,7 +439,7 @@ export default function PlayerManagementPage() {
         const groupCoursesRef = ref(db, `tournaments/current/groups/${currentEditingGroup.name}/courses`);
         set(groupCoursesRef, assignedCourses)
             .then(() => {
-                toast({ title: "저장 완료", description: `${currentEditingGroup.name} 그룹의 코스 설정이 저장되었습니다.`, className: "bg-green-500 text-white" });
+                toast({ title: "저장 완료", description: `${currentEditingGroup.name} 그룹의 코스 설정이 저장되었습니다.`, className: "bg-primary text-primary-foreground" });
                 setGroupCourseModalOpen(false);
                 setCurrentEditingGroup(null);
             })
@@ -832,3 +833,5 @@ export default function PlayerManagementPage() {
     </div>
   )
 }
+
+    

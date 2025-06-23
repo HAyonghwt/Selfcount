@@ -1,3 +1,4 @@
+
 "use client"
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -79,7 +80,7 @@ export default function SuperAdminPage() {
                 toast({
                     title: "성공",
                     description: "모든 설정이 성공적으로 저장되었습니다. 변경사항을 적용하려면 페이지를 새로고침하세요.",
-                    className: "bg-green-500 text-white",
+                    className: "bg-primary text-primary-foreground",
                 });
             });
         } catch (error) {
@@ -224,3 +225,5 @@ export default function SuperAdminPage() {
         </div>
     );
 }
+
+    

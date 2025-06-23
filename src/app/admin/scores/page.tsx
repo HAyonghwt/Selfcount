@@ -1,3 +1,4 @@
+
 "use client";
 import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -119,7 +120,7 @@ export default function ScoreManagementPage() {
             toast({
                 title: "점수 수정 완료",
                 description: `${scoreToUpdate.group} ${scoreToUpdate.jo}조 ${scoreToUpdate.name} 선수의 ${scoreToUpdate.course} ${scoreToUpdate.hole}홀 점수가 ${scoreToUpdate.score}점으로 수정되었습니다.`,
-                className: "bg-green-500 text-white",
+                className: "bg-primary text-primary-foreground",
             });
             setEditingCell(null);
             setScoreToUpdate(null);
@@ -222,3 +223,5 @@ export default function ScoreManagementPage() {
         </div>
     );
 }
+
+    

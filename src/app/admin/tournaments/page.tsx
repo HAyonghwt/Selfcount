@@ -1,3 +1,4 @@
+
 "use client"
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -134,7 +135,7 @@ export default function TournamentManagementPage() {
       toast({
         title: "성공",
         description: "대회 및 코스 정보가 저장되었습니다.",
-        className: "bg-green-500 text-white",
+        className: "bg-primary text-primary-foreground",
       });
     }).catch(err => {
         toast({ title: "오류", description: err.message, variant: "destructive"});
@@ -249,3 +250,5 @@ export default function TournamentManagementPage() {
     </div>
   );
 }
+
+    
