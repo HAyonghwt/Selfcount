@@ -9,7 +9,6 @@ import {
   Users,
   ClipboardList,
   Tv,
-  Settings,
   LogOut,
 } from "lucide-react"
 
@@ -113,14 +112,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </SidebarContent>
           <SidebarFooter className="p-4 border-t">
               <SidebarMenu>
-                 <SidebarMenuItem>
-                  <SidebarMenuButton asChild tooltip={{ children: "설정" }}>
-                    <Link href="/super-admin">
-                      <Settings className="h-5 w-5" />
-                      <span>설정</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
                 <SidebarMenuItem>
                   <SidebarMenuButton asChild tooltip={{ children: "로그아웃" }}>
                     <Link href="/">
