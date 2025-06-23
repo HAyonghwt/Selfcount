@@ -131,13 +131,36 @@ export default function RefereePage() {
 
 
     // ---- Timers and Side Effects for UI ----
+    
+    // This effect initializes or resets the local score state when the selected players change.
     useEffect(() => {
-        if (!selectedJo) return;
-        const newScores: { [key: string]: ScoreData } = {};
-        currentPlayers.forEach((p: Player) => {
-            if (!scores[p.id]) newScores[p.id] = { score: 1, status: 'editing' };
+        // If no group of players is selected, clear the scores.
+        if (!selectedJo || currentPlayers.length === 0) {
+            setScores({});
+            return;
+        }
+
+        const newScoresState: { [key: string]: ScoreData } = {};
+        currentPlayers.forEach((player) => {
+            // Check if a score for this player/course/hole already exists in the master scores from Firebase.
+            const existingScore = allScores[player.id]?.[selectedCourse]?.[hole];
+            
+            if (existingScore !== undefined && existingScore !== null) {
+                // If a score has already been saved to the database, display it as locked.
+                newScoresState[player.id] = { score: Number(existingScore), status: 'locked' };
+            } else {
+                // If no score exists, initialize it for editing with a default value of Par 3.
+                newScoresState[player.id] = { score: 3, status: 'editing' };
+            }
         });
-        if(Object.keys(newScores).length > 0) setScores(prev => ({...prev, ...newScores}));
+
+        // Replace the entire local scores state with the newly generated state for the current players.
+        // This avoids accumulating scores from previously viewed groups.
+        setScores(newScoresState);
+        
+    // This effect should ONLY re-run when the selected players change (new `jo` selected).
+    // It uses `allScores` to initialize, but we don't want it to re-run on every `allScores` update,
+    // as that would overwrite the referee's local edits before they are saved.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [currentPlayers, selectedJo]);
 
@@ -178,11 +201,20 @@ export default function RefereePage() {
     };
 
     const updateScore = (id: string, delta: number) => {
-        if (scores[id]?.status !== 'editing') return;
-        setScores(prev => ({
-            ...prev,
-            [id]: { ...prev[id], score: Math.max(1, (prev[id].score || 0) + delta) }
-        }));
+        setScores(prev => {
+            const currentScoreData = prev[id];
+            // Only allow updates if the score is in 'editing' mode.
+            if (!currentScoreData || currentScoreData.status !== 'editing') {
+                return prev;
+            }
+            
+            const newScore = Math.max(1, currentScoreData.score + delta);
+            
+            return {
+                ...prev,
+                [id]: { ...currentScoreData, score: newScore }
+            };
+        });
     };
 
     const handleSavePress = (player: Player) => {
@@ -203,10 +235,18 @@ export default function RefereePage() {
     };
 
     const handleScoreDoubleClick = (player: Player) => {
-        if (scores[player.id]?.status === 'saved') {
-             setScores(prev => ({ ...prev, [player.id]: { ...prev[player.id], status: 'editing' } }));
+        setScores(prev => {
+            const currentScoreData = prev[player.id];
+            // Only allow unlocking if the score is 'saved' (not 'locked' or 'editing').
+            if (!currentScoreData || currentScoreData.status !== 'saved') {
+                return prev;
+            }
             toast({ title: "수정 모드", description: `${getPlayerName(player)} 선수의 점수를 다시 수정합니다.` });
-        }
+            return {
+                ...prev,
+                [player.id]: { ...currentScoreData, status: 'editing' }
+            };
+        });
     }
 
     const getPlayerName = (player: Player) => player.type === 'team' ? `${player.p1_name}/${player.p2_name}` : player.name;
@@ -371,4 +411,3 @@ export default function RefereePage() {
     );
 }
 
-    
