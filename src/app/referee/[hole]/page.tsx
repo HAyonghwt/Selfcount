@@ -105,6 +105,11 @@ export default function RefereePage() {
         return [...new Set(groupPlayers.map(p => p.jo))].sort((a, b) => a - b);
     }, [allPlayers, selectedGroup]);
     
+    const currentPlayers = useMemo(() => {
+        if (!selectedJo) return [];
+        return allPlayers.filter(p => p.group === selectedGroup && p.jo.toString() === selectedJo);
+    }, [allPlayers, selectedGroup, selectedJo]);
+    
     const completedJos = useMemo(() => {
         if (!selectedGroup || !selectedCourse || !hole) return new Set<number>();
     
@@ -116,7 +121,10 @@ export default function RefereePage() {
             if (joPlayers.length === 0) return;
     
             const allScored = joPlayers.every(player => {
-                return allScores[player.id]?.[selectedCourse]?.[hole] !== undefined;
+                const coursePlayers = currentPlayers.filter(p => p.group === selectedGroup && p.jo === joNum);
+                if (coursePlayers.length === 0) return false; // If no players for the course, it's not completed
+                
+                return coursePlayers.every(p => allScores[p.id]?.[selectedCourse]?.[hole] !== undefined);
             });
     
             if (allScored) {
@@ -125,13 +133,9 @@ export default function RefereePage() {
         });
     
         return completed;
-    }, [allPlayers, allScores, availableJos, selectedGroup, selectedCourse, hole]);
+    }, [allPlayers, allScores, availableJos, selectedGroup, selectedCourse, hole, currentPlayers]);
 
-    const currentPlayers = useMemo(() => {
-        if (!selectedJo) return [];
-        return allPlayers.filter(p => p.group === selectedGroup && p.jo.toString() === selectedJo);
-    }, [allPlayers, selectedGroup, selectedJo]);
-    
+
     const selectedCourseName = useMemo(() => courses.find(c => c.id.toString() === selectedCourse)?.name || '', [courses, selectedCourse]);
     
     // When view changes to 'scoring', initialize the scores state
@@ -234,15 +238,19 @@ export default function RefereePage() {
             <CardContent className="space-y-4">
                 <Select value={selectedGroup} onValueChange={v => {setSelectedGroup(v); setSelectedCourse(''); setSelectedJo('');}}>
                     <SelectTrigger className="h-12 text-base"><SelectValue placeholder="1. 그룹 선택" /></SelectTrigger>
-                    <SelectContent>{availableGroups.map(g => <SelectItem key={g} value={g} className="text-base">{g}</SelectItem>)}</SelectContent>
+                    <SelectContent position="item-aligned">
+                        {availableGroups.map(g => <SelectItem key={g} value={g} className="text-base">{g}</SelectItem>)}
+                    </SelectContent>
                 </Select>
                 <Select value={selectedCourse} onValueChange={v => {setSelectedCourse(v); setSelectedJo('');}} disabled={!selectedGroup || availableCoursesForGroup.length === 0}>
                     <SelectTrigger className="h-12 text-base"><SelectValue placeholder={!selectedGroup ? "그룹 먼저 선택" : (availableCoursesForGroup.length === 0 ? "배정된 코스 없음" : "2. 코스 선택")} /></SelectTrigger>
-                    <SelectContent>{availableCoursesForGroup.map(c => <SelectItem key={c.id} value={c.id.toString()} className="text-base">{c.name}</SelectItem>)}</SelectContent>
+                    <SelectContent position="item-aligned">
+                        {availableCoursesForGroup.map(c => <SelectItem key={c.id} value={c.id.toString()} className="text-base">{c.name}</SelectItem>)}
+                    </SelectContent>
                 </Select>
                  <Select value={selectedJo} onValueChange={setSelectedJo} disabled={!selectedCourse || availableJos.length === 0}>
                     <SelectTrigger className="h-12 text-base"><SelectValue placeholder={!selectedCourse ? "코스 먼저 선택" : (availableJos.length === 0 ? "배정된 선수 없음" : "3. 조 선택")} /></SelectTrigger>
-                    <SelectContent>
+                    <SelectContent position="item-aligned">
                         {availableJos.map(jo => {
                             const isCompleted = completedJos.has(jo);
                             return (
@@ -361,17 +369,17 @@ export default function RefereePage() {
             </div>
             
             <AlertDialog open={!!confirmingPlayer} onOpenChange={(open) => !open && setConfirmingPlayer(null)}>
-                <AlertDialogContent className="bg-card border">
+                <AlertDialogContent className="bg-card border-2 border-primary">
                     <AlertDialogHeader>
-                        <AlertDialogTitle className="text-center text-3xl sm:text-4xl font-bold leading-tight truncate text-foreground">
+                        <AlertDialogTitle className="text-center text-3xl sm:text-4xl font-bold leading-tight truncate text-primary">
                             {confirmingPlayer?.player ? getPlayerName(confirmingPlayer.player) : ''}
                         </AlertDialogTitle>
                         <AlertDialogDescription className="text-center !mt-2">
-                            <p className="text-sm text-foreground mb-2">점수 확인</p>
+                             <p className="text-sm text-primary mb-2">점수 확인</p>
                              <span className="font-extrabold text-8xl sm:text-9xl text-primary">
                                 {confirmingPlayer?.score}
                             </span>
-                            <span className="text-4xl sm:text-5xl text-foreground ml-2">
+                            <span className="text-4xl sm:text-5xl text-primary ml-2">
                                 점
                             </span>
                         </AlertDialogDescription>
@@ -385,3 +393,5 @@ export default function RefereePage() {
         </div>
     );
 }
+
+    
