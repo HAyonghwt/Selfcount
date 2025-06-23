@@ -11,8 +11,9 @@ interface ProcessedPlayer {
     club: string;
     group: string;
     totalScore: number;
-    rank: number;
+    rank: number | null;
     hasAnyScore: boolean;
+    hasForfeited: boolean;
     coursesData: {
         [courseId: string]: {
             courseName: string;
@@ -27,6 +28,9 @@ interface ProcessedPlayer {
 }
 
 const tieBreak = (a: any, b: any, coursesForGroup: any[]) => {
+    if (a.hasForfeited && !b.hasForfeited) return 1;
+    if (!a.hasForfeited && b.hasForfeited) return -1;
+
     if (!a.hasAnyScore && !b.hasAnyScore) return 0;
     if (!a.hasAnyScore) return 1;
     if (!b.hasAnyScore) return -1;
@@ -104,8 +108,8 @@ export default function ExternalScoreboard() {
 
             const playerScoresData = scores[playerId] || {};
             
-            const hasAnyScore = Object.values(playerScoresData).some((courseScores: any) => Object.keys(courseScores).length > 0);
-
+            let hasAnyScore = false;
+            let hasForfeited = false;
             let totalScore = 0;
             const coursesData: any = {};
             const courseScoresForTieBreak: { [courseId: string]: number } = {};
@@ -121,8 +125,13 @@ export default function ExternalScoreboard() {
                 for (let i = 0; i < 9; i++) {
                     const holeScore = scoresForCourse[(i + 1).toString()];
                     if (holeScore !== undefined && holeScore !== null) {
-                        holeScores[i] = Number(holeScore);
-                        courseTotal += Number(holeScore);
+                        const scoreNum = Number(holeScore);
+                        holeScores[i] = scoreNum;
+                        courseTotal += scoreNum;
+                        hasAnyScore = true;
+                        if (scoreNum === 0) {
+                            hasForfeited = true;
+                        }
                     }
                 }
                 
@@ -140,6 +149,7 @@ export default function ExternalScoreboard() {
                 totalScore,
                 coursesData,
                 hasAnyScore,
+                hasForfeited,
                 total: totalScore,
                 courseScores: courseScoresForTieBreak,
                 detailedScores: detailedScoresForTieBreak,
@@ -164,17 +174,28 @@ export default function ExternalScoreboard() {
 
             const groupPlayers = groupedData[groupName].sort((a,b) => tieBreak(a, b, allAssignedCoursesForGroup));
             
-            const rankedPlayers: ProcessedPlayer[] = [];
-            groupPlayers.forEach((player, index) => {
-                let rank;
-                if (index > 0 && player.hasAnyScore && groupPlayers[index-1].hasAnyScore && tieBreak(player, groupPlayers[index - 1], allAssignedCoursesForGroup) === 0) {
-                    rank = rankedPlayers[index - 1].rank;
-                } else {
-                    rank = index + 1;
+            const finalPlayers: ProcessedPlayer[] = [];
+            let currentRank = 0;
+            let numRankedPlayers = 0;
+
+            for (const player of groupPlayers) {
+                if (player.hasForfeited || !player.hasAnyScore) {
+                    finalPlayers.push({ ...player, rank: null });
+                    continue;
                 }
-                rankedPlayers.push({ ...player, rank });
-            });
-            rankedData[groupName] = rankedPlayers;
+
+                numRankedPlayers++;
+                
+                const prevRankedPlayer = finalPlayers.slice().reverse().find(p => p.rank !== null);
+                
+                if (prevRankedPlayer && tieBreak(player, prevRankedPlayer, allAssignedCoursesForGroup) === 0) {
+                    finalPlayers.push({ ...player, rank: prevRankedPlayer.rank });
+                } else {
+                    currentRank = numRankedPlayers;
+                    finalPlayers.push({ ...player, rank: currentRank });
+                }
+            }
+            rankedData[groupName] = finalPlayers;
         }
         
         return rankedData;
@@ -317,11 +338,11 @@ export default function ExternalScoreboard() {
                                                         )}
                                                         <td className="py-0.5 px-1 w-32 align-middle text-center border-r border-gray-800">{player.coursesData[course.id]?.courseName}</td>
                                                         {player.coursesData[course.id]?.holeScores.map((score, i) => <td key={i} className={`py-0.5 px-1 align-middle font-mono font-bold text-xl border-r border-gray-800 ${i % 2 !== 0 ? 'bg-gray-800/50' : ''}`}>{score === null ? '-' : score}</td>)}
-                                                        <td className="py-0.5 px-1 align-middle font-bold text-gray-300 text-xl border-r border-gray-800">{player.hasAnyScore ? player.coursesData[course.id]?.courseTotal : '-'}</td>
+                                                        <td className="py-0.5 px-1 align-middle font-bold text-gray-300 text-xl border-r border-gray-800">{player.hasForfeited ? '기권' : (player.hasAnyScore ? player.coursesData[course.id]?.courseTotal : '-')}</td>
                                                         {courseIndex === 0 && (
                                                             <>
-                                                                <td rowSpan={player.assignedCourses.length || 1} className="py-0.5 px-1 align-middle font-bold text-yellow-400 text-xl border-r border-gray-800">{player.hasAnyScore ? player.totalScore : '-'}</td>
-                                                                <td rowSpan={player.assignedCourses.length || 1} className="py-0.5 px-1 align-middle font-bold text-xl">{player.hasAnyScore ? `${player.rank}위` : ''}</td>
+                                                                <td rowSpan={player.assignedCourses.length || 1} className="py-0.5 px-1 align-middle font-bold text-yellow-400 text-xl border-r border-gray-800">{player.hasForfeited ? '기권' : (player.hasAnyScore ? player.totalScore : '-')}</td>
+                                                                <td rowSpan={player.assignedCourses.length || 1} className="py-0.5 px-1 align-middle font-bold text-xl">{player.rank !== null ? `${player.rank}위` : (player.hasForfeited ? '기권' : '')}</td>
                                                             </>
                                                         )}
                                                     </tr>
@@ -331,8 +352,8 @@ export default function ExternalScoreboard() {
                                                         <td className="py-0.5 px-1 w-32 text-center align-middle font-semibold border-r border-gray-800">{player.name}</td>
                                                         <td className="py-0.5 px-1 w-32 text-center align-middle text-gray-400 border-r border-gray-800">{player.club}</td>
                                                         <td colSpan={11} className="py-0.5 px-1 align-middle text-center text-gray-500 border-r border-gray-800">표시하도록 설정된 코스가 없습니다.</td>
-                                                        <td className="py-0.5 px-1 align-middle font-bold text-yellow-400 text-xl border-r border-gray-800">{player.hasAnyScore ? player.totalScore : '-'}</td>
-                                                        <td className="py-0.5 px-1 align-middle font-bold text-xl">{player.hasAnyScore ? `${player.rank}위` : ''}</td>
+                                                        <td className="py-0.5 px-1 align-middle font-bold text-yellow-400 text-xl border-r border-gray-800">{player.hasForfeited ? '기권' : (player.hasAnyScore ? player.totalScore : '-')}</td>
+                                                        <td className="py-0.5 px-1 align-middle font-bold text-xl">{player.rank !== null ? `${player.rank}위` : (player.hasForfeited ? '기권' : '')}</td>
                                                     </tr>
                                                 )}
                                             </React.Fragment>

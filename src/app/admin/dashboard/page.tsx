@@ -17,8 +17,9 @@ interface ProcessedPlayer {
     affiliation: string;
     group: string;
     totalScore: number;
-    rank: number;
+    rank: number | null;
     hasAnyScore: boolean;
+    hasForfeited: boolean;
     coursesData: {
         [courseId: string]: {
             courseName: string;
@@ -34,6 +35,9 @@ interface ProcessedPlayer {
 
 // Helper function for tie-breaking using back-count method
 const tieBreak = (a: any, b: any, coursesForGroup: any[]) => {
+    if (a.hasForfeited && !b.hasForfeited) return 1;
+    if (!a.hasForfeited && b.hasForfeited) return -1;
+    
     if (!a.hasAnyScore && !b.hasAnyScore) return 0;
     if (!a.hasAnyScore) return 1;
     if (!b.hasAnyScore) return -1;
@@ -113,6 +117,7 @@ export default function AdminDashboard() {
             const courseScoresForTieBreak: { [courseId: string]: number } = {};
             const detailedScoresForTieBreak: { [courseId: string]: { [holeNumber: string]: number } } = {};
             let hasAnyScore = false;
+            let hasForfeited = false;
 
             coursesForPlayer.forEach((course: any) => {
                 const courseId = course.id;
@@ -124,9 +129,13 @@ export default function AdminDashboard() {
                 for (let i = 0; i < 9; i++) {
                     const holeScore = scoresForCourse[(i + 1).toString()];
                     if (holeScore !== undefined && holeScore !== null) {
-                        holeScores[i] = Number(holeScore);
-                        courseTotal += Number(holeScore);
+                        const scoreNum = Number(holeScore);
+                        holeScores[i] = scoreNum;
+                        courseTotal += scoreNum;
                         hasAnyScore = true;
+                        if (scoreNum === 0) {
+                            hasForfeited = true;
+                        }
                     }
                 }
                 
@@ -144,6 +153,7 @@ export default function AdminDashboard() {
                 totalScore,
                 coursesData,
                 hasAnyScore,
+                hasForfeited,
                 total: totalScore,
                 courseScores: courseScoresForTieBreak,
                 detailedScores: detailedScoresForTieBreak,
@@ -166,17 +176,28 @@ export default function AdminDashboard() {
             const coursesForGroup = groupedData[groupName][0]?.assignedCourses || allCoursesList;
             const groupPlayers = groupedData[groupName].sort((a,b) => tieBreak(a, b, coursesForGroup));
             
-            const rankedPlayers: ProcessedPlayer[] = [];
-            groupPlayers.forEach((player, index) => {
-                let rank;
-                if (index > 0 && player.hasAnyScore && groupPlayers[index-1].hasAnyScore && tieBreak(player, groupPlayers[index - 1], coursesForGroup) === 0) {
-                    rank = rankedPlayers[index - 1].rank;
-                } else {
-                    rank = index + 1;
+            const finalPlayers: ProcessedPlayer[] = [];
+            let currentRank = 0;
+            let numRankedPlayers = 0;
+
+            for (const player of groupPlayers) {
+                if (player.hasForfeited || !player.hasAnyScore) {
+                    finalPlayers.push({ ...player, rank: null });
+                    continue;
                 }
-                rankedPlayers.push({ ...player, rank });
-            });
-            rankedData[groupName] = rankedPlayers;
+
+                numRankedPlayers++;
+                
+                const prevRankedPlayer = finalPlayers.slice().reverse().find(p => p.rank !== null);
+                
+                if (prevRankedPlayer && tieBreak(player, prevRankedPlayer, coursesForGroup) === 0) {
+                    finalPlayers.push({ ...player, rank: prevRankedPlayer.rank });
+                } else {
+                    currentRank = numRankedPlayers;
+                    finalPlayers.push({ ...player, rank: currentRank });
+                }
+            }
+            rankedData[groupName] = finalPlayers;
         }
         
         return rankedData;
@@ -250,12 +271,12 @@ export default function AdminDashboard() {
             groupPlayers.forEach(player => {
                 if (player.assignedCourses.length === 0) {
                      sheetData.push([
-                        player.hasAnyScore ? `${player.rank}위` : '',
+                        player.rank !== null ? `${player.rank}위` : (player.hasForfeited ? '기권' : ''),
                         player.jo,
                         player.name,
                         player.affiliation,
                         '배정된 코스 없음', '', '', '', '', '', '', '', '', '', '',
-                        player.hasAnyScore ? player.totalScore : '-'
+                        player.hasForfeited ? '기권' : (player.hasAnyScore ? player.totalScore : '-')
                      ]);
                 } else {
                     player.assignedCourses.forEach((course: any, courseIndex: number) => {
@@ -264,7 +285,7 @@ export default function AdminDashboard() {
 
                         if (courseIndex === 0) {
                             row.push(
-                                player.hasAnyScore ? `${player.rank}위` : '',
+                                player.rank !== null ? `${player.rank}위` : (player.hasForfeited ? '기권' : ''),
                                 player.jo,
                                 player.name,
                                 player.affiliation
@@ -276,11 +297,11 @@ export default function AdminDashboard() {
                         row.push(
                             courseData?.courseName || course.name,
                             ...(courseData?.holeScores.map(s => s === null ? '-' : s) || Array(9).fill('-')),
-                            player.hasAnyScore ? (courseData?.courseTotal || 0) : '-',
+                            player.hasForfeited ? '기권' : (player.hasAnyScore ? (courseData?.courseTotal || 0) : '-'),
                         );
 
                         if (courseIndex === 0) {
-                            row.push(player.hasAnyScore ? player.totalScore : '-');
+                            row.push(player.hasForfeited ? '기권' : (player.hasAnyScore ? player.totalScore : '-'));
                         } else {
                             row.push('');
                         }
@@ -377,7 +398,7 @@ export default function AdminDashboard() {
                                                     <TableRow key={`${player.id}-${course.id}`} className="text-base">
                                                         {courseIndex === 0 && (
                                                             <>
-                                                                <TableCell rowSpan={player.assignedCourses.length || 1} className="text-center align-middle font-bold text-lg px-2 py-1 border-r">{player.hasAnyScore ? `${player.rank}위` : '-'}</TableCell>
+                                                                <TableCell rowSpan={player.assignedCourses.length || 1} className="text-center align-middle font-bold text-lg px-2 py-1 border-r">{player.rank !== null ? `${player.rank}위` : (player.hasForfeited ? '기권' : '-')}</TableCell>
                                                                 <TableCell rowSpan={player.assignedCourses.length || 1} className="text-center align-middle font-medium px-2 py-1 border-r">{player.jo}</TableCell>
                                                                 <TableCell rowSpan={player.assignedCourses.length || 1} className="align-middle font-semibold px-2 py-1 border-r">{player.name}</TableCell>
                                                                 <TableCell rowSpan={player.assignedCourses.length || 1} className="align-middle text-muted-foreground px-2 py-1 border-r">{player.affiliation}</TableCell>
@@ -388,20 +409,20 @@ export default function AdminDashboard() {
                                                         
                                                         {player.coursesData[course.id]?.holeScores.map((score, i) => <TableCell key={i} className="text-center font-mono px-2 py-1 border-r">{score === null ? '-' : score}</TableCell>)}
                                                         
-                                                        <TableCell className="text-center font-bold px-2 py-1 border-r">{player.hasAnyScore ? player.coursesData[course.id]?.courseTotal : '-'}</TableCell>
+                                                        <TableCell className="text-center font-bold px-2 py-1 border-r">{player.hasForfeited ? '기권' : (player.hasAnyScore ? player.coursesData[course.id]?.courseTotal : '-')}</TableCell>
 
                                                         {courseIndex === 0 && (
-                                                            <TableCell rowSpan={player.assignedCourses.length || 1} className="text-center align-middle font-bold text-primary text-lg px-2 py-1">{player.hasAnyScore ? player.totalScore : '-'}</TableCell>
+                                                            <TableCell rowSpan={player.assignedCourses.length || 1} className="text-center align-middle font-bold text-primary text-lg px-2 py-1">{player.hasForfeited ? '기권' : (player.hasAnyScore ? player.totalScore : '-')}</TableCell>
                                                         )}
                                                     </TableRow>
                                                 )) : (
                                                     <TableRow key={`${player.id}-no-course`} className="text-base text-muted-foreground">
-                                                         <TableCell className="text-center align-middle font-bold text-lg px-2 py-1 border-r">{player.hasAnyScore ? `${player.rank}위` : '-'}</TableCell>
+                                                         <TableCell className="text-center align-middle font-bold text-lg px-2 py-1 border-r">{player.rank !== null ? `${player.rank}위` : (player.hasForfeited ? '기권' : '-')}</TableCell>
                                                          <TableCell className="text-center align-middle font-medium px-2 py-1 border-r">{player.jo}</TableCell>
                                                          <TableCell className="align-middle font-semibold px-2 py-1 border-r">{player.name}</TableCell>
                                                          <TableCell className="align-middle px-2 py-1 border-r">{player.affiliation}</TableCell>
                                                          <TableCell colSpan={11} className="text-center px-2 py-1 border-r">이 그룹에 배정된 코스가 없습니다.</TableCell>
-                                                         <TableCell className="text-center align-middle font-bold text-primary text-lg px-2 py-1">{player.hasAnyScore ? player.totalScore : '-'}</TableCell>
+                                                         <TableCell className="text-center align-middle font-bold text-primary text-lg px-2 py-1">{player.hasForfeited ? '기권' : (player.hasAnyScore ? player.totalScore : '-')}</TableCell>
                                                     </TableRow>
                                                 )}
                                             </React.Fragment>
