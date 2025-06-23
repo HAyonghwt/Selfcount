@@ -5,8 +5,8 @@ import { useParams } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Minus, Plus, Save, CheckCircle, Lock, Edit, ChevronDown } from 'lucide-react';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Minus, Plus, Save, Lock, Edit, ChevronDown } from 'lucide-react';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useToast } from '@/hooks/use-toast';
 import { Progress } from '@/components/ui/progress';
 import { db } from '@/lib/firebase';
@@ -103,7 +103,7 @@ export default function RefereePage() {
     useEffect(() => {
         const newScores: { [key: string]: ScoreData } = {};
         currentPlayers.forEach((p: Player) => {
-            if (!scores[p.id] || scores[p.id].status !== 'editing') {
+            if (!scores[p.id]) {
                 newScores[p.id] = { score: 1, status: 'editing' };
             }
         });
@@ -186,7 +186,7 @@ export default function RefereePage() {
     return (
         <div className="bg-slate-50 min-h-screen p-4 flex flex-col font-body">
             <header className="text-center mb-4">
-                <h1 className="text-4xl font-extrabold text-primary break-keep leading-tight">{hole}번홀 점수 기록</h1>
+                <h1 className="text-3xl font-extrabold text-primary break-keep leading-tight">{hole}번홀 점수 기록</h1>
                 <p className="text-muted-foreground text-base">담당 심판용 페이지</p>
             </header>
 
@@ -244,39 +244,39 @@ export default function RefereePage() {
 
                             return (
                             <div key={player.id} className="bg-white rounded-lg shadow p-3">
-                                <div className="flex items-center gap-3 w-full">
-                                    <p className="font-bold text-xl sm:text-2xl truncate w-32 flex-shrink-0">{getPlayerName(player)}</p>
+                                <div className="flex items-center gap-2 w-full">
+                                    <p className="font-bold text-xl truncate w-28 flex-shrink-0">{getPlayerName(player)}</p>
                                     
-                                    <div className="flex-1 flex justify-center items-center gap-2">
-                                        <Button variant="outline" size="icon" className="w-12 h-12 rounded-lg border-2" onClick={() => updateScore(player.id, -1)} disabled={!isEditing}>
-                                            <Minus className="h-8 w-8" />
+                                    <div className="flex-1 flex justify-center items-center gap-1.5">
+                                        <Button variant="outline" size="icon" className="w-10 h-10 rounded-lg border-2" onClick={() => updateScore(player.id, -1)} disabled={!isEditing}>
+                                            <Minus className="h-6 w-6" />
                                         </Button>
-                                        <div className="relative w-20 text-center" onDoubleClick={() => handleScoreDoubleClick(player)}>
-                                            <span className={`text-6xl font-bold tabular-nums ${isSaved ? 'cursor-pointer' : ''}`}>
+                                        <div className="relative w-16 text-center" onDoubleClick={() => handleScoreDoubleClick(player)}>
+                                            <span className={`text-5xl font-bold tabular-nums ${isSaved ? 'cursor-pointer' : ''}`}>
                                                 {scoreData.score}
                                             </span>
                                         </div>
-                                        <Button variant="outline" size="icon" className="w-12 h-12 rounded-lg border-2" onClick={() => updateScore(player.id, 1)} disabled={!isEditing}>
-                                            <Plus className="h-8 w-8" />
+                                        <Button variant="outline" size="icon" className="w-10 h-10 rounded-lg border-2" onClick={() => updateScore(player.id, 1)} disabled={!isEditing}>
+                                            <Plus className="h-6 w-6" />
                                         </Button>
                                     </div>
 
-                                    <div className="w-12 h-12 flex-shrink-0">
+                                    <div className="w-10 h-10 flex-shrink-0">
                                         {isEditing && (
                                             <Button variant="default" size="icon" className="w-full h-full rounded-lg" onClick={() => handleSavePress(player)}>
-                                                <Save className="h-6 w-6" />
+                                                <Save className="h-5 w-5" />
                                             </Button>
                                         )}
                                         {isSaved && (
                                             <div className="flex flex-col items-center justify-center h-full text-center relative" onDoubleClick={() => handleScoreDoubleClick(player)}>
                                                     <Edit className="absolute top-0 right-0 w-3 h-3 text-primary animate-pulse" />
-                                                    <p className="text-[10px] sm:text-xs text-primary font-bold">저장됨</p>
+                                                    <p className="text-[10px] text-primary font-bold">저장됨</p>
                                                     <Progress value={(now % 10000) / 100} className="h-1 mt-1 w-full" />
                                             </div>
                                         )}
                                         {isLocked && (
                                             <div className="flex items-center justify-center h-full bg-muted text-muted-foreground rounded-lg">
-                                                <Lock className="w-6 h-6" />
+                                                <Lock className="w-5 h-5" />
                                             </div>
                                         )}
                                     </div>
@@ -290,17 +290,17 @@ export default function RefereePage() {
             <AlertDialog open={!!confirmingPlayer} onOpenChange={(open) => !open && setConfirmingPlayer(null)}>
                 <AlertDialogContent>
                     <AlertDialogHeader>
-                        <AlertDialogTitle className="text-center text-4xl leading-tight">{confirmingPlayer?.player ? getPlayerName(confirmingPlayer.player) : ''}님</AlertDialogTitle>
+                        <AlertDialogTitle className="text-center text-2xl sm:text-3xl leading-tight">{confirmingPlayer?.player ? getPlayerName(confirmingPlayer.player) : ''}님</AlertDialogTitle>
                          <AlertDialogDescription className="text-center !mt-4">
-                            <span className="font-extrabold text-9xl text-destructive">{confirmingPlayer?.score}</span>
-                            <span className="text-5xl text-foreground ml-2">점</span>
+                            <span className="font-extrabold text-8xl sm:text-9xl text-destructive">{confirmingPlayer?.score}</span>
+                            <span className="text-4xl sm:text-5xl text-foreground ml-2">점</span>
                          </AlertDialogDescription>
-                         <p className="text-center text-2xl text-muted-foreground pt-2">이 점수로 저장하시겠습니까?</p>
+                         <p className="text-center text-lg sm:text-xl text-muted-foreground pt-2">이 점수로 저장하시겠습니까?</p>
                     </AlertDialogHeader>
                     <AlertDialogFooter className="grid grid-cols-2 gap-4 !mt-8">
-                        <AlertDialogCancel className="h-16 text-2xl font-bold">취소</AlertDialogCancel>
-                        <AlertDialogAction onClick={handleConfirmFinalSave} className="h-16 text-2xl font-bold">
-                            <CheckCircle className="mr-2 h-7 w-7"/> 확인
+                        <AlertDialogCancel className="h-14 sm:h-16 text-xl sm:text-2xl font-bold">취소</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleConfirmFinalSave} className="h-14 sm:h-16 text-xl sm:text-2xl font-bold">
+                            확인
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
