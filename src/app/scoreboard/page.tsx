@@ -268,14 +268,14 @@ export default function ExternalScoreboard() {
                                 <table className="w-full text-center border-collapse border-l border-r border-gray-800">
                                     <thead className="text-gray-400 text-sm">
                                         <tr className="border-b-2 border-gray-600">
-                                            <th className="py-1 px-1 w-12 text-center align-middle border-r border-gray-700">조</th>
-                                            <th className="py-1 px-1 w-32 text-center align-middle border-r border-gray-700">선수명(팀명)</th>
-                                            <th className="py-1 px-1 w-32 text-center align-middle border-r border-gray-700">소속</th>
-                                            <th className="py-1 px-1 w-32 text-center align-middle border-r border-gray-700">코스</th>
-                                            <th colSpan={9} className="py-1 px-1 text-center align-middle border-r border-gray-700">HOLE</th>
-                                            <th className="py-1 px-1 w-16 text-center align-middle border-r border-gray-700">합계</th>
-                                            <th className="py-1 px-1 w-16 text-center align-middle border-r border-gray-700">총타수</th>
-                                            <th className="py-1 px-1 w-16 text-center align-middle">순위</th>
+                                            <th className="py-1 px-1 w-12 text-center align-middle font-bold border-r border-gray-700">조</th>
+                                            <th className="py-1 px-1 w-32 text-center align-middle font-bold border-r border-gray-700">선수명(팀명)</th>
+                                            <th className="py-1 px-1 w-32 text-center align-middle font-bold border-r border-gray-700">소속</th>
+                                            <th className="py-1 px-1 w-32 text-center align-middle font-bold border-r border-gray-700">코스</th>
+                                            <th colSpan={9} className="py-1 px-1 text-center align-middle font-bold border-r border-gray-700">HOLE</th>
+                                            <th className="py-1 px-1 w-16 text-center align-middle font-bold border-r border-gray-700">합계</th>
+                                            <th className="py-1 px-1 w-16 text-center align-middle font-bold border-r border-gray-700">총타수</th>
+                                            <th className="py-1 px-1 w-16 text-center align-middle font-bold">순위</th>
                                         </tr>
                                         <tr className="border-b border-gray-600">
                                             <th className="py-1 px-1 align-middle border-r border-gray-700"></th>
