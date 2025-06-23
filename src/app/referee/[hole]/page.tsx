@@ -49,6 +49,27 @@ export default function RefereePage() {
     const [scores, setScores] = useState<{ [key: string]: ScoreData }>({});
     const [confirmingPlayer, setConfirmingPlayer] = useState<{ player: Player; score: number; } | null>(null);
     const [now, setNow] = useState(Date.now());
+    
+    // Data fetching
+    useEffect(() => {
+        const playersRef = ref(db, 'players');
+        const scoresRef = ref(db, 'scores');
+        const tournamentRef = ref(db, 'tournaments/current');
+
+        const unsubPlayers = onValue(playersRef, (snapshot) => setAllPlayers(Object.entries(snapshot.val() || {}).map(([id, player]) => ({ id, ...player as object } as Player))));
+        const unsubScores = onValue(scoresRef, (snapshot) => setAllScores(snapshot.val() || {}));
+        const unsubTournament = onValue(tournamentRef, (snapshot) => {
+            const data = snapshot.val() || {};
+            setCourses(data.courses ? Object.values(data.courses).filter((c: any) => c.isActive) : []);
+            setGroupsData(data.groups || {});
+        });
+
+        return () => {
+            unsubPlayers();
+            unsubScores();
+            unsubTournament();
+        };
+    }, []);
 
     // Derived data
     const availableGroups = useMemo(() => Object.keys(groupsData).sort(), [groupsData]);
@@ -76,26 +97,6 @@ export default function RefereePage() {
     const selectedCourseName = useMemo(() => courses.find(c => c.id.toString() === selectedCourse)?.name || '', [courses, selectedCourse]);
 
 
-    // Data fetching
-    useEffect(() => {
-        const playersRef = ref(db, 'players');
-        const scoresRef = ref(db, 'scores');
-        const tournamentRef = ref(db, 'tournaments/current');
-
-        const unsubPlayers = onValue(playersRef, (snapshot) => setAllPlayers(Object.entries(snapshot.val() || {}).map(([id, player]) => ({ id, ...player as object } as Player))));
-        const unsubScores = onValue(scoresRef, (snapshot) => setAllScores(snapshot.val() || {}));
-        const unsubTournament = onValue(tournamentRef, (snapshot) => {
-            const data = snapshot.val() || {};
-            setCourses(data.courses ? Object.values(data.courses).filter((c: any) => c.isActive) : []);
-            setGroupsData(data.groups || {});
-        });
-
-        return () => {
-            unsubPlayers();
-            unsubScores();
-            unsubTournament();
-        };
-    }, []);
     
     // Timer for "saved" state progress bar. Only runs in scoring view to prevent re-renders.
     useEffect(() => {
@@ -209,15 +210,15 @@ export default function RefereePage() {
             <CardContent className="space-y-4">
                 <Select value={selectedGroup} onValueChange={handleGroupChange}>
                     <SelectTrigger className="h-12 text-base"><SelectValue placeholder="1. 그룹 선택" /></SelectTrigger>
-                    <SelectContent position="item-aligned">{availableGroups.map(g => <SelectItem key={g} value={g} className="text-base">{g}</SelectItem>)}</SelectContent>
+                    <SelectContent>{availableGroups.map(g => <SelectItem key={g} value={g} className="text-base">{g}</SelectItem>)}</SelectContent>
                 </Select>
                 <Select value={selectedCourse} onValueChange={setSelectedCourse} disabled={!selectedGroup || availableCoursesForGroup.length === 0}>
                     <SelectTrigger className="h-12 text-base"><SelectValue placeholder={!selectedGroup ? "그룹 먼저 선택" : (availableCoursesForGroup.length === 0 ? "배정된 코스 없음" : "2. 코스 선택")} /></SelectTrigger>
-                    <SelectContent position="item-aligned">{availableCoursesForGroup.map(c => <SelectItem key={c.id} value={c.id.toString()} className="text-base">{c.name}</SelectItem>)}</SelectContent>
+                    <SelectContent>{availableCoursesForGroup.map(c => <SelectItem key={c.id} value={c.id.toString()} className="text-base">{c.name}</SelectItem>)}</SelectContent>
                 </Select>
                 <Select value={selectedJo} onValueChange={setSelectedJo} disabled={!selectedGroup || availableJos.length === 0}>
                     <SelectTrigger className="h-12 text-base"><SelectValue placeholder={!selectedGroup ? "그룹 먼저 선택" : (availableJos.length === 0 ? "배정된 선수 없음" : "3. 조 선택")} /></SelectTrigger>
-                    <SelectContent position="item-aligned">{availableJos.map(j => <SelectItem key={j} value={j.toString()} className="text-base">{j}조</SelectItem>)}</SelectContent>
+                    <SelectContent>{availableJos.map(j => <SelectItem key={j} value={j.toString()} className="text-base">{j}조</SelectItem>)}</SelectContent>
                 </Select>
             </CardContent>
             <CardFooter>
