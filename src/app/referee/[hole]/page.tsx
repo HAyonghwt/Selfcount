@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Minus, Plus, Save, Lock, Edit } from 'lucide-react';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useToast } from '@/hooks/use-toast';
 import { Progress } from '@/components/ui/progress';
 import { db } from '@/lib/firebase';
@@ -223,7 +223,7 @@ export default function RefereePage() {
                     <Card className="mb-4">
                         <CardHeader className="p-3">
                             <div className="flex flex-col items-center gap-2">
-                                <h2 className="text-base sm:text-lg font-bold text-center break-keep">
+                                <h2 className="text-xl sm:text-2xl font-bold text-center break-keep">
                                     {selectedGroup} / {selectedCourseName} - {selectedJo}조
                                 </h2>
                                 <Button variant="outline" size="sm" onClick={handleResetSelection}>
@@ -234,7 +234,7 @@ export default function RefereePage() {
                         </CardHeader>
                     </Card>
 
-                    <div className="flex-1 space-y-2">
+                    <div className="flex-1 space-y-4">
                         {currentPlayers.map(player => {
                             const scoreData = scores[player.id];
                             if (!scoreData) return null;
@@ -244,16 +244,16 @@ export default function RefereePage() {
                             const isLocked = scoreData.status === 'locked';
 
                             return (
-                                <div key={player.id} className="bg-white rounded-lg shadow p-1">
-                                    <div className="flex items-center justify-between gap-0.5 w-full">
-                                        <div className="flex items-center gap-0.5">
+                                <div key={player.id} className="bg-white rounded-lg shadow p-2">
+                                    <div className="flex items-center justify-between gap-1 w-full">
+                                        <div className="flex items-center gap-2">
                                             <p className="font-bold text-lg truncate w-20 flex-shrink-0">{getPlayerName(player)}</p>
                                             
-                                            <div className="flex items-center gap-0.5">
+                                            <div className="flex items-center gap-1">
                                                 <Button variant="outline" size="icon" className="w-10 h-10 rounded-lg border-2" onClick={() => updateScore(player.id, -1)} disabled={!isEditing}>
                                                     <Minus className="h-5 w-5" />
                                                 </Button>
-                                                <div className="relative w-8 text-center" onDoubleClick={() => handleScoreDoubleClick(player)}>
+                                                <div className="relative w-10 text-center" onDoubleClick={() => handleScoreDoubleClick(player)}>
                                                     <span className={`text-3xl font-bold tabular-nums ${isSaved ? 'cursor-pointer' : ''}`}>
                                                         {scoreData.score}
                                                     </span>
@@ -272,14 +272,14 @@ export default function RefereePage() {
                                             )}
                                             {isSaved && (
                                                 <div className="flex flex-col items-center justify-center h-full w-full text-center relative border border-dashed border-primary/50 rounded-lg cursor-pointer" onDoubleClick={() => handleScoreDoubleClick(player)}>
-                                                        <Edit className="absolute top-0.5 right-0.5 w-2.5 h-2.5 text-primary animate-pulse" />
-                                                        <p className="text-[9px] text-primary font-bold leading-tight">수정가능</p>
+                                                        <Edit className="absolute top-0.5 right-0.5 w-2 h-2 text-primary animate-pulse" />
+                                                        <p className="text-[8px] text-primary font-bold leading-tight">수정가능</p>
                                                         <Progress value={(now % 10000) / 100} className="h-0.5 mt-0.5 w-10/12 mx-auto" />
                                                 </div>
                                             )}
                                             {isLocked && (
                                                 <div className="flex items-center justify-center h-full w-full bg-muted text-muted-foreground rounded-lg">
-                                                    <Lock className="w-5 h-5" />
+                                                    <Lock className="w-4 h-4" />
                                                 </div>
                                             )}
                                         </div>
