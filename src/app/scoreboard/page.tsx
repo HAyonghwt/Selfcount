@@ -1,3 +1,4 @@
+
 "use client"
 import React, { useEffect, useState, useMemo } from 'react';
 import { db } from '@/lib/firebase';
@@ -173,27 +174,48 @@ export default function ExternalScoreboard() {
         return rankedData;
     }, [players, scores, tournament, groupsData, activeCourses]);
     
-    const progress = useMemo(() => {
-        if (Object.keys(scores).length === 0 || Object.keys(players).length === 0) return 0;
-        
-        let totalPossibleScores = 0;
-        let totalScoresEntered = 0;
+    const groupProgress = useMemo(() => {
+        const progressByGroup: { [key: string]: number } = {};
 
-        Object.values(processedDataByGroup).forEach((groupPlayers: any) => {
-            if (groupPlayers.length > 0) {
-                const numCourses = groupPlayers[0].assignedCourses.length;
-                totalPossibleScores += groupPlayers.length * numCourses * 9;
+        for (const groupName in processedDataByGroup) {
+            const groupPlayers = processedDataByGroup[groupName];
+
+            if (!groupPlayers || groupPlayers.length === 0) {
+                progressByGroup[groupName] = 0;
+                continue;
             }
-        });
-        
-        if (totalPossibleScores === 0) return 0;
 
-        totalScoresEntered = Object.values(scores).reduce((acc: number, courseScores: any) => {
-           return acc + Object.values(courseScores).reduce((cAcc: number, holeScores: any) => cAcc + Object.keys(holeScores).length, 0);
-        }, 0);
+            const coursesForGroup = groupPlayers[0]?.assignedCourses;
+            if (!coursesForGroup || coursesForGroup.length === 0) {
+                progressByGroup[groupName] = 0;
+                continue;
+            }
+            
+            const totalPossibleScoresInGroup = groupPlayers.length * coursesForGroup.length * 9;
 
-        return Math.round((totalScoresEntered / totalPossibleScores) * 100);
-    }, [scores, players, processedDataByGroup]);
+            if (totalPossibleScoresInGroup === 0) {
+                progressByGroup[groupName] = 0;
+                continue;
+            }
+            
+            let totalScoresEnteredInGroup = 0;
+            groupPlayers.forEach((player: any) => {
+                 if (scores[player.id]) {
+                    const assignedCourseIds = coursesForGroup.map((c: any) => c.id.toString());
+                    for (const courseId in scores[player.id]) {
+                        if (assignedCourseIds.includes(courseId)) {
+                             totalScoresEnteredInGroup += Object.keys(scores[player.id][courseId]).length;
+                        }
+                    }
+                 }
+            });
+            
+            const progress = Math.round((totalScoresEnteredInGroup / totalPossibleScoresInGroup) * 100);
+            progressByGroup[groupName] = isNaN(progress) ? 0 : progress;
+        }
+
+        return progressByGroup;
+    }, [processedDataByGroup, scores]);
 
 
     if (loading) {
@@ -230,7 +252,7 @@ export default function ExternalScoreboard() {
                             <h1 className="text-2xl md:text-3xl font-bold text-yellow-300">
                                 {tournament.name || '파크골프 토너먼트'} ({groupName})
                             </h1>
-                            <div className="text-xl md:text-2xl font-bold text-green-400">{progress}% 진행</div>
+                            <div className="text-xl md:text-2xl font-bold text-green-400">{groupProgress[groupName]}% 진행</div>
                         </header>
                         <div className="overflow-x-auto">
                             <table className="w-full text-center border-collapse">
@@ -298,3 +320,5 @@ export default function ExternalScoreboard() {
         </div>
     );
 }
+
+    
