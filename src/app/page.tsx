@@ -122,6 +122,13 @@ export default function LoginPage() {
     <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md shadow-2xl">
         <CardHeader className="text-center">
+          <Button variant="secondary" className="w-full h-12 text-base font-bold mb-6" asChild>
+              <Link href="/scoreboard" target="_blank" rel="noopener noreferrer">
+                  <Tv className="mr-2 h-5 w-5" />
+                  실시간 전광판
+              </Link>
+          </Button>
+
           <div className="mx-auto w-fit mb-4">
             <Image 
                 src="/logo.png"
@@ -135,23 +142,10 @@ export default function LoginPage() {
             {loading ? <Skeleton className="h-9 w-48 mx-auto" /> : (config?.appName || '파크골프대회')}
           </CardTitle>
           <CardDescription className="text-muted-foreground pt-2">
-            {loading ? ' ' : `실시간 점수 확인 또는 관리자/심판으로 로그인 하세요.`}
+            {loading ? ' ' : `관리자/심판으로 로그인 하세요.`}
           </CardDescription>
         </CardHeader>
         <CardContent className="p-6 pt-2">
-           <Button variant="secondary" className="w-full h-12 text-base font-bold" asChild>
-              <Link href="/scoreboard" target="_blank" rel="noopener noreferrer">
-                  <Tv className="mr-2 h-5 w-5" />
-                  실시간 전광판
-              </Link>
-          </Button>
-
-          <div className="relative flex w-full items-center my-6">
-              <div className="flex-grow border-t border-muted"></div>
-              <span className="flex-shrink mx-4 text-xs uppercase text-muted-foreground">로그인</span>
-              <div className="flex-grow border-t border-muted"></div>
-          </div>
-
           <form onSubmit={handleLogin} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email">이메일</Label>
