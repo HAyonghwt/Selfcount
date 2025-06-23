@@ -42,7 +42,16 @@ export default function TournamentManagementPage() {
       const data = snapshot.val();
       if (data) {
         setTournamentName(data.name || '새로운 대회');
-        setCourses(data.courses ? Object.values(data.courses) : []);
+        if (data.courses) {
+            const loadedCourses = Object.values(data.courses).map((course: any) => ({
+                ...course,
+                pars: course.pars || defaultPars,
+                isActive: course.isActive !== false, // Default to true if undefined or true
+            }));
+            setCourses(loadedCourses);
+        } else {
+            setCourses([]);
+        }
       } else {
         setTournamentName('제1회 전국 파크골프 대회');
         setCourses(initialCourses);
