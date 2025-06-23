@@ -303,14 +303,14 @@ export default function RefereePage() {
             {view === 'selection' ? renderSelectionScreen() : renderScoringScreen()}
             
             <AlertDialog open={!!confirmingPlayer} onOpenChange={(open) => !open && setConfirmingPlayer(null)}>
-                <AlertDialogContent>
+                <AlertDialogContent className="bg-card border-primary border-2">
                     <AlertDialogHeader>
-                        <AlertDialogTitle className="text-center text-2xl sm:text-3xl leading-tight">{confirmingPlayer?.player ? getPlayerName(confirmingPlayer.player) : ''}님</AlertDialogTitle>
+                        <AlertDialogTitle className="text-primary text-center text-2xl sm:text-3xl leading-tight">{confirmingPlayer?.player ? getPlayerName(confirmingPlayer.player) : ''}님</AlertDialogTitle>
                          <AlertDialogDescription className="text-center !mt-4">
-                            <span className="font-extrabold text-8xl sm:text-9xl text-foreground">{confirmingPlayer?.score}</span>
-                            <span className="text-4xl sm:text-5xl text-foreground ml-2">점</span>
+                            <span className="font-extrabold text-8xl sm:text-9xl text-primary">{confirmingPlayer?.score}</span>
+                            <span className="text-4xl sm:text-5xl text-primary ml-2">점</span>
                          </AlertDialogDescription>
-                         <p className="text-center text-lg sm:text-xl text-muted-foreground pt-2">이 점수로 저장하시겠습니까?</p>
+                         <p className="text-center text-lg sm:text-xl text-primary/80 pt-2">이 점수로 저장하시겠습니까?</p>
                     </AlertDialogHeader>
                     <AlertDialogFooter className="grid grid-cols-2 gap-4 !mt-8">
                         <AlertDialogCancel onClick={() => setConfirmingPlayer(null)} className="h-14 sm:h-16 text-xl sm:text-2xl font-bold">취소</AlertDialogCancel>
