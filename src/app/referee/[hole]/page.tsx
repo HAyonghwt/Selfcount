@@ -133,29 +133,17 @@ export default function RefereePage() {
     // ---- Timers and Side Effects for UI ----
     
     useEffect(() => {
-        if (!selectedJo || currentPlayers.length === 0) {
-            setScores({});
-            return;
-        }
-
         const newScoresState: { [key: string]: ScoreData } = {};
         currentPlayers.forEach((player) => {
             const existingScore = allScores[player.id]?.[selectedCourse]?.[hole];
-            
-            if (existingScore !== undefined && existingScore !== null) {
-                newScoresState[player.id] = { score: Number(existingScore), status: 'locked' };
-            } else {
-                // The previous logic for initializing scores was unstable.
-                // It now resets scores for the new group, using Par 3 as a default
-                // if no score has been previously recorded.
-                newScoresState[player.id] = { score: 3, status: 'editing' };
-            }
+            newScoresState[player.id] = {
+                score: scores[player.id]?.score || existingScore || 3, // Keep local score if it exists
+                status: existingScore !== undefined ? 'locked' : (scores[player.id]?.status || 'editing'),
+            };
         });
-
         setScores(newScoresState);
-        
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [currentPlayers, selectedJo]);
+    }, [allPlayers, allScores, selectedCourse, selectedJo, hole]);
 
     useEffect(() => {
         const timers: NodeJS.Timeout[] = [];
@@ -194,20 +182,12 @@ export default function RefereePage() {
     };
 
     const updateScore = (id: string, delta: number) => {
-        setScores(prev => {
-            const currentScoreData = prev[id];
-            // Only allow updates if the score is in 'editing' mode.
-            if (!currentScoreData || currentScoreData.status !== 'editing') {
-                return prev;
-            }
-            
-            const newScore = Math.max(1, currentScoreData.score + delta);
-            
-            return {
+        if (scores[id]?.status === 'editing') {
+            setScores(prev => ({
                 ...prev,
-                [id]: { ...currentScoreData, score: newScore }
-            };
-        });
+                [id]: { ...prev[id], score: Math.max(1, prev[id].score + delta) }
+            }));
+        }
     };
 
     const handleSavePress = (player: Player) => {
@@ -228,18 +208,13 @@ export default function RefereePage() {
     };
 
     const handleScoreDoubleClick = (player: Player) => {
-        setScores(prev => {
-            const currentScoreData = prev[player.id];
-            // Only allow unlocking if the score is 'saved' (not 'locked' or 'editing').
-            if (!currentScoreData || currentScoreData.status !== 'saved') {
-                return prev;
-            }
-            toast({ title: "수정 모드", description: `${getPlayerName(player)} 선수의 점수를 다시 수정합니다.` });
-            return {
+        if (scores[player.id]?.status === 'saved') {
+            setScores(prev => ({
                 ...prev,
-                [player.id]: { ...currentScoreData, status: 'editing' }
-            };
-        });
+                [player.id]: { ...prev[player.id], status: 'editing' }
+            }));
+            toast({ title: "수정 모드", description: `${getPlayerName(player)} 선수의 점수를 다시 수정합니다.` });
+        }
     }
 
     const getPlayerName = (player: Player) => player.type === 'team' ? `${player.p1_name}/${player.p2_name}` : player.name;
