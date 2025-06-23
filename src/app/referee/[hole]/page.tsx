@@ -6,7 +6,7 @@ import { useParams } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Minus, Plus, Save, Lock, Edit, CheckCircle2, Trophy, Users } from 'lucide-react';
+import { Minus, Plus, Save, Lock, Edit, CheckCircle2, Users } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useToast } from '@/hooks/use-toast';
 import { Progress } from '@/components/ui/progress';
@@ -75,7 +75,7 @@ export default function RefereePage() {
         };
     }, []);
     
-    // ---- Memoized selectors ----
+    // ---- Memoized selectors (SIMPLIFIED) ----
     const availableGroups = useMemo(() => Object.keys(groupsData).sort(), [groupsData]);
 
     const availableCoursesForGroup = useMemo(() => {
@@ -86,6 +86,7 @@ export default function RefereePage() {
         return courses.filter(c => assignedCourseIds.includes(c.id.toString()));
     }, [selectedGroup, groupsData, courses]);
 
+    // This is the key simplification. We no longer filter out completed jos.
     const availableJos = useMemo(() => {
         if (!selectedGroup) return [];
         const groupPlayers = allPlayers.filter(p => p.group === selectedGroup);
@@ -102,6 +103,14 @@ export default function RefereePage() {
 
     // ---- Timers and Side Effects for UI ----
     
+    // Reset the "jo" selection and scores when group/course changes to prevent stale data.
+    useEffect(() => {
+        if (groupLocked) {
+          setSelectedJo('');
+          setScores({});
+        }
+    }, [selectedGroup, selectedCourse, groupLocked]);
+
     useEffect(() => {
         const newScoresState: { [key: string]: ScoreData } = {};
         currentPlayers.forEach((player) => {
@@ -141,8 +150,6 @@ export default function RefereePage() {
         setGroupLocked(false);
         setSelectedGroup('');
         setSelectedCourse('');
-        setSelectedJo('');
-        setScores({});
     };
 
     const handleResetJo = () => {
@@ -189,7 +196,7 @@ export default function RefereePage() {
 
     const getPlayerName = (player: Player) => player.type === 'team' ? `${player.p1_name}/${player.p2_name}` : player.name;
     
-    // ---- Render components ----
+    // ---- Render components (SIMPLIFIED LOGIC) ----
     const renderInitialSelection = () => (
         <Card className="flex-1 flex flex-col">
             <CardHeader>
@@ -219,12 +226,12 @@ export default function RefereePage() {
         <Card className="flex-1 flex flex-col">
             <CardHeader>
                 <CardTitle className="text-xl">다음 조를 선택하세요</CardTitle>
-                {availableJos && availableJos.length > 0 && (
+                {availableJos.length > 0 && (
                     <CardDescription>{availableJos.length}개 조가 있습니다.</CardDescription>
                 )}
             </CardHeader>
             <CardContent className="flex-1 flex flex-col justify-center items-center">
-                {availableJos && availableJos.length > 0 ? (
+                {availableJos.length > 0 ? (
                      <Select value={selectedJo} onValueChange={setSelectedJo}>
                         <SelectTrigger className="h-14 text-lg w-full max-w-xs"><SelectValue placeholder="조 선택" /></SelectTrigger>
                         <SelectContent>
@@ -298,7 +305,7 @@ export default function RefereePage() {
              <Button variant="secondary" className="w-full" onClick={handleResetJo}>다른 조 기록</Button>
         </div>
     );
-
+    
     return (
         <div className="bg-slate-50 min-h-screen p-2 sm:p-4 flex flex-col font-body">
             <header className="text-center mb-4">
@@ -325,7 +332,7 @@ export default function RefereePage() {
                     {!selectedJo ? renderJoSelection() : renderScoring()}
                 </>
             )}
-
+            
             <AlertDialog open={!!confirmingPlayer} onOpenChange={(open) => !open && setConfirmingPlayer(null)}>
                 <AlertDialogContent>
                     <AlertDialogHeader>
