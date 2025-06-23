@@ -258,7 +258,7 @@ export default function ExternalScoreboard() {
 
                     return (
                         <div key={groupName} className="mb-4">
-                            <header className="flex justify-between items-baseline pb-1 border-b-2 border-gray-700">
+                            <header className="flex justify-between items-baseline border-b-2 border-gray-700">
                                 <h1 className="text-xl md:text-2xl font-bold text-yellow-300">
                                     {tournament.name || '파크골프 토너먼트'} ({groupName})
                                 </h1>
@@ -306,7 +306,7 @@ export default function ExternalScoreboard() {
                                                         {courseIndex === 0 && (
                                                             <>
                                                                 <td rowSpan={player.assignedCourses.length || 1} className="py-0.5 px-1 align-middle font-bold text-yellow-400 text-2xl border-r border-gray-800">{player.hasAnyScore ? player.totalScore : '-'}</td>
-                                                                <td rowSpan={player.assignedCourses.length || 1} className="py-0.5 px-1 align-middle font-bold text-2xl">{player.hasAnyScore ? `${player.rank}위` : '-'}</td>
+                                                                <td rowSpan={player.assignedCourses.length || 1} className="py-0.5 px-1 align-middle font-bold text-2xl">{player.hasAnyScore ? player.rank : '-'}</td>
                                                             </>
                                                         )}
                                                     </tr>
@@ -316,7 +316,7 @@ export default function ExternalScoreboard() {
                                                         <td className="py-0.5 px-1 align-middle text-center font-semibold border-r border-gray-800">{player.name}</td>
                                                         <td className="py-0.5 px-1 align-middle text-center text-gray-400 border-r border-gray-800">{player.club}</td>
                                                         <td colSpan={12} className="py-0.5 px-1 align-middle text-center text-gray-500 border-r border-gray-800">배정된 코스가 없습니다.</td>
-                                                        <td className="py-0.5 px-1 align-middle font-bold text-2xl">{player.hasAnyScore ? `${player.rank}위` : '-'}</td>
+                                                        <td className="py-0.5 px-1 align-middle font-bold text-2xl">{player.hasAnyScore ? player.rank : '-'}</td>
                                                     </tr>
                                                 )}
                                             </React.Fragment>
