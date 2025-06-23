@@ -389,15 +389,15 @@ export default function RefereePage() {
                             {confirmingPlayer?.player ? getPlayerName(confirmingPlayer.player) : ''}
                         </AlertDialogTitle>
                         <AlertDialogDescription className="text-center !mt-4 space-y-2">
-                             <p className="text-base text-muted-foreground">점수 확인</p>
-                             <div>
+                             <span className="text-base text-muted-foreground block">점수 확인</span>
+                             <span className="block">
                                  <span className="font-extrabold text-8xl sm:text-9xl text-primary">
                                     {confirmingPlayer?.score}
                                 </span>
                                 <span className="text-4xl sm:text-5xl text-foreground ml-2">
                                     점
                                 </span>
-                             </div>
+                             </span>
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter className="grid grid-cols-2 gap-4 !mt-8">
