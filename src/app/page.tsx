@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect } from 'react';
@@ -6,8 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Tv, LogIn } from 'lucide-react';
-import Link from 'next/link';
+import { LogIn } from 'lucide-react';
 import { auth, db } from '@/lib/firebase';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { ref, get } from 'firebase/database';
@@ -98,7 +98,7 @@ export default function LoginPage() {
               <ellipse cx="50" cy="90" rx="7" ry="2.5" fill="#3f3f46"/>
             </svg>
           </div>
-          <CardTitle className="text-3xl font-bold font-headline">ParkScore</CardTitle>
+          <CardTitle className="text-3xl font-bold font-headline">파크골프대회</CardTitle>
           <CardDescription className="text-muted-foreground pt-2">
             파크골프 대회의 관리자 또는 심판으로 로그인 하세요.
           </CardDescription>
@@ -138,7 +138,7 @@ export default function LoginPage() {
         </CardContent>
       </Card>
       <footer className="mt-8 text-center text-sm text-muted-foreground">
-        <p>&copy; {year} ParkScore. All rights reserved.</p>
+        <p>&copy; {year} 파크골프대회. All rights reserved.</p>
       </footer>
     </div>
   );

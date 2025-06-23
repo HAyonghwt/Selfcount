@@ -79,7 +79,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 </svg>
               </div>
               <div className="group-data-[collapsible=icon]:hidden transition-opacity duration-200">
-                <h1 className="text-xl font-bold font-headline">파크골프대회</h1>
+                <h1 className="text-xl font-bold font-headline">용인파크골프대회</h1>
                 <p className="text-xs text-muted-foreground">관리자 패널</p>
               </div>
             </div>
