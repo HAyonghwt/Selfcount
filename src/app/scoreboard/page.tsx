@@ -27,6 +27,10 @@ interface ProcessedPlayer {
 }
 
 const tieBreak = (a: any, b: any, coursesForGroup: any[]) => {
+    if (!a.hasAnyScore && !b.hasAnyScore) return 0;
+    if (!a.hasAnyScore) return 1;
+    if (!b.hasAnyScore) return -1;
+    
     if (a.total !== b.total) {
         return a.total - b.total;
     }
@@ -101,11 +105,13 @@ export default function ExternalScoreboard() {
             const coursesForPlayer = activeCourses.filter(c => assignedCourseIds.includes(c.id.toString()));
 
             const playerScoresData = scores[playerId] || {};
+            
+            const hasAnyScore = Object.values(playerScoresData).some((courseScores: any) => Object.keys(courseScores).length > 0);
+
             let totalScore = 0;
             const coursesData: any = {};
             const courseScoresForTieBreak: { [courseId: string]: number } = {};
             const detailedScoresForTieBreak: { [courseId: string]: { [holeNumber: string]: number } } = {};
-            let hasAnyScore = false;
 
             coursesForPlayer.forEach((course: any) => {
                 const courseId = course.id;
@@ -119,7 +125,6 @@ export default function ExternalScoreboard() {
                     if (holeScore !== undefined && holeScore !== null) {
                         holeScores[i] = Number(holeScore);
                         courseTotal += Number(holeScore);
-                        hasAnyScore = true;
                     }
                 }
                 
