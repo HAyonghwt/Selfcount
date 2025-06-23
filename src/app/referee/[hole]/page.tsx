@@ -137,36 +137,79 @@ export default function RefereePage() {
     
     // When view changes to 'scoring', initialize or intelligently update the scores state
     useEffect(() => {
-        if (view === 'scoring') {
-            setScores(prevScores => {
-                const newScoresState = { ...prevScores };
-                let hasChanges = false;
+        if (view === 'scoring' && selectedGroup && selectedCourse && selectedJo) {
+            let restoredScores: { [key: string]: ScoreData } = {};
+            try {
+                // Try to load scores from localStorage for the current context
+                const storageKey = `parkscore-referee-scores-${selectedGroup}-${selectedCourse}-${selectedJo}`;
+                const savedScoresJSON = localStorage.getItem(storageKey);
+                if (savedScoresJSON) {
+                    restoredScores = JSON.parse(savedScoresJSON);
+                }
+            } catch (e) {
+                console.error("Could not restore scores from localStorage:", e);
+            }
+            
+            const finalScoresState: { [key: string]: ScoreData } = {};
+            currentPlayers.forEach((player) => {
+                const existingScoreFromDb = allScores[player.id]?.[selectedCourse]?.[hole];
+                const restoredPlayerData = restoredScores[player.id];
 
-                currentPlayers.forEach((player) => {
-                    const existingScoreFromDb = allScores[player.id]?.[selectedCourse]?.[hole];
-                    const localPlayerData = newScoresState[player.id];
-
-                    // This is the key logic: Only update from DB if the local state is not currently being edited or in the 'saved' grace period.
-                    if (!localPlayerData || localPlayerData.status === 'locked') {
-                        const dbScore = existingScoreFromDb === undefined ? 1 : existingScoreFromDb;
-                        const dbStatus = existingScoreFromDb === undefined ? 'editing' : 'locked';
-
-                        // Initialize if not present, or update if DB has changed
-                        if (!localPlayerData || localPlayerData.score !== dbScore || localPlayerData.status !== dbStatus) {
-                            newScoresState[player.id] = {
-                                ...localPlayerData,
-                                score: dbScore,
-                                status: dbStatus,
-                            };
-                            hasChanges = true;
-                        }
-                    }
-                });
-
-                return hasChanges ? newScoresState : prevScores;
+                if (existingScoreFromDb !== undefined) {
+                    // A score is already in the database, so it's locked. This has the highest priority.
+                    finalScoresState[player.id] = {
+                        score: existingScoreFromDb,
+                        status: 'locked',
+                    };
+                } else if (restoredPlayerData) {
+                    // No score in DB, but we have a restored session from localStorage. Use it.
+                    // If it was 'locked' in localStorage but not in DB (e.g. score was deleted by admin), revert to 'editing'.
+                    finalScoresState[player.id] = {
+                        ...restoredPlayerData,
+                        status: restoredPlayerData.status === 'locked' ? 'editing' : restoredPlayerData.status
+                    };
+                } else {
+                    // Nothing in DB and nothing in localStorage. Initialize to default 'editing' state.
+                    finalScoresState[player.id] = {
+                        score: 1,
+                        status: 'editing',
+                    };
+                }
             });
+
+            setScores(finalScoresState);
         }
-    }, [view, currentPlayers, allScores, selectedCourse, hole]);
+        // This effect should only run when entering the scoring view or if the context (players, course, etc.) changes.
+    }, [view, currentPlayers, allScores, selectedCourse, selectedJo, hole, selectedGroup]);
+
+
+    // Persist scores to localStorage on change to prevent data loss on refresh
+    useEffect(() => {
+        if (view === 'scoring' && Object.keys(scores).length > 0 && selectedGroup && selectedCourse && selectedJo) {
+            try {
+                const storageKey = `parkscore-referee-scores-${selectedGroup}-${selectedCourse}-${selectedJo}`;
+                localStorage.setItem(storageKey, JSON.stringify(scores));
+            } catch (e) {
+                console.error("Failed to save scores to localStorage", e);
+            }
+        }
+    }, [scores, view, selectedGroup, selectedCourse, selectedJo]);
+
+
+    // Cleanup localStorage when all players in the Jo are locked
+    useEffect(() => {
+        if (view === 'scoring' && currentPlayers.length > 0) {
+            const allLocked = currentPlayers.every(p => scores[p.id]?.status === 'locked');
+            if (allLocked) {
+                try {
+                    const storageKey = `parkscore-referee-scores-${selectedGroup}-${selectedCourse}-${selectedJo}`;
+                    localStorage.removeItem(storageKey);
+                } catch (e) {
+                    console.error("Failed to clear localStorage after all scores locked.", e);
+                }
+            }
+        }
+    }, [scores, view, currentPlayers, selectedGroup, selectedCourse, selectedJo]);
 
     // Timer to lock scores after saving.
     useEffect(() => {
@@ -196,6 +239,16 @@ export default function RefereePage() {
     };
     
     const handleBackToSelection = () => {
+        // Clear the localStorage for the completed/exited Jo to prevent stale data
+        try {
+            if(selectedGroup && selectedCourse && selectedJo) {
+                const storageKey = `parkscore-referee-scores-${selectedGroup}-${selectedCourse}-${selectedJo}`;
+                localStorage.removeItem(storageKey);
+            }
+        } catch(e) {
+            console.error("Failed to clear localStorage for Jo", e);
+        }
+
         setView('selection');
         setScores({});
     };
