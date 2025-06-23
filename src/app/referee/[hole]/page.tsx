@@ -77,6 +77,31 @@ export default function RefereePage() {
         };
     }, []);
 
+    // Derived data
+    const availableGroups = useMemo(() => Object.keys(groupsData).sort(), [groupsData]);
+
+    const availableCoursesForGroup = useMemo(() => {
+        if (!selectedGroup) return [];
+        const group = groupsData[selectedGroup];
+        if (!group || !group.courses) return [];
+        const assignedCourseIds = Object.keys(group.courses).filter(id => group.courses[id]);
+        return courses.filter(c => assignedCourseIds.includes(c.id.toString()));
+    }, [selectedGroup, groupsData, courses]);
+
+    const availableJos = useMemo(() => {
+        if (!selectedGroup) return [];
+        const groupPlayers = allPlayers.filter(p => p.group === selectedGroup);
+        if (groupPlayers.length === 0) return [];
+        return [...new Set(groupPlayers.map(p => p.jo))].sort((a, b) => a - b);
+    }, [allPlayers, selectedGroup]);
+
+    const currentPlayers = useMemo(() => {
+        if (!selectedJo) return [];
+        return allPlayers.filter(p => p.group === selectedGroup && p.jo.toString() === selectedJo);
+    }, [allPlayers, selectedGroup, selectedJo]);
+    
+    const selectedCourseName = useMemo(() => courses.find(c => c.id.toString() === selectedCourse)?.name || '', [courses, selectedCourse]);
+
     // When view changes to 'scoring', initialize the scores state
     useEffect(() => {
         if (view === 'scoring') {
@@ -106,30 +131,6 @@ export default function RefereePage() {
         return () => timers.forEach(clearTimeout);
     }, [scores]);
 
-    // Derived data
-    const availableGroups = useMemo(() => Object.keys(groupsData).sort(), [groupsData]);
-
-    const availableCoursesForGroup = useMemo(() => {
-        if (!selectedGroup) return [];
-        const group = groupsData[selectedGroup];
-        if (!group || !group.courses) return [];
-        const assignedCourseIds = Object.keys(group.courses).filter(id => group.courses[id]);
-        return courses.filter(c => assignedCourseIds.includes(c.id.toString()));
-    }, [selectedGroup, groupsData, courses]);
-
-    const availableJos = useMemo(() => {
-        if (!selectedGroup) return [];
-        const groupPlayers = allPlayers.filter(p => p.group === selectedGroup);
-        if (groupPlayers.length === 0) return [];
-        return [...new Set(groupPlayers.map(p => p.jo))].sort((a, b) => a - b);
-    }, [allPlayers, selectedGroup]);
-
-    const currentPlayers = useMemo(() => {
-        if (!selectedJo) return [];
-        return allPlayers.filter(p => p.group === selectedGroup && p.jo.toString() === selectedJo);
-    }, [allPlayers, selectedGroup, selectedJo]);
-    
-    const selectedCourseName = useMemo(() => courses.find(c => c.id.toString() === selectedCourse)?.name || '', [courses, selectedCourse]);
 
     // ---- Handlers ----
     const handleGroupChange = (group: string) => {
