@@ -11,7 +11,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { useToast } from '@/hooks/use-toast';
 import { Progress } from '@/components/ui/progress';
 import { db } from '@/lib/firebase';
-import { ref, onValue, update } from 'firebase/database';
+import { ref, onValue, set } from 'firebase/database';
 
 interface Player {
     id: string;
@@ -100,36 +100,6 @@ export default function RefereePage() {
     
     const selectedCourseName = useMemo(() => courses.find(c => c.id.toString() === selectedCourse)?.name || '', [courses, selectedCourse]);
 
-    const completedJos = useMemo(() => {
-        if (!groupLocked || !Object.keys(allScores).length) return new Set();
-
-        const groupPlayers = allPlayers.filter(p => p.group === selectedGroup);
-        const joStatus = new Map<number, { total: number, completed: number }>();
-
-        groupPlayers.forEach(p => {
-            if (!joStatus.has(p.jo)) joStatus.set(p.jo, { total: 0, completed: 0 });
-            const status = joStatus.get(p.jo)!;
-            status.total++;
-            if (allScores[p.id]?.[selectedCourse]?.[hole] !== undefined) {
-                status.completed++;
-            }
-        });
-
-        const completed = new Set<number>();
-        joStatus.forEach((status, jo) => {
-            if (status.total > 0 && status.total === status.completed) {
-                completed.add(jo);
-            }
-        });
-        return completed;
-    }, [allScores, allPlayers, selectedGroup, selectedCourse, hole, groupLocked]);
-
-    const isGroupComplete = useMemo(() => {
-        if (!groupLocked || availableJos.length === 0) return false;
-        return availableJos.length === completedJos.size;
-    }, [groupLocked, availableJos, completedJos]);
-
-
     // ---- Timers and Side Effects for UI ----
     
     useEffect(() => {
@@ -199,7 +169,8 @@ export default function RefereePage() {
         if (!confirmingPlayer || !selectedCourse) return;
         const { player, score } = confirmingPlayer;
 
-        update(ref(db, `/scores/${player.id}/${selectedCourse}/${hole}`), score).then(() => {
+        const scoreRef = ref(db, `/scores/${player.id}/${selectedCourse}/${hole}`);
+        set(scoreRef, score).then(() => {
             setScores(prev => ({ ...prev, [player.id]: { score, status: 'saved' } }));
             toast({ title: "점수 저장 완료", description: "3초 내에 점수를 더블클릭하여 수정할 수 있습니다.", className: "bg-primary text-primary-foreground" });
         }).catch(err => toast({ title: "저장 실패", description: err.message, variant: "destructive" }))
@@ -244,25 +215,12 @@ export default function RefereePage() {
         </Card>
     );
 
-    const renderGroupComplete = () => (
-         <Card className="flex-1 flex flex-col items-center justify-center text-center p-6">
-            <Trophy className="w-16 h-16 text-yellow-400 mb-4" />
-            <CardTitle className="text-2xl mb-2">수고하셨습니다!</CardTitle>
-            <CardDescription className="text-base mb-6">
-                <span className="font-bold text-primary">{selectedGroup}</span> 그룹의 모든 조에 대한<br/> {hole}번홀 점수 입력이 완료되었습니다.
-            </CardDescription>
-            <Button size="lg" onClick={handleResetGroupAndCourse}>
-                다른 그룹 심사하기
-            </Button>
-        </Card>
-    );
-
     const renderJoSelection = () => (
         <Card className="flex-1 flex flex-col">
             <CardHeader>
                 <CardTitle className="text-xl">다음 조를 선택하세요</CardTitle>
                 {availableJos.length > 0 && (
-                    <CardDescription>{availableJos.length - completedJos.size}개 조가 남았습니다.</CardDescription>
+                    <CardDescription>{availableJos.length}개 조가 있습니다.</CardDescription>
                 )}
             </CardHeader>
             <CardContent className="flex-1 flex flex-col justify-center items-center">
@@ -271,11 +229,8 @@ export default function RefereePage() {
                         <SelectTrigger className="h-14 text-lg w-full max-w-xs"><SelectValue placeholder="조 선택" /></SelectTrigger>
                         <SelectContent>
                             {availableJos.map(j => (
-                                <SelectItem key={j} value={j.toString()} disabled={completedJos.has(j)} className="text-lg">
-                                    <div className="flex items-center justify-between w-full">
-                                        <span>{j}조</span>
-                                        {completedJos.has(j) && <span className="text-xs text-muted-foreground">(완료)</span>}
-                                    </div>
+                                <SelectItem key={j} value={j.toString()} className="text-lg">
+                                    {j}조
                                 </SelectItem>
                             ))}
                         </SelectContent>
@@ -364,9 +319,7 @@ export default function RefereePage() {
                         </CardHeader>
                     </Card>
 
-                    {isGroupComplete ? renderGroupComplete() : (
-                        !selectedJo ? renderJoSelection() : renderScoring()
-                    )}
+                    {!selectedJo ? renderJoSelection() : renderScoring()}
                 </>
             )}
 
