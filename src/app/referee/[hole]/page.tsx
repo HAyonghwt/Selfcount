@@ -42,7 +42,7 @@ export default function RefereePage() {
     const [loading, setLoading] = useState(true);
 
     // UI State
-    const [flowState, setFlowState] = useState<'initial' | 'jo' | 'scoring'>('initial');
+    const [view, setView] = useState<'selection' | 'scoring'>('selection');
     const [selectedGroup, setSelectedGroup] = useState<string>('');
     const [selectedCourse, setSelectedCourse] = useState<string>('');
     const [selectedJo, setSelectedJo] = useState<string>('');
@@ -75,11 +75,16 @@ export default function RefereePage() {
         };
     }, []);
 
-     // Reset selections when group/course changes
+    // Timer for "saved" state progress bar.
     useEffect(() => {
-        setSelectedJo('');
-        setFlowState(selectedGroup && selectedCourse ? 'jo' : 'initial');
-    }, [selectedGroup, selectedCourse]);
+        let interval: NodeJS.Timeout | undefined;
+        if (view === 'scoring') {
+            interval = setInterval(() => setNow(Date.now()), 50);
+        }
+        return () => {
+            if (interval) clearInterval(interval);
+        };
+    }, [view]);
 
     // Derived data
     const availableGroups = useMemo(() => Object.keys(groupsData).sort(), [groupsData]);
@@ -104,21 +109,10 @@ export default function RefereePage() {
     }, [allPlayers, selectedGroup, selectedJo]);
     
     const selectedCourseName = useMemo(() => courses.find(c => c.id.toString() === selectedCourse)?.name || '', [courses, selectedCourse]);
-
-    // Timer for "saved" state progress bar.
-    useEffect(() => {
-        let interval: NodeJS.Timeout | undefined;
-        if (flowState === 'scoring') {
-            interval = setInterval(() => setNow(Date.now()), 50);
-        }
-        return () => {
-            if (interval) clearInterval(interval);
-        };
-    }, [flowState]);
-
+    
     // When view changes to 'scoring', initialize the scores state
     useEffect(() => {
-        if (flowState === 'scoring') {
+        if (view === 'scoring') {
             const newScoresState: { [key: string]: ScoreData } = {};
             currentPlayers.forEach((player) => {
                 const existingScore = allScores[player.id]?.[selectedCourse]?.[hole];
@@ -129,7 +123,7 @@ export default function RefereePage() {
             });
             setScores(newScoresState);
         }
-    }, [flowState, currentPlayers, allScores, selectedCourse, hole]);
+    }, [view, currentPlayers, allScores, selectedCourse, hole]);
 
     // Timer to lock scores after saving.
     useEffect(() => {
@@ -147,14 +141,20 @@ export default function RefereePage() {
 
 
     // ---- Handlers ----
-    const handleJoSelect = (jo: string) => {
-        setSelectedJo(jo);
-        setFlowState('scoring');
+    const handleStartScoring = () => {
+        if (selectedGroup && selectedCourse && selectedJo) {
+            setView('scoring');
+        } else {
+            toast({
+                title: "선택 필요",
+                description: "그룹, 코스, 조를 모두 선택해주세요.",
+                variant: "destructive"
+            });
+        }
     };
     
     const handleBackToSelection = () => {
-        setSelectedJo('');
-        setFlowState('jo');
+        setView('selection');
         setScores({});
     };
 
@@ -197,51 +197,29 @@ export default function RefereePage() {
 
     const getPlayerName = (player: Player) => player.type === 'team' ? `${player.p1_name}/${player.p2_name}` : player.name;
     
-    const renderInitialSelection = () => (
+    const renderSelectionScreen = () => (
         <Card>
             <CardHeader>
                 <CardTitle className="text-xl">심사 조 선택</CardTitle>
-                <CardDescription className="text-sm">점수를 기록할 그룹과 코스를 선택하세요.</CardDescription>
+                <CardDescription className="text-sm">점수를 기록할 그룹, 코스, 조를 선택하세요.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-                <Select value={selectedGroup} onValueChange={setSelectedGroup}>
+                <Select value={selectedGroup} onValueChange={v => {setSelectedGroup(v); setSelectedCourse(''); setSelectedJo('');}}>
                     <SelectTrigger className="h-12 text-base"><SelectValue placeholder="1. 그룹 선택" /></SelectTrigger>
-                    <SelectContent position="popper">{availableGroups.map(g => <SelectItem key={g} value={g} className="text-base">{g}</SelectItem>)}</SelectContent>
+                    <SelectContent position="item-aligned">{availableGroups.map(g => <SelectItem key={g} value={g} className="text-base">{g}</SelectItem>)}</SelectContent>
                 </Select>
-                <Select value={selectedCourse} onValueChange={setSelectedCourse} disabled={!selectedGroup || availableCoursesForGroup.length === 0}>
+                <Select value={selectedCourse} onValueChange={v => {setSelectedCourse(v); setSelectedJo('');}} disabled={!selectedGroup || availableCoursesForGroup.length === 0}>
                     <SelectTrigger className="h-12 text-base"><SelectValue placeholder={!selectedGroup ? "그룹 먼저 선택" : (availableCoursesForGroup.length === 0 ? "배정된 코스 없음" : "2. 코스 선택")} /></SelectTrigger>
-                    <SelectContent position="popper">{availableCoursesForGroup.map(c => <SelectItem key={c.id} value={c.id.toString()} className="text-base">{c.name}</SelectItem>)}</SelectContent>
+                    <SelectContent position="item-aligned">{availableCoursesForGroup.map(c => <SelectItem key={c.id} value={c.id.toString()} className="text-base">{c.name}</SelectItem>)}</SelectContent>
+                </Select>
+                 <Select value={selectedJo} onValueChange={setSelectedJo} disabled={!selectedCourse || availableJos.length === 0}>
+                    <SelectTrigger className="h-12 text-base"><SelectValue placeholder={!selectedCourse ? "코스 먼저 선택" : (availableJos.length === 0 ? "배정된 선수 없음" : "3. 조 선택")} /></SelectTrigger>
+                    <SelectContent position="item-aligned">{availableJos.map(jo => <SelectItem key={jo} value={jo.toString()} className="text-base">{jo}조</SelectItem>)}</SelectContent>
                 </Select>
             </CardContent>
-        </Card>
-    );
-
-    const renderJoSelection = () => (
-         <Card>
-            <CardHeader>
-                <CardTitle className="text-xl">3. 조 선택</CardTitle>
-                <CardDescription className="text-sm">점수를 기록할 조를 선택하세요.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-               {availableJos.length > 0 ? (
-                    availableJos.map(jo => (
-                        <Button 
-                            key={jo} 
-                            variant="outline"
-                            className="w-full h-14 text-lg justify-start"
-                            onClick={() => handleJoSelect(jo.toString())}
-                        >
-                            {jo}조
-                        </Button>
-                    ))
-                ) : (
-                    <div className="text-center text-muted-foreground py-10">
-                        <Users className="mx-auto h-12 w-12" />
-                        <p className="mt-4 text-base font-semibold">배정된 선수가 없습니다.</p>
-                        <p className="text-sm">선수 관리 페이지에서 이 그룹에 선수를 추가해주세요.</p>
-                    </div>
-                )}
-            </CardContent>
+            <CardFooter>
+                 <Button className="w-full h-14 text-xl font-bold" onClick={handleStartScoring} disabled={!selectedJo}>점수기록 시작</Button>
+            </CardFooter>
         </Card>
     );
 
@@ -258,20 +236,18 @@ export default function RefereePage() {
                 return (
                     <Card key={player.id} className="overflow-hidden">
                       <CardContent className="p-2">
-                        <div className="flex items-center justify-between gap-1 w-full">
-                            <div className="flex items-center gap-3">
-                                <p className="font-bold text-lg truncate w-24 flex-shrink-0">{getPlayerName(player)}</p>
-                                
-                                <div className="flex items-center gap-1">
-                                    <Button variant="outline" size="icon" className="w-12 h-12 rounded-lg border-2" onClick={() => updateScore(player.id, -1)} disabled={!isEditing}><Minus className="h-6 w-6" /></Button>
-                                    <div className="relative w-12 text-center" onDoubleClick={() => handleScoreDoubleClick(player)}>
-                                        <span className={`text-4xl font-bold tabular-nums ${isSaved ? 'cursor-pointer' : ''}`}>{scoreData.score}</span>
-                                    </div>
-                                    <Button variant="outline" size="icon" className="w-12 h-12 rounded-lg border-2" onClick={() => updateScore(player.id, 1)} disabled={!isEditing}><Plus className="h-6 w-6" /></Button>
-                                </div>
+                        <div className="flex items-center gap-2 w-full">
+                            <div className="flex-1 truncate pr-2">
+                                <p className="font-bold text-lg truncate">{getPlayerName(player)}</p>
                             </div>
-
-                            <div className="w-12 h-12 flex-shrink-0">
+                            <div className="flex items-center gap-1">
+                                <Button variant="outline" size="icon" className="w-11 h-11 rounded-lg border-2 flex-shrink-0" onClick={() => updateScore(player.id, -1)} disabled={!isEditing}><Minus className="h-6 w-6" /></Button>
+                                <div className="relative w-10 text-center" onDoubleClick={() => handleScoreDoubleClick(player)}>
+                                    <span className={`text-4xl font-bold tabular-nums ${isSaved ? 'cursor-pointer' : ''}`}>{scoreData.score}</span>
+                                </div>
+                                <Button variant="outline" size="icon" className="w-11 h-11 rounded-lg border-2 flex-shrink-0" onClick={() => updateScore(player.id, 1)} disabled={!isEditing}><Plus className="h-6 w-6" /></Button>
+                            </div>
+                            <div className="w-11 h-11 flex-shrink-0">
                                 {isEditing && <Button variant="default" size="icon" className="w-full h-full rounded-lg" onClick={() => handleSavePress(player)}><Save className="h-6 w-6" /></Button>}
                                 {isSaved && (
                                     <div className="flex flex-col items-center justify-center h-full w-full text-center relative border border-dashed border-primary/50 rounded-lg cursor-pointer" onDoubleClick={() => handleScoreDoubleClick(player)}>
@@ -317,7 +293,7 @@ export default function RefereePage() {
             </header>
 
             <div className="flex-1 flex flex-col space-y-4">
-                {(flowState === 'jo' || flowState === 'scoring') && (
+                {view === 'scoring' && (
                      <Card>
                         <CardHeader className="p-3">
                             <div className="flex justify-between items-center gap-2">
@@ -325,25 +301,19 @@ export default function RefereePage() {
                                     <span>{selectedGroup}</span> 
                                     <span className="text-muted-foreground mx-1">/</span> 
                                     <span>{selectedCourseName}</span>
-                                    {flowState === 'scoring' && (
-                                      <>
-                                        <span className="text-muted-foreground mx-1">/</span>
-                                        <span>{selectedJo}조</span>
-                                      </>
-                                    )}
+                                    <span className="text-muted-foreground mx-1">/</span>
+                                    <span>{selectedJo}조</span>
                                 </div>
-                                <Button variant="outline" size="sm" onClick={() => setFlowState('initial')}>
+                                <Button variant="outline" size="sm" onClick={handleBackToSelection}>
                                     <ArrowLeft className="mr-1 h-3 w-3" />
-                                    그룹/코스 변경
+                                    조 변경
                                 </Button>
                             </div>
                         </CardHeader>
                     </Card>
                 )}
 
-                {flowState === 'initial' && renderInitialSelection()}
-                {flowState === 'jo' && renderJoSelection()}
-                {flowState === 'scoring' && renderScoringScreen()}
+                {view === 'selection' ? renderSelectionScreen() : renderScoringScreen()}
             </div>
             
             <AlertDialog open={!!confirmingPlayer} onOpenChange={(open) => !open && setConfirmingPlayer(null)}>
@@ -365,5 +335,3 @@ export default function RefereePage() {
         </div>
     );
 }
-
-
