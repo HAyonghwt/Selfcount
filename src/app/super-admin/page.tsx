@@ -5,11 +5,10 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Save, LogOut, Users } from "lucide-react";
 import Link from 'next/link';
 import { useToast } from "@/hooks/use-toast";
-import { db, firebaseConfig as localFirebaseConfig } from "@/lib/firebase";
+import { db } from "@/lib/firebase";
 import { ref, set, get } from "firebase/database";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -19,13 +18,10 @@ export default function SuperAdminPage() {
     const [config, setConfig] = useState({
         appName: '',
         userDomain: '',
-        firebaseConfig: '',
         maxCourses: 10,
         maxPlayers: 200,
         refereePassword: '',
     });
-
-    const firebaseConfigString = JSON.stringify(localFirebaseConfig, null, 2);
 
     useEffect(() => {
         const configRef = ref(db, 'config');
@@ -35,7 +31,6 @@ export default function SuperAdminPage() {
                 setConfig({
                     appName: data.appName || '00파크골프',
                     userDomain: data.userDomain || 'parkgolf.com',
-                    firebaseConfig: data.firebaseConfig ? JSON.stringify(data.firebaseConfig, null, 2) : firebaseConfigString,
                     maxCourses: data.maxCourses || 10,
                     maxPlayers: data.maxPlayers || 200,
                     refereePassword: data.refereePassword || '',
@@ -44,7 +39,6 @@ export default function SuperAdminPage() {
                  setConfig({
                     appName: '00파크골프',
                     userDomain: 'parkgolf.com',
-                    firebaseConfig: firebaseConfigString,
                     maxCourses: 10,
                     maxPlayers: 200,
                     refereePassword: '',
@@ -55,7 +49,6 @@ export default function SuperAdminPage() {
              setConfig({
                 appName: '00파크골프',
                 userDomain: 'parkgolf.com',
-                firebaseConfig: firebaseConfigString,
                 maxCourses: 10,
                 maxPlayers: 200,
                 refereePassword: '',
@@ -63,36 +56,27 @@ export default function SuperAdminPage() {
         }).finally(() => {
             setLoading(false);
         });
-    }, [firebaseConfigString, toast]);
+    }, [toast]);
     
-    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { id, value } = e.target;
         setConfig(prev => ({ ...prev, [id]: value }));
     };
 
     const handleSaveChanges = () => {
-        try {
-            const parsedConfig = JSON.parse(config.firebaseConfig);
-            const configRef = ref(db, 'config');
-            set(configRef, {
-                appName: config.appName.trim(),
-                userDomain: config.userDomain.trim(),
-                firebaseConfig: parsedConfig,
-                maxCourses: Number(config.maxCourses),
-                maxPlayers: Number(config.maxPlayers),
-                refereePassword: config.refereePassword.trim(),
-            }).then(() => {
-                toast({
-                    title: "성공",
-                    description: "모든 설정이 성공적으로 저장되었습니다. 변경사항을 적용하려면 페이지를 새로고침하세요.",
-                });
-            });
-        } catch (error) {
+        const configRef = ref(db, 'config');
+        set(configRef, {
+            appName: config.appName.trim(),
+            userDomain: config.userDomain.trim(),
+            maxCourses: Number(config.maxCourses),
+            maxPlayers: Number(config.maxPlayers),
+            refereePassword: config.refereePassword.trim(),
+        }).then(() => {
             toast({
-                title: "오류",
-                description: "Firebase 구성이 유효한 JSON 형식이 아닙니다.",
+                title: "성공",
+                description: "모든 설정이 성공적으로 저장되었습니다.",
             });
-        }
+        });
     };
 
     if (loading) {
@@ -137,12 +121,18 @@ export default function SuperAdminPage() {
                     <h1 className="text-3xl font-bold text-gray-800 font-headline">최고 관리자 페이지</h1>
                     <p className="text-muted-foreground">ParkScore 앱의 전역 설정을 관리합니다.</p>
                 </div>
-                <Button variant="outline" asChild>
-                    <Link href="/">
-                        <LogOut className="mr-2 h-4 w-4" />
-                        로그아웃
-                    </Link>
-                </Button>
+                <div className="flex gap-2">
+                    <Button onClick={handleSaveChanges}>
+                        <Save className="mr-2 h-4 w-4" />
+                        설정 저장
+                    </Button>
+                    <Button variant="outline" asChild>
+                        <Link href="/">
+                            <LogOut className="mr-2 h-4 w-4" />
+                            로그아웃
+                        </Link>
+                    </Button>
+                </div>
             </header>
             
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -192,7 +182,8 @@ export default function SuperAdminPage() {
                             </div>
                         </CardContent>
                     </Card>
-
+                </div>
+                <div className="space-y-8">
                     <Card>
                         <CardHeader>
                             <CardTitle>사용자 계정 관리</CardTitle>
@@ -205,30 +196,24 @@ export default function SuperAdminPage() {
                                 <strong>심판 계정 예시:</strong> <code className="bg-muted px-1.5 py-0.5 rounded-sm">referee1@{config.userDomain.trim()}</code>
                             </p>
                              <Button asChild variant="secondary">
-                                <a href={`https://console.firebase.google.com/project/${localFirebaseConfig.projectId}/authentication/users`} target="_blank" rel="noopener noreferrer">
+                                <a href={`https://console.firebase.google.com/project/${process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID}/authentication/users`} target="_blank" rel="noopener noreferrer">
                                     <Users className="mr-2 h-4 w-4" /> Firebase 인증 콘솔로 이동
                                 </a>
                             </Button>
                         </CardContent>
                     </Card>
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Firebase 연결 정보</CardTitle>
+                            <CardDescription>앱의 Firebase 연결은 이제 환경 변수를 통해 안전하게 관리됩니다.</CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-4 text-sm text-muted-foreground">
+                            <p>보안을 위해 Firebase 연결 정보(API 키 등)는 더 이상 이 화면에서 보거나 수정할 수 없습니다.</p>
+                            <p>모든 연결 정보는 프로젝트의 `.env.local` 파일에서 불러옵니다. 설정을 변경하려면 해당 파일을 직접 수정해야 합니다.</p>
+                            <p>이 방식은 민감한 정보를 소스 코드나 데이터베이스에 저장하지 않아, 앱을 GitHub 등에 안전하게 게시할 수 있도록 합니다.</p>
+                        </CardContent>
+                    </Card>
                 </div>
-
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Firebase 설정</CardTitle>
-                        <CardDescription>앱의 데이터베이스 및 서비스 연결을 위한 Firebase 구성 정보를 입력합니다. 변경 시 주의가 필요합니다.</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="firebaseConfig">Firebase 구성 (JSON 형식)</Label>
-                            <Textarea id="firebaseConfig" rows={12} value={config.firebaseConfig} onChange={handleInputChange} className="font-mono text-sm" />
-                        </div>
-                        <Button size="lg" className="w-full" onClick={handleSaveChanges}>
-                            <Save className="mr-2 h-5 w-5" />
-                            모든 설정 저장
-                        </Button>
-                    </CardContent>
-                </Card>
             </div>
         </div>
     );

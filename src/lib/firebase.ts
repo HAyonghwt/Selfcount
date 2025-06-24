@@ -1,16 +1,18 @@
-import { initializeApp, getApp, getApps } from "firebase/app";
+import { initializeApp, getApp, getApps, type FirebaseOptions } from "firebase/app";
 import { getDatabase } from "firebase/database";
 import { getAuth } from "firebase/auth";
 
-// IMPORTANT: Replace with your actual Firebase project configuration
-const firebaseConfig = {
-  apiKey: "AIzaSyAM6GtB8HB8pw0VPSmZxk7xOxB2n1iXFP8",
-  authDomain: "dehoi-1.firebaseapp.com",
-  databaseURL: "https://dehoi-1-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId: "dehoi-1",
-  storageBucket: "dehoi-1.firebasestorage.app",
-  messagingSenderId: "81139018391",
-  appId: "1:81139018391:web:88d8e15e245181c2c557d2"
+// IMPORTANT: This configuration is loaded from environment variables for security.
+// Ensure you have a .env.local file with the correct values.
+// See .env.local.example for the required variables.
+const firebaseConfig: FirebaseOptions = {
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "your-api-key",
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || "your-auth-domain",
+  databaseURL: process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL || "https://parkscore-dev.firebaseio.com",
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "parkscore-dev",
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || "your-storage-bucket",
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || "your-messaging-sender-id",
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || "your-app-id",
 };
 
 // Initialize Firebase
@@ -18,4 +20,4 @@ const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 const db = getDatabase(app);
 const auth = getAuth(app);
 
-export { db, app, auth, firebaseConfig };
+export { db, app, auth };
