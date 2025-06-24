@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -10,7 +10,7 @@ import { Minus, Plus, Save, Lock, ArrowLeft } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { ref, onValue, set } from 'firebase/database';
 import { Skeleton } from '@/components/ui/skeleton';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useToast } from '@/hooks/use-toast';
 
 interface Player {
@@ -197,6 +197,9 @@ export default function RefereePage() {
                     newScoresState[player.id] = { score: Number(existingScoreFromDb), status: 'locked' };
                 } else if (interimScore) {
                     newScoresState[player.id] = { score: Number(interimScore.score), status: 'editing'};
+                } else if (prevScores[player.id]?.status === 'editing') {
+                    // Preserve editing score if it exists (e.g. from another player's save)
+                    newScoresState[player.id] = prevScores[player.id];
                 } else {
                     newScoresState[player.id] = { score: 1, status: 'editing' };
                 }
@@ -247,16 +250,7 @@ export default function RefereePage() {
         const scoreRef = ref(db, `/scores/${playerToSave.id}/${selectedCourse}/${hole}`);
         
         set(scoreRef, scoreData.score).then(() => {
-            setScores(prev => ({
-                ...prev,
-                [playerToSave.id]: { ...prev[playerToSave.id], status: 'locked' }
-            }));
-            const storageKey = getLocalStorageScoresKey();
-            if (storageKey) {
-                const savedInterimScores = JSON.parse(localStorage.getItem(storageKey) || '{}');
-                delete savedInterimScores[playerToSave.id];
-                localStorage.setItem(storageKey, JSON.stringify(savedInterimScores));
-            }
+            // Don't show toast, UI change is enough
         }).catch(err => {
             console.error("Failed to save score:", err);
             toast({
@@ -413,21 +407,21 @@ export default function RefereePage() {
                 <AlertDialogContent>
                     <div className="flex flex-col items-center justify-center p-4 text-center">
                         {playerToSave && (
-                             <p className="text-5xl font-bold mb-4">{getPlayerName(playerToSave)}</p>
+                             <p className="text-4xl font-bold mb-4">{getPlayerName(playerToSave)}</p>
                         )}
                        
                         {playerToSave && scores[playerToSave.id] && (
-                             <div className="flex items-baseline my-6">
-                                <span className="text-9xl font-extrabold text-destructive leading-none">{scores[playerToSave.id].score}</span>
-                                <span className="text-5xl font-bold ml-4">점</span>
+                             <div className="flex items-baseline my-4">
+                                <span className="text-8xl font-extrabold text-destructive leading-none">{scores[playerToSave.id].score}</span>
+                                <span className="text-4xl font-bold ml-2">점</span>
                             </div>
                         )}
                         
-                        <p className="text-3xl font-semibold mt-2">저장하시겠습니까?</p>
+                        <p className="text-xl font-semibold mt-2">저장하시겠습니까?</p>
                     </div>
                     <AlertDialogFooter className="flex-row justify-center gap-4 pt-4">
-                        <AlertDialogCancel onClick={() => setPlayerToSave(null)} className="h-14 px-8 text-xl">취소</AlertDialogCancel>
-                        <AlertDialogAction onClick={handleConfirmSave} className="h-14 px-8 text-xl">확인 및 저장</AlertDialogAction>
+                        <AlertDialogCancel onClick={() => setPlayerToSave(null)} className="h-12 px-6 text-lg">취소</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleConfirmSave} className="h-12 px-6 text-lg">확인 및 저장</AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
