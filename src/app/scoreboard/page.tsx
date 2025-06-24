@@ -124,6 +124,7 @@ export default function ExternalScoreboard() {
                 : [];
             
             const allAssignedCoursesForPlayer = allCourses.filter((c:any) => assignedCourseIds.includes(c.id.toString()));
+            const activeCoursesForPlayer = allAssignedCoursesForPlayer.filter((c: any) => c.isActive !== false);
 
             const playerScoresData = scores[playerId] || {};
             
@@ -134,7 +135,7 @@ export default function ExternalScoreboard() {
             const courseScoresForTieBreak: { [courseId: string]: number } = {};
             const detailedScoresForTieBreak: { [courseId: string]: { [holeNumber: string]: number } } = {};
 
-            allAssignedCoursesForPlayer.forEach((course: any) => {
+            activeCoursesForPlayer.forEach((course: any) => {
                 const courseId = course.id;
                 const scoresForCourse = playerScoresData[courseId] || {};
                 detailedScoresForTieBreak[courseId] = scoresForCourse;
@@ -173,7 +174,7 @@ export default function ExternalScoreboard() {
                 total: totalScore,
                 courseScores: courseScoresForTieBreak,
                 detailedScores: detailedScoresForTieBreak,
-                assignedCourses: allAssignedCoursesForPlayer.filter((c: any) => c.isActive !== false)
+                assignedCourses: activeCoursesForPlayer
             };
         });
 
@@ -188,7 +189,7 @@ export default function ExternalScoreboard() {
 
         const rankedData: { [key: string]: ProcessedPlayer[] } = {};
         for (const groupName in groupedData) {
-            const coursesForGroup = groupedData[groupName][0]?.assignedCourses || Object.values(tournament.courses || {});
+            const coursesForGroup = groupedData[groupName][0]?.assignedCourses || [];
             
             const playersToSort = groupedData[groupName].filter(p => p.hasAnyScore && !p.hasForfeited);
             const otherPlayers = groupedData[groupName].filter(p => !p.hasAnyScore || p.hasForfeited);
@@ -551,5 +552,3 @@ export default function ExternalScoreboard() {
         </>
     );
 }
-
-    
