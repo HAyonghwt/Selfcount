@@ -1,4 +1,3 @@
-
 "use client"
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -29,7 +28,7 @@ export default function SuperAdminPage() {
             if (snapshot.exists()) {
                 const data = snapshot.val();
                 setConfig({
-                    appName: data.appName || '00파크골프',
+                    appName: data.appName || 'ParkScore',
                     userDomain: data.userDomain || 'parkgolf.com',
                     maxCourses: data.maxCourses || 10,
                     maxPlayers: data.maxPlayers || 200,
@@ -37,7 +36,7 @@ export default function SuperAdminPage() {
                 });
             } else {
                  setConfig({
-                    appName: '00파크골프',
+                    appName: 'ParkScore',
                     userDomain: 'parkgolf.com',
                     maxCourses: 10,
                     maxPlayers: 200,
@@ -47,7 +46,7 @@ export default function SuperAdminPage() {
         }).catch(() => {
              toast({ title: "오류", description: "설정 정보를 불러오는데 실패했습니다." });
              setConfig({
-                appName: '00파크골프',
+                appName: 'ParkScore',
                 userDomain: 'parkgolf.com',
                 maxCourses: 10,
                 maxPlayers: 200,
@@ -145,7 +144,7 @@ export default function SuperAdminPage() {
                         <CardContent className="space-y-4">
                             <div className="space-y-2">
                                 <Label htmlFor="appName">단체 이름</Label>
-                                <Input id="appName" value={config.appName} onChange={handleInputChange} placeholder="예: 행복 파크골프" />
+                                <Input id="appName" value={config.appName} onChange={handleInputChange} placeholder="예: ParkScore" />
                                 <p className="text-xs text-muted-foreground">이 이름은 앱의 여러 곳에 표시됩니다.</p>
                             </div>
                              <div className="space-y-2">

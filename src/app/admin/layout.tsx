@@ -56,7 +56,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         if (snapshot.exists() && snapshot.val().appName) {
             setAppName(snapshot.val().appName);
         } else {
-            setAppName('파크골프대회');
+            setAppName('ParkScore');
         }
     });
   }, [])

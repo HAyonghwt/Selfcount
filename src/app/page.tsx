@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect } from 'react';
@@ -39,7 +38,7 @@ export default function LoginPage() {
         const data = snapshot.val();
         setConfig(data);
       } else {
-        setConfig({ appName: '파크골프대회', userDomain: 'parkgolf.com' });
+        setConfig({ appName: 'ParkScore', userDomain: 'parkgolf.com' });
       }
     }).finally(() => {
         setLoading(false);
@@ -132,14 +131,14 @@ export default function LoginPage() {
           <div className="mx-auto w-fit mb-4">
             <Image 
                 src="/logo.png"
-                alt={`${config?.appName || '파크골프대회'} 로고`}
+                alt={`${config?.appName || 'ParkScore'} 로고`}
                 width={80}
                 height={80}
                 className="h-20 w-20"
             />
           </div>
           <CardTitle className="text-3xl font-bold font-headline">
-            {loading ? <Skeleton className="h-9 w-48 mx-auto" /> : (config?.appName || '파크골프대회')}
+            {loading ? <Skeleton className="h-9 w-48 mx-auto" /> : (config?.appName || 'ParkScore')}
           </CardTitle>
           <CardDescription className="text-muted-foreground pt-2">
             {loading ? ' ' : `관리자/심판으로 로그인 하세요.`}
@@ -184,7 +183,7 @@ export default function LoginPage() {
         </CardContent>
       </Card>
       <footer className="mt-8 text-center text-sm text-muted-foreground">
-        <p>&copy; {year} {config?.appName || '파크골프대회'}. All rights reserved.</p>
+        <p>&copy; {year} {config?.appName || 'ParkScore'}. All rights reserved.</p>
       </footer>
     </div>
   );
