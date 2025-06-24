@@ -59,6 +59,11 @@ export default function RefereePage() {
     const [unlockPasswordInput, setUnlockPasswordInput] = useState('');
     const [playerToUnlock, setPlayerToUnlock] = useState<Player | null>(null);
 
+    const viewRef = useRef(view);
+    useEffect(() => {
+        viewRef.current = view;
+    }, [view]);
+
     // Restore state from localStorage on initial load
     useEffect(() => {
         try {
@@ -221,18 +226,16 @@ export default function RefereePage() {
     // Prevent accidental navigation when scoring
     useEffect(() => {
         const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-            e.preventDefault();
-            e.returnValue = '';
+            if (viewRef.current === 'scoring') {
+                e.preventDefault();
+                e.returnValue = '';
+            }
         };
-
-        if (view === 'scoring') {
-            window.addEventListener('beforeunload', handleBeforeUnload);
-        }
-
+        window.addEventListener('beforeunload', handleBeforeUnload);
         return () => {
             window.removeEventListener('beforeunload', handleBeforeUnload);
         };
-    }, [view]);
+    }, []);
 
     // ---- Handlers ----
     const handleStartScoring = () => {
@@ -518,3 +521,4 @@ export default function RefereePage() {
 }
 
     
+
