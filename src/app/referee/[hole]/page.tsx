@@ -353,38 +353,38 @@ export default function RefereePage() {
 
                 return (
                     <Card key={player.id} className="overflow-hidden">
-                      <CardContent className="p-2">
-                        <div className="flex items-center gap-2 w-full">
-                            <div className="flex-1 min-w-0">
-                                <p className="font-bold text-lg truncate pr-2">{getPlayerName(player)}</p>
-                            </div>
-                            
-                            <div className="flex items-center justify-center gap-2 flex-shrink-0">
-                                <Button variant="outline" size="icon" className="w-11 h-11 rounded-lg border-2" onClick={() => updateScore(player.id, -1)} disabled={isLocked}><Minus className="h-6 w-6" /></Button>
-                                <div className="w-10 text-center">
-                                    <span className={`text-4xl font-bold tabular-nums`}>{scoreData.score}</span>
+                        <CardContent className="p-0">
+                            <div className="flex items-center gap-2 w-full p-2">
+                                <div className="flex-1 min-w-0">
+                                    <p className="font-bold text-lg truncate pr-2">{getPlayerName(player)}</p>
                                 </div>
-                                <Button variant="outline" size="icon" className="w-11 h-11 rounded-lg border-2" onClick={() => updateScore(player.id, 1)} disabled={isLocked}><Plus className="h-6 w-6" /></Button>
                                 
-                                <Button
-                                    size="icon"
-                                    className={cn("w-11 h-11 rounded-lg", {
-                                        'bg-muted hover:bg-muted cursor-not-allowed': isLocked,
-                                    })}
-                                    onClick={() => {
-                                        if (isLocked) return;
-                                        handleSavePress(player);
-                                    }}
-                                >
-                                    {isLocked ? (
-                                        <Lock className="w-6 h-6 text-green-500" />
-                                    ) : (
-                                        <Save className="h-6 w-6" />
-                                    )}
-                                </Button>
+                                <div className="flex items-center justify-center gap-2 flex-shrink-0">
+                                    <Button variant="outline" size="icon" className="w-11 h-11 rounded-lg border-2" onClick={() => updateScore(player.id, -1)} disabled={isLocked}><Minus className="h-6 w-6" /></Button>
+                                    <div className="w-10 text-center">
+                                        <span className={`text-4xl font-bold tabular-nums`}>{scoreData.score}</span>
+                                    </div>
+                                    <Button variant="outline" size="icon" className="w-11 h-11 rounded-lg border-2" onClick={() => updateScore(player.id, 1)} disabled={isLocked}><Plus className="h-6 w-6" /></Button>
+                                    
+                                    <Button
+                                        size="icon"
+                                        className={cn("w-11 h-11 rounded-lg", {
+                                            'bg-muted hover:bg-muted cursor-not-allowed': isLocked,
+                                        })}
+                                        onClick={() => {
+                                            if (isLocked) return;
+                                            handleSavePress(player);
+                                        }}
+                                    >
+                                        {isLocked ? (
+                                            <Lock className="w-6 h-6 text-green-500" />
+                                        ) : (
+                                            <Save className="h-6 w-6" />
+                                        )}
+                                    </Button>
+                                </div>
                             </div>
-                        </div>
-                      </CardContent>
+                        </CardContent>
                     </Card>
                 )
             })}
@@ -426,16 +426,16 @@ export default function RefereePage() {
             
             <AlertDialog open={!!playerToSave} onOpenChange={(open) => !open && setPlayerToSave(null)}>
                 <AlertDialogContent>
-                    <AlertDialogHeader className="text-center">
-                        <AlertDialogTitle className="text-2xl font-bold" style={{ fontSize: '1.8rem', lineHeight: '2.2rem' }}>
+                     <AlertDialogHeader>
+                        <AlertDialogTitle className="text-2xl font-bold text-center" style={{ fontSize: '1.95rem', lineHeight: '2.2rem' }}>
                             {playerToSave ? getPlayerName(playerToSave) : ''}
                         </AlertDialogTitle>
                     </AlertDialogHeader>
                     <div className="flex flex-col items-center justify-center p-0 text-center">
                         {playerToSave && scores[playerToSave.id] && (
                              <div className="flex items-baseline my-2">
-                                <span className="text-5xl font-extrabold text-destructive leading-none" style={{ fontSize: '3.8rem', lineHeight: '1' }}>{scores[playerToSave.id].score}</span>
-                                <span className="text-base font-bold ml-2">점</span>
+                                <span className="font-extrabold text-destructive leading-none" style={{ fontSize: '5.07rem', lineHeight: '1' }}>{scores[playerToSave.id].score}</span>
+                                <span className="font-bold ml-2" style={{ fontSize: '1.3rem' }}>점</span>
                             </div>
                         )}
                         
@@ -444,8 +444,8 @@ export default function RefereePage() {
                         </AlertDialogDescription>
                     </div>
                     <AlertDialogFooter className="grid grid-cols-2 gap-4 pt-4">
-                        <AlertDialogCancel onClick={() => setPlayerToSave(null)} className="h-11 px-6 text-sm mt-0">취소</AlertDialogCancel>
-                        <AlertDialogAction onClick={handleConfirmSave} className="h-11 px-6 text-sm">확인</AlertDialogAction>
+                        <AlertDialogCancel onClick={() => setPlayerToSave(null)} className="h-11 px-6 text-base mt-0">취소</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleConfirmSave} className="h-11 px-6 text-base">확인</AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
