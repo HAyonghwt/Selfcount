@@ -120,7 +120,7 @@ export default function AdminDashboard() {
     }, []);
     
     const processedDataByGroup = useMemo(() => {
-        const allCoursesList = Object.values(courses);
+        const allCoursesList = Object.values(courses).filter(Boolean);
         if (Object.keys(players).length === 0 || allCoursesList.length === 0) return {};
 
         const allProcessedPlayers: any[] = Object.entries(players).map(([playerId, player]: [string, any]) => {

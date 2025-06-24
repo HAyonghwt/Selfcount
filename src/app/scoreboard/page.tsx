@@ -113,7 +113,7 @@ export default function ExternalScoreboard() {
     }, []);
 
     const processedDataByGroup = useMemo(() => {
-        const allCourses = Object.values(tournament.courses || {});
+        const allCourses = Object.values(tournament.courses || {}).filter(Boolean);
         if (Object.keys(players).length === 0) return {};
 
         const allProcessedPlayers: any[] = Object.entries(players).map(([playerId, player]: [string, any]) => {
