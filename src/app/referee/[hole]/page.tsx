@@ -384,32 +384,23 @@ export default function RefereePage() {
 
                 return (
                     <Card key={player.id} className="overflow-hidden">
-                        <CardContent
-                            className="p-3"
-                            onDoubleClick={isLocked ? () => handleUnlockRequest(player) : undefined}
-                        >
-                            <div className="flex flex-col gap-2">
-                                <div>
-                                    <p className="font-bold text-lg text-center truncate">{getPlayerName(player)}</p>
+                        <CardContent className="p-2" onDoubleClick={isLocked ? () => handleUnlockRequest(player) : undefined}>
+                            <div className="flex items-center justify-between gap-2">
+                                <div className="flex-1 min-w-0 pr-2">
+                                    <p className="font-bold text-lg truncate">{getPlayerName(player)}</p>
                                 </div>
-                                <div className="flex items-center justify-around gap-2 w-full">
-                                    <Button variant="outline" size="icon" className="w-12 h-12 rounded-lg border-2" onClick={() => updateScore(player.id, -1)} disabled={isLocked}>
-                                        <Minus className="h-6 w-6" />
+                                <div className="flex-none flex items-center gap-1.5">
+                                    <Button variant="outline" size="icon" className="w-10 h-10 rounded-md border-2" onClick={() => updateScore(player.id, -1)} disabled={isLocked}>
+                                        <Minus className="h-5 w-5" />
                                     </Button>
-                                    
-                                    <div className="flex-1 text-center">
-                                        <span className="text-5xl font-bold tabular-nums">{scoreData.score}</span>
-                                    </div>
-                                    
-                                    <Button variant="outline" size="icon" className="w-12 h-12 rounded-lg border-2" onClick={() => updateScore(player.id, 1)} disabled={isLocked}>
-                                        <Plus className="h-6 w-6" />
+                                    <span className="text-4xl font-bold tabular-nums w-12 text-center">{scoreData.score}</span>
+                                    <Button variant="outline" size="icon" className="w-10 h-10 rounded-md border-2" onClick={() => updateScore(player.id, 1)} disabled={isLocked}>
+                                        <Plus className="h-5 w-5" />
                                     </Button>
-
-                                    <div className="w-px bg-border h-10 mx-1"></div>
-
+                                    <div className="w-px bg-border h-8 mx-1"></div>
                                     <Button
                                         size="icon"
-                                        className={cn("w-12 h-12 rounded-lg", {
+                                        className={cn("w-10 h-10 rounded-md", {
                                             'bg-muted hover:bg-muted cursor-not-allowed': isLocked,
                                         })}
                                         onClick={() => {
@@ -417,11 +408,7 @@ export default function RefereePage() {
                                             handleSavePress(player);
                                         }}
                                     >
-                                        {isLocked ? (
-                                            <Lock className="w-6 h-6 text-green-500" />
-                                        ) : (
-                                            <Save className="h-6 w-6" />
-                                        )}
+                                        {isLocked ? <Lock className="w-5 h-5 text-green-500" /> : <Save className="h-5 w-5" />}
                                     </Button>
                                 </div>
                             </div>
