@@ -33,6 +33,17 @@ export default function LoginPage() {
 
   useEffect(() => {
     setYear(new Date().getFullYear());
+
+    // Essential check: If Firebase config is missing, don't attempt to connect.
+    // This prevents the app from hanging on a network request that will never resolve.
+    if (!process.env.NEXT_PUBLIC_FIREBASE_API_KEY || process.env.NEXT_PUBLIC_FIREBASE_API_KEY === 'your-api-key') {
+        console.error("Firebase configuration is missing or is using placeholder values in .env.local. Please set it up.");
+        setError("Firebase 연결 설정이 필요합니다. .env.local 파일을 확인해주세요.");
+        setConfig({ appName: 'ParkScore', userDomain: 'parkgolf.com' });
+        setLoading(false); // Immediately stop loading
+        return; // Stop execution here
+    }
+
     const configRef = ref(db, 'config');
     get(configRef).then((snapshot) => {
       if (snapshot.exists()) {
@@ -59,17 +70,12 @@ export default function LoginPage() {
       return;
     }
 
-    setLoading(true);
-
-    if (!config || !config.userDomain) {
-      setError('설정 정보를 불러오는 중입니다. 잠시 후 다시 시도해주세요.');
-      toast({
-        title: "오류",
-        description: "앱 설정을 불러오는 중입니다. 잠시 후 다시 시도해 주세요.",
-      });
-      setLoading(false);
-      return;
+    if (!config) {
+        setError("설정이 로드되지 않았습니다. 잠시 후 다시 시도해주세요.");
+        return;
     }
+
+    setLoading(true);
 
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
@@ -146,7 +152,7 @@ export default function LoginPage() {
             {loading ? <Skeleton className="h-9 w-48 mx-auto" /> : (config?.appName || 'ParkScore')}
           </CardTitle>
           <CardDescription className="text-muted-foreground pt-2">
-            {loading ? ' ' : `관리자/심판으로 로그인 하세요.`}
+            {loading ? <Skeleton className="h-5 w-40 mx-auto" /> : `관리자/심판으로 로그인 하세요.`}
           </CardDescription>
         </CardHeader>
         <CardContent className="p-6 pt-2">
@@ -177,11 +183,9 @@ export default function LoginPage() {
               />
             </div>
             {error && <p className="text-sm font-medium text-destructive">{error}</p>}
-            <Button type="submit" className="w-full h-12 text-lg font-bold" disabled={loading || !config}>
-              {loading && !config
+            <Button type="submit" className="w-full h-12 text-lg font-bold" disabled={loading}>
+              {loading
                 ? '설정 로딩 중...' 
-                : loading && config
-                ? '로그인 중...'
                 : (<><LogIn className="mr-2 h-5 w-5" />로그인</>)}
             </Button>
           </form>
