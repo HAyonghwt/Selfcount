@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -467,9 +467,9 @@ export default function RefereePage() {
                     </AlertDialogHeader>
                     <div className="flex flex-col items-center justify-center p-0 text-center">
                         {playerToSave && scores[playerToSave.id] && (
-                             <div className="flex items-baseline my-2">
-                                <span className="font-extrabold text-destructive leading-none" style={{ fontSize: '3.5rem', lineHeight: '1' }}>{scores[playerToSave.id].score}</span>
-                                <span className="font-bold ml-2 text-base">점</span>
+                             <div className="flex items-baseline my-4">
+                                <span className="font-extrabold text-destructive leading-none" style={{ fontSize: '5.25rem', lineHeight: '1' }}>{scores[playerToSave.id].score}</span>
+                                <span className="font-bold ml-3 text-2xl">점</span>
                             </div>
                         )}
                         
