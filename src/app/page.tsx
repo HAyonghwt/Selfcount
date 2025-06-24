@@ -33,16 +33,6 @@ export default function LoginPage() {
   useEffect(() => {
     setYear(new Date().getFullYear());
 
-    // Essential check: If Firebase config is missing, don't attempt to connect.
-    // This prevents the app from hanging on a network request that will never resolve.
-    if (!process.env.NEXT_PUBLIC_FIREBASE_API_KEY || process.env.NEXT_PUBLIC_FIREBASE_API_KEY === 'your-api-key') {
-        console.warn("Firebase configuration is missing or is using placeholder values in .env.local. Please set it up.");
-        setError("Firebase 연결 설정이 필요합니다. .env.local 파일을 확인해주세요.");
-        setConfig({ appName: 'ParkScore', userDomain: 'parkgolf.com' });
-        setLoading(false); // Immediately stop loading
-        return; // Stop execution here
-    }
-
     const configRef = ref(db, 'config');
     get(configRef).then((snapshot) => {
       if (snapshot.exists()) {
@@ -52,8 +42,8 @@ export default function LoginPage() {
         setConfig({ appName: 'ParkScore', userDomain: 'parkgolf.com' });
       }
     }).catch((err) => {
-        console.warn("Firebase config fetch error:", err);
-        setError("Firebase 연결에 실패했습니다. .env.local 파일 설정을 확인해주세요.");
+        console.error("Firebase config fetch error:", err);
+        setError("Firebase 연결에 실패했습니다. firebase.ts 파일 설정을 확인해주세요.");
         setConfig({ appName: 'ParkScore', userDomain: 'parkgolf.com' });
     }).finally(() => {
         setLoading(false);
@@ -183,9 +173,14 @@ export default function LoginPage() {
             </div>
             {error && <p className="text-sm font-medium text-destructive">{error}</p>}
             <Button type="submit" className="w-full h-12 text-lg font-bold" disabled={loading}>
-              {loading
-                ? '설정 로딩 중...' 
-                : (<><LogIn className="mr-2 h-5 w-5" />로그인</>)}
+              {loading ? (
+                '설정 로딩 중...'
+              ) : (
+                <>
+                  <LogIn className="mr-2 h-5 w-5" />
+                  로그인
+                </>
+              )}
             </Button>
           </form>
         </CardContent>

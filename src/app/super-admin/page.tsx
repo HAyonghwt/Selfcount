@@ -7,8 +7,9 @@ import { Label } from "@/components/ui/label";
 import { Save, LogOut, Users } from "lucide-react";
 import Link from 'next/link';
 import { useToast } from "@/hooks/use-toast";
-import { db } from "@/lib/firebase";
-import { ref, set, get } from "firebase/database";
+import { db, auth } from "@/lib/firebase";
+import { ref, set, get, onValue } from "firebase/database";
+import { createUserWithEmailAndPassword, updatePassword } from "firebase/auth";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export default function SuperAdminPage() {
@@ -24,7 +25,7 @@ export default function SuperAdminPage() {
 
     useEffect(() => {
         const configRef = ref(db, 'config');
-        get(configRef).then((snapshot) => {
+        const unsubscribe = onValue(configRef, (snapshot) => {
             if (snapshot.exists()) {
                 const data = snapshot.val();
                 setConfig({
@@ -43,39 +44,43 @@ export default function SuperAdminPage() {
                     refereePassword: '',
                 });
             }
-        }).catch(() => {
-             toast({ title: "오류", description: "설정 정보를 불러오는데 실패했습니다." });
-             setConfig({
-                appName: 'ParkScore',
-                userDomain: 'parkgolf.com',
-                maxCourses: 10,
-                maxPlayers: 200,
-                refereePassword: '',
-            });
-        }).finally(() => {
             setLoading(false);
         });
-    }, [toast]);
+        return () => unsubscribe();
+    }, []);
     
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { id, value } = e.target;
         setConfig(prev => ({ ...prev, [id]: value }));
     };
 
-    const handleSaveChanges = () => {
+    const handleSaveChanges = async () => {
+        setLoading(true);
         const configRef = ref(db, 'config');
-        set(configRef, {
-            appName: config.appName.trim(),
-            userDomain: config.userDomain.trim(),
-            maxCourses: Number(config.maxCourses),
-            maxPlayers: Number(config.maxPlayers),
-            refereePassword: config.refereePassword.trim(),
-        }).then(() => {
+
+        try {
+            // 1. Save config to Realtime Database
+            await set(configRef, {
+                appName: config.appName.trim(),
+                userDomain: config.userDomain.trim(),
+                maxCourses: Number(config.maxCourses),
+                maxPlayers: Number(config.maxPlayers),
+                refereePassword: config.refereePassword.trim(),
+            });
+
             toast({
                 title: "성공",
                 description: "모든 설정이 성공적으로 저장되었습니다.",
             });
-        });
+        } catch (error: any) {
+            toast({
+                title: "설정 저장 실패",
+                description: error.message,
+                variant: "destructive",
+            });
+        } finally {
+            setLoading(false);
+        }
     };
 
     if (loading) {
@@ -121,9 +126,9 @@ export default function SuperAdminPage() {
                     <p className="text-muted-foreground">ParkScore 앱의 전역 설정을 관리합니다.</p>
                 </div>
                 <div className="flex gap-2">
-                    <Button onClick={handleSaveChanges}>
+                    <Button onClick={handleSaveChanges} disabled={loading}>
                         <Save className="mr-2 h-4 w-4" />
-                        설정 저장
+                        {loading ? '저장 중...' : '설정 저장'}
                     </Button>
                     <Button variant="outline" asChild>
                         <Link href="/">
@@ -158,7 +163,7 @@ export default function SuperAdminPage() {
                             <div className="space-y-2">
                                 <Label htmlFor="refereePassword">심판 공용 비밀번호</Label>
                                 <Input id="refereePassword" value={config.refereePassword} onChange={handleInputChange} placeholder="예: 123456" />
-                                <p className="text-xs text-muted-foreground">모든 심판 계정(referee1, referee2...)에 공통으로 사용할 비밀번호입니다. Firebase에 실제 계정을 만들 때 이 비밀번호를 사용해야 합니다.</p>
+                                <p className="text-xs text-muted-foreground">모든 심판 계정(referee1, referee2...)에 공통으로 사용할 비밀번호입니다.</p>
                             </div>
                         </CardContent>
                     </Card>
@@ -182,34 +187,19 @@ export default function SuperAdminPage() {
                         </CardContent>
                     </Card>
                 </div>
-                <div className="space-y-8">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>사용자 계정 관리</CardTitle>
-                             <CardDescription>관리자 및 심판 사용자 계정은 Firebase 콘솔에서 직접 관리해야 합니다.</CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-4 text-sm text-muted-foreground">
-                            <p>보안을 위해 사용자 계정 생성 및 비밀번호 관리는 Firebase 프로젝트의 Authentication 섹션에서 직접 수행해야 합니다.</p>
-                            <p>
-                                <strong>관리자 계정:</strong> <code className="bg-muted px-1.5 py-0.5 rounded-sm">admin@{config.userDomain.trim()}</code><br/>
-                                <strong>심판 계정 예시:</strong> <code className="bg-muted px-1.5 py-0.5 rounded-sm">referee1@{config.userDomain.trim()}</code>
-                            </p>
-                             <Button asChild variant="secondary">
-                                <a href={`https://console.firebase.google.com/project/${process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID}/authentication/users`} target="_blank" rel="noopener noreferrer">
-                                    <Users className="mr-2 h-4 w-4" /> Firebase 인증 콘솔로 이동
-                                </a>
-                            </Button>
-                        </CardContent>
-                    </Card>
-                    <Card>
+                 <div className="space-y-8">
+                     <Card>
                         <CardHeader>
                             <CardTitle>Firebase 연결 정보</CardTitle>
-                            <CardDescription>앱의 Firebase 연결은 이제 환경 변수를 통해 안전하게 관리됩니다.</CardDescription>
+                             <CardDescription>앱과 Firebase를 연결하는 설정입니다. 이 정보는 외부에 노출되지 않도록 주의해야 합니다.</CardDescription>
                         </CardHeader>
-                        <CardContent className="space-y-4 text-sm text-muted-foreground">
-                            <p>보안을 위해 Firebase 연결 정보(API 키 등)는 더 이상 이 화면에서 보거나 수정할 수 없습니다.</p>
-                            <p>모든 연결 정보는 프로젝트의 `.env.local` 파일에서 불러옵니다. 설정을 변경하려면 해당 파일을 직접 수정해야 합니다.</p>
-                            <p>이 방식은 민감한 정보를 소스 코드나 데이터베이스에 저장하지 않아, 앱을 GitHub 등에 안전하게 게시할 수 있도록 합니다.</p>
+                        <CardContent className="text-sm text-muted-foreground">
+                           <p>Firebase 연결 정보는 <code className="bg-muted px-1.5 py-0.5 rounded-sm">src/lib/firebase.ts</code> 파일에 직접 입력해야 합니다. 아래 버튼을 눌러 Firebase 콘솔에서 프로젝트 설정 정보를 확인하고, 해당 파일에 복사-붙여넣기 하세요.</p>
+                             <Button asChild variant="secondary" className="mt-4">
+                                <a href="https://console.firebase.google.com/" target="_blank" rel="noopener noreferrer">
+                                    <Users className="mr-2 h-4 w-4" /> Firebase 콘솔로 이동
+                                </a>
+                            </Button>
                         </CardContent>
                     </Card>
                 </div>
