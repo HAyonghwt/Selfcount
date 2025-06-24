@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect } from 'react';
@@ -178,8 +179,15 @@ export default function LoginPage() {
                 disabled={loading}
               />
             </div>
-            {error && <p className="text-sm font-medium text-destructive">{error}</p>}
-            <Button type="submit" className="w-full h-12 text-lg font-bold" disabled={loading}>
+            {error && (
+                <div className="text-center text-sm font-medium text-destructive bg-red-50 border border-red-200 p-3 rounded-lg">
+                    <p>{error}</p>
+                    <a href="https://console.firebase.google.com" target="_blank" rel="noopener noreferrer" className="underline text-xs">
+                        Firebase 콘솔에서 키를 복사해 붙여넣으세요.
+                    </a>
+                </div>
+            )}
+            <Button type="submit" className="w-full h-12 text-lg font-bold" disabled={loading || !!error}>
               {loading ? (
                 '설정 로딩 중...'
               ) : (
