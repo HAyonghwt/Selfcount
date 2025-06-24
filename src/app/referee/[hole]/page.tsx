@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useMemo } from 'react';
@@ -358,14 +359,12 @@ export default function RefereePage() {
                                 <p className="font-bold text-lg truncate pr-2">{getPlayerName(player)}</p>
                             </div>
                             
-                            <div className="flex items-center gap-1 flex-shrink-0">
-                                <div className="flex items-center gap-1">
-                                    <Button variant="outline" size="icon" className="w-11 h-11 rounded-lg border-2" onClick={() => updateScore(player.id, -1)} disabled={isLocked}><Minus className="h-6 w-6" /></Button>
-                                    <div className="relative w-10 text-center">
-                                        <span className={`text-4xl font-bold tabular-nums`}>{scoreData.score}</span>
-                                    </div>
-                                    <Button variant="outline" size="icon" className="w-11 h-11 rounded-lg border-2" onClick={() => updateScore(player.id, 1)} disabled={isLocked}><Plus className="h-6 w-6" /></Button>
+                            <div className="flex items-center gap-2 flex-shrink-0">
+                                <Button variant="outline" size="icon" className="w-11 h-11 rounded-lg border-2" onClick={() => updateScore(player.id, -1)} disabled={isLocked}><Minus className="h-6 w-6" /></Button>
+                                <div className="w-10 text-center">
+                                    <span className={`text-4xl font-bold tabular-nums`}>{scoreData.score}</span>
                                 </div>
+                                <Button variant="outline" size="icon" className="w-11 h-11 rounded-lg border-2" onClick={() => updateScore(player.id, 1)} disabled={isLocked}><Plus className="h-6 w-6" /></Button>
                                 
                                 <Button
                                     size="icon"
@@ -427,10 +426,10 @@ export default function RefereePage() {
             
             <AlertDialog open={!!playerToSave} onOpenChange={(open) => !open && setPlayerToSave(null)}>
                 <AlertDialogContent>
-                    <AlertDialogHeader className="sr-only">
-                        <AlertDialogTitle>점수 저장 확인</AlertDialogTitle>
+                    <AlertDialogHeader>
+                         <AlertDialogTitle className="sr-only">점수 저장 확인</AlertDialogTitle>
                         {playerToSave && scores[playerToSave.id] && (
-                            <AlertDialogDescription>
+                            <AlertDialogDescription className="sr-only">
                                 {`선수 ${getPlayerName(playerToSave)}의 점수를 ${scores[playerToSave.id].score}점으로 저장합니다.`}
                             </AlertDialogDescription>
                         )}
@@ -442,8 +441,8 @@ export default function RefereePage() {
                        
                         {playerToSave && scores[playerToSave.id] && (
                              <div className="flex items-baseline my-2">
-                                <span className="text-5xl font-extrabold text-destructive leading-none" style={{ fontSize: '6rem', lineHeight: '1' }}>{scores[playerToSave.id].score}</span>
-                                <span className="text-xl font-bold ml-2">점</span>
+                                <span className="text-5xl font-extrabold text-destructive leading-none" style={{ fontSize: '4.8rem', lineHeight: '1' }}>{scores[playerToSave.id].score}</span>
+                                <span className="text-lg font-bold ml-2">점</span>
                             </div>
                         )}
                         
