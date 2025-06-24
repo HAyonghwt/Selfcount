@@ -359,7 +359,7 @@ export default function RefereePage() {
                                 <p className="font-bold text-lg truncate pr-2">{getPlayerName(player)}</p>
                             </div>
                             
-                            <div className="flex items-center gap-2 flex-shrink-0">
+                            <div className="flex items-center justify-center gap-2 flex-shrink-0">
                                 <Button variant="outline" size="icon" className="w-11 h-11 rounded-lg border-2" onClick={() => updateScore(player.id, -1)} disabled={isLocked}><Minus className="h-6 w-6" /></Button>
                                 <div className="w-10 text-center">
                                     <span className={`text-4xl font-bold tabular-nums`}>{scoreData.score}</span>
@@ -436,21 +436,21 @@ export default function RefereePage() {
                     </AlertDialogHeader>
                     <div className="flex flex-col items-center justify-center p-4 text-center">
                         {playerToSave && (
-                             <p className="text-2xl font-bold mb-2" style={{ fontSize: '2.25rem', lineHeight: '2.5rem' }}>{getPlayerName(playerToSave)}</p>
+                             <p className="text-2xl font-bold mb-2" style={{ fontSize: '1.8rem', lineHeight: '2.2rem' }}>{getPlayerName(playerToSave)}</p>
                         )}
                        
                         {playerToSave && scores[playerToSave.id] && (
                              <div className="flex items-baseline my-2">
-                                <span className="text-5xl font-extrabold text-destructive leading-none" style={{ fontSize: '4.8rem', lineHeight: '1' }}>{scores[playerToSave.id].score}</span>
-                                <span className="text-lg font-bold ml-2">점</span>
+                                <span className="text-5xl font-extrabold text-destructive leading-none" style={{ fontSize: '3.8rem', lineHeight: '1' }}>{scores[playerToSave.id].score}</span>
+                                <span className="text-base font-bold ml-2">점</span>
                             </div>
                         )}
                         
-                        <p className="text-sm font-semibold mt-2 text-muted-foreground">저장하시겠습니까?</p>
+                        <p className="text-xs font-semibold mt-2 text-muted-foreground">저장하시겠습니까?</p>
                     </div>
                     <AlertDialogFooter className="grid grid-cols-2 gap-4 pt-4">
-                        <AlertDialogCancel onClick={() => setPlayerToSave(null)} className="h-11 px-6 text-base">취소</AlertDialogCancel>
-                        <AlertDialogAction onClick={handleConfirmSave} className="h-11 px-6 text-base">확인</AlertDialogAction>
+                        <AlertDialogCancel onClick={() => setPlayerToSave(null)} className="h-11 px-6 text-sm mt-0">취소</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleConfirmSave} className="h-11 px-6 text-sm">확인</AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
