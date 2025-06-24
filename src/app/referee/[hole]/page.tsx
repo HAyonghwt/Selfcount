@@ -6,7 +6,7 @@ import { useParams } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Minus, Plus, Save, Lock, Edit, CheckCircle2, ArrowLeft } from 'lucide-react';
+import { Minus, Plus, Save, Lock, CheckCircle2, ArrowLeft } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useToast } from '@/hooks/use-toast';
 import { Progress } from '@/components/ui/progress';
@@ -225,14 +225,6 @@ export default function RefereePage() {
                     const scoreRef = ref(db, `/scores/${playerId}/${selectedCourse}/${hole}`);
                     set(scoreRef, scoreData.score).then(() => {
                         setScores(prev => (prev[playerId]?.status === 'saved') ? { ...prev, [playerId]: { ...prev[playerId], status: 'locked' } } : prev);
-                        const player = currentPlayers.find(p => p.id === playerId);
-                        if (player) {
-                            toast({
-                                title: "최종 저장 완료",
-                                description: `${getPlayerName(player)} 선수의 점수가 최종 저장되었습니다.`,
-                                duration: 3000,
-                            });
-                        }
                         timers.delete(playerId);
                     }).catch(err => {
                         setScores(prev => ({...prev, [playerId]: {...prev[playerId], status: 'editing'}}));
@@ -352,12 +344,6 @@ export default function RefereePage() {
 
                 return newScoresState;
             });
-            
-            toast({
-                title: "임시 저장 완료",
-                description: `${getPlayerName(player)} 선수의 점수를 10초 후 저장합니다.`,
-                duration: 3000,
-            });
         }).catch(err => {
             toast({ title: "오류", description: `이전 점수를 저장하는 중 오류 발생: ${err.message}`, variant: "destructive" });
         });
@@ -365,26 +351,33 @@ export default function RefereePage() {
         setConfirmingPlayer(null);
     };
 
-    const handleScoreClickToEdit = (player: Player) => {
-        if (scores[player.id]?.status === 'saved') {
-            const timers = saveTimers.current;
-            if (timers.has(player.id)) {
-                clearTimeout(timers.get(player.id)!);
-                timers.delete(player.id);
-            }
-            
-            setScores(prev => ({
-                ...prev,
-                [player.id]: { ...prev[player.id], status: 'editing' }
-            }));
-            toast({ title: "수정 모드", description: `${getPlayerName(player)} 선수의 점수를 다시 수정합니다.`, duration: 3000 });
+    const handleImmediateLock = (playerId: string) => {
+        const scoreData = scores[playerId];
+        if (scoreData?.status !== 'saved') return;
+
+        const timers = saveTimers.current;
+        if (timers.has(playerId)) {
+            clearTimeout(timers.get(playerId)!);
+            timers.delete(playerId);
         }
-    }
+
+        const scoreRef = ref(db, `/scores/${playerId}/${selectedCourse}/${hole}`);
+        set(scoreRef, scoreData.score)
+            .then(() => {
+                setScores(prev => ({
+                    ...prev,
+                    [playerId]: { ...prev[playerId], status: 'locked' }
+                }));
+            })
+            .catch(err => {
+                setScores(prev => ({...prev, [playerId]: {...prev[playerId], status: 'editing'}}));
+                toast({ title: "오류", description: `즉시 잠금에 실패했습니다: ${err.message}`, variant: "destructive" });
+            });
+    };
 
     const getPlayerName = (player: Player) => player.type === 'team' ? `${player.p1_name}/${player.p2_name}` : player.name;
     
     const renderSelectionScreen = () => {
-        const isGroupSelectionLocked = !!selectedGroup && !(availableJos.length > 0 && availableJos.length === completedJos.size);
         return (
             <Card>
                 <CardHeader>
@@ -392,13 +385,13 @@ export default function RefereePage() {
                     <CardDescription className="text-sm">점수를 기록할 그룹, 코스, 조를 선택하세요.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                    <Select value={selectedGroup} onValueChange={v => {setSelectedGroup(v); setSelectedCourse(''); setSelectedJo('');}} disabled={isGroupSelectionLocked} >
+                    <Select value={selectedGroup} onValueChange={v => {setSelectedGroup(v); setSelectedCourse(''); setSelectedJo('');}} >
                         <SelectTrigger className="h-12 text-base"><SelectValue placeholder="1. 그룹 선택" /></SelectTrigger>
                         <SelectContent position="item-aligned">
                             {availableGroups.map(g => <SelectItem key={g} value={g} className="text-base">{g}</SelectItem>)}
                         </SelectContent>
                     </Select>
-                    <Select value={selectedCourse} onValueChange={v => {setSelectedCourse(v); setSelectedJo('');}} disabled={isGroupSelectionLocked || !selectedGroup || availableCoursesForGroup.length === 0}>
+                    <Select value={selectedCourse} onValueChange={v => {setSelectedCourse(v); setSelectedJo('');}} disabled={!selectedGroup || availableCoursesForGroup.length === 0}>
                         <SelectTrigger className="h-12 text-base"><SelectValue placeholder={!selectedGroup ? "그룹 먼저 선택" : (availableCoursesForGroup.length === 0 ? "배정된 코스 없음" : "2. 코스 선택")} /></SelectTrigger>
                         <SelectContent position="item-aligned">
                             {availableCoursesForGroup.map(c => <SelectItem key={c.id} value={c.id.toString()} className="text-base">{c.name}</SelectItem>)}
@@ -423,9 +416,6 @@ export default function RefereePage() {
                 </CardContent>
                 <CardFooter className="flex-col gap-2">
                      <Button className="w-full h-14 text-xl font-bold" onClick={handleStartScoring} disabled={!selectedJo}>점수기록 시작</Button>
-                     {isGroupSelectionLocked && (
-                        <Button variant="outline" className="w-full" onClick={() => { setSelectedGroup(''); setSelectedCourse(''); setSelectedJo(''); }}>그룹/코스 변경</Button>
-                     )}
                 </CardFooter>
             </Card>
         );
@@ -454,17 +444,17 @@ export default function RefereePage() {
                             </div>
                             <div className="flex items-center gap-1">
                                 <Button variant="outline" size="icon" className="w-11 h-11 rounded-lg border-2 flex-shrink-0" onClick={() => updateScore(player.id, -1)} disabled={!isEditing}><Minus className="h-6 w-6" /></Button>
-                                <div className="relative w-10 text-center" onClick={() => handleScoreClickToEdit(player)}>
-                                    <span className={`text-4xl font-bold tabular-nums ${isSaved ? 'cursor-pointer' : ''}`}>{scoreData.score}</span>
+                                <div className="relative w-10 text-center">
+                                    <span className={`text-4xl font-bold tabular-nums`}>{scoreData.score}</span>
                                 </div>
                                 <Button variant="outline" size="icon" className="w-11 h-11 rounded-lg border-2 flex-shrink-0" onClick={() => updateScore(player.id, 1)} disabled={!isEditing}><Plus className="h-6 w-6" /></Button>
                             </div>
                             <div className="w-11 h-11 flex-shrink-0">
                                 {isEditing && <Button variant="default" size="icon" className="w-full h-full rounded-lg" onClick={() => handleSavePress(player)}><Save className="h-6 w-6" /></Button>}
                                 {isSaved && (
-                                    <div className="flex flex-col items-center justify-center h-full w-full text-center relative border border-dashed border-primary/50 rounded-lg cursor-pointer" onClick={() => handleScoreClickToEdit(player)}>
-                                        <Edit className="absolute top-1 right-1 w-3 h-3 text-primary animate-pulse" />
-                                        <p className="text-xs text-primary font-bold leading-tight">수정</p>
+                                    <div className="flex flex-col items-center justify-center h-full w-full text-center relative border border-dashed border-primary/50 rounded-lg cursor-pointer" onClick={() => handleImmediateLock(player.id)}>
+                                        <CheckCircle2 className="absolute top-1 right-1 w-3 h-3 text-primary" />
+                                        <p className="text-xs text-primary font-bold leading-tight">즉시잠금</p>
                                         <Progress value={progressValue} className="h-0.5 mt-0.5 w-10/12 mx-auto" />
                                     </div>
                                 )}
@@ -557,3 +547,5 @@ export default function RefereePage() {
         </div>
     );
 }
+
+    
