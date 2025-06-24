@@ -1,6 +1,6 @@
 
 "use client"
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -58,8 +58,9 @@ export default function PlayerManagementPage() {
     const [editingPlayerId, setEditingPlayerId] = useState<string | null>(null);
     const [editingPlayerData, setEditingPlayerData] = useState<any | null>(null);
     
-    const individualFileInputRef = useRef<HTMLInputElement>(null);
-    const teamFileInputRef = useRef<HTMLInputElement>(null);
+    // Refs for file inputs, compatible with React 19
+    const [individualFileInput, setIndividualFileInput] = useState<HTMLInputElement | null>(null);
+    const [teamFileInput, setTeamFileInput] = useState<HTMLInputElement | null>(null);
 
     // Search states
     const [individualSearchTerm, setIndividualSearchTerm] = useState('');
@@ -128,9 +129,9 @@ export default function PlayerManagementPage() {
                 [2, "김철수", "강원속초", "강진숙", "강원속초"],
                 [2, "장선호", "강원화천", "임미숙", "강원화천"],
                 [3, "권영운", "경기가평", "김미애", "경기가평"],
-                [3, "김영식", "충남천안", "장성희", "충남천안"],
-                [4, "손종철", "경기평택", "오선애", "경기평택"],
-                [4, "허만덕", "강원평창", "강현숙", "강원평창"],
+                [4, "김영식", "충남천안", "장성희", "충남천안"],
+                [5, "손종철", "경기평택", "오선애", "경기평택"],
+                [5, "허만덕", "강원평창", "강현숙", "강원평창"],
             ];
             
             const ws1 = XLSX.utils.aoa_to_sheet(team_data);
@@ -613,8 +614,8 @@ export default function PlayerManagementPage() {
                             </CardHeader>
                             <CardContent className="flex flex-col sm:flex-row gap-4">
                                 <Button variant="outline" onClick={() => handleDownloadTemplate('individual')}><Download className="mr-2 h-4 w-4" /> 엑셀 양식 다운로드</Button>
-                                <Button onClick={() => individualFileInputRef.current?.click()}><Upload className="mr-2 h-4 w-4" /> 엑셀 파일 업로드</Button>
-                                <input type="file" ref={individualFileInputRef} className="hidden" accept=".xlsx, .xls" onChange={(e) => handleFileUpload(e, 'individual')} />
+                                <Button onClick={() => individualFileInput?.click()}><Upload className="mr-2 h-4 w-4" /> 엑셀 파일 업로드</Button>
+                                <input type="file" ref={setIndividualFileInput} className="hidden" accept=".xlsx, .xls" onChange={(e) => handleFileUpload(e, 'individual')} />
                             </CardContent>
                         </Card>
                         <Card>
@@ -742,8 +743,8 @@ export default function PlayerManagementPage() {
                             <CardHeader><CardTitle className="text-lg">엑셀로 일괄 등록</CardTitle></CardHeader>
                             <CardContent className="flex flex-col sm:flex-row gap-4">
                                <Button variant="outline" onClick={() => handleDownloadTemplate('team')}><Download className="mr-2 h-4 w-4" /> 엑셀 양식 다운로드</Button>
-                                <Button onClick={() => teamFileInputRef.current?.click()}><Upload className="mr-2 h-4 w-4" /> 엑셀 파일 업로드</Button>
-                                <input type="file" ref={teamFileInputRef} className="hidden" accept=".xlsx, .xls" onChange={(e) => handleFileUpload(e, 'team')} />
+                                <Button onClick={() => teamFileInput?.click()}><Upload className="mr-2 h-4 w-4" /> 엑셀 파일 업로드</Button>
+                                <input type="file" ref={setTeamFileInput} className="hidden" accept=".xlsx, .xls" onChange={(e) => handleFileUpload(e, 'team')} />
                             </CardContent>
                         </Card>
                          <Card>
