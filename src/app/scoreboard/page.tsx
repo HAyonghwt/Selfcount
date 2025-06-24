@@ -1,7 +1,6 @@
 
 "use client"
 import React, { useEffect, useState, useMemo, useRef } from 'react';
-import { useSearchParams } from 'next/navigation';
 import { db } from '@/lib/firebase';
 import { ref, onValue } from 'firebase/database';
 import { Flame, ChevronUp, ChevronDown } from 'lucide-react';
@@ -88,8 +87,6 @@ export default function ExternalScoreboard() {
     const [teamSuddenDeathData, setTeamSuddenDeathData] = useState<any>(null);
     const [filterGroup, setFilterGroup] = useState('all');
     const scrollContainerRef = useRef<HTMLDivElement>(null);
-    const searchParams = useSearchParams();
-    const showAdminControls = searchParams.get('admin') === 'true';
     
     useEffect(() => {
         const playersRef = ref(db, 'players');
@@ -249,6 +246,8 @@ export default function ExternalScoreboard() {
         return rankedData;
     }, [players, scores, tournament, groupsData, individualSuddenDeathData, teamSuddenDeathData]);
     
+    const allGroupsList = Object.keys(processedDataByGroup).sort();
+    
     const groupProgress = useMemo(() => {
         const progressByGroup: { [key: string]: number } = {};
         const allCourses = Object.values(tournament.courses || {}).filter(Boolean);
@@ -353,7 +352,6 @@ export default function ExternalScoreboard() {
                 }
             });
             
-            // Re-sort the groups based on the new ranks from sudden death
             finalData[groupName].sort((a: any, b: any) => {
                 const rankA = a.rank === null ? Infinity : a.rank;
                 const rankB = b.rank === null ? Infinity : b.rank;
@@ -367,8 +365,7 @@ export default function ExternalScoreboard() {
 
         return finalData;
     }, [processedDataByGroup, processedIndividualSuddenDeathData, processedTeamSuddenDeathData]);
-
-    const allGroupsList = Object.keys(finalDataByGroup);
+    
     const visibleGroups = Object.keys(finalDataByGroup).filter(groupName => finalDataByGroup[groupName]?.some(player => player.assignedCourses.length > 0));
     
     const groupsToDisplay = useMemo(() => {
@@ -436,8 +433,8 @@ export default function ExternalScoreboard() {
                                 <th className="py-2 px-2 w-48 text-center align-middle font-bold border-r border-red-800/50">선수명(팀명)</th>
                                 <th className="py-2 px-2 w-48 text-center align-middle font-bold border-r border-red-800/50">소속</th>
                                 {data.holes?.sort((a:number,b:number) => a-b).map((hole:number) => <th key={hole} className="py-2 px-2 w-16 text-center align-middle font-bold border-r border-red-800/50">{hole}홀</th>)}
-                                <th className="py-2 px-2 min-w-20 text-center align-middle font-bold border-r border-red-800/50">합계</th>
-                                <th className="py-2 px-2 min-w-20 text-center align-middle font-bold">순위</th>
+                                <th className="py-2 px-2 min-w-[5rem] text-center align-middle font-bold border-r border-red-800/50">합계</th>
+                                <th className="py-2 px-2 min-w-[5rem] text-center align-middle font-bold">순위</th>
                             </tr>
                         </thead>
                         <tbody className="text-xl">
@@ -494,16 +491,16 @@ export default function ExternalScoreboard() {
                                             <th className="py-1 px-1 w-24 text-center align-middle font-bold border-r border-gray-800">소속</th>
                                             <th className="py-1 px-1 w-24 text-center align-middle font-bold border-r border-gray-800">코스</th>
                                             <th colSpan={9} className="py-1 px-1 text-center align-middle font-bold border-r border-gray-800">HOLE</th>
-                                            <th className="py-1 px-1 min-w-16 text-center align-middle font-bold border-r border-gray-800">합계</th>
-                                            <th className="py-1 px-1 min-w-16 text-center align-middle font-bold text-yellow-400 border-r border-gray-800">총타수</th>
-                                            <th className="py-1 px-1 min-w-16 text-center align-middle font-bold">순위</th>
+                                            <th className="py-1 px-1 min-w-[4rem] text-center align-middle font-bold border-r border-gray-800">합계</th>
+                                            <th className="py-1 px-1 min-w-[4rem] text-center align-middle font-bold text-yellow-400 border-r border-gray-800">총타수</th>
+                                            <th className="py-1 px-1 min-w-[4rem] text-center align-middle font-bold">순위</th>
                                         </tr>
                                         <tr className="border-b border-gray-600">
                                             <th className="py-1 px-1 align-middle border-r border-gray-800"></th>
                                             <th className="py-1 px-1 align-middle border-r border-gray-800"></th>
                                             <th className="py-1 px-1 align-middle border-r border-gray-800"></th>
                                             <th className="py-1 px-1 align-middle border-r border-gray-800"></th>
-                                            {Array.from({length: 9}).map((_, i) => <th key={i} className={`py-1 px-1 font-bold text-base align-middle border-r border-gray-800 w-9 ${i % 2 !== 0 ? 'bg-gray-800/50' : ''}`}>{i + 1}</th>)}
+                                            {Array.from({length: 9}).map((_, i) => <th key={i} className={`py-1 px-1 font-bold text-base align-middle border-r border-gray-800 min-w-[2.5rem] ${i % 2 !== 0 ? 'bg-gray-800/50' : ''}`}>{i + 1}</th>)}
                                             <th className="py-1 px-1 align-middle border-r border-gray-800"></th>
                                             <th className="py-1 px-1 align-middle border-r border-gray-800"></th>
                                             <th className="py-1 px-1 align-middle"></th>
@@ -550,39 +547,40 @@ export default function ExternalScoreboard() {
                     )
                 })}
             </div>
-            {showAdminControls && (
-                <div className="fixed top-4 right-4 flex items-center gap-4 z-50">
-                    <div className="flex items-center gap-2">
-                        <Label htmlFor="group-filter" className="font-bold text-sm text-gray-300">그룹 선택</Label>
-                        <Select value={filterGroup} onValueChange={setFilterGroup}>
-                            <SelectTrigger id="group-filter" className="w-[200px] h-9 bg-gray-800/80 backdrop-blur-sm border-gray-600 text-white focus:ring-yellow-400">
-                                <SelectValue placeholder="그룹을 선택하세요" />
-                            </SelectTrigger>
-                            <SelectContent className="bg-gray-900 text-white border-gray-700">
-                                <SelectItem value="all">모든 그룹 보기</SelectItem>
-                                {allGroupsList.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}
-                            </SelectContent>
-                        </Select>
-                    </div>
-
-                    <div className="flex flex-col gap-2 group">
-                        <button
-                            onClick={() => handleScroll(-50)}
-                            aria-label="Scroll Up"
-                            className="bg-gray-800/70 text-white p-2 rounded-full hover:bg-gray-700 transition-opacity opacity-0 group-hover:opacity-100 duration-300"
-                        >
-                            <ChevronUp className="h-6 w-6" />
-                        </button>
-                        <button
-                            onClick={() => handleScroll(50)}
-                            aria-label="Scroll Down"
-                            className="bg-gray-800/70 text-white p-2 rounded-full hover:bg-gray-700 transition-opacity opacity-0 group-hover:opacity-100 duration-300"
-                        >
-                            <ChevronDown className="h-6 w-6" />
-                        </button>
-                    </div>
+            
+            <div className="fixed top-4 right-4 flex items-center gap-4 z-50 group">
+                <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                    <Label htmlFor="group-filter" className="font-bold text-sm text-gray-300">그룹 선택</Label>
+                    <Select value={filterGroup} onValueChange={setFilterGroup}>
+                        <SelectTrigger id="group-filter" className="w-[200px] h-9 bg-gray-800/80 backdrop-blur-sm border-gray-600 text-white focus:ring-yellow-400">
+                            <SelectValue placeholder="그룹을 선택하세요" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-gray-900 text-white border-gray-700">
+                            <SelectItem value="all">모든 그룹 보기</SelectItem>
+                            {allGroupsList.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}
+                        </SelectContent>
+                    </Select>
                 </div>
-            )}
+
+                <div className="flex flex-col gap-2">
+                    <button
+                        onClick={() => handleScroll(-50)}
+                        aria-label="Scroll Up"
+                        className="bg-gray-800/70 text-white p-2 rounded-full hover:bg-gray-700 transition-opacity opacity-0 group-hover:opacity-100 duration-300"
+                    >
+                        <ChevronUp className="h-6 w-6" />
+                    </button>
+                    <button
+                        onClick={() => handleScroll(50)}
+                        aria-label="Scroll Down"
+                        className="bg-gray-800/70 text-white p-2 rounded-full hover:bg-gray-700 transition-opacity opacity-0 group-hover:opacity-100 duration-300"
+                    >
+                        <ChevronDown className="h-6 w-6" />
+                    </button>
+                </div>
+            </div>
         </>
     );
 }
+
+    
