@@ -121,19 +121,22 @@ export default function PlayerManagementPage() {
             XLSX.utils.book_append_sheet(wb, ws2, "여자개인전");
             filename = "개인전_선수등록_양식.xlsx";
         } else { // team
-            const ws1_data = [
+            const team_data = [
                 ["조", "선수1 이름", "선수1 소속", "선수2 이름", "선수2 소속"],
-                ["1", "홍길동", "중앙 파크골프", "김철수", "중앙 파크골프"],
-                ["2", "이영희", "강남 클럽", "박지성", ""],
+                [1, "홍길동", "서울광진", "김순희", "서울광진"],
+                [1, "이영희", "경기용인", "정희숙", "경기용인"],
+                [2, "김철수", "강원속초", "강진숙", "강원속초"],
+                [2, "장선호", "강원화천", "임미숙", "강원화천"],
+                [3, "권영운", "경기가평", "김미애", "경기가평"],
+                [3, "김영식", "충남천안", "장성희", "충남천안"],
+                [4, "손종철", "경기평택", "오선애", "경기평택"],
+                [4, "허만덕", "강원평창", "강현숙", "강원평창"],
             ];
-            const ws2_data = [
-                ["조", "선수1 이름", "선수1 소속", "선수2 이름", "선수2 소속"],
-                ["5", "나팀", "팀플레이", "너팀", "팀플레이"],
-            ];
-            const ws1 = XLSX.utils.aoa_to_sheet(ws1_data);
-            const ws2 = XLSX.utils.aoa_to_sheet(ws2_data);
-            XLSX.utils.book_append_sheet(wb, ws1, "시니어팀 (예시)");
-            XLSX.utils.book_append_sheet(wb, ws2, "일반팀 (예시)");
+            
+            const ws1 = XLSX.utils.aoa_to_sheet(team_data);
+            const ws2 = XLSX.utils.aoa_to_sheet(team_data);
+            XLSX.utils.book_append_sheet(wb, ws1, "부부대항");
+            XLSX.utils.book_append_sheet(wb, ws2, "혼성2인");
             filename = "2인1팀_선수등록_양식.xlsx";
         }
 
