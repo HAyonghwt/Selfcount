@@ -1,3 +1,4 @@
+
 "use client"
 
 import React, { useState, useEffect } from 'react';
@@ -11,7 +12,7 @@ import { db, firebaseConfig } from '@/lib/firebase';
 import { ref, onValue, set } from 'firebase/database';
 import { Skeleton } from '@/components/ui/skeleton';
 
-const MAX_HOLES = 18;
+const MAX_HOLES = 9;
 
 export default function RefereeManagementPage() {
     const { toast } = useToast();
