@@ -368,22 +368,32 @@ export default function AdminDashboard() {
             const groupPlayers = dataToExport[groupName];
             if (!groupPlayers || groupPlayers.length === 0) continue;
 
+            const ws_data: { [key: string]: any } = {};
+            const merges: any[] = [];
+            let rowIndex = 0;
             const headers = [
                 '순위', '조', '선수명(팀명)', '소속', '코스', 
                 '1', '2', '3', '4', '5', '6', '7', '8', '9',
                 '코스 합계', '총타수'
             ];
-            
-            const sheetData = [headers];
 
-            // Re-fetch full data for export to include hole scores
+            const centerAlign = { alignment: { horizontal: "center", vertical: "center" } };
+
+            // 1. Set Headers
+            headers.forEach((header, colIndex) => {
+                const cellRef = XLSX.utils.encode_cell({ r: rowIndex, c: colIndex });
+                ws_data[cellRef] = { v: header, t: 's', s: { font: { bold: true }, ...centerAlign } };
+            });
+            rowIndex++;
+
+            // 2. Re-fetch full data for export to include hole scores
             const fullPlayersDataForExport = groupPlayers.map(p => {
                  const playerScoresData = scores[p.id] || {};
                  const coursesData: any = {};
                  p.assignedCourses.forEach((course: any) => {
                     const courseId = course.id;
                     const scoresForCourse = playerScoresData[courseId] || {};
-                    const holeScores: (number | null)[] = Array(9).fill(null);
+                    const holeScores: (number | string)[] = Array(9).fill('-');
                     let courseTotal = 0;
                     for (let i = 0; i < 9; i++) {
                         const holeScore = scoresForCourse[(i + 1).toString()];
@@ -398,57 +408,67 @@ export default function AdminDashboard() {
                  return {...p, coursesData};
             });
 
-
+            // 3. Populate Data and Merges
             fullPlayersDataForExport.forEach(player => {
-                if (player.assignedCourses.length === 0) {
-                     sheetData.push([
-                        player.rank !== null ? `${player.rank}위` : (player.hasForfeited ? '기권' : ''),
-                        player.jo,
-                        player.name,
-                        player.affiliation,
-                        '배정된 코스 없음', '', '', '', '', '', '', '', '', '', '',
-                        player.hasForfeited ? '기권' : (player.hasAnyScore ? player.totalScore : '-')
-                     ]);
-                } else {
-                    player.assignedCourses.forEach((course: any, courseIndex: number) => {
-                        const courseData = player.coursesData[course.id];
-                        const row: (string|number)[] = [];
+                const startRow = rowIndex;
+                const numCourses = player.assignedCourses.length > 0 ? player.assignedCourses.length : 1;
+                const endRow = startRow + numCourses - 1;
+                
+                const addCell = (r: number, c: number, value: any) => {
+                    const cellRef = XLSX.utils.encode_cell({ r, c });
+                    const type = typeof value === 'number' ? 'n' : 's';
+                    ws_data[cellRef] = { v: value, t: type, s: centerAlign };
+                };
 
-                        if (courseIndex === 0) {
-                            row.push(
-                                player.rank !== null ? `${player.rank}위` : (player.hasForfeited ? '기권' : ''),
-                                player.jo,
-                                player.name,
-                                player.affiliation
-                            );
-                        } else {
-                            row.push('', '', '', '');
-                        }
+                // Merged columns
+                addCell(startRow, 0, player.rank !== null ? `${player.rank}위` : (player.hasForfeited ? '기권' : ''));
+                addCell(startRow, 1, player.jo);
+                addCell(startRow, 2, player.name);
+                addCell(startRow, 3, player.affiliation);
+                addCell(startRow, 15, player.hasForfeited ? '기권' : (player.hasAnyScore ? player.totalScore : '-'));
 
-                        row.push(
-                            courseData?.courseName || course.name,
-                            ...(courseData?.holeScores.map(s => s === null ? '-' : s) || Array(9).fill('-')),
-                            player.hasForfeited ? '기권' : (player.hasAnyScore ? (courseData?.courseTotal || 0) : '-'),
-                        );
-
-                        if (courseIndex === 0) {
-                            row.push(player.hasForfeited ? '기권' : (player.hasAnyScore ? player.totalScore : '-'));
-                        } else {
-                            row.push('');
-                        }
-                        sheetData.push(row);
-                    });
+                if (numCourses > 1) {
+                    merges.push({ s: { r: startRow, c: 0 }, e: { r: endRow, c: 0 } }); // Rank
+                    merges.push({ s: { r: startRow, c: 1 }, e: { r: endRow, c: 1 } }); // Jo
+                    merges.push({ s: { r: startRow, c: 2 }, e: { r: endRow, c: 2 } }); // Name
+                    merges.push({ s: { r: startRow, c: 3 }, e: { r: endRow, c: 3 } }); // Affiliation
+                    merges.push({ s: { r: startRow, c: 15 }, e: { r: endRow, c: 15 } });// Total Score
                 }
+
+                if (player.assignedCourses.length > 0) {
+                    player.assignedCourses.forEach((course: any, courseIndex: number) => {
+                        const currentRow = startRow + courseIndex;
+                        const courseData = player.coursesData[course.id];
+                        
+                        addCell(currentRow, 4, courseData?.courseName || course.name);
+                        
+                        const holeScores = courseData?.holeScores || Array(9).fill('-');
+                        holeScores.forEach((score: number | string, i: number) => {
+                            addCell(currentRow, 5 + i, score);
+                        });
+
+                        addCell(currentRow, 14, player.hasForfeited ? '기권' : (player.hasAnyScore ? (courseData?.courseTotal || 0) : '-'));
+                    });
+                } else {
+                    addCell(startRow, 4, '배정된 코스 없음');
+                    merges.push({ s: { r: startRow, c: 4 }, e: { r: startRow, c: 14 } });
+                }
+
+                rowIndex += numCourses;
             });
-
-            const ws = XLSX.utils.aoa_to_sheet(sheetData);
-
+            
+            // 4. Create Worksheet
+            const ws: XLSX.WorkSheet = ws_data;
+            ws['!merges'] = merges;
             ws['!cols'] = [
-                { wch: 5 }, { wch: 5 }, { wch: 25 }, { wch: 25 }, { wch: 15 },
-                ...Array(9).fill({ wch: 4 }),
+                { wch: 8 }, { wch: 8 }, { wch: 30 }, { wch: 30 }, { wch: 15 },
+                ...Array(9).fill({ wch: 5 }),
                 { wch: 10 }, { wch: 10 },
             ];
             
+            const range = { s: { r: 0, c: 0 }, e: { r: rowIndex > 0 ? rowIndex - 1 : 0, c: headers.length - 1 } };
+            ws['!ref'] = XLSX.utils.encode_range(range);
+
             XLSX.utils.book_append_sheet(wb, ws, groupName);
         }
 
