@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Search, Save } from 'lucide-react';
+import { Search, Save, Eye, EyeOff } from 'lucide-react';
 import {
   Select,
   SelectContent,
@@ -37,6 +37,7 @@ export default function ScoreManagementPage() {
     const [allCourses, setAllCourses] = useState({});
     const [flatScores, setFlatScores] = useState<ScoreEntry[]>([]);
     const [unlockPassword, setUnlockPassword] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
 
     const [editingCell, setEditingCell] = useState<string | null>(null);
     const [editValue, setEditValue] = useState<number | string>('');
@@ -170,13 +171,26 @@ export default function ScoreManagementPage() {
                 <CardContent className="flex flex-col sm:flex-row gap-4 items-end">
                     <div className="space-y-2 flex-1 w-full">
                         <Label htmlFor="unlock-password">잠금 해제 비밀번호</Label>
-                        <Input
-                            id="unlock-password"
-                            type="password"
-                            value={unlockPassword}
-                            onChange={e => setUnlockPassword(e.target.value)}
-                            placeholder="새로운 비밀번호 입력"
-                        />
+                        <div className="relative">
+                            <Input
+                                id="unlock-password"
+                                type={showPassword ? 'text' : 'password'}
+                                value={unlockPassword}
+                                onChange={e => setUnlockPassword(e.target.value)}
+                                placeholder="새로운 비밀번호 입력"
+                                className="pr-10"
+                            />
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="absolute inset-y-0 right-0 h-full w-auto px-3 text-muted-foreground hover:text-foreground"
+                                onClick={() => setShowPassword(prev => !prev)}
+                                aria-label={showPassword ? "비밀번호 숨기기" : "비밀번호 보기"}
+                            >
+                                {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                            </Button>
+                        </div>
                     </div>
                     <Button onClick={handleSaveUnlockPassword}>
                         <Save className="mr-2 h-4 w-4" />
