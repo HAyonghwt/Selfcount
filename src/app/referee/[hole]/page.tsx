@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -187,22 +187,26 @@ export default function RefereePage() {
         const storageKey = getLocalStorageScoresKey();
         const savedInterimScores = storageKey ? JSON.parse(localStorage.getItem(storageKey) || '{}') : {};
 
-        const newScoresState: { [key: string]: ScoreData } = {};
-        
-        currentPlayers.forEach((player) => {
-            const existingScoreFromDb = allScores[player.id]?.[selectedCourse]?.[hole];
-            const interimScore = savedInterimScores[player.id];
-
-            if (existingScoreFromDb !== undefined) {
-                newScoresState[player.id] = { score: Number(existingScoreFromDb), status: 'locked' };
-            } else if (interimScore) {
-                newScoresState[player.id] = { score: Number(interimScore.score), status: 'editing'};
-            } else {
-                newScoresState[player.id] = { score: 1, status: 'editing' };
-            }
+        setScores((prevScores) => {
+            const newScoresState: { [key: string]: ScoreData } = {};
+            currentPlayers.forEach((player) => {
+                const existingScoreFromDb = allScores[player.id]?.[selectedCourse]?.[hole];
+                const interimScore = savedInterimScores[player.id];
+                const currentEditingScore = prevScores[player.id];
+    
+                if (existingScoreFromDb !== undefined) {
+                    newScoresState[player.id] = { score: Number(existingScoreFromDb), status: 'locked' };
+                } else if (currentEditingScore && currentEditingScore.status === 'editing') {
+                    // Preserve currently edited score if it exists and is not locked
+                    newScoresState[player.id] = currentEditingScore;
+                } else if (interimScore) {
+                    newScoresState[player.id] = { score: Number(interimScore.score), status: 'editing'};
+                } else {
+                    newScoresState[player.id] = { score: 1, status: 'editing' };
+                }
+            });
+            return newScoresState;
         });
-        
-        setScores(newScoresState);
         
     }, [view, selectedJo, selectedCourse, hole, allScores, currentPlayers]);
 
@@ -411,22 +415,23 @@ export default function RefereePage() {
             
             <AlertDialog open={!!playerToSave} onOpenChange={(open) => !open && setPlayerToSave(null)}>
                 <AlertDialogContent>
-                    <AlertDialogHeader>
-                        <AlertDialogTitle>점수를 저장하시겠습니까?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            {playerToSave && scores[playerToSave.id] && (
-                                <div className="space-y-1 my-4 text-base text-foreground">
-                                    <p><strong>선수:</strong> {getPlayerName(playerToSave)}</p>
-                                    <p><strong>코스:</strong> {selectedCourseName} {hole}홀</p>
-                                    <p><strong>점수:</strong> <span className="font-bold text-lg text-primary">{scores[playerToSave.id].score}점</span></p>
-                                </div>
-                            )}
-                            저장 후에는 수정할 수 없습니다.
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel onClick={() => setPlayerToSave(null)}>취소</AlertDialogCancel>
-                        <AlertDialogAction onClick={handleConfirmSave}>확인 및 저장</AlertDialogAction>
+                    <div className="flex flex-col items-center justify-center p-4 text-center">
+                        {playerToSave && (
+                             <p className="text-2xl font-bold mb-2">{getPlayerName(playerToSave)}</p>
+                        )}
+                       
+                        {playerToSave && scores[playerToSave.id] && (
+                             <div className="flex items-baseline my-4">
+                                <span className="text-7xl font-extrabold text-destructive leading-none">{scores[playerToSave.id].score}</span>
+                                <span className="text-2xl font-bold ml-2">점</span>
+                            </div>
+                        )}
+                        
+                        <p className="text-lg font-semibold mt-2">저장하시겠습니까?</p>
+                    </div>
+                    <AlertDialogFooter className="sm:justify-center gap-2">
+                        <AlertDialogCancel onClick={() => setPlayerToSave(null)} className="flex-1">취소</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleConfirmSave} className="flex-1">확인 및 저장</AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
