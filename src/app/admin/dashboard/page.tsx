@@ -89,13 +89,16 @@ export default function AdminDashboard() {
     const [courses, setCourses] = useState({});
     const [groupsData, setGroupsData] = useState({});
     const [filterGroup, setFilterGroup] = useState('all');
-    const [suddenDeathData, setSuddenDeathData] = useState<any>(null);
+    const [individualSuddenDeathData, setIndividualSuddenDeathData] = useState<any>(null);
+    const [teamSuddenDeathData, setTeamSuddenDeathData] = useState<any>(null);
 
     useEffect(() => {
         const playersRef = ref(db, 'players');
         const scoresRef = ref(db, 'scores');
         const tournamentRef = ref(db, 'tournaments/current');
-        const suddenDeathRef = ref(db, 'tournaments/current/suddenDeath');
+        const individualSuddenDeathRef = ref(db, 'tournaments/current/suddenDeath/individual');
+        const teamSuddenDeathRef = ref(db, 'tournaments/current/suddenDeath/team');
+
 
         const unsubPlayers = onValue(playersRef, snap => setPlayers(snap.val() || {}));
         const unsubScores = onValue(scoresRef, snap => setScores(snap.val() || {}));
@@ -104,13 +107,15 @@ export default function AdminDashboard() {
             setCourses(data.courses || {});
             setGroupsData(data.groups || {});
         });
-        const unsubSuddenDeath = onValue(suddenDeathRef, snap => setSuddenDeathData(snap.val()));
+        const unsubIndividualSuddenDeath = onValue(individualSuddenDeathRef, snap => setIndividualSuddenDeathData(snap.val()));
+        const unsubTeamSuddenDeath = onValue(teamSuddenDeathRef, snap => setTeamSuddenDeathData(snap.val()));
         
         return () => {
             unsubPlayers();
             unsubScores();
             unsubTournament();
-            unsubSuddenDeath();
+            unsubIndividualSuddenDeath();
+            unsubTeamSuddenDeath();
         }
     }, []);
     
@@ -144,7 +149,7 @@ export default function AdminDashboard() {
                     const holeScore = scoresForCourse[(i + 1).toString()];
                     if (holeScore !== undefined && holeScore !== null) {
                         const scoreNum = Number(holeScore);
-                        holeScores[i] = scoreNum;
+                        // holeScores[i] = scoreNum; // Not used on this page
                         courseTotal += scoreNum;
                         hasAnyScore = true;
                         if (scoreNum === 0) {
@@ -164,6 +169,7 @@ export default function AdminDashboard() {
                 name: player.type === 'team' ? `${player.p1_name} / ${player.p2_name}` : player.name,
                 affiliation: player.type === 'team' ? player.p1_affiliation : player.affiliation,
                 group: player.group,
+                type: player.type,
                 totalScore,
                 coursesData,
                 hasAnyScore,
@@ -228,7 +234,7 @@ export default function AdminDashboard() {
         return rankedData;
     }, [players, scores, courses, groupsData]);
     
-    const processedSuddenDeathData = useMemo(() => {
+    const processSuddenDeath = (suddenDeathData: any) => {
         if (!suddenDeathData?.isActive || !suddenDeathData.players || !suddenDeathData.holes || !Array.isArray(suddenDeathData.holes)) return [];
         
         const participatingPlayerIds = Object.keys(suddenDeathData.players).filter(id => suddenDeathData.players[id]);
@@ -267,29 +273,43 @@ export default function AdminDashboard() {
         }
 
         return results;
-    }, [suddenDeathData, players]);
+    }
+
+    const processedIndividualSuddenDeathData = useMemo(() => processSuddenDeath(individualSuddenDeathData), [individualSuddenDeathData, players]);
+    const processedTeamSuddenDeathData = useMemo(() => processSuddenDeath(teamSuddenDeathData), [teamSuddenDeathData, players]);
 
     const finalDataByGroup = useMemo(() => {
-        if (!suddenDeathData?.isActive || !processedSuddenDeathData || processedSuddenDeathData.length === 0) {
+        const individualRankMap = new Map(processedIndividualSuddenDeathData.map(p => [p.id, p.rank]));
+        const teamRankMap = new Map(processedTeamSuddenDeathData.map(p => [p.id, p.rank]));
+        const combinedRankMap = new Map([...individualRankMap, ...teamRankMap]);
+
+        if (combinedRankMap.size === 0) {
             return processedDataByGroup;
         }
-
-        const suddenDeathRankMap = new Map(
-            processedSuddenDeathData.map(p => [p.id, p.rank])
-        );
-
+        
         const finalData = JSON.parse(JSON.stringify(processedDataByGroup));
 
         for (const groupName in finalData) {
             finalData[groupName].forEach((player: ProcessedPlayer) => {
-                if (suddenDeathRankMap.has(player.id)) {
-                    player.rank = suddenDeathRankMap.get(player.id) as number;
+                if (combinedRankMap.has(player.id)) {
+                    player.rank = combinedRankMap.get(player.id) as number;
                 }
             });
+
+            // Re-sort the groups based on the new ranks from sudden death
+            finalData[groupName].sort((a,b) => {
+                const rankA = a.rank === null ? Infinity : a.rank;
+                const rankB = b.rank === null ? Infinity : b.rank;
+                if (rankA !== rankB) return rankA - rankB;
+
+                const scoreA = a.hasAnyScore && !a.hasForfeited ? a.totalScore : Infinity;
+                const scoreB = b.hasAnyScore && !b.hasForfeited ? b.totalScore : Infinity;
+                return scoreA - scoreB;
+            })
         }
 
         return finalData;
-    }, [processedDataByGroup, processedSuddenDeathData, suddenDeathData]);
+    }, [processedDataByGroup, processedIndividualSuddenDeathData, processedTeamSuddenDeathData]);
     
     const allGroupsList = Object.keys(finalDataByGroup);
 

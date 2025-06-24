@@ -11,6 +11,7 @@ interface ProcessedPlayer {
     name: string;
     club: string;
     group: string;
+    type: 'individual' | 'team';
     totalScore: number;
     rank: number | null;
     hasAnyScore: boolean;
@@ -78,13 +79,15 @@ export default function ExternalScoreboard() {
     const [scores, setScores] = useState({});
     const [tournament, setTournament] = useState<any>({});
     const [groupsData, setGroupsData] = useState<any>({});
-    const [suddenDeathData, setSuddenDeathData] = useState<any>(null);
+    const [individualSuddenDeathData, setIndividualSuddenDeathData] = useState<any>(null);
+    const [teamSuddenDeathData, setTeamSuddenDeathData] = useState<any>(null);
     
     useEffect(() => {
         const playersRef = ref(db, 'players');
         const scoresRef = ref(db, 'scores');
         const tournamentRef = ref(db, 'tournaments/current');
-        const suddenDeathRef = ref(db, 'tournaments/current/suddenDeath');
+        const individualSuddenDeathRef = ref(db, 'tournaments/current/suddenDeath/individual');
+        const teamSuddenDeathRef = ref(db, 'tournaments/current/suddenDeath/team');
 
         const unsubPlayers = onValue(playersRef, snap => setPlayers(snap.val() || {}));
         const unsubScores = onValue(scoresRef, snap => setScores(snap.val() || {}));
@@ -94,7 +97,8 @@ export default function ExternalScoreboard() {
             setGroupsData(data.groups || {});
             setLoading(false);
         });
-        const unsubSuddenDeath = onValue(suddenDeathRef, snap => setSuddenDeathData(snap.val()));
+        const unsubIndividualSuddenDeath = onValue(individualSuddenDeathRef, snap => setIndividualSuddenDeathData(snap.val()));
+        const unsubTeamSuddenDeath = onValue(teamSuddenDeathRef, snap => setTeamSuddenDeathData(snap.val()));
 
         const timer = setTimeout(() => setLoading(false), 5000);
 
@@ -102,7 +106,8 @@ export default function ExternalScoreboard() {
             unsubPlayers();
             unsubScores();
             unsubTournament();
-            unsubSuddenDeath();
+            unsubIndividualSuddenDeath();
+            unsubTeamSuddenDeath();
             clearTimeout(timer);
         };
     }, []);
@@ -159,6 +164,7 @@ export default function ExternalScoreboard() {
                 name: player.type === 'team' ? `${player.p1_name} / ${player.p2_name}` : player.name,
                 club: player.type === 'team' ? player.p1_affiliation : player.affiliation,
                 group: player.group,
+                type: player.type,
                 totalScore,
                 coursesData,
                 hasAnyScore,
@@ -191,7 +197,9 @@ export default function ExternalScoreboard() {
 
                 playersToSort.sort((a, b) => {
                     if (a.totalScore !== b.totalScore) return a.totalScore - b.totalScore;
+                    // For leaders, do not apply tie-break to let them be tied for sudden death
                     if (a.totalScore === leaderScore) return a.name.localeCompare(b.name);
+                    // For other ranks, apply tie-break
                     return tieBreak(a, b, coursesForGroup);
                 });
 
@@ -203,8 +211,8 @@ export default function ExternalScoreboard() {
                     
                     let isTied = false;
                     if (curr.totalScore === prev.totalScore) {
-                        if (curr.totalScore === leaderScore) isTied = true;
-                        else isTied = tieBreak(curr, prev, coursesForGroup) === 0;
+                         if (curr.totalScore === leaderScore) isTied = true; // Leaders are always tied
+                         else isTied = tieBreak(curr, prev, coursesForGroup) === 0;
                     }
 
                     if (isTied) {
@@ -260,7 +268,7 @@ export default function ExternalScoreboard() {
         return progressByGroup;
     }, [processedDataByGroup, scores, groupsData, tournament.courses]);
 
-    const processedSuddenDeathData = useMemo(() => {
+    const processSuddenDeath = (suddenDeathData: any) => {
         if (!suddenDeathData?.isActive || !suddenDeathData.players || !suddenDeathData.holes || !Array.isArray(suddenDeathData.holes)) return [];
         
         const participatingPlayerIds = Object.keys(suddenDeathData.players).filter(id => suddenDeathData.players[id]);
@@ -304,29 +312,43 @@ export default function ExternalScoreboard() {
         }
 
         return results;
-    }, [suddenDeathData, players]);
+    };
+    
+    const processedIndividualSuddenDeathData = useMemo(() => processSuddenDeath(individualSuddenDeathData), [individualSuddenDeathData, players]);
+    const processedTeamSuddenDeathData = useMemo(() => processSuddenDeath(teamSuddenDeathData), [teamSuddenDeathData, players]);
 
     const finalDataByGroup = useMemo(() => {
-        if (!suddenDeathData?.isActive || !processedSuddenDeathData || processedSuddenDeathData.length === 0) {
+        const individualRankMap = new Map(processedIndividualSuddenDeathData.map(p => [p.id, p.rank]));
+        const teamRankMap = new Map(processedTeamSuddenDeathData.map(p => [p.id, p.rank]));
+        const combinedRankMap = new Map([...individualRankMap, ...teamRankMap]);
+
+        if (combinedRankMap.size === 0) {
             return processedDataByGroup;
         }
-
-        const suddenDeathRankMap = new Map(
-            processedSuddenDeathData.map(p => [p.id, p.rank])
-        );
 
         const finalData = JSON.parse(JSON.stringify(processedDataByGroup));
 
         for (const groupName in finalData) {
             finalData[groupName].forEach((player: ProcessedPlayer) => {
-                if (suddenDeathRankMap.has(player.id)) {
-                    player.rank = suddenDeathRankMap.get(player.id) as number;
+                if (combinedRankMap.has(player.id)) {
+                    player.rank = combinedRankMap.get(player.id) as number;
                 }
             });
+            
+            // Re-sort the groups based on the new ranks from sudden death
+            finalData[groupName].sort((a: any, b: any) => {
+                const rankA = a.rank === null ? Infinity : a.rank;
+                const rankB = b.rank === null ? Infinity : b.rank;
+                if (rankA !== rankB) return rankA - rankB;
+
+                const scoreA = a.hasAnyScore && !a.hasForfeited ? a.totalScore : Infinity;
+                const scoreB = b.hasAnyScore && !b.hasForfeited ? b.totalScore : Infinity;
+                return scoreA - scoreB;
+            })
         }
 
         return finalData;
-    }, [processedDataByGroup, processedSuddenDeathData, suddenDeathData]);
+    }, [processedDataByGroup, processedIndividualSuddenDeathData, processedTeamSuddenDeathData]);
 
 
     if (loading) {
@@ -350,6 +372,52 @@ export default function ExternalScoreboard() {
         </div>
     );
 
+    const SuddenDeathTable = ({ type, data, processedData }: { type: 'individual' | 'team', data: any, processedData: any[] }) => {
+        const title = type === 'individual' ? '개인전 서든데스 플레이오프' : '2인 1팀 서든데스 플레이오프';
+        const courseName = data?.courseId && tournament?.courses?.[data.courseId]?.name;
+        
+        return (
+            <div className="mb-6">
+                <header className="flex flex-col justify-center items-center border-b-4 border-red-500 pb-2 mb-2 text-center">
+                    <h1 className="text-2xl md:text-4xl font-bold text-red-400 flex items-center gap-3">
+                        <Flame className="h-8 w-8 animate-pulse" />
+                        {title}
+                        <Flame className="h-8 w-8 animate-pulse" />
+                    </h1>
+                    {courseName && (
+                        <p className="text-lg md:text-xl font-semibold text-gray-300 mt-1">
+                            ({courseName})
+                        </p>
+                    )}
+                </header>
+                <div className="overflow-x-auto bg-gray-900/50 rounded-lg border-2 border-red-500/50">
+                    <table className="w-full text-center border-collapse">
+                        <thead className="text-red-300 text-base">
+                            <tr className="border-b-2 border-red-600/70">
+                                <th className="py-2 px-2 w-48 text-center align-middle font-bold border-r border-red-800/50">선수명(팀명)</th>
+                                <th className="py-2 px-2 w-48 text-center align-middle font-bold border-r border-red-800/50">소속</th>
+                                {data.holes?.sort((a:number,b:number) => a-b).map((hole:number) => <th key={hole} className="py-2 px-2 w-16 text-center align-middle font-bold border-r border-red-800/50">{hole}홀</th>)}
+                                <th className="py-2 px-2 w-20 text-center align-middle font-bold border-r border-red-800/50">합계</th>
+                                <th className="py-2 px-2 w-20 text-center align-middle font-bold">순위</th>
+                            </tr>
+                        </thead>
+                        <tbody className="text-xl">
+                            {processedData.map(player => (
+                                <tr key={player.id} className="border-b border-red-800/50 last:border-0">
+                                    <td className="py-1 px-2 text-center align-middle font-semibold border-r border-red-800/50">{player.name}</td>
+                                    <td className="py-1 px-2 text-center align-middle text-gray-400 border-r border-red-800/50">{player.club}</td>
+                                    {data.holes.map((hole:number) => <td key={hole} className="py-1 px-2 align-middle font-mono font-bold text-2xl border-r border-red-800/50">{player.scoresPerHole[hole] ?? '-'}</td>)}
+                                    <td className="py-1 px-2 align-middle font-bold text-2xl border-r border-red-800/50">{player.totalScore}</td>
+                                    <td className="py-1 px-2 align-middle font-bold text-yellow-300 text-2xl">{player.rank}위</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        )
+    }
+
     const visibleGroups = Object.keys(finalDataByGroup).filter(groupName => finalDataByGroup[groupName]?.some(player => player.assignedCourses.length > 0));
 
     return (
@@ -359,45 +427,11 @@ export default function ExternalScoreboard() {
                 .scoreboard-container { -ms-overflow-style: none; scrollbar-width: none; }
             `}</style>
             <div className="scoreboard-container bg-black h-screen overflow-y-auto text-gray-200 p-2 sm:p-4 md:p-6 font-sans">
-                {suddenDeathData?.isActive && (
-                    <div className="mb-6">
-                        <header className="flex flex-col justify-center items-center border-b-4 border-red-500 pb-2 mb-2 text-center">
-                            <h1 className="text-2xl md:text-4xl font-bold text-red-400 flex items-center gap-3">
-                                <Flame className="h-8 w-8 animate-pulse" />
-                                서든데스 플레이오프
-                                <Flame className="h-8 w-8 animate-pulse" />
-                            </h1>
-                            {suddenDeathData?.courseId && tournament?.courses?.[suddenDeathData.courseId]?.name && (
-                                <p className="text-lg md:text-xl font-semibold text-gray-300 mt-1">
-                                    ({tournament.courses[suddenDeathData.courseId].name})
-                                </p>
-                            )}
-                        </header>
-                        <div className="overflow-x-auto bg-gray-900/50 rounded-lg border-2 border-red-500/50">
-                            <table className="w-full text-center border-collapse">
-                                <thead className="text-red-300 text-base">
-                                    <tr className="border-b-2 border-red-600/70">
-                                        <th className="py-2 px-2 w-48 text-center align-middle font-bold border-r border-red-800/50">선수명(팀명)</th>
-                                        <th className="py-2 px-2 w-48 text-center align-middle font-bold border-r border-red-800/50">소속</th>
-                                        {suddenDeathData.holes?.sort((a:number,b:number) => a-b).map((hole:number) => <th key={hole} className="py-2 px-2 w-16 text-center align-middle font-bold border-r border-red-800/50">{hole}홀</th>)}
-                                        <th className="py-2 px-2 w-20 text-center align-middle font-bold border-r border-red-800/50">합계</th>
-                                        <th className="py-2 px-2 w-20 text-center align-middle font-bold">순위</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="text-xl">
-                                    {processedSuddenDeathData.map(player => (
-                                        <tr key={player.id} className="border-b border-red-800/50 last:border-0">
-                                            <td className="py-1 px-2 text-center align-middle font-semibold border-r border-red-800/50">{player.name}</td>
-                                            <td className="py-1 px-2 text-center align-middle text-gray-400 border-r border-red-800/50">{player.club}</td>
-                                            {suddenDeathData.holes.map((hole:number) => <td key={hole} className="py-1 px-2 align-middle font-mono font-bold text-2xl border-r border-red-800/50">{player.scoresPerHole[hole] ?? '-'}</td>)}
-                                            <td className="py-1 px-2 align-middle font-bold text-2xl border-r border-red-800/50">{player.totalScore}</td>
-                                            <td className="py-1 px-2 align-middle font-bold text-yellow-300 text-2xl">{player.rank}위</td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
+                {individualSuddenDeathData?.isActive && (
+                    <SuddenDeathTable type="individual" data={individualSuddenDeathData} processedData={processedIndividualSuddenDeathData} />
+                )}
+                {teamSuddenDeathData?.isActive && (
+                    <SuddenDeathTable type="team" data={teamSuddenDeathData} processedData={processedTeamSuddenDeathData} />
                 )}
                 
                 {visibleGroups.length === 0 ? (

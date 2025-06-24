@@ -9,12 +9,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { MultiSelect } from '@/components/ui/multi-select';
 import { Input } from '@/components/ui/input';
-import { Flame, AlertTriangle, Play, RotateCcw } from 'lucide-react';
+import { Flame, Play, RotateCcw, User, Users } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { db } from '@/lib/firebase';
 import { ref, onValue, set, remove } from 'firebase/database';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 interface Player {
     id: string;
@@ -22,6 +22,7 @@ interface Player {
     name: string;
     affiliation: string;
     group: string;
+    type: 'individual' | 'team';
     totalScore: number;
     rank: number | null;
     hasAnyScore: boolean;
@@ -50,16 +51,25 @@ export default function SuddenDeathPage() {
     const [courses, setCourses] = useState<Course[]>([]);
     const [groupsData, setGroupsData] = useState({});
 
+    // Sudden death states (separated for individual and team)
+    const [individualSuddenDeathData, setIndividualSuddenDeathData] = useState<Partial<SuddenDeathData>>({});
+    const [teamSuddenDeathData, setTeamSuddenDeathData] = useState<Partial<SuddenDeathData>>({});
+
     // Processed data
-    const [tiedPlayers, setTiedPlayers] = useState<Player[]>([]);
+    const [tiedIndividualPlayers, setTiedIndividualPlayers] = useState<Player[]>([]);
+    const [tiedTeamPlayers, setTiedTeamPlayers] = useState<Player[]>([]);
 
-    // Sudden death state
-    const [suddenDeathData, setSuddenDeathData] = useState<Partial<SuddenDeathData>>({});
-    const [selectedPlayers, setSelectedPlayers] = useState<{ [key: string]: boolean }>({});
-    const [selectedCourseId, setSelectedCourseId] = useState<string>('');
-    const [selectedHoles, setSelectedHoles] = useState<number[]>([]);
-    const [suddenDeathScores, setSuddenDeathScores] = useState<{ [key: string]: { [key: string]: string } }>({});
+    // UI states for individual tab
+    const [selectedIndividualPlayers, setSelectedIndividualPlayers] = useState<{ [key: string]: boolean }>({});
+    const [selectedIndividualCourseId, setSelectedIndividualCourseId] = useState<string>('');
+    const [selectedIndividualHoles, setSelectedIndividualHoles] = useState<number[]>([]);
+    const [individualSuddenDeathScores, setIndividualSuddenDeathScores] = useState<{ [key: string]: { [key: string]: string } }>({});
 
+    // UI states for team tab
+    const [selectedTeamPlayers, setSelectedTeamPlayers] = useState<{ [key: string]: boolean }>({});
+    const [selectedTeamCourseId, setSelectedTeamCourseId] = useState<string>('');
+    const [selectedTeamHoles, setSelectedTeamHoles] = useState<number[]>([]);
+    const [teamSuddenDeathScores, setTeamSuddenDeathScores] = useState<{ [key: string]: { [key: string]: string } }>({});
 
     // Tie-breaking logic from dashboard (needed to find tied players)
     const tieBreak = (a: any, b: any, coursesForGroup: any[]) => {
@@ -100,7 +110,8 @@ export default function SuddenDeathPage() {
         const playersRef = ref(db, 'players');
         const scoresRef = ref(db, 'scores');
         const tournamentRef = ref(db, 'tournaments/current');
-        const suddenDeathRef = ref(db, 'tournaments/current/suddenDeath');
+        const individualSuddenDeathRef = ref(db, 'tournaments/current/suddenDeath/individual');
+        const teamSuddenDeathRef = ref(db, 'tournaments/current/suddenDeath/team');
 
         const unsubPlayers = onValue(playersRef, snap => setPlayers(snap.val() || {}));
         const unsubScores = onValue(scoresRef, snap => setScores(snap.val() || {}));
@@ -109,9 +120,10 @@ export default function SuddenDeathPage() {
             setCourses(Object.values(data.courses || {}).filter((c:any) => c.isActive));
             setGroupsData(data.groups || {});
         });
-        const unsubSuddenDeath = onValue(suddenDeathRef, snap => {
+
+        const setupSuddenDeathListener = (setter: Function, scoreSetter: Function) => (snap: any) => {
             const data = snap.val();
-            setSuddenDeathData(data || { isActive: false });
+            setter(data || { isActive: false });
             if (data?.scores) {
                 const stringScores: any = {};
                 Object.entries(data.scores).forEach(([pId, hScores]: [string, any]) => {
@@ -120,17 +132,21 @@ export default function SuddenDeathPage() {
                         stringScores[pId][h] = String(s);
                     });
                 });
-                setSuddenDeathScores(stringScores);
+                scoreSetter(stringScores);
             } else {
-                setSuddenDeathScores({});
+                scoreSetter({});
             }
-        });
+        };
+
+        const unsubIndividualSuddenDeath = onValue(individualSuddenDeathRef, setupSuddenDeathListener(setIndividualSuddenDeathData, setIndividualSuddenDeathScores));
+        const unsubTeamSuddenDeath = onValue(teamSuddenDeathRef, setupSuddenDeathListener(setTeamSuddenDeathData, setTeamSuddenDeathScores));
 
         return () => {
             unsubPlayers();
             unsubScores();
             unsubTournament();
-            unsubSuddenDeath();
+            unsubIndividualSuddenDeath();
+            unsubTeamSuddenDeath();
         };
     }, []);
 
@@ -172,6 +188,7 @@ export default function SuddenDeathPage() {
                 name: player.type === 'team' ? `${player.p1_name} / ${player.p2_name}` : player.name,
                 affiliation: player.type === 'team' ? player.p1_affiliation : player.affiliation,
                 group: player.group,
+                type: player.type,
                 totalScore,
                 hasAnyScore, hasForfeited, total: totalScore, courseScores: courseScoresForTieBreak,
                 detailedScores: detailedScoresForTieBreak, assignedCourses: coursesForPlayer
@@ -213,52 +230,70 @@ export default function SuddenDeathPage() {
         }
 
         const allRankedPlayers = Object.values(rankedData).flat();
-        const firstPlacePlayers = allRankedPlayers.filter(p => p.rank === 1);
-        setTiedPlayers(firstPlacePlayers.length > 1 ? firstPlacePlayers : []);
+        const individualPlayers = allRankedPlayers.filter(p => p.type === 'individual');
+        const teamPlayers = allRankedPlayers.filter(p => p.type === 'team');
+        
+        const findTies = (players: Player[]) => {
+            if (!players || players.length === 0) return [];
+            const firstPlacePlayers = players.filter(p => p.rank === 1);
+            return firstPlacePlayers.length > 1 ? firstPlacePlayers : [];
+        };
+
+        setTiedIndividualPlayers(findTies(individualPlayers));
+        setTiedTeamPlayers(findTies(teamPlayers));
 
     }, [players, scores, courses, groupsData]);
 
-    const handleStartSuddenDeath = () => {
-        const activePlayers = Object.keys(selectedPlayers).filter(id => selectedPlayers[id]);
+    const handleStartSuddenDeath = (type: 'individual' | 'team') => {
+        const isIndividual = type === 'individual';
+        const activePlayers = Object.keys(isIndividual ? selectedIndividualPlayers : selectedTeamPlayers).filter(id => (isIndividual ? selectedIndividualPlayers : selectedTeamPlayers)[id]);
+        const courseId = isIndividual ? selectedIndividualCourseId : selectedTeamCourseId;
+        const holes = isIndividual ? selectedIndividualHoles : selectedTeamHoles;
+
         if (activePlayers.length < 2) {
             toast({ title: "오류", description: "서든데스를 진행할 선수를 2명 이상 선택해주세요." });
             return;
         }
-        if (!selectedCourseId) {
+        if (!courseId) {
             toast({ title: "오류", description: "코스를 선택해주세요." });
             return;
         }
-        if (selectedHoles.length === 0) {
+        if (holes.length === 0) {
             toast({ title: "오류", description: "하나 이상의 홀을 선택해주세요." });
             return;
         }
 
         const suddenDeathSetup = {
             isActive: true,
-            players: selectedPlayers,
-            courseId: selectedCourseId,
-            holes: selectedHoles.sort((a,b) => a - b),
+            players: isIndividual ? selectedIndividualPlayers : selectedTeamPlayers,
+            courseId: courseId,
+            holes: holes.sort((a,b) => a - b),
             scores: {},
         };
 
-        set(ref(db, 'tournaments/current/suddenDeath'), suddenDeathSetup)
-            .then(() => toast({ title: "성공", description: "서든데스 플레이오프가 시작되었습니다." }))
+        set(ref(db, `tournaments/current/suddenDeath/${type}`), suddenDeathSetup)
+            .then(() => toast({ title: "성공", description: `${isIndividual ? '개인전' : '2인 1팀'} 서든데스 플레이오프가 시작되었습니다.` }))
             .catch(err => toast({ title: "오류", description: err.message }));
     };
     
-    const handleResetSuddenDeath = () => {
-        remove(ref(db, 'tournaments/current/suddenDeath'))
+    const handleResetSuddenDeath = (type: 'individual' | 'team') => {
+        remove(ref(db, `tournaments/current/suddenDeath/${type}`))
             .then(() => toast({ title: "초기화 완료", description: "서든데스 정보가 초기화되었습니다." }))
             .catch(err => toast({ title: "오류", description: err.message }));
     };
 
-    const handleSuddenDeathScoreChange = (playerId: string, hole: number, value: string) => {
-        const newScores = { ...suddenDeathScores };
-        if (!newScores[playerId]) newScores[playerId] = {};
-        newScores[playerId][hole] = value;
-        setSuddenDeathScores(newScores);
+    const handleSuddenDeathScoreChange = (type: 'individual' | 'team', playerId: string, hole: number, value: string) => {
+        const isIndividual = type === 'individual';
+        const setScores = isIndividual ? setIndividualSuddenDeathScores : setTeamSuddenDeathScores;
+        
+        setScores(prevScores => {
+            const newScores = { ...prevScores };
+            if (!newScores[playerId]) newScores[playerId] = {};
+            newScores[playerId][hole] = value;
+            return newScores;
+        });
 
-        const scoreRef = ref(db, `tournaments/current/suddenDeath/scores/${playerId}/${hole}`);
+        const scoreRef = ref(db, `tournaments/current/suddenDeath/${type}/scores/${playerId}/${hole}`);
         const numericValue = parseInt(value, 10);
         if (!isNaN(numericValue)) {
             set(scoreRef, numericValue);
@@ -267,10 +302,10 @@ export default function SuddenDeathPage() {
         }
     };
 
-    const processedSuddenDeathData = useMemo(() => {
+    const processSuddenDeathData = (suddenDeathData: Partial<SuddenDeathData> | null) => {
         if (!suddenDeathData?.isActive || !suddenDeathData.players || !suddenDeathData.holes || !Array.isArray(suddenDeathData.holes)) return [];
 
-        const participatingPlayerIds = Object.keys(suddenDeathData.players).filter(id => suddenDeathData.players[id]);
+        const participatingPlayerIds = Object.keys(suddenDeathData.players).filter(id => suddenDeathData.players![id]);
         const allPlayersMap = new Map(Object.entries(players).map(([id, p]) => [id, p]));
 
         const results: any[] = participatingPlayerIds.map(id => {
@@ -283,7 +318,7 @@ export default function SuddenDeathPage() {
             let totalScore = 0;
             let holesPlayed = 0;
 
-            suddenDeathData.holes.forEach(hole => {
+            suddenDeathData.holes!.forEach(hole => {
                 const score = suddenDeathData.scores?.[id]?.[hole];
                 if (score !== undefined && score !== null) {
                     scoresPerHole[hole] = score;
@@ -297,8 +332,6 @@ export default function SuddenDeathPage() {
             return { id, name, scoresPerHole, totalScore, holesPlayed };
         }).filter(Boolean);
 
-
-        // Determine rank
         results.sort((a, b) => {
             if (a.holesPlayed !== b.holesPlayed) return b.holesPlayed - a.holesPlayed;
             if (a.totalScore !== b.totalScore) return a.totalScore - b.totalScore;
@@ -314,10 +347,157 @@ export default function SuddenDeathPage() {
         }
 
         return results;
-    }, [suddenDeathData, players]);
-
+    }
+    
+    const processedIndividualSuddenDeathData = useMemo(() => processSuddenDeathData(individualSuddenDeathData), [individualSuddenDeathData, players]);
+    const processedTeamSuddenDeathData = useMemo(() => processSuddenDeathData(teamSuddenDeathData), [teamSuddenDeathData, players]);
 
     const holeOptions = Array.from({ length: 9 }, (_, i) => ({ value: (i + 1).toString(), label: `${i + 1}홀` }));
+
+    const renderSuddenDeathInterface = (type: 'individual' | 'team') => {
+        const isIndividual = type === 'individual';
+        const tiedPlayers = isIndividual ? tiedIndividualPlayers : tiedTeamPlayers;
+        const selectedPlayers = isIndividual ? selectedIndividualPlayers : selectedTeamPlayers;
+        const setSelectedPlayers = isIndividual ? setSelectedIndividualPlayers : setSelectedTeamPlayers;
+        const selectedCourseId = isIndividual ? selectedIndividualCourseId : selectedTeamCourseId;
+        const setSelectedCourseId = isIndividual ? setSelectedIndividualCourseId : setSelectedTeamCourseId;
+        const selectedHoles = isIndividual ? selectedIndividualHoles : selectedTeamHoles;
+        const setSelectedHoles = isIndividual ? setSelectedIndividualHoles : setSelectedTeamHoles;
+        const suddenDeathData = isIndividual ? individualSuddenDeathData : teamSuddenDeathData;
+        const processedData = isIndividual ? processedIndividualSuddenDeathData : processedTeamSuddenDeathData;
+        const suddenDeathScores = isIndividual ? individualSuddenDeathScores : teamSuddenDeathScores;
+
+        return (
+            <div className="space-y-6">
+                <Card>
+                    <CardHeader>
+                        <CardTitle>플레이오프 설정</CardTitle>
+                        <CardDescription>플레이오프를 진행할 선수, 코스, 홀을 선택하고 시작하세요.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-6">
+                        {tiedPlayers.length > 0 ? (
+                            <div className="space-y-4">
+                                <div>
+                                    <Label className="font-semibold">1. 참가 선수 선택 ({tiedPlayers.length}명 동점)</Label>
+                                    <div className="p-4 border rounded-md grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-2">
+                                        {tiedPlayers.map(player => (
+                                            <div key={player.id} className="flex items-center space-x-3">
+                                                <Checkbox
+                                                    id={`${type}-player-${player.id}`}
+                                                    checked={selectedPlayers[player.id] || false}
+                                                    onCheckedChange={(checked) => setSelectedPlayers(prev => ({...prev, [player.id]: !!checked}))}
+                                                    disabled={suddenDeathData?.isActive}
+                                                />
+                                                <Label htmlFor={`${type}-player-${player.id}`} className="font-medium text-base">
+                                                    {player.name} <span className="text-muted-foreground text-sm">({player.affiliation})</span>
+                                                </Label>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                                
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                        <Label htmlFor={`${type}-course-select`} className="font-semibold">2. 코스 선택</Label>
+                                        <Select 
+                                            value={selectedCourseId}
+                                            onValueChange={setSelectedCourseId}
+                                            disabled={suddenDeathData?.isActive}
+                                        >
+                                            <SelectTrigger id={`${type}-course-select`}><SelectValue placeholder="코스 선택" /></SelectTrigger>
+                                            <SelectContent>
+                                                {courses.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label htmlFor={`${type}-hole-select`} className="font-semibold">3. 홀 선택</Label>
+                                        <MultiSelect
+                                            options={holeOptions}
+                                            selected={selectedHoles.map(String)}
+                                            onChange={(values) => setSelectedHoles(values.map(Number))}
+                                            placeholder="홀 선택..."
+                                            disabled={suddenDeathData?.isActive}
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="flex gap-4">
+                                    <Button onClick={() => handleStartSuddenDeath(type)} disabled={suddenDeathData?.isActive} size="lg">
+                                        <Play className="mr-2 h-4 w-4"/> 서든데스 시작
+                                    </Button>
+                                    <AlertDialog>
+                                        <AlertDialogTrigger asChild>
+                                            <Button variant="destructive" size="lg" disabled={!suddenDeathData?.isActive}>
+                                                <RotateCcw className="mr-2 h-4 w-4"/> 서든데스 초기화
+                                            </Button>
+                                        </AlertDialogTrigger>
+                                        <AlertDialogContent>
+                                            <AlertDialogHeader>
+                                                <AlertDialogTitle>정말 초기화하시겠습니까?</AlertDialogTitle>
+                                                <AlertDialogDescription>진행 중인 서든데스 플레이오프 정보와 점수가 모두 삭제됩니다. 이 작업은 되돌릴 수 없습니다.</AlertDialogDescription>
+                                            </AlertDialogHeader>
+                                            <AlertDialogFooter>
+                                                <AlertDialogCancel>취소</AlertDialogCancel>
+                                                <AlertDialogAction onClick={() => handleResetSuddenDeath(type)}>초기화</AlertDialogAction>
+                                            </AlertDialogFooter>
+                                        </AlertDialogContent>
+                                    </AlertDialog>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="text-center py-10 text-muted-foreground">
+                                <p>현재 1위 동점자가 없습니다.</p>
+                                <p className="text-sm">대회가 진행되어 1위 동점자가 발생하면 여기에 표시됩니다.</p>
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
+
+                {suddenDeathData?.isActive && (
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>서든데스 점수판 (실시간 입력)</CardTitle>
+                            <CardDescription>{courses.find(c => c.id == Number(suddenDeathData.courseId))?.name}에서 플레이오프가 진행 중입니다.</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="overflow-x-auto border rounded-lg">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead className="w-48">선수</TableHead>
+                                            {suddenDeathData.holes?.sort((a,b) => a-b).map(hole => <TableHead key={hole} className="text-center">{hole}홀</TableHead>)}
+                                            <TableHead className="text-center font-bold text-primary">합계</TableHead>
+                                            <TableHead className="text-center font-bold text-primary">순위</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {processedData.map(player => (
+                                            <TableRow key={player.id}>
+                                                <TableCell className="font-semibold">{player.name}</TableCell>
+                                                {suddenDeathData.holes?.map(hole => (
+                                                    <TableCell key={hole} className="text-center">
+                                                        <Input
+                                                            type="number"
+                                                            className="w-16 h-10 mx-auto text-center text-base"
+                                                            value={suddenDeathScores[player.id]?.[hole] ?? ''}
+                                                            onChange={(e) => handleSuddenDeathScoreChange(type, player.id, hole, e.target.value)}
+                                                        />
+                                                    </TableCell>
+                                                ))}
+                                                <TableCell className="text-center font-bold text-lg">{player.totalScore}</TableCell>
+                                                <TableCell className="text-center font-bold text-lg text-primary">{player.rank}위</TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </div>
+                        </CardContent>
+                    </Card>
+                )}
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-6">
@@ -328,132 +508,22 @@ export default function SuddenDeathPage() {
                 </CardHeader>
             </Card>
 
-            <Card>
-                <CardHeader>
-                    <CardTitle>서든데스 설정</CardTitle>
-                    <CardDescription>플레이오프를 진행할 선수, 코스, 홀을 선택하고 시작하세요.</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                    {tiedPlayers.length > 0 ? (
-                        <div className="space-y-4">
-                            <div>
-                                <Label className="font-semibold">1. 참가 선수 선택 ({tiedPlayers.length}명 동점)</Label>
-                                <div className="p-4 border rounded-md grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-2">
-                                    {tiedPlayers.map(player => (
-                                        <div key={player.id} className="flex items-center space-x-3">
-                                            <Checkbox
-                                                id={`player-${player.id}`}
-                                                checked={selectedPlayers[player.id] || false}
-                                                onCheckedChange={(checked) => setSelectedPlayers(prev => ({...prev, [player.id]: !!checked}))}
-                                                disabled={suddenDeathData?.isActive}
-                                            />
-                                            <Label htmlFor={`player-${player.id}`} className="font-medium text-base">
-                                                {player.name} <span className="text-muted-foreground text-sm">({player.affiliation})</span>
-                                            </Label>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                            
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <Label htmlFor="course-select" className="font-semibold">2. 코스 선택</Label>
-                                    <Select 
-                                        value={selectedCourseId}
-                                        onValueChange={setSelectedCourseId}
-                                        disabled={suddenDeathData?.isActive}
-                                    >
-                                        <SelectTrigger id="course-select"><SelectValue placeholder="코스 선택" /></SelectTrigger>
-                                        <SelectContent>
-                                            {courses.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="hole-select" className="font-semibold">3. 홀 선택</Label>
-                                    <MultiSelect
-                                        options={holeOptions}
-                                        selected={selectedHoles.map(String)}
-                                        onChange={(values) => setSelectedHoles(values.map(Number))}
-                                        placeholder="홀 선택..."
-                                        disabled={suddenDeathData?.isActive}
-                                    />
-                                </div>
-                            </div>
-
-                            <div className="flex gap-4">
-                                <Button onClick={handleStartSuddenDeath} disabled={suddenDeathData?.isActive} size="lg">
-                                    <Play className="mr-2 h-4 w-4"/> 서든데스 시작
-                                </Button>
-                                <AlertDialog>
-                                    <AlertDialogTrigger asChild>
-                                        <Button variant="destructive" size="lg" disabled={!suddenDeathData?.isActive}>
-                                            <RotateCcw className="mr-2 h-4 w-4"/> 서든데스 초기화
-                                        </Button>
-                                    </AlertDialogTrigger>
-                                    <AlertDialogContent>
-                                        <AlertDialogHeader>
-                                            <AlertDialogTitle>정말 초기화하시겠습니까?</AlertDialogTitle>
-                                            <AlertDialogDescription>진행 중인 서든데스 플레이오프 정보와 점수가 모두 삭제됩니다. 이 작업은 되돌릴 수 없습니다.</AlertDialogDescription>
-                                        </AlertDialogHeader>
-                                        <AlertDialogFooter>
-                                            <AlertDialogCancel>취소</AlertDialogCancel>
-                                            <AlertDialogAction onClick={handleResetSuddenDeath}>초기화</AlertDialogAction>
-                                        </AlertDialogFooter>
-                                    </AlertDialogContent>
-                                </AlertDialog>
-                            </div>
-                        </div>
-                    ) : (
-                        <div className="text-center py-10 text-muted-foreground">
-                            <p>현재 1위 동점자가 없습니다.</p>
-                            <p className="text-sm">대회가 진행되어 1위 동점자가 발생하면 여기에 표시됩니다.</p>
-                        </div>
-                    )}
-                </CardContent>
-            </Card>
-
-            {suddenDeathData?.isActive && (
-                 <Card>
-                    <CardHeader>
-                        <CardTitle>서든데스 점수판 (실시간 입력)</CardTitle>
-                        <CardDescription>{courses.find(c => c.id == Number(suddenDeathData.courseId))?.name}에서 플레이오프가 진행 중입니다.</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                         <div className="overflow-x-auto border rounded-lg">
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead className="w-48">선수</TableHead>
-                                        {suddenDeathData.holes?.sort((a,b) => a-b).map(hole => <TableHead key={hole} className="text-center">{hole}홀</TableHead>)}
-                                        <TableHead className="text-center font-bold text-primary">합계</TableHead>
-                                        <TableHead className="text-center font-bold text-primary">순위</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {processedSuddenDeathData.map(player => (
-                                        <TableRow key={player.id}>
-                                            <TableCell className="font-semibold">{player.name}</TableCell>
-                                            {suddenDeathData.holes?.map(hole => (
-                                                <TableCell key={hole} className="text-center">
-                                                    <Input
-                                                        type="number"
-                                                        className="w-16 h-10 mx-auto text-center text-base"
-                                                        value={suddenDeathScores[player.id]?.[hole] ?? ''}
-                                                        onChange={(e) => handleSuddenDeathScoreChange(player.id, hole, e.target.value)}
-                                                    />
-                                                </TableCell>
-                                            ))}
-                                            <TableCell className="text-center font-bold text-lg">{player.totalScore}</TableCell>
-                                            <TableCell className="text-center font-bold text-lg text-primary">{player.rank}위</TableCell>
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
-                        </div>
-                    </CardContent>
-                 </Card>
-            )}
+            <Tabs defaultValue="individual" className="w-full">
+                <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="individual" className="py-2.5 text-base font-semibold">
+                        <User className="mr-2 h-5 w-5" /> 개인전
+                    </TabsTrigger>
+                    <TabsTrigger value="team" className="py-2.5 text-base font-semibold">
+                        <Users className="mr-2 h-5 w-5" /> 2인 1팀
+                    </TabsTrigger>
+                </TabsList>
+                <TabsContent value="individual" className="mt-6">
+                    {renderSuddenDeathInterface('individual')}
+                </TabsContent>
+                <TabsContent value="team" className="mt-6">
+                    {renderSuddenDeathInterface('team')}
+                </TabsContent>
+            </Tabs>
         </div>
     );
 }
