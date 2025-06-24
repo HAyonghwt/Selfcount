@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { db } from '@/lib/firebase';
 import { ref, onValue } from 'firebase/database';
-import { Flame } from 'lucide-react';
+import { Flame, ChevronUp, ChevronDown } from 'lucide-react';
 
 interface ProcessedPlayer {
     id: string;
@@ -233,7 +233,7 @@ export default function ExternalScoreboard() {
     
     const groupProgress = useMemo(() => {
         const progressByGroup: { [key: string]: number } = {};
-        const allCourses = Object.values(tournament.courses || {});
+        const allCourses = Object.values(tournament.courses || {}).filter(Boolean);
 
         for (const groupName in processedDataByGroup) {
             const groupPlayers = processedDataByGroup[groupName];
@@ -269,7 +269,7 @@ export default function ExternalScoreboard() {
     }, [processedDataByGroup, scores, groupsData, tournament.courses]);
 
     const processSuddenDeath = (suddenDeathData: any) => {
-        if (!suddenDeathData?.isActive || !suddenDeathData.players || !suddenDeathData.holes || !Array.isArray(suddenDeathData.holes)) return [];
+        if (!suddenDeathData?.isActive || !suddenDeathData.players || !Array.isArray(suddenDeathData.holes)) return [];
         
         const participatingPlayerIds = Object.keys(suddenDeathData.players).filter(id => suddenDeathData.players[id]);
         const allPlayersMap = new Map(Object.entries(players).map(([id, p]) => [id, p]));
@@ -350,6 +350,14 @@ export default function ExternalScoreboard() {
         return finalData;
     }, [processedDataByGroup, processedIndividualSuddenDeathData, processedTeamSuddenDeathData]);
 
+
+    const handleScroll = (amount: number) => {
+        window.scrollBy({
+            top: amount,
+            left: 0,
+            behavior: 'smooth'
+        });
+    };
 
     if (loading) {
         return (
@@ -441,7 +449,7 @@ export default function ExternalScoreboard() {
                     if (!groupPlayers || groupPlayers.length === 0) return null;
 
                     return (
-                        <div key={groupName} className="mb-4">
+                        <div key={groupName} className="mb-8">
                             <header className="flex justify-between items-baseline border-b-2 border-gray-700">
                                 <h1 className="text-xl md:text-2xl font-bold text-yellow-300">
                                     {tournament.name || '파크골프 토너먼트'} ({groupName})
@@ -453,9 +461,9 @@ export default function ExternalScoreboard() {
                                     <thead className="text-gray-400 text-sm">
                                         <tr className="border-b-2 border-gray-600">
                                             <th className="py-1 px-1 w-12 text-center align-middle font-bold border-r border-gray-800">조</th>
-                                            <th className="py-1 px-1 w-32 text-center align-middle font-bold border-r border-gray-800">선수명(팀명)</th>
-                                            <th className="py-1 px-1 w-32 text-center align-middle font-bold border-r border-gray-800">소속</th>
-                                            <th className="py-1 px-1 w-32 text-center align-middle font-bold border-r border-gray-800">코스</th>
+                                            <th className="py-1 px-1 w-40 text-center align-middle font-bold border-r border-gray-800">선수명(팀명)</th>
+                                            <th className="py-1 px-1 w-28 text-center align-middle font-bold border-r border-gray-800">소속</th>
+                                            <th className="py-1 px-1 w-28 text-center align-middle font-bold border-r border-gray-800">코스</th>
                                             <th colSpan={9} className="py-1 px-1 text-center align-middle font-bold border-r border-gray-800">HOLE</th>
                                             <th className="py-1 px-1 w-16 text-center align-middle font-bold border-r border-gray-800">합계</th>
                                             <th className="py-1 px-1 w-16 text-center align-middle font-bold text-yellow-400 border-r border-gray-800">총타수</th>
@@ -480,11 +488,11 @@ export default function ExternalScoreboard() {
                                                         {courseIndex === 0 && (
                                                             <>
                                                                 <td rowSpan={player.assignedCourses.length || 1} className="py-0.5 px-1 align-middle font-bold border-r border-gray-800">{player.jo}</td>
-                                                                <td rowSpan={player.assignedCourses.length || 1} className="py-0.5 px-1 w-32 text-center align-middle font-semibold border-r border-gray-800">{player.name}</td>
-                                                                <td rowSpan={player.assignedCourses.length || 1} className="py-0.5 px-1 w-32 text-center align-middle text-gray-400 border-r border-gray-800">{player.club}</td>
+                                                                <td rowSpan={player.assignedCourses.length || 1} className="py-0.5 px-1 w-40 text-center align-middle font-semibold border-r border-gray-800">{player.name}</td>
+                                                                <td rowSpan={player.assignedCourses.length || 1} className="py-0.5 px-1 w-28 text-center align-middle text-gray-400 border-r border-gray-800">{player.club}</td>
                                                             </>
                                                         )}
-                                                        <td className="py-0.5 px-1 w-32 align-middle text-center border-r border-gray-800">{player.coursesData[course.id]?.courseName}</td>
+                                                        <td className="py-0.5 px-1 w-28 align-middle text-center border-r border-gray-800">{player.coursesData[course.id]?.courseName}</td>
                                                         {player.coursesData[course.id]?.holeScores.map((score, i) => <td key={i} className={`py-0.5 px-1 align-middle font-mono font-bold text-xl border-r border-gray-800 ${i % 2 !== 0 ? 'bg-gray-800/50' : ''}`}>{score === null ? '-' : (score === 0 ? '기권' : score)}</td>)}
                                                         <td className="py-0.5 px-1 align-middle font-bold text-gray-300 text-xl border-r border-gray-800">{player.hasForfeited ? '기권' : (player.hasAnyScore ? player.coursesData[course.id]?.courseTotal : '-')}</td>
                                                         {courseIndex === 0 && (
@@ -497,8 +505,8 @@ export default function ExternalScoreboard() {
                                                 )) : (
                                                     <tr className="border-b border-gray-800 last:border-0">
                                                         <td className="py-0.5 px-1 align-middle font-bold border-r border-gray-800">{player.jo}</td>
-                                                        <td className="py-0.5 px-1 w-32 text-center align-middle font-semibold border-r border-gray-800">{player.name}</td>
-                                                        <td className="py-0.5 px-1 w-32 text-center align-middle text-gray-400 border-r border-gray-800">{player.club}</td>
+                                                        <td className="py-0.5 px-1 w-40 text-center align-middle font-semibold border-r border-gray-800">{player.name}</td>
+                                                        <td className="py-0.5 px-1 w-28 text-center align-middle text-gray-400 border-r border-gray-800">{player.club}</td>
                                                         <td colSpan={11} className="py-0.5 px-1 align-middle text-center text-gray-500 border-r border-gray-800">표시하도록 설정된 코스가 없습니다.</td>
                                                         <td className="py-0.5 px-1 align-middle font-bold text-yellow-400 text-xl border-r border-gray-800">{player.hasForfeited ? '기권' : (player.hasAnyScore ? player.totalScore : '-')}</td>
                                                         <td className="py-0.5 px-1 align-middle font-bold text-xl">{player.rank !== null ? `${player.rank}위` : (player.hasForfeited ? '기권' : '')}</td>
@@ -512,6 +520,22 @@ export default function ExternalScoreboard() {
                         </div>
                     )
                 })}
+            </div>
+            <div className="fixed bottom-4 right-4 flex flex-col gap-2 z-50">
+                <button
+                    onClick={() => handleScroll(-50)}
+                    aria-label="Scroll Up"
+                    className="bg-gray-800/70 text-white p-2 rounded-full hover:bg-gray-700 transition-colors"
+                >
+                    <ChevronUp className="h-6 w-6" />
+                </button>
+                <button
+                    onClick={() => handleScroll(50)}
+                    aria-label="Scroll Down"
+                    className="bg-gray-800/70 text-white p-2 rounded-full hover:bg-gray-700 transition-colors"
+                >
+                    <ChevronDown className="h-6 w-6" />
+                </button>
             </div>
         </>
     );
