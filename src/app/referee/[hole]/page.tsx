@@ -12,6 +12,7 @@ import { ref, onValue, set } from 'firebase/database';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useToast } from '@/hooks/use-toast';
+import { cn } from '@/lib/utils';
 
 interface Player {
     id: string;
@@ -349,7 +350,17 @@ export default function RefereePage() {
                                     <Button variant="outline" size="icon" className="w-11 h-11 rounded-lg border-2" onClick={() => updateScore(player.id, 1)} disabled={isLocked}><Plus className="h-6 w-6" /></Button>
                                 </div>
                                 
-                                <Button variant="default" size="icon" className="w-11 h-11 rounded-lg" onClick={() => handleSavePress(player)} disabled={isLocked}>
+                                <Button
+                                    variant="default"
+                                    size="icon"
+                                    className={cn("w-11 h-11 rounded-lg", {
+                                        'bg-white hover:bg-white cursor-not-allowed border border-input': isLocked,
+                                    })}
+                                    onClick={() => {
+                                        if (isLocked) return;
+                                        handleSavePress(player);
+                                    }}
+                                >
                                     {isLocked ? (
                                         <Lock className="w-6 h-6 text-green-500" />
                                     ) : (
@@ -407,12 +418,12 @@ export default function RefereePage() {
                        
                         {playerToSave && scores[playerToSave.id] && (
                              <div className="flex items-baseline my-2">
-                                <span className="text-6xl font-extrabold text-destructive leading-none">{scores[playerToSave.id].score}</span>
-                                <span className="text-2xl font-bold ml-2">점</span>
+                                <span className="text-5xl font-extrabold text-destructive leading-none">{scores[playerToSave.id].score}</span>
+                                <span className="text-xl font-bold ml-2">점</span>
                             </div>
                         )}
                         
-                        <p className="text-base font-semibold mt-2 text-muted-foreground">저장하시겠습니까?</p>
+                        <p className="text-sm font-semibold mt-2 text-muted-foreground">저장하시겠습니까?</p>
                     </div>
                     <AlertDialogFooter className="grid grid-cols-2 gap-4 pt-4">
                         <AlertDialogCancel onClick={() => setPlayerToSave(null)} className="h-11 px-6 text-base">취소</AlertDialogCancel>
