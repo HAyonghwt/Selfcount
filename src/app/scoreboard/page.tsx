@@ -5,6 +5,9 @@ import { db } from '@/lib/firebase';
 import { ref, onValue } from 'firebase/database';
 import { Flame, ChevronUp, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
+
 
 interface ProcessedPlayer {
     id: string;
@@ -82,6 +85,7 @@ export default function ExternalScoreboard() {
     const [groupsData, setGroupsData] = useState<any>({});
     const [individualSuddenDeathData, setIndividualSuddenDeathData] = useState<any>(null);
     const [teamSuddenDeathData, setTeamSuddenDeathData] = useState<any>(null);
+    const [filterGroup, setFilterGroup] = useState('all');
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     
     useEffect(() => {
@@ -380,6 +384,17 @@ export default function ExternalScoreboard() {
         );
     }
     
+    const allGroupsList = Object.keys(finalDataByGroup);
+    const visibleGroups = Object.keys(finalDataByGroup).filter(groupName => finalDataByGroup[groupName]?.some(player => player.assignedCourses.length > 0));
+    
+    const groupsToDisplay = useMemo(() => {
+        if (filterGroup === 'all') {
+            return visibleGroups;
+        }
+        return visibleGroups.filter(g => g === filterGroup);
+    }, [filterGroup, visibleGroups]);
+
+
     const NoDataContent = () => (
         <div className="bg-black min-h-screen text-white p-8">
             <div className="text-center py-20">
@@ -387,7 +402,8 @@ export default function ExternalScoreboard() {
                 <p className="mt-4 text-2xl text-gray-400">
                     {Object.keys(players).length === 0 
                         ? "표시할 선수 데이터가 없습니다. 선수를 먼저 등록해주세요."
-                        : "그룹에 배정된 코스가 없거나, 표시하도록 설정된 코스가 없습니다."}
+                        : (groupsToDisplay.length === 0 && filterGroup !== 'all' ? `선택한 '${filterGroup}' 그룹에 표시할 데이터가 없습니다.` : "그룹에 배정된 코스가 없거나, 표시하도록 설정된 코스가 없습니다.")
+                    }
                 </p>
             </div>
         </div>
@@ -439,8 +455,6 @@ export default function ExternalScoreboard() {
         )
     }
 
-    const visibleGroups = Object.keys(finalDataByGroup).filter(groupName => finalDataByGroup[groupName]?.some(player => player.assignedCourses.length > 0));
-
     return (
         <>
             <style>{`
@@ -455,9 +469,9 @@ export default function ExternalScoreboard() {
                     <SuddenDeathTable type="team" data={teamSuddenDeathData} processedData={processedTeamSuddenDeathData} />
                 )}
                 
-                {visibleGroups.length === 0 ? (
+                {groupsToDisplay.length === 0 ? (
                      <NoDataContent />
-                ) : visibleGroups.map((groupName) => {
+                ) : groupsToDisplay.map((groupName) => {
                     const groupPlayers = finalDataByGroup[groupName];
                     if (!groupPlayers || groupPlayers.length === 0) return null;
 
@@ -534,23 +548,41 @@ export default function ExternalScoreboard() {
                     )
                 })}
             </div>
-            <div className="fixed bottom-4 right-4 flex flex-col gap-2 z-50 group">
-                <button
-                    onClick={() => handleScroll(-50)}
-                    aria-label="Scroll Up"
-                    className="bg-gray-800/70 text-white p-2 rounded-full hover:bg-gray-700 transition-opacity opacity-0 group-hover:opacity-100 duration-300"
-                >
-                    <ChevronUp className="h-6 w-6" />
-                </button>
-                <button
-                    onClick={() => handleScroll(50)}
-                    aria-label="Scroll Down"
-                    className="bg-gray-800/70 text-white p-2 rounded-full hover:bg-gray-700 transition-opacity opacity-0 group-hover:opacity-100 duration-300"
-                >
-                    <ChevronDown className="h-6 w-6" />
-                </button>
+            <div className="fixed top-4 right-4 flex items-center gap-4 z-50">
+                <div className="flex items-center gap-2">
+                    <Label htmlFor="group-filter" className="font-bold text-sm text-gray-300">그룹 선택</Label>
+                     <Select value={filterGroup} onValueChange={setFilterGroup}>
+                        <SelectTrigger id="group-filter" className="w-[200px] h-9 bg-gray-800/80 backdrop-blur-sm border-gray-600 text-white focus:ring-yellow-400">
+                            <SelectValue placeholder="그룹을 선택하세요" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-gray-900 text-white border-gray-700">
+                            <SelectItem value="all">모든 그룹 보기</SelectItem>
+                            {allGroupsList.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}
+                        </SelectContent>
+                    </Select>
+                </div>
+
+                <div className="flex flex-col gap-2 group">
+                    <button
+                        onClick={() => handleScroll(-50)}
+                        aria-label="Scroll Up"
+                        className="bg-gray-800/70 text-white p-2 rounded-full hover:bg-gray-700 transition-opacity opacity-0 group-hover:opacity-100 duration-300"
+                    >
+                        <ChevronUp className="h-6 w-6" />
+                    </button>
+                    <button
+                        onClick={() => handleScroll(50)}
+                        aria-label="Scroll Down"
+                        className="bg-gray-800/70 text-white p-2 rounded-full hover:bg-gray-700 transition-opacity opacity-0 group-hover:opacity-100 duration-300"
+                    >
+                        <ChevronDown className="h-6 w-6" />
+                    </button>
+                </div>
             </div>
         </>
     );
 }
 
+
+
+    
