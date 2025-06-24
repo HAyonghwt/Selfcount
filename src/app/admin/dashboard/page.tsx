@@ -196,13 +196,20 @@ export default function AdminDashboard() {
             
             const playersToSort = groupedData[groupName].filter(p => p.hasAnyScore && !p.hasForfeited);
             const otherPlayers = groupedData[groupName].filter(p => !p.hasAnyScore || p.hasForfeited);
+            
+            const playerType = playersToSort[0]?.type;
+            const isSuddenDeathActiveForThisGroup = playerType === 'individual'
+                ? individualSuddenDeathData?.isActive
+                : teamSuddenDeathData?.isActive;
 
             if (playersToSort.length > 0) {
                 const leaderScore = playersToSort.reduce((min, p) => Math.min(min, p.totalScore), Infinity);
 
                 playersToSort.sort((a, b) => {
                     if (a.totalScore !== b.totalScore) return a.totalScore - b.totalScore;
-                    if (a.totalScore === leaderScore) return a.name.localeCompare(b.name);
+                    if (a.totalScore === leaderScore && isSuddenDeathActiveForThisGroup) {
+                        return a.name.localeCompare(b.name);
+                    }
                     return tieBreak(a, b, coursesForGroup);
                 });
 
@@ -214,7 +221,7 @@ export default function AdminDashboard() {
                     
                     let isTied = false;
                     if (curr.totalScore === prev.totalScore) {
-                        if (curr.totalScore === leaderScore) isTied = true;
+                        if (curr.totalScore === leaderScore && isSuddenDeathActiveForThisGroup) isTied = true;
                         else isTied = tieBreak(curr, prev, coursesForGroup) === 0;
                     }
 
@@ -232,7 +239,7 @@ export default function AdminDashboard() {
         }
         
         return rankedData;
-    }, [players, scores, courses, groupsData]);
+    }, [players, scores, courses, groupsData, individualSuddenDeathData, teamSuddenDeathData]);
     
     const processSuddenDeath = (suddenDeathData: any) => {
         if (!suddenDeathData?.isActive || !suddenDeathData.players || !suddenDeathData.holes || !Array.isArray(suddenDeathData.holes)) return [];
