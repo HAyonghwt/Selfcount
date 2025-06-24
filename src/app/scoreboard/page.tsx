@@ -339,12 +339,17 @@ export default function ExternalScoreboard() {
             <div className="scoreboard-container bg-black h-screen overflow-y-auto text-gray-200 p-2 sm:p-4 md:p-6 font-sans">
                 {suddenDeathData?.isActive && (
                     <div className="mb-6">
-                        <header className="flex justify-center items-baseline border-b-4 border-red-500 pb-2 mb-2">
+                        <header className="flex flex-col justify-center items-center border-b-4 border-red-500 pb-2 mb-2 text-center">
                             <h1 className="text-2xl md:text-4xl font-bold text-red-400 flex items-center gap-3">
                                 <Flame className="h-8 w-8 animate-pulse" />
                                 서든데스 플레이오프
                                 <Flame className="h-8 w-8 animate-pulse" />
                             </h1>
+                            {suddenDeathData?.courseId && tournament?.courses?.[suddenDeathData.courseId]?.name && (
+                                <p className="text-lg md:text-xl font-semibold text-gray-300 mt-1">
+                                    ({tournament.courses[suddenDeathData.courseId].name})
+                                </p>
+                            )}
                         </header>
                         <div className="overflow-x-auto bg-gray-900/50 rounded-lg border-2 border-red-500/50">
                             <table className="w-full text-center border-collapse">
