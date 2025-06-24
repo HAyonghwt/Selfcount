@@ -192,10 +192,8 @@ export default function RefereePage() {
                 newScoresState[player.id] = { score: 1, status: 'editing' };
             }
         });
-
-        if (JSON.stringify(scores) !== JSON.stringify(newScoresState)) {
-             setScores(newScoresState);
-        }
+        
+        setScores(newScoresState);
         
     }, [view, selectedJo, selectedCourse, hole, allScores, currentPlayers]);
 
@@ -335,7 +333,7 @@ export default function RefereePage() {
                                     <Button variant="outline" size="icon" className="w-11 h-11 rounded-lg border-2" onClick={() => updateScore(player.id, 1)} disabled={isLocked}><Plus className="h-6 w-6" /></Button>
                                 </div>
                                 
-                                <div className="w-24 h-11">
+                                <div className="w-11 h-11">
                                     {isLocked ? (
                                         <div className="flex items-center justify-center h-full w-full bg-muted text-muted-foreground rounded-lg">
                                             <Lock className="w-6 h-6 text-green-500" />
