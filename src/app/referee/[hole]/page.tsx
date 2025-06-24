@@ -10,8 +10,10 @@ import { Minus, Plus, Save, Lock, ArrowLeft } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Progress } from '@/components/ui/progress';
 import { db } from '@/lib/firebase';
-import { ref, onValue, set } from 'firebase/database';
+import { ref, onValue, set, update } from 'firebase/database';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useToast } from "@/hooks/use-toast";
+
 
 interface Player {
     id: string;
@@ -31,6 +33,7 @@ interface ScoreData {
 
 export default function RefereePage() {
     const params = useParams();
+    const { toast } = useToast();
     const hole = params.hole;
 
     // Data from Firebase
@@ -69,7 +72,6 @@ export default function RefereePage() {
             console.error("Failed to restore referee state from localStorage", error);
             localStorage.removeItem(`refereeState_${hole}`);
         }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [hole]);
     
     // Save state to localStorage when scoring
@@ -155,10 +157,13 @@ export default function RefereePage() {
         return completed;
     }, [allPlayers, allScores, availableJos, selectedGroup, selectedCourse, hole]);
 
+    const selectedCourseName = useMemo(() => courses.find(c => c.id.toString() === selectedCourse)?.name || '', [courses, selectedCourse]);
+
     // When view changes to 'scoring', or when players for a Jo are determined, initialize or sync the scores state.
     useEffect(() => {
         if (view !== 'scoring' || !selectedJo) {
-            setScores({}); // Clear scores when not in scoring view for a specific jo
+            // When not in scoring view, there are no players, so scores should be empty.
+            if(Object.keys(scores).length > 0) setScores({});
             return;
         }
 
@@ -166,19 +171,37 @@ export default function RefereePage() {
         if (playersForJo.length === 0) return;
 
         const newScoresState: { [key: string]: ScoreData } = {};
+        let stateNeedsUpdate = false;
+
         playersForJo.forEach((player) => {
             const existingScoreFromDb = allScores[player.id]?.[selectedCourse]?.[hole];
+            const currentLocalScore = scores[player.id];
 
             if (existingScoreFromDb !== undefined) {
-                newScoresState[player.id] = { score: existingScoreFromDb, status: 'locked' };
+                // If DB has a score, it's locked.
+                 if (!currentLocalScore || currentLocalScore.score !== existingScoreFromDb || currentLocalScore.status !== 'locked') {
+                    newScoresState[player.id] = { score: existingScoreFromDb, status: 'locked' };
+                    stateNeedsUpdate = true;
+                } else {
+                    newScoresState[player.id] = currentLocalScore;
+                }
             } else {
-                // Initialize with default or keep existing local state if not in DB
-                newScoresState[player.id] = scores[player.id] || { score: 1, status: 'editing' };
+                // If no score in DB, retain local state or initialize.
+                if (currentLocalScore) {
+                     newScoresState[player.id] = currentLocalScore;
+                } else {
+                    newScoresState[player.id] = { score: 1, status: 'editing' };
+                    stateNeedsUpdate = true;
+                }
             }
         });
-        setScores(newScoresState);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [view, selectedGroup, selectedJo, selectedCourse, hole, allPlayers, allScores]);
+
+        // Only update state if there's a meaningful change to avoid re-renders
+        if (stateNeedsUpdate || Object.keys(scores).length !== Object.keys(newScoresState).length) {
+            setScores(newScoresState);
+        }
+    }, [view, selectedGroup, selectedJo, selectedCourse, hole, allPlayers, allScores, scores]);
+
 
     // Delayed saving logic
     useEffect(() => {
@@ -192,10 +215,11 @@ export default function RefereePage() {
                         setScores(prev => (prev[playerId]?.status === 'saved') ? { ...prev, [playerId]: { ...prev[playerId], status: 'locked' } } : prev);
                         timers.delete(playerId);
                     }).catch(err => {
+                        // On failure, revert to editing so user can try again
                         setScores(prev => ({...prev, [playerId]: {...prev[playerId], status: 'editing'}}));
                         timers.delete(playerId);
                     });
-                }, 10000); // 10 seconds delay
+                }, 3000); // 3 seconds delay now
                 timers.set(playerId, timer);
             }
         });
@@ -215,7 +239,7 @@ export default function RefereePage() {
     
     const handleReturnToJoSelection = () => {
         const timers = saveTimers.current;
-        const savePromises: Promise<void>[] = [];
+        const updates = {};
 
         Object.entries(scores).forEach(([playerId, scoreData]) => {
             if (scoreData.status === 'saved') {
@@ -223,12 +247,13 @@ export default function RefereePage() {
                     clearTimeout(timers.get(playerId)!);
                     timers.delete(playerId);
                 }
-                const scoreRef = ref(db, `scores/${playerId}/${selectedCourse}/${hole}`);
-                savePromises.push(set(scoreRef, scoreData.score));
+                updates[`/scores/${playerId}/${selectedCourse}/${hole}`] = scoreData.score;
             }
         });
+        
+        const savePromise = Object.keys(updates).length > 0 ? update(ref(db), updates) : Promise.resolve();
 
-        Promise.all(savePromises).finally(() => {
+        savePromise.finally(() => {
             setView('selection');
             setSelectedJo(''); 
         });
@@ -247,29 +272,29 @@ export default function RefereePage() {
         if (scores[playerToSave.id]?.status !== 'editing') return;
         const timers = saveTimers.current;
 
-        const playersToLockImmediately: { pid: string; scoreData: ScoreData }[] = [];
+        const updates = {};
+        const playersToLockImmediately: string[] = [];
+
         // Find all other players currently in 'saved' state
         Object.entries(scores).forEach(([pid, scoreData]) => {
             if (pid !== playerToSave.id && scoreData.status === 'saved') {
-                playersToLockImmediately.push({ pid, scoreData });
+                if (timers.has(pid)) {
+                    clearTimeout(timers.get(pid)!);
+                    timers.delete(pid);
+                }
+                updates[`/scores/${pid}/${selectedCourse}/${hole}`] = scoreData.score;
+                playersToLockImmediately.push(pid);
             }
         });
         
-        const dbPromises = playersToLockImmediately.map(({ pid, scoreData }) => {
-            if (timers.has(pid)) {
-                clearTimeout(timers.get(pid)!);
-                timers.delete(pid);
-            }
-            const scoreRef = ref(db, `scores/${pid}/${selectedCourse}/${hole}`);
-            return set(scoreRef, scoreData.score);
-        });
+        const dbPromise = Object.keys(updates).length > 0 ? update(ref(db), updates) : Promise.resolve();
         
-        Promise.all(dbPromises).finally(() => {
+        dbPromise.finally(() => {
              setScores(currentScores => {
                 const newScoresState = { ...currentScores };
-                playersToLockImmediately.forEach(({ pid, scoreData }) => {
+                playersToLockImmediately.forEach((pid) => {
                     if (newScoresState[pid]) {
-                        newScoresState[pid] = { ...scoreData, status: 'locked' };
+                        newScoresState[pid] = { ...newScoresState[pid], status: 'locked' };
                     }
                 });
                 newScoresState[playerToSave.id] = { ...currentScores[playerToSave.id], status: 'saved', savedAt: Date.now() };
@@ -303,8 +328,6 @@ export default function RefereePage() {
 
     const getPlayerName = (player: Player) => player.type === 'team' ? `${player.p1_name}/${player.p2_name}` : player.name;
     
-    const selectedCourseName = useMemo(() => courses.find(c => c.id.toString() === selectedCourse)?.name || '', [courses, selectedCourse]);
-
     if (loading) {
         return (
              <div className="bg-slate-50 min-h-screen p-2 sm:p-4 flex flex-col font-body">
@@ -375,36 +398,40 @@ export default function RefereePage() {
                 const isLocked = scoreData.status === 'locked';
                 
                 const progressValue = isSaved && scoreData.savedAt 
-                    ? Math.min(((Date.now() - scoreData.savedAt) / 10000) * 100, 100)
+                    ? Math.min(((Date.now() - scoreData.savedAt) / 3000) * 100, 100)
                     : 0;
 
                 return (
                     <Card key={player.id} className="overflow-hidden">
                       <CardContent className="p-2">
-                        <div className="flex items-center gap-2 w-full">
-                            <div className="flex-1 min-w-0 pr-2">
-                                <p className="font-bold text-lg truncate">{getPlayerName(player)}</p>
+                        <div className="flex items-center justify-between gap-2 w-full">
+                            <div className="flex-1 min-w-0">
+                                <p className="font-bold text-lg truncate pr-2">{getPlayerName(player)}</p>
                             </div>
-                            <div className="flex items-center gap-1 flex-shrink-0">
-                                <Button variant="outline" size="icon" className="w-11 h-11 rounded-lg border-2 flex-shrink-0" onClick={() => updateScore(player.id, -1)} disabled={!isEditing}><Minus className="h-6 w-6" /></Button>
-                                <div className="relative w-10 text-center">
-                                    <span className={`text-4xl font-bold tabular-nums`}>{scoreData.score}</span>
-                                </div>
-                                <Button variant="outline" size="icon" className="w-11 h-11 rounded-lg border-2 flex-shrink-0" onClick={() => updateScore(player.id, 1)} disabled={!isEditing}><Plus className="h-6 w-6" /></Button>
-                            </div>
-                            <div className="w-24 h-11 flex-shrink-0">
-                                {isEditing && <Button variant="default" size="icon" className="w-full h-full rounded-lg" onClick={() => handleSavePress(player)}><Save className="h-6 w-6" /></Button>}
-                                {isSaved && (
-                                     <Button variant="secondary" className="w-full h-full text-center relative border border-dashed border-primary/50 rounded-lg cursor-pointer text-xs leading-tight font-bold" onClick={() => handleImmediateLock(player.id)}>
-                                        <Progress value={progressValue} className="absolute bottom-0 left-0 h-full w-full opacity-30" />
-                                        <span className="relative">즉시잠금</span>
-                                    </Button>
-                                )}
-                                {isLocked && (
-                                    <div className="flex items-center justify-center h-full w-full bg-muted text-muted-foreground rounded-lg">
-                                        <Lock className="w-6 h-6 text-green-500" />
+                            
+                            <div className="flex items-center gap-2 flex-shrink-0">
+                                <div className="flex items-center gap-1">
+                                    <Button variant="outline" size="icon" className="w-11 h-11 rounded-lg border-2" onClick={() => updateScore(player.id, -1)} disabled={!isEditing}><Minus className="h-6 w-6" /></Button>
+                                    <div className="relative w-10 text-center">
+                                        <span className={`text-4xl font-bold tabular-nums`}>{scoreData.score}</span>
                                     </div>
-                                )}
+                                    <Button variant="outline" size="icon" className="w-11 h-11 rounded-lg border-2" onClick={() => updateScore(player.id, 1)} disabled={!isEditing}><Plus className="h-6 w-6" /></Button>
+                                </div>
+                                
+                                <div className="w-24 h-11">
+                                    {isEditing && <Button variant="default" size="icon" className="w-full h-full rounded-lg" onClick={() => handleSavePress(player)}><Save className="h-6 w-6" /></Button>}
+                                    {isSaved && (
+                                         <Button variant="secondary" className="w-full h-full text-center relative border border-dashed border-primary/50 rounded-lg cursor-pointer text-xs leading-tight font-bold" onClick={() => handleImmediateLock(player.id)}>
+                                            <Progress value={progressValue} className="absolute bottom-0 left-0 h-full w-full opacity-30" />
+                                            <span className="relative">즉시잠금</span>
+                                        </Button>
+                                    )}
+                                    {isLocked && (
+                                        <div className="flex items-center justify-center h-full w-full bg-muted text-muted-foreground rounded-lg">
+                                            <Lock className="w-6 h-6 text-green-500" />
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         </div>
                       </CardContent>
