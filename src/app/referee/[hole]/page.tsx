@@ -354,7 +354,7 @@ export default function RefereePage() {
                 return (
                     <Card key={player.id} className="overflow-hidden">
                       <CardContent className="p-2">
-                        <div className="flex items-center justify-between gap-2 w-full">
+                        <div className="flex items-center gap-2 w-full">
                             <div className="flex-1 min-w-0">
                                 <p className="font-bold text-lg truncate pr-2">{getPlayerName(player)}</p>
                             </div>
@@ -426,19 +426,12 @@ export default function RefereePage() {
             
             <AlertDialog open={!!playerToSave} onOpenChange={(open) => !open && setPlayerToSave(null)}>
                 <AlertDialogContent>
-                    <AlertDialogHeader>
-                         <AlertDialogTitle className="sr-only">점수 저장 확인</AlertDialogTitle>
-                        {playerToSave && scores[playerToSave.id] && (
-                            <AlertDialogDescription className="sr-only">
-                                {`선수 ${getPlayerName(playerToSave)}의 점수를 ${scores[playerToSave.id].score}점으로 저장합니다.`}
-                            </AlertDialogDescription>
-                        )}
+                    <AlertDialogHeader className="text-center">
+                        <AlertDialogTitle className="text-2xl font-bold" style={{ fontSize: '1.8rem', lineHeight: '2.2rem' }}>
+                            {playerToSave ? getPlayerName(playerToSave) : ''}
+                        </AlertDialogTitle>
                     </AlertDialogHeader>
-                    <div className="flex flex-col items-center justify-center p-4 text-center">
-                        {playerToSave && (
-                             <p className="text-2xl font-bold mb-2" style={{ fontSize: '1.8rem', lineHeight: '2.2rem' }}>{getPlayerName(playerToSave)}</p>
-                        )}
-                       
+                    <div className="flex flex-col items-center justify-center p-0 text-center">
                         {playerToSave && scores[playerToSave.id] && (
                              <div className="flex items-baseline my-2">
                                 <span className="text-5xl font-extrabold text-destructive leading-none" style={{ fontSize: '3.8rem', lineHeight: '1' }}>{scores[playerToSave.id].score}</span>
@@ -446,7 +439,9 @@ export default function RefereePage() {
                             </div>
                         )}
                         
-                        <p className="text-xs font-semibold mt-2 text-muted-foreground">저장하시겠습니까?</p>
+                        <AlertDialogDescription className="text-sm font-semibold mt-2 text-muted-foreground">
+                            저장하시겠습니까?
+                        </AlertDialogDescription>
                     </div>
                     <AlertDialogFooter className="grid grid-cols-2 gap-4 pt-4">
                         <AlertDialogCancel onClick={() => setPlayerToSave(null)} className="h-11 px-6 text-sm mt-0">취소</AlertDialogCancel>
