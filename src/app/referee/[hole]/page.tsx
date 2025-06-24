@@ -12,6 +12,7 @@ import { Progress } from '@/components/ui/progress';
 import { db } from '@/lib/firebase';
 import { ref, onValue, set } from 'firebase/database';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useToast } from '@/hooks/use-toast';
 
 interface Player {
     id: string;
@@ -49,9 +50,48 @@ export default function RefereePage() {
     // Local state for scoring UI
     const [scores, setScores] = useState<{ [key: string]: ScoreData }>({});
     const [confirmingPlayer, setConfirmingPlayer] = useState<{ player: Player; score: number; } | null>(null);
+    const { toast } = useToast();
     const [now, setNow] = useState(Date.now());
     const saveTimers = useRef<Map<string, NodeJS.Timeout>>(new Map());
+
+    // Restore state from localStorage on initial load
+    useEffect(() => {
+        try {
+            const savedStateJSON = localStorage.getItem(`refereeState_${hole}`);
+            if (savedStateJSON) {
+                const savedState = JSON.parse(savedStateJSON);
+                if (savedState.group && savedState.course && savedState.jo && savedState.view === 'scoring') {
+                    setSelectedGroup(savedState.group);
+                    setSelectedCourse(savedState.course);
+                    setSelectedJo(savedState.jo);
+                    setView(savedState.view);
+                } else {
+                    localStorage.removeItem(`refereeState_${hole}`);
+                }
+            }
+        } catch (error) {
+            console.error("Failed to restore referee state from localStorage", error);
+            localStorage.removeItem(`refereeState_${hole}`);
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [hole]);
     
+    // Save state to localStorage when scoring
+    useEffect(() => {
+        if (view === 'scoring' && selectedGroup && selectedCourse && selectedJo) {
+            const stateToSave = {
+                group: selectedGroup,
+                course: selectedCourse,
+                jo: selectedJo,
+                view: 'scoring'
+            };
+            localStorage.setItem(`refereeState_${hole}`, JSON.stringify(stateToSave));
+        } else {
+            // Clear the state if we are back to selection view or some values are missing
+            localStorage.removeItem(`refereeState_${hole}`);
+        }
+    }, [view, selectedGroup, selectedCourse, selectedJo, hole]);
+
     // Data fetching
     useEffect(() => {
         setLoading(true);
@@ -133,9 +173,8 @@ export default function RefereePage() {
     const selectedCourseName = useMemo(() => courses.find(c => c.id.toString() === selectedCourse)?.name || '', [courses, selectedCourse]);
 
     // When view changes to 'scoring', initialize the scores state.
-    // This effect should only run when the Jo to be scored changes, not on every DB update.
     useEffect(() => {
-        if (view === 'scoring' && selectedGroup && selectedCourse && selectedJo) {
+        if (view === 'scoring' && selectedJo) {
             const playersForJo = allPlayers.filter(p => p.group === selectedGroup && p.jo.toString() === selectedJo);
 
             const finalScoresState: { [key: string]: ScoreData } = {};
@@ -151,7 +190,7 @@ export default function RefereePage() {
             setScores(finalScoresState);
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [view, selectedGroup, selectedCourse, selectedJo]);
+    }, [view, selectedJo, allPlayers, allScores, selectedCourse, hole]); // Re-run when Jo changes or db data changes
     
     // Delayed saving logic
     useEffect(() => {
@@ -167,8 +206,9 @@ export default function RefereePage() {
                     }).catch(err => {
                         setScores(prev => ({...prev, [playerId]: {...prev[playerId], status: 'editing'}}));
                         timers.delete(playerId);
+                        toast({ title: "저장 실패", description: err.message, variant: "destructive" });
                     });
-                }, 10000); // 10 seconds delay
+                }, 3000); // 3 seconds delay
                 timers.set(playerId, timer);
             }
         });
@@ -176,7 +216,7 @@ export default function RefereePage() {
         return () => {
             timers.forEach(timer => clearTimeout(timer));
         };
-    }, [scores, selectedCourse, hole]);
+    }, [scores, selectedCourse, hole, toast]);
 
 
     // ---- Handlers ----
@@ -261,7 +301,7 @@ export default function RefereePage() {
                 return newScoresState;
             });
         }).catch(err => {
-             // Silently fail as per user request to remove toasts
+             toast({ title: "저장 실패", description: err.message, variant: "destructive" });
         });
 
         setConfirmingPlayer(null);
@@ -287,11 +327,27 @@ export default function RefereePage() {
             })
             .catch(err => {
                 setScores(prev => ({...prev, [playerId]: {...prev[playerId], status: 'editing'}}));
+                toast({ title: "저장 실패", description: err.message, variant: "destructive" });
             });
     };
 
     const getPlayerName = (player: Player) => player.type === 'team' ? `${player.p1_name}/${player.p2_name}` : player.name;
     
+    if (loading) {
+        return (
+             <div className="bg-slate-50 min-h-screen p-2 sm:p-4 flex flex-col font-body">
+                <header className="text-center mb-4">
+                    <h1 className="text-3xl font-extrabold text-primary break-keep leading-tight">{hole}번홀 점수 기록</h1>
+                    <p className="text-muted-foreground text-base">담당 심판용 페이지</p>
+                </header>
+                <div className="space-y-4">
+                    <Skeleton className="h-32 w-full" />
+                    <Skeleton className="h-48 w-full" />
+                </div>
+            </div>
+        )
+    }
+
     const renderSelectionScreen = () => {
         return (
             <Card>
@@ -347,7 +403,7 @@ export default function RefereePage() {
                 const isLocked = scoreData.status === 'locked';
 
                 const progressValue = isSaved && scoreData.savedAt 
-                    ? ((now - scoreData.savedAt) / 10000) * 100
+                    ? ((now - scoreData.savedAt) / 3000) * 100
                     : 0;
 
                 return (
@@ -385,21 +441,6 @@ export default function RefereePage() {
             })}
         </div>
     );
-
-    if (loading) {
-        return (
-             <div className="bg-slate-50 min-h-screen p-2 sm:p-4 flex flex-col font-body">
-                <header className="text-center mb-4">
-                    <h1 className="text-3xl font-extrabold text-primary break-keep leading-tight">{hole}번홀 점수 기록</h1>
-                    <p className="text-muted-foreground text-base">담당 심판용 페이지</p>
-                </header>
-                <div className="space-y-4">
-                    <Skeleton className="h-32 w-full" />
-                    <Skeleton className="h-48 w-full" />
-                </div>
-            </div>
-        )
-    }
 
     return (
         <div className="bg-slate-50 min-h-screen p-2 sm:p-4 flex flex-col font-body">
