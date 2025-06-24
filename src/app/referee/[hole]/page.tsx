@@ -307,13 +307,48 @@ export default function RefereePage() {
     const handleConfirmFinalSave = () => {
         if (!confirmingPlayer) return;
         const { player, score } = confirmingPlayer;
+        const playerIdToSave = player.id;
+        const timers = saveTimers.current;
 
-        setScores(prev => ({ ...prev, [player.id]: { score, status: 'saved', savedAt: Date.now() } }));
-        toast({
-            title: "임시 저장 완료", 
-            description: "10초 후 자동 저장됩니다. 그 전에 수정할 수 있습니다.",
-            duration: 3000,
+        // Create a copy of the current scores state to modify
+        const newScoresState = { ...scores };
+        const dbPromises: Promise<void>[] = [];
+
+        // Find any other player in 'saved' state and lock them immediately
+        Object.entries(newScoresState).forEach(([pid, scoreData]) => {
+            if (pid !== playerIdToSave && scoreData.status === 'saved') {
+                // Clear their timer
+                if (timers.has(pid)) {
+                    clearTimeout(timers.get(pid)!);
+                    timers.delete(pid);
+                }
+                
+                // Save to DB
+                const scoreRef = ref(db, `scores/${pid}/${selectedCourse}/${hole}`);
+                dbPromises.push(set(scoreRef, scoreData.score));
+                
+                // Update their local state to 'locked'
+                newScoresState[pid] = { ...scoreData, status: 'locked' };
+            }
         });
+        
+        // Set the new player to 'saved'
+        newScoresState[playerIdToSave] = { score, status: 'saved', savedAt: Date.now() };
+
+        // Wait for DB operations to complete (if any) before updating state
+        Promise.all(dbPromises).then(() => {
+            // Update the entire scores state at once
+            setScores(newScoresState);
+            
+            toast({
+                title: "임시 저장 완료",
+                description: `${getPlayerName(player)} 선수의 점수를 10초 후 저장합니다.`,
+                duration: 3000,
+            });
+        }).catch(err => {
+            toast({ title: "오류", description: `이전 점수를 저장하는 중 오류 발생: ${err.message}`, variant: "destructive" });
+        });
+
         setConfirmingPlayer(null);
     };
 
@@ -363,7 +398,7 @@ export default function RefereePage() {
                             {availableJos.map(jo => {
                                 const isCompleted = completedJos.has(jo);
                                 return (
-                                    <SelectItem key={jo} value={jo.toString()}>
+                                    <SelectItem key={jo} value={jo.toString()} disabled={isCompleted && selectedJo !== jo.toString()}>
                                         <div className="flex items-center justify-between w-full">
                                             <span>{jo}조</span>
                                             {isCompleted && <Lock className="h-4 w-4 text-muted-foreground" />}
@@ -395,7 +430,7 @@ export default function RefereePage() {
                 const isLocked = scoreData.status === 'locked';
 
                 const progressValue = isSaved && scoreData.savedAt 
-                    ? ((Date.now() - scoreData.savedAt) / 10000) * 100
+                    ? ((now - scoreData.savedAt) / 10000) * 100
                     : 0;
 
                 return (
@@ -510,5 +545,7 @@ export default function RefereePage() {
         </div>
     );
 }
+
+    
 
     
