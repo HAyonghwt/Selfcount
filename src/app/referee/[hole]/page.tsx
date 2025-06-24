@@ -10,6 +10,8 @@ import { Minus, Plus, Save, Lock, ArrowLeft } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { ref, onValue, set } from 'firebase/database';
 import { Skeleton } from '@/components/ui/skeleton';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { useToast } from '@/hooks/use-toast';
 
 interface Player {
     id: string;
@@ -29,6 +31,7 @@ interface ScoreData {
 export default function RefereePage() {
     const params = useParams();
     const hole = params.hole;
+    const { toast } = useToast();
 
     // Data from Firebase
     const [allPlayers, setAllPlayers] = useState<Player[]>([]);
@@ -45,6 +48,8 @@ export default function RefereePage() {
     
     // Local state for scoring UI
     const [scores, setScores] = useState<{ [key: string]: ScoreData }>({});
+    const [playerToSave, setPlayerToSave] = useState<Player | null>(null);
+
 
     // Restore state from localStorage on initial load
     useEffect(() => {
@@ -164,7 +169,11 @@ export default function RefereePage() {
                 }
                 return acc;
             }, {});
-            localStorage.setItem(key, JSON.stringify(scoresToSave));
+            if (Object.keys(scoresToSave).length > 0) {
+                localStorage.setItem(key, JSON.stringify(scoresToSave));
+            } else {
+                localStorage.removeItem(key);
+            }
         }
     }, [scores, hole, selectedGroup, selectedCourse, selectedJo, view]);
 
@@ -223,7 +232,15 @@ export default function RefereePage() {
         }
     };
 
-    const handleSavePress = (playerToSave: Player) => {
+    const handleSavePress = (player: Player) => {
+        const scoreData = scores[player.id];
+        if (!scoreData || scoreData.status !== 'editing') return;
+        setPlayerToSave(player);
+    };
+
+    const handleConfirmSave = () => {
+        if (!playerToSave) return;
+        
         const scoreData = scores[playerToSave.id];
         if (!scoreData || scoreData.status !== 'editing') return;
 
@@ -242,7 +259,13 @@ export default function RefereePage() {
             }
         }).catch(err => {
             console.error("Failed to save score:", err);
-            // Optionally, show an error to the user, but request was to remove toasts.
+            toast({
+                title: "저장 실패",
+                description: `점수를 저장하는 중 오류가 발생했습니다: ${err.message}`,
+                variant: "destructive",
+            });
+        }).finally(() => {
+            setPlayerToSave(null);
         });
     };
 
@@ -324,7 +347,7 @@ export default function RefereePage() {
                                 <p className="font-bold text-lg truncate pr-2">{getPlayerName(player)}</p>
                             </div>
                             
-                            <div className="flex items-center gap-2 flex-shrink-0">
+                            <div className="flex items-center gap-1 flex-shrink-0">
                                 <div className="flex items-center gap-1">
                                     <Button variant="outline" size="icon" className="w-11 h-11 rounded-lg border-2" onClick={() => updateScore(player.id, -1)} disabled={isLocked}><Minus className="h-6 w-6" /></Button>
                                     <div className="relative w-10 text-center">
@@ -354,35 +377,59 @@ export default function RefereePage() {
     );
 
     return (
-        <div className="bg-slate-50 min-h-screen p-2 sm:p-4 flex flex-col font-body">
-            <header className="text-center mb-4">
-                <h1 className="text-3xl font-extrabold text-primary break-keep leading-tight">{hole}번홀 점수 기록</h1>
-                <p className="text-muted-foreground text-base">담당 심판용 페이지</p>
-            </header>
+        <>
+            <div className="bg-slate-50 min-h-screen p-2 sm:p-4 flex flex-col font-body">
+                <header className="text-center mb-4">
+                    <h1 className="text-3xl font-extrabold text-primary break-keep leading-tight">{hole}번홀 점수 기록</h1>
+                    <p className="text-muted-foreground text-base">담당 심판용 페이지</p>
+                </header>
 
-            <div className="flex-1 flex flex-col space-y-4">
-                {view === 'scoring' && (
-                     <Card>
-                        <CardHeader className="p-3">
-                            <div className="flex justify-between items-center gap-2">
-                                <div className="text-lg sm:text-xl font-bold text-center break-keep">
-                                    <span>{selectedGroup}</span> 
-                                    <span className="text-muted-foreground mx-1">/</span> 
-                                    <span>{selectedCourseName}</span>
-                                    <span className="text-muted-foreground mx-1">/</span>
-                                    <span>{selectedJo}조</span>
+                <div className="flex-1 flex flex-col space-y-4">
+                    {view === 'scoring' && (
+                        <Card>
+                            <CardHeader className="p-3">
+                                <div className="flex justify-between items-center gap-2">
+                                    <div className="text-lg sm:text-xl font-bold text-center break-keep">
+                                        <span>{selectedGroup}</span> 
+                                        <span className="text-muted-foreground mx-1">/</span> 
+                                        <span>{selectedCourseName}</span>
+                                        <span className="text-muted-foreground mx-1">/</span>
+                                        <span>{selectedJo}조</span>
+                                    </div>
+                                    <Button variant="outline" size="sm" onClick={handleReturnToJoSelection}>
+                                        <ArrowLeft className="mr-1 h-3 w-3" />
+                                        다른 조 선택
+                                    </Button>
                                 </div>
-                                <Button variant="outline" size="sm" onClick={handleReturnToJoSelection}>
-                                    <ArrowLeft className="mr-1 h-3 w-3" />
-                                    다른 조 선택
-                                </Button>
-                            </div>
-                        </CardHeader>
-                    </Card>
-                )}
+                            </CardHeader>
+                        </Card>
+                    )}
 
-                {view === 'selection' ? renderSelectionScreen() : renderScoringScreen()}
+                    {view === 'selection' ? renderSelectionScreen() : renderScoringScreen()}
+                </div>
             </div>
-        </div>
+            
+            <AlertDialog open={!!playerToSave} onOpenChange={(open) => !open && setPlayerToSave(null)}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>점수를 저장하시겠습니까?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            {playerToSave && scores[playerToSave.id] && (
+                                <div className="space-y-1 my-4 text-base text-foreground">
+                                    <p><strong>선수:</strong> {getPlayerName(playerToSave)}</p>
+                                    <p><strong>코스:</strong> {selectedCourseName} {hole}홀</p>
+                                    <p><strong>점수:</strong> <span className="font-bold text-lg text-primary">{scores[playerToSave.id].score}점</span></p>
+                                </div>
+                            )}
+                            저장 후에는 수정할 수 없습니다.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel onClick={() => setPlayerToSave(null)}>취소</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleConfirmSave}>확인 및 저장</AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+        </>
     );
 }
