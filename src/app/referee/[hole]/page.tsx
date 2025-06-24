@@ -262,6 +262,19 @@ export default function RefereePage() {
     };
     
     const handleReturnToJoSelection = () => {
+        // Force-save any pending scores
+        const timers = saveTimers.current;
+        Object.entries(scores).forEach(([playerId, scoreData]) => {
+            if (scoreData.status === 'saved') {
+                if (timers.has(playerId)) {
+                    clearTimeout(timers.get(playerId)!);
+                    timers.delete(playerId);
+                }
+                const scoreRef = ref(db, `/scores/${playerId}/${selectedCourse}/${hole}`);
+                set(scoreRef, scoreData.score);
+            }
+        });
+
         try {
             if(selectedGroup && selectedCourse && selectedJo) {
                 const storageKey = `parkscore-referee-scores-${selectedGroup}-${selectedCourse}-${selectedJo}`;
@@ -324,7 +337,6 @@ export default function RefereePage() {
     
     const renderSelectionScreen = () => {
         const isGroupSelectionDisabled = availableGroups.length > 0 && !!selectedGroup;
-        const isCourseSelectionDisabled = !selectedGroup || !!selectedCourse || availableCoursesForGroup.length === 0;
 
         return (
             <Card>
@@ -339,7 +351,7 @@ export default function RefereePage() {
                             {availableGroups.map(g => <SelectItem key={g} value={g} className="text-base">{g}</SelectItem>)}
                         </SelectContent>
                     </Select>
-                    <Select value={selectedCourse} onValueChange={v => {setSelectedCourse(v); setSelectedJo('');}} disabled={isCourseSelectionDisabled}>
+                    <Select value={selectedCourse} onValueChange={v => {setSelectedCourse(v); setSelectedJo('');}} disabled={!selectedGroup || availableCoursesForGroup.length === 0}>
                         <SelectTrigger className="h-12 text-base"><SelectValue placeholder={!selectedGroup ? "그룹 먼저 선택" : (availableCoursesForGroup.length === 0 ? "배정된 코스 없음" : "2. 코스 선택")} /></SelectTrigger>
                         <SelectContent position="item-aligned">
                             {availableCoursesForGroup.map(c => <SelectItem key={c.id} value={c.id.toString()} className="text-base">{c.name}</SelectItem>)}
@@ -351,7 +363,7 @@ export default function RefereePage() {
                             {availableJos.map(jo => {
                                 const isCompleted = completedJos.has(jo);
                                 return (
-                                    <SelectItem key={jo} value={jo.toString()} disabled={isCompleted}>
+                                    <SelectItem key={jo} value={jo.toString()}>
                                         <div className="flex items-center justify-between w-full">
                                             <span>{jo}조</span>
                                             {isCompleted && <Lock className="h-4 w-4 text-muted-foreground" />}
@@ -498,3 +510,5 @@ export default function RefereePage() {
         </div>
     );
 }
+
+    
