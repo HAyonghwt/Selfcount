@@ -134,11 +134,11 @@ export default function RefereePage() {
 
     // Automatically reset selections when a group is fully scored.
     useEffect(() => {
-        if (selectedGroup && availableJos.length > 0 && availableJos.length === completedJos.size) {
+        if (selectedGroup && availableJos.length > 0 && availableJos.length > 0 && availableJos.length === completedJos.size) {
             toast({
                 title: "그룹 심사 완료",
                 description: `'${selectedGroup}' 그룹의 모든 조의 점수 입력이 완료되었습니다. 다른 그룹을 선택하세요.`,
-                duration: 5000,
+                duration: 3000,
             });
             setView('selection');
             setScores({});
@@ -229,7 +229,8 @@ export default function RefereePage() {
                         if (player) {
                             toast({
                                 title: "최종 저장 완료",
-                                description: `${getPlayerName(player)} 선수의 점수가 최종 저장되었습니다.`
+                                description: `${getPlayerName(player)} 선수의 점수가 최종 저장되었습니다.`,
+                                duration: 3000,
                             });
                         }
                         timers.delete(playerId);
@@ -257,6 +258,7 @@ export default function RefereePage() {
             toast({
                 title: "선택 필요",
                 description: "그룹, 코스, 조를 모두 선택해주세요.",
+                duration: 3000,
             });
         }
     };
@@ -359,15 +361,13 @@ export default function RefereePage() {
                 ...prev,
                 [player.id]: { ...prev[player.id], status: 'editing' }
             }));
-            toast({ title: "수정 모드", description: `${getPlayerName(player)} 선수의 점수를 다시 수정합니다.` });
+            toast({ title: "수정 모드", description: `${getPlayerName(player)} 선수의 점수를 다시 수정합니다.`, duration: 3000 });
         }
     }
 
     const getPlayerName = (player: Player) => player.type === 'team' ? `${player.p1_name}/${player.p2_name}` : player.name;
     
     const renderSelectionScreen = () => {
-        const isGroupSelectionDisabled = availableGroups.length > 0 && !!selectedGroup;
-
         return (
             <Card>
                 <CardHeader>
@@ -375,7 +375,7 @@ export default function RefereePage() {
                     <CardDescription className="text-sm">점수를 기록할 그룹, 코스, 조를 선택하세요.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                    <Select value={selectedGroup} onValueChange={v => {setSelectedGroup(v); setSelectedCourse(''); setSelectedJo('');}} disabled={isGroupSelectionDisabled}>
+                    <Select value={selectedGroup} onValueChange={v => {setSelectedGroup(v); setSelectedCourse(''); setSelectedJo('');}} disabled={availableGroups.length > 0 && !!selectedGroup && !(availableJos.length > 0 && availableJos.length === completedJos.size)} >
                         <SelectTrigger className="h-12 text-base"><SelectValue placeholder="1. 그룹 선택" /></SelectTrigger>
                         <SelectContent position="item-aligned">
                             {availableGroups.map(g => <SelectItem key={g} value={g} className="text-base">{g}</SelectItem>)}
@@ -393,7 +393,7 @@ export default function RefereePage() {
                             {availableJos.map(jo => {
                                 const isCompleted = completedJos.has(jo);
                                 return (
-                                    <SelectItem key={jo} value={jo.toString()}>
+                                    <SelectItem key={jo} value={jo.toString()} >
                                         <div className="flex items-center justify-between w-full">
                                             <span>{jo}조</span>
                                             {isCompleted && <Lock className="h-4 w-4 text-muted-foreground" />}
@@ -406,7 +406,7 @@ export default function RefereePage() {
                 </CardContent>
                 <CardFooter className="flex-col gap-2">
                      <Button className="w-full h-14 text-xl font-bold" onClick={handleStartScoring} disabled={!selectedJo}>점수기록 시작</Button>
-                     {isGroupSelectionDisabled && (
+                     {(availableGroups.length > 0 && !!selectedGroup && !(availableJos.length > 0 && availableJos.length === completedJos.size)) && (
                         <Button variant="outline" className="w-full" onClick={() => { setSelectedGroup(''); setSelectedCourse(''); setSelectedJo(''); }}>그룹/코스 변경</Button>
                      )}
                 </CardFooter>
