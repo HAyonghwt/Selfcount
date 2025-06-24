@@ -107,6 +107,17 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </SidebarHeader>
           <SidebarContent>
             <SidebarMenu>
+               <SidebarMenuItem>
+                  <SidebarMenuButton asChild tooltip={{ children: "외부 전광판" }}>
+                     <Link href="/scoreboard" target="_blank" rel="noopener noreferrer">
+                        <Tv className="h-5 w-5 text-primary" />
+                        <span className="text-primary font-semibold">외부 전광판</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+
+              <SidebarSeparator className="my-2" />
+
               {mainNavItems.map((item) => (
                 <SidebarMenuItem key={item.href}>
                   <SidebarMenuButton
@@ -138,15 +149,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
-              
-               <SidebarMenuItem>
-                  <SidebarMenuButton asChild tooltip={{ children: "외부 전광판" }}>
-                     <Link href="/scoreboard" target="_blank" rel="noopener noreferrer">
-                        <Tv className="h-5 w-5 text-primary" />
-                        <span className="text-primary font-semibold">외부 전광판</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
             </SidebarMenu>
           </SidebarContent>
           <SidebarFooter className="p-4 border-t">
