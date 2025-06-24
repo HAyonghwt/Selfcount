@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -58,11 +58,6 @@ export default function RefereePage() {
     const [isUnlockModalOpen, setIsUnlockModalOpen] = useState(false);
     const [unlockPasswordInput, setUnlockPasswordInput] = useState('');
     const [playerToUnlock, setPlayerToUnlock] = useState<Player | null>(null);
-
-    const viewRef = useRef(view);
-    useEffect(() => {
-        viewRef.current = view;
-    }, [view]);
 
     // Restore state from localStorage on initial load
     useEffect(() => {
@@ -226,16 +221,18 @@ export default function RefereePage() {
     // Prevent accidental navigation when scoring
     useEffect(() => {
         const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-            if (viewRef.current === 'scoring') {
-                e.preventDefault();
-                e.returnValue = '';
-            }
+            e.preventDefault();
+            e.returnValue = '';
         };
-        window.addEventListener('beforeunload', handleBeforeUnload);
-        return () => {
-            window.removeEventListener('beforeunload', handleBeforeUnload);
-        };
-    }, []);
+
+        if (view === 'scoring') {
+            window.addEventListener('beforeunload', handleBeforeUnload);
+            
+            return () => {
+                window.removeEventListener('beforeunload', handleBeforeUnload);
+            };
+        }
+    }, [view]);
 
     // ---- Handlers ----
     const handleStartScoring = () => {
@@ -519,6 +516,3 @@ export default function RefereePage() {
         </>
     );
 }
-
-    
-
