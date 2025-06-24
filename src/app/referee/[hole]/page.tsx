@@ -219,19 +219,25 @@ export default function RefereePage() {
     }, [view, selectedJo, selectedCourse, hole, allScores, currentPlayers]);
 
     // Prevent accidental navigation when scoring
+    const viewRef = useRef(view);
+    useEffect(() => {
+        viewRef.current = view;
+    }, [view]);
+
     useEffect(() => {
         const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-            if (view === 'scoring') {
-                e.preventDefault(); // Standard for most browsers
-                e.returnValue = ''; // For some older browsers
+            if (viewRef.current === 'scoring') {
+                e.preventDefault();
+                e.returnValue = '';
             }
         };
 
         window.addEventListener('beforeunload', handleBeforeUnload);
+
         return () => {
             window.removeEventListener('beforeunload', handleBeforeUnload);
         };
-    }, [view]);
+    }, []); // Empty dependency array ensures this runs only once
 
     // ---- Handlers ----
     const handleStartScoring = () => {
@@ -515,3 +521,5 @@ export default function RefereePage() {
         </>
     );
 }
+
+    
