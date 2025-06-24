@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -52,6 +52,7 @@ export default function RefereePage() {
     const [scores, setScores] = useState<{ [key: string]: ScoreData }>({});
     const [confirmingPlayer, setConfirmingPlayer] = useState<{ player: Player; score: number; } | null>(null);
     const [now, setNow] = useState(Date.now());
+    const saveTimers = useRef<Map<string, NodeJS.Timeout>>(new Map());
     
     // Data fetching
     useEffect(() => {
@@ -86,7 +87,6 @@ export default function RefereePage() {
             if (interval) clearInterval(interval);
         };
     }, [view, scores]);
-
 
     // Derived data
     const availableGroups = useMemo(() => Object.keys(groupsData).sort(), [groupsData]);
@@ -140,8 +140,6 @@ export default function RefereePage() {
                 description: `'${selectedGroup}' 그룹의 모든 조의 점수 입력이 완료되었습니다. 다른 그룹을 선택하세요.`,
                 duration: 5000,
             });
-
-            // Reset all selections to go back to the initial screen
             setView('selection');
             setScores({});
             setSelectedGroup('');
@@ -158,7 +156,6 @@ export default function RefereePage() {
         if (view === 'scoring' && selectedGroup && selectedCourse && selectedJo) {
             let restoredScores: { [key: string]: ScoreData } = {};
             try {
-                // Try to load scores from localStorage for the current context
                 const storageKey = `parkscore-referee-scores-${selectedGroup}-${selectedCourse}-${selectedJo}`;
                 const savedScoresJSON = localStorage.getItem(storageKey);
                 if (savedScoresJSON) {
@@ -174,30 +171,19 @@ export default function RefereePage() {
                 const restoredPlayerData = restoredScores[player.id];
 
                 if (existingScoreFromDb !== undefined) {
-                    // A score is already in the database, so it's locked. This has the highest priority.
-                    finalScoresState[player.id] = {
-                        score: existingScoreFromDb,
-                        status: 'locked',
-                    };
+                    finalScoresState[player.id] = { score: existingScoreFromDb, status: 'locked' };
                 } else if (restoredPlayerData) {
-                    // No score in DB, but we have a restored session from localStorage. Use it.
-                    // If it was 'locked' in localStorage but not in DB (e.g. score was deleted by admin), revert to 'editing'.
                     finalScoresState[player.id] = {
                         ...restoredPlayerData,
                         status: restoredPlayerData.status === 'locked' ? 'editing' : restoredPlayerData.status
                     };
                 } else {
-                    // Nothing in DB and nothing in localStorage. Initialize to default 'editing' state.
-                    finalScoresState[player.id] = {
-                        score: 1,
-                        status: 'editing',
-                    };
+                    finalScoresState[player.id] = { score: 1, status: 'editing' };
                 }
             });
 
             setScores(finalScoresState);
         }
-        // This effect should only run when entering the scoring view or if the context (players, course, etc.) changes.
     }, [view, currentPlayers, allScores, selectedCourse, selectedJo, hole, selectedGroup]);
 
 
@@ -229,19 +215,38 @@ export default function RefereePage() {
         }
     }, [scores, view, currentPlayers, selectedGroup, selectedCourse, selectedJo]);
 
-    // Timer to lock scores after saving.
+    // Delayed saving logic
     useEffect(() => {
-        const timers: NodeJS.Timeout[] = [];
+        const timers = saveTimers.current;
+
         Object.entries(scores).forEach(([playerId, scoreData]) => {
-            if (scoreData.status === 'saved') {
+            if (scoreData.status === 'saved' && !timers.has(playerId)) {
                 const timer = setTimeout(() => {
-                    setScores(prev => (prev[playerId]?.status === 'saved') ? { ...prev, [playerId]: { ...prev[playerId], status: 'locked' } } : prev);
-                }, 10000); // 10 seconds to edit
-                timers.push(timer);
+                    const scoreRef = ref(db, `/scores/${playerId}/${selectedCourse}/${hole}`);
+                    set(scoreRef, scoreData.score).then(() => {
+                        setScores(prev => (prev[playerId]?.status === 'saved') ? { ...prev, [playerId]: { ...prev[playerId], status: 'locked' } } : prev);
+                        const player = currentPlayers.find(p => p.id === playerId);
+                        if (player) {
+                            toast({
+                                title: "최종 저장 완료",
+                                description: `${getPlayerName(player)} 선수의 점수가 최종 저장되었습니다.`
+                            });
+                        }
+                        timers.delete(playerId);
+                    }).catch(err => {
+                        setScores(prev => ({...prev, [playerId]: {...prev[playerId], status: 'editing'}}));
+                        toast({ title: "저장 실패", description: err.message, variant: "destructive" });
+                        timers.delete(playerId);
+                    });
+                }, 10000); // 10 seconds delay
+                timers.set(playerId, timer);
             }
         });
-        return () => timers.forEach(clearTimeout);
-    }, [scores]);
+
+        return () => {
+            timers.forEach(timer => clearTimeout(timer));
+        };
+    }, [scores, selectedCourse, hole, currentPlayers, toast]);
 
 
     // ---- Handlers ----
@@ -257,7 +262,6 @@ export default function RefereePage() {
     };
     
     const handleReturnToJoSelection = () => {
-        // Clear the localStorage for the completed/exited Jo to prevent stale data
         try {
             if(selectedGroup && selectedCourse && selectedJo) {
                 const storageKey = `parkscore-referee-scores-${selectedGroup}-${selectedCourse}-${selectedJo}`;
@@ -268,7 +272,8 @@ export default function RefereePage() {
         }
 
         setView('selection');
-        setSelectedJo(''); // Only reset Jo
+        setSelectedJo(''); 
+        setScores({}); 
     };
 
     const updateScore = (id: string, delta: number) => {
@@ -287,23 +292,26 @@ export default function RefereePage() {
     };
 
     const handleConfirmFinalSave = () => {
-        if (!confirmingPlayer || !selectedCourse) return;
+        if (!confirmingPlayer) return;
         const { player, score } = confirmingPlayer;
 
-        const scoreRef = ref(db, `/scores/${player.id}/${selectedCourse}/${hole}`);
-        set(scoreRef, score).then(() => {
-            setScores(prev => ({ ...prev, [player.id]: { score, status: 'saved', savedAt: Date.now() } }));
-            toast({
-                title: "점수 저장 완료", 
-                description: "점수가 저장되었습니다. 10초 내에 수정 가능합니다.",
-                duration: 3000,
-            });
-        }).catch(err => toast({ title: "저장 실패", description: err.message }))
-        .finally(() => setConfirmingPlayer(null));
+        setScores(prev => ({ ...prev, [player.id]: { score, status: 'saved', savedAt: Date.now() } }));
+        toast({
+            title: "임시 저장 완료", 
+            description: "10초 후 자동 저장됩니다. 그 전에 수정할 수 있습니다.",
+            duration: 3000,
+        });
+        setConfirmingPlayer(null);
     };
 
-    const handleScoreDoubleClick = (player: Player) => {
+    const handleScoreClickToEdit = (player: Player) => {
         if (scores[player.id]?.status === 'saved') {
+            const timers = saveTimers.current;
+            if (timers.has(player.id)) {
+                clearTimeout(timers.get(player.id)!);
+                timers.delete(player.id);
+            }
+            
             setScores(prev => ({
                 ...prev,
                 [player.id]: { ...prev[player.id], status: 'editing' }
@@ -315,6 +323,9 @@ export default function RefereePage() {
     const getPlayerName = (player: Player) => player.type === 'team' ? `${player.p1_name}/${player.p2_name}` : player.name;
     
     const renderSelectionScreen = () => {
+        const isGroupSelectionDisabled = availableGroups.length > 0 && !!selectedGroup;
+        const isCourseSelectionDisabled = !selectedGroup || !!selectedCourse || availableCoursesForGroup.length === 0;
+
         return (
             <Card>
                 <CardHeader>
@@ -322,13 +333,13 @@ export default function RefereePage() {
                     <CardDescription className="text-sm">점수를 기록할 그룹, 코스, 조를 선택하세요.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                    <Select value={selectedGroup} onValueChange={v => {setSelectedGroup(v); setSelectedCourse(''); setSelectedJo('');}} disabled={!!selectedGroup}>
+                    <Select value={selectedGroup} onValueChange={v => {setSelectedGroup(v); setSelectedCourse(''); setSelectedJo('');}} disabled={isGroupSelectionDisabled}>
                         <SelectTrigger className="h-12 text-base"><SelectValue placeholder="1. 그룹 선택" /></SelectTrigger>
                         <SelectContent position="item-aligned">
                             {availableGroups.map(g => <SelectItem key={g} value={g} className="text-base">{g}</SelectItem>)}
                         </SelectContent>
                     </Select>
-                    <Select value={selectedCourse} onValueChange={v => {setSelectedCourse(v); setSelectedJo('');}} disabled={!selectedGroup || !!selectedCourse || availableCoursesForGroup.length === 0}>
+                    <Select value={selectedCourse} onValueChange={v => {setSelectedCourse(v); setSelectedJo('');}} disabled={isCourseSelectionDisabled}>
                         <SelectTrigger className="h-12 text-base"><SelectValue placeholder={!selectedGroup ? "그룹 먼저 선택" : (availableCoursesForGroup.length === 0 ? "배정된 코스 없음" : "2. 코스 선택")} /></SelectTrigger>
                         <SelectContent position="item-aligned">
                             {availableCoursesForGroup.map(c => <SelectItem key={c.id} value={c.id.toString()} className="text-base">{c.name}</SelectItem>)}
@@ -351,8 +362,11 @@ export default function RefereePage() {
                         </SelectContent>
                     </Select>
                 </CardContent>
-                <CardFooter>
+                <CardFooter className="flex-col gap-2">
                      <Button className="w-full h-14 text-xl font-bold" onClick={handleStartScoring} disabled={!selectedJo}>점수기록 시작</Button>
+                     {isGroupSelectionDisabled && (
+                        <Button variant="outline" className="w-full" onClick={() => { setSelectedGroup(''); setSelectedCourse(''); setSelectedJo(''); }}>그룹/코스 변경</Button>
+                     )}
                 </CardFooter>
             </Card>
         );
@@ -381,7 +395,7 @@ export default function RefereePage() {
                             </div>
                             <div className="flex items-center gap-1">
                                 <Button variant="outline" size="icon" className="w-11 h-11 rounded-lg border-2 flex-shrink-0" onClick={() => updateScore(player.id, -1)} disabled={!isEditing}><Minus className="h-6 w-6" /></Button>
-                                <div className="relative w-10 text-center" onDoubleClick={() => handleScoreDoubleClick(player)}>
+                                <div className="relative w-10 text-center" onClick={() => handleScoreClickToEdit(player)}>
                                     <span className={`text-4xl font-bold tabular-nums ${isSaved ? 'cursor-pointer' : ''}`}>{scoreData.score}</span>
                                 </div>
                                 <Button variant="outline" size="icon" className="w-11 h-11 rounded-lg border-2 flex-shrink-0" onClick={() => updateScore(player.id, 1)} disabled={!isEditing}><Plus className="h-6 w-6" /></Button>
@@ -389,7 +403,7 @@ export default function RefereePage() {
                             <div className="w-11 h-11 flex-shrink-0">
                                 {isEditing && <Button variant="default" size="icon" className="w-full h-full rounded-lg" onClick={() => handleSavePress(player)}><Save className="h-6 w-6" /></Button>}
                                 {isSaved && (
-                                    <div className="flex flex-col items-center justify-center h-full w-full text-center relative border border-dashed border-primary/50 rounded-lg cursor-pointer" onDoubleClick={() => handleScoreDoubleClick(player)}>
+                                    <div className="flex flex-col items-center justify-center h-full w-full text-center relative border border-dashed border-primary/50 rounded-lg cursor-pointer" onClick={() => handleScoreClickToEdit(player)}>
                                         <Edit className="absolute top-1 right-1 w-3 h-3 text-primary animate-pulse" />
                                         <p className="text-xs text-primary font-bold leading-tight">수정</p>
                                         <Progress value={progressValue} className="h-0.5 mt-0.5 w-10/12 mx-auto" />
