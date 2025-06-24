@@ -16,7 +16,6 @@ import {
 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
 import {
   SidebarProvider,
   Sidebar,
@@ -26,19 +25,24 @@ import {
   SidebarMenuItem,
   SidebarMenuButton,
   SidebarFooter,
+  SidebarSeparator,
 } from "@/components/ui/sidebar"
 import { Skeleton } from "@/components/ui/skeleton"
 import { get, ref } from "firebase/database"
 import { db } from "@/lib/firebase"
 
-const navItems = [
+const mainNavItems = [
   { href: "/admin/dashboard", icon: BarChart2, label: "홈 전광판" },
   { href: "/admin/tournaments", icon: Trophy, label: "대회 및 코스 관리" },
   { href: "/admin/players", icon: Users, label: "선수 관리" },
+];
+
+const secondaryNavItems = [
   { href: "/admin/scores", icon: ClipboardList, label: "점수 관리" },
   { href: "/admin/suddendeath", icon: Flame, label: "서든데스 관리" },
-  { href: "/admin/referees", icon: ShieldCheck, label: "심판 계정 관리" },
-]
+  { href: "/admin/referees", icon: ShieldCheck, label: "심판 계정 보기" },
+];
+
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
@@ -103,7 +107,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </SidebarHeader>
           <SidebarContent>
             <SidebarMenu>
-              {navItems.map((item) => (
+              {mainNavItems.map((item) => (
                 <SidebarMenuItem key={item.href}>
                   <SidebarMenuButton
                     asChild
@@ -117,6 +121,24 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
+
+              <SidebarSeparator className="my-2" />
+
+              {secondaryNavItems.map((item) => (
+                 <SidebarMenuItem key={item.href}>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={pathname === item.href}
+                    tooltip={{ children: item.label }}
+                  >
+                    <Link href={item.href}>
+                      <item.icon className="h-5 w-5" />
+                      <span>{item.label}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+              
                <SidebarMenuItem>
                   <SidebarMenuButton asChild tooltip={{ children: "외부 전광판" }}>
                      <Link href="/scoreboard" target="_blank" rel="noopener noreferrer">
