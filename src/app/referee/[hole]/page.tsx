@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useMemo } from 'react';
@@ -10,7 +9,7 @@ import { Minus, Plus, Save, Lock, ArrowLeft } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { ref, onValue, set } from 'firebase/database';
 import { Skeleton } from '@/components/ui/skeleton';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription } from "@/components/ui/alert-dialog";
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 
@@ -369,7 +368,6 @@ export default function RefereePage() {
                                 </div>
                                 
                                 <Button
-                                    variant="default"
                                     size="icon"
                                     className={cn("w-11 h-11 rounded-lg", {
                                         'bg-muted hover:bg-muted cursor-not-allowed': isLocked,
@@ -429,14 +427,22 @@ export default function RefereePage() {
             
             <AlertDialog open={!!playerToSave} onOpenChange={(open) => !open && setPlayerToSave(null)}>
                 <AlertDialogContent>
+                    <AlertDialogHeader className="sr-only">
+                        <AlertDialogTitle>점수 저장 확인</AlertDialogTitle>
+                        {playerToSave && scores[playerToSave.id] && (
+                            <AlertDialogDescription>
+                                {`선수 ${getPlayerName(playerToSave)}의 점수를 ${scores[playerToSave.id].score}점으로 저장합니다.`}
+                            </AlertDialogDescription>
+                        )}
+                    </AlertDialogHeader>
                     <div className="flex flex-col items-center justify-center p-4 text-center">
                         {playerToSave && (
-                             <p className="text-2xl font-bold mb-2">{getPlayerName(playerToSave)}</p>
+                             <p className="text-2xl font-bold mb-2" style={{ fontSize: '2.25rem', lineHeight: '2.5rem' }}>{getPlayerName(playerToSave)}</p>
                         )}
                        
                         {playerToSave && scores[playerToSave.id] && (
                              <div className="flex items-baseline my-2">
-                                <span className="text-5xl font-extrabold text-destructive leading-none">{scores[playerToSave.id].score}</span>
+                                <span className="text-5xl font-extrabold text-destructive leading-none" style={{ fontSize: '6rem', lineHeight: '1' }}>{scores[playerToSave.id].score}</span>
                                 <span className="text-xl font-bold ml-2">점</span>
                             </div>
                         )}
