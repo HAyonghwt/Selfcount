@@ -22,6 +22,7 @@ export default function SuperAdminPage() {
         firebaseConfig: '',
         maxCourses: 10,
         maxPlayers: 200,
+        refereePassword: '',
     });
 
     const firebaseConfigString = JSON.stringify(localFirebaseConfig, null, 2);
@@ -37,6 +38,7 @@ export default function SuperAdminPage() {
                     firebaseConfig: data.firebaseConfig ? JSON.stringify(data.firebaseConfig, null, 2) : firebaseConfigString,
                     maxCourses: data.maxCourses || 10,
                     maxPlayers: data.maxPlayers || 200,
+                    refereePassword: data.refereePassword || '',
                 });
             } else {
                  setConfig({
@@ -45,6 +47,7 @@ export default function SuperAdminPage() {
                     firebaseConfig: firebaseConfigString,
                     maxCourses: 10,
                     maxPlayers: 200,
+                    refereePassword: '',
                 });
             }
         }).catch(() => {
@@ -55,6 +58,7 @@ export default function SuperAdminPage() {
                 firebaseConfig: firebaseConfigString,
                 maxCourses: 10,
                 maxPlayers: 200,
+                refereePassword: '',
             });
         }).finally(() => {
             setLoading(false);
@@ -76,6 +80,7 @@ export default function SuperAdminPage() {
                 firebaseConfig: parsedConfig,
                 maxCourses: Number(config.maxCourses),
                 maxPlayers: Number(config.maxPlayers),
+                refereePassword: config.refereePassword.trim(),
             }).then(() => {
                 toast({
                     title: "성공",
@@ -160,6 +165,11 @@ export default function SuperAdminPage() {
                                     <Input id="userDomain" value={config.userDomain} onChange={handleInputChange} className="rounded-l-none" />
                                 </div>
                                  <p className="text-xs text-muted-foreground">admin@XXX.com 및 refereeN@XXX.com의 XXX 부분을 설정합니다.</p>
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="refereePassword">심판 공용 비밀번호</Label>
+                                <Input id="refereePassword" value={config.refereePassword} onChange={handleInputChange} placeholder="예: 123456" />
+                                <p className="text-xs text-muted-foreground">모든 심판 계정(referee1, referee2...)에 공통으로 사용할 비밀번호입니다. Firebase에 실제 계정을 만들 때 이 비밀번호를 사용해야 합니다.</p>
                             </div>
                         </CardContent>
                     </Card>
