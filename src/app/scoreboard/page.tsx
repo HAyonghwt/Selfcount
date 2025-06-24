@@ -365,6 +365,16 @@ export default function ExternalScoreboard() {
         return finalData;
     }, [processedDataByGroup, processedIndividualSuddenDeathData, processedTeamSuddenDeathData]);
 
+    const allGroupsList = Object.keys(finalDataByGroup);
+    const visibleGroups = Object.keys(finalDataByGroup).filter(groupName => finalDataByGroup[groupName]?.some(player => player.assignedCourses.length > 0));
+    
+    const groupsToDisplay = useMemo(() => {
+        if (filterGroup === 'all') {
+            return visibleGroups;
+        }
+        return visibleGroups.filter(g => g === filterGroup);
+    }, [filterGroup, visibleGroups]);
+
 
     const handleScroll = (amount: number) => {
         if (scrollContainerRef.current) {
@@ -384,17 +394,6 @@ export default function ExternalScoreboard() {
         );
     }
     
-    const allGroupsList = Object.keys(finalDataByGroup);
-    const visibleGroups = Object.keys(finalDataByGroup).filter(groupName => finalDataByGroup[groupName]?.some(player => player.assignedCourses.length > 0));
-    
-    const groupsToDisplay = useMemo(() => {
-        if (filterGroup === 'all') {
-            return visibleGroups;
-        }
-        return visibleGroups.filter(g => g === filterGroup);
-    }, [filterGroup, visibleGroups]);
-
-
     const NoDataContent = () => (
         <div className="bg-black min-h-screen text-white p-8">
             <div className="text-center py-20">
@@ -492,16 +491,16 @@ export default function ExternalScoreboard() {
                                             <th className="py-1 px-1 w-24 text-center align-middle font-bold border-r border-gray-800">소속</th>
                                             <th className="py-1 px-1 w-24 text-center align-middle font-bold border-r border-gray-800">코스</th>
                                             <th colSpan={9} className="py-1 px-1 text-center align-middle font-bold border-r border-gray-800">HOLE</th>
-                                            <th className="py-1 px-1 w-16 text-center align-middle font-bold border-r border-gray-800">합계</th>
-                                            <th className="py-1 px-1 w-16 text-center align-middle font-bold text-yellow-400 border-r border-gray-800">총타수</th>
-                                            <th className="py-1 px-1 w-16 text-center align-middle font-bold">순위</th>
+                                            <th className="py-1 px-1 min-w-16 text-center align-middle font-bold border-r border-gray-800">합계</th>
+                                            <th className="py-1 px-1 min-w-16 text-center align-middle font-bold text-yellow-400 border-r border-gray-800">총타수</th>
+                                            <th className="py-1 px-1 min-w-16 text-center align-middle font-bold">순위</th>
                                         </tr>
                                         <tr className="border-b border-gray-600">
                                             <th className="py-1 px-1 align-middle border-r border-gray-800"></th>
                                             <th className="py-1 px-1 align-middle border-r border-gray-800"></th>
                                             <th className="py-1 px-1 align-middle border-r border-gray-800"></th>
                                             <th className="py-1 px-1 align-middle border-r border-gray-800"></th>
-                                            {Array.from({length: 9}).map((_, i) => <th key={i} className={`py-1 px-1 font-bold text-base align-middle border-r border-gray-800 ${i % 2 !== 0 ? 'bg-gray-800/50' : ''}`}>{i + 1}</th>)}
+                                            {Array.from({length: 9}).map((_, i) => <th key={i} className={`py-1 px-1 font-bold text-base align-middle border-r border-gray-800 w-9 ${i % 2 !== 0 ? 'bg-gray-800/50' : ''}`}>{i + 1}</th>)}
                                             <th className="py-1 px-1 align-middle border-r border-gray-800"></th>
                                             <th className="py-1 px-1 align-middle border-r border-gray-800"></th>
                                             <th className="py-1 px-1 align-middle"></th>
@@ -582,7 +581,5 @@ export default function ExternalScoreboard() {
         </>
     );
 }
-
-
 
     
