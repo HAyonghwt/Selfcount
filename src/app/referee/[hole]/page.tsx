@@ -12,7 +12,6 @@ import { Progress } from '@/components/ui/progress';
 import { db } from '@/lib/firebase';
 import { ref, onValue, set } from 'firebase/database';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useToast } from '@/hooks/use-toast';
 
 interface Player {
     id: string;
@@ -49,9 +48,6 @@ export default function RefereePage() {
     
     // Local state for scoring UI
     const [scores, setScores] = useState<{ [key: string]: ScoreData }>({});
-    const [confirmingPlayer, setConfirmingPlayer] = useState<{ player: Player; score: number; } | null>(null);
-    const { toast } = useToast();
-    const [now, setNow] = useState(Date.now());
     const saveTimers = useRef<Map<string, NodeJS.Timeout>>(new Map());
 
     // Restore state from localStorage on initial load
@@ -115,17 +111,6 @@ export default function RefereePage() {
         };
     }, []);
 
-    // Timer for "saved" state progress bar, only runs in scoring view.
-    useEffect(() => {
-        let interval: NodeJS.Timeout | undefined;
-        if (view === 'scoring' && Object.values(scores).some(s => s.status === 'saved')) {
-            interval = setInterval(() => setNow(Date.now()), 50);
-        }
-        return () => {
-            if (interval) clearInterval(interval);
-        };
-    }, [view, scores]);
-
     // Derived data
     const availableGroups = useMemo(() => Object.keys(groupsData).sort(), [groupsData]);
     
@@ -172,29 +157,29 @@ export default function RefereePage() {
 
     // When view changes to 'scoring', or when players for a Jo are determined, initialize or sync the scores state.
     useEffect(() => {
-        if (view !== 'scoring' || !currentPlayers.length) return;
+        if (view !== 'scoring' || !selectedJo) {
+            setScores({}); // Clear scores when not in scoring view for a specific jo
+            return;
+        }
 
-        setScores(currentScores => {
-            const newScoresState: { [key: string]: ScoreData } = {};
-            currentPlayers.forEach((player) => {
-                const existingScoreFromDb = allScores[player.id]?.[selectedCourse]?.[hole];
-                const currentLocalScoreData = currentScores[player.id];
+        const playersForJo = allPlayers.filter(p => p.group === selectedGroup && p.jo.toString() === selectedJo);
+        if (playersForJo.length === 0) return;
 
-                if (existingScoreFromDb !== undefined) {
-                    newScoresState[player.id] = { score: existingScoreFromDb, status: 'locked' };
-                } else if (currentLocalScoreData) {
-                    // If no DB score, but we have a local one, keep it.
-                    newScoresState[player.id] = currentLocalScoreData;
-                } else {
-                    // Only initialize if no DB and no local score exists.
-                    newScoresState[player.id] = { score: 1, status: 'editing' };
-                }
-            });
-            return newScoresState;
+        const newScoresState: { [key: string]: ScoreData } = {};
+        playersForJo.forEach((player) => {
+            const existingScoreFromDb = allScores[player.id]?.[selectedCourse]?.[hole];
+
+            if (existingScoreFromDb !== undefined) {
+                newScoresState[player.id] = { score: existingScoreFromDb, status: 'locked' };
+            } else {
+                // Initialize with default or keep existing local state if not in DB
+                newScoresState[player.id] = scores[player.id] || { score: 1, status: 'editing' };
+            }
         });
+        setScores(newScoresState);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [view, currentPlayers, allScores, selectedCourse, hole]);
-    
+    }, [view, selectedGroup, selectedJo, selectedCourse, hole, allPlayers, allScores]);
+
     // Delayed saving logic
     useEffect(() => {
         const timers = saveTimers.current;
@@ -246,7 +231,6 @@ export default function RefereePage() {
         Promise.all(savePromises).finally(() => {
             setView('selection');
             setSelectedJo(''); 
-            setScores({}); 
         });
     };
 
@@ -259,28 +243,18 @@ export default function RefereePage() {
         }
     };
 
-    const handleSavePress = (player: Player) => {
-        if (scores[player.id]?.status === 'editing') {
-            setConfirmingPlayer({ player, score: scores[player.id].score });
-        }
-    };
-
-    const handleConfirmFinalSave = () => {
-        if (!confirmingPlayer) return;
-        const { player, score } = confirmingPlayer;
-        const playerIdToSave = player.id;
+    const handleSavePress = (playerToSave: Player) => {
+        if (scores[playerToSave.id]?.status !== 'editing') return;
         const timers = saveTimers.current;
 
         const playersToLockImmediately: { pid: string; scoreData: ScoreData }[] = [];
-
         // Find all other players currently in 'saved' state
         Object.entries(scores).forEach(([pid, scoreData]) => {
-            if (pid !== playerIdToSave && scoreData.status === 'saved') {
+            if (pid !== playerToSave.id && scoreData.status === 'saved') {
                 playersToLockImmediately.push({ pid, scoreData });
             }
         });
-
-        // Immediately save and lock them
+        
         const dbPromises = playersToLockImmediately.map(({ pid, scoreData }) => {
             if (timers.has(pid)) {
                 clearTimeout(timers.get(pid)!);
@@ -290,29 +264,20 @@ export default function RefereePage() {
             return set(scoreRef, scoreData.score);
         });
         
-        Promise.all(dbPromises).then(() => {
-            setScores(currentScores => {
+        Promise.all(dbPromises).finally(() => {
+             setScores(currentScores => {
                 const newScoresState = { ...currentScores };
-
-                // Update the state of the now locked players
                 playersToLockImmediately.forEach(({ pid, scoreData }) => {
                     if (newScoresState[pid]) {
                         newScoresState[pid] = { ...scoreData, status: 'locked' };
                     }
                 });
-
-                // Set the newly saved player to 'saved' state
-                newScoresState[playerIdToSave] = { score, status: 'saved', savedAt: Date.now() };
-
+                newScoresState[playerToSave.id] = { ...currentScores[playerToSave.id], status: 'saved', savedAt: Date.now() };
                 return newScoresState;
             });
-        }).catch(err => {
-            // Do not show toast.
         });
-
-        setConfirmingPlayer(null);
     };
-
+    
     const handleImmediateLock = (playerId: string) => {
         const scoreData = scores[playerId];
         if (scoreData?.status !== 'saved') return;
@@ -323,7 +288,7 @@ export default function RefereePage() {
             timers.delete(playerId);
         }
 
-        const scoreRef = ref(db, `/scores/${playerId}/${selectedCourse}/${hole}`);
+        const scoreRef = ref(db, `scores/${playerId}/${selectedCourse}/${hole}`);
         set(scoreRef, scoreData.score)
             .then(() => {
                 setScores(prev => ({
@@ -381,7 +346,7 @@ export default function RefereePage() {
                             {availableJos.map(jo => {
                                 const isCompleted = completedJos.has(jo);
                                 return (
-                                    <SelectItem key={jo} value={jo.toString()} disabled={isCompleted && Object.values(scores).some(s => s.status === 'saved')}>
+                                    <SelectItem key={jo} value={jo.toString()}>
                                         <div className="flex items-center justify-between w-full">
                                             <span>{jo}조</span>
                                             {isCompleted && <Lock className="h-4 w-4 text-muted-foreground" />}
@@ -408,19 +373,19 @@ export default function RefereePage() {
                 const isEditing = scoreData.status === 'editing';
                 const isSaved = scoreData.status === 'saved';
                 const isLocked = scoreData.status === 'locked';
-
+                
                 const progressValue = isSaved && scoreData.savedAt 
-                    ? ((now - scoreData.savedAt) / 10000) * 100
+                    ? Math.min(((Date.now() - scoreData.savedAt) / 10000) * 100, 100)
                     : 0;
 
                 return (
                     <Card key={player.id} className="overflow-hidden">
                       <CardContent className="p-2">
                         <div className="flex items-center gap-2 w-full">
-                            <div className="flex-1 truncate pr-2">
+                            <div className="flex-1 min-w-0 pr-2">
                                 <p className="font-bold text-lg truncate">{getPlayerName(player)}</p>
                             </div>
-                            <div className="flex items-center gap-1">
+                            <div className="flex items-center gap-1 flex-shrink-0">
                                 <Button variant="outline" size="icon" className="w-11 h-11 rounded-lg border-2 flex-shrink-0" onClick={() => updateScore(player.id, -1)} disabled={!isEditing}><Minus className="h-6 w-6" /></Button>
                                 <div className="relative w-10 text-center">
                                     <span className={`text-4xl font-bold tabular-nums`}>{scoreData.score}</span>
@@ -430,8 +395,8 @@ export default function RefereePage() {
                             <div className="w-24 h-11 flex-shrink-0">
                                 {isEditing && <Button variant="default" size="icon" className="w-full h-full rounded-lg" onClick={() => handleSavePress(player)}><Save className="h-6 w-6" /></Button>}
                                 {isSaved && (
-                                    <Button variant="secondary" className="w-full h-full text-center relative border border-dashed border-primary/50 rounded-lg cursor-pointer text-xs leading-tight font-bold" onClick={() => handleImmediateLock(player.id)}>
-                                        <div className='absolute bottom-0 left-0 top-0 bg-primary/30' style={{width: `${progressValue}%`}}></div>
+                                     <Button variant="secondary" className="w-full h-full text-center relative border border-dashed border-primary/50 rounded-lg cursor-pointer text-xs leading-tight font-bold" onClick={() => handleImmediateLock(player.id)}>
+                                        <Progress value={progressValue} className="absolute bottom-0 left-0 h-full w-full opacity-30" />
                                         <span className="relative">즉시잠금</span>
                                     </Button>
                                 )}
@@ -479,33 +444,6 @@ export default function RefereePage() {
 
                 {view === 'selection' ? renderSelectionScreen() : renderScoringScreen()}
             </div>
-            
-            <AlertDialog open={!!confirmingPlayer} onOpenChange={(open) => !open && setConfirmingPlayer(null)}>
-                <AlertDialogContent className="border-foreground/20">
-                    <AlertDialogHeader>
-                        <AlertDialogTitle className="text-center text-4xl sm:text-5xl font-extrabold leading-tight truncate text-foreground">
-                            {confirmingPlayer?.player ? getPlayerName(confirmingPlayer.player) : ''}
-                        </AlertDialogTitle>
-                        <AlertDialogDescription asChild>
-                             <div className="text-center !mt-4 space-y-2">
-                                <span className="text-base text-muted-foreground block">점수 확인</span>
-                                 <span className="block">
-                                     <span className="font-extrabold text-8xl sm:text-9xl text-primary">
-                                        {confirmingPlayer?.score}
-                                    </span>
-                                    <span className="text-4xl sm:text-5xl text-foreground ml-2">
-                                        점
-                                    </span>
-                                 </span>
-                            </div>
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter className="grid grid-cols-2 gap-4 !mt-8">
-                        <AlertDialogCancel onClick={() => setConfirmingPlayer(null)} className="h-14 sm:h-16 text-xl sm:text-2xl font-bold">취소</AlertDialogCancel>
-                        <AlertDialogAction onClick={handleConfirmFinalSave} className="h-14 sm:h-16 text-xl sm:text-2xl font-bold">저장</AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
         </div>
     );
 }
