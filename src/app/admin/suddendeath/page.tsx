@@ -264,12 +264,14 @@ export default function SuddenDeathPage() {
 
     const processedSuddenDeathData = useMemo(() => {
         if (!suddenDeathData?.isActive || !suddenDeathData.players || !suddenDeathData.holes) return [];
-        
+
         const participatingPlayerIds = Object.keys(suddenDeathData.players).filter(id => suddenDeathData.players[id]);
         const allPlayersMap = new Map(Object.entries(players).map(([id, p]) => [id, p]));
 
         const results: any[] = participatingPlayerIds.map(id => {
             const playerInfo: any = allPlayersMap.get(id);
+            if (!playerInfo) return null;
+
             const name = playerInfo.type === 'team' ? `${playerInfo.p1_name} / ${playerInfo.p2_name}` : playerInfo.name;
             
             const scoresPerHole: { [hole: string]: number | null } = {};
@@ -288,7 +290,8 @@ export default function SuddenDeathPage() {
             });
 
             return { id, name, scoresPerHole, totalScore, holesPlayed };
-        });
+        }).filter(Boolean);
+
 
         // Determine rank
         results.sort((a, b) => {

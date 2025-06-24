@@ -263,6 +263,8 @@ export default function ExternalScoreboard() {
 
         const results: any[] = participatingPlayerIds.map(id => {
             const playerInfo: any = allPlayersMap.get(id);
+            if (!playerInfo) return null;
+
             const name = playerInfo.type === 'team' ? `${playerInfo.p1_name} / ${playerInfo.p2_name}` : playerInfo.name;
             const club = playerInfo.type === 'team' ? playerInfo.p1_affiliation : playerInfo.affiliation;
 
@@ -280,7 +282,7 @@ export default function ExternalScoreboard() {
                 }
             });
             return { id, name, club, scoresPerHole, totalScore, holesPlayed };
-        });
+        }).filter(Boolean);
 
         results.sort((a, b) => {
             if (a.holesPlayed !== b.holesPlayed) return b.holesPlayed - a.holesPlayed;
