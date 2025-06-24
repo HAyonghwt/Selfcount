@@ -219,25 +219,20 @@ export default function RefereePage() {
     }, [view, selectedJo, selectedCourse, hole, allScores, currentPlayers]);
 
     // Prevent accidental navigation when scoring
-    const viewRef = useRef(view);
-    useEffect(() => {
-        viewRef.current = view;
-    }, [view]);
-
     useEffect(() => {
         const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-            if (viewRef.current === 'scoring') {
-                e.preventDefault();
-                e.returnValue = '';
-            }
+            e.preventDefault();
+            e.returnValue = '';
         };
 
-        window.addEventListener('beforeunload', handleBeforeUnload);
+        if (view === 'scoring') {
+            window.addEventListener('beforeunload', handleBeforeUnload);
+        }
 
         return () => {
             window.removeEventListener('beforeunload', handleBeforeUnload);
         };
-    }, []); // Empty dependency array ensures this runs only once
+    }, [view]);
 
     // ---- Handlers ----
     const handleStartScoring = () => {
