@@ -168,7 +168,7 @@ export default function RefereePage() {
                     acc[playerId] = data;
                 }
                 return acc;
-            }, {});
+            }, {} as {[key: string]: ScoreData});
             if (Object.keys(scoresToSave).length > 0) {
                 localStorage.setItem(key, JSON.stringify(scoresToSave));
             } else {
@@ -188,27 +188,45 @@ export default function RefereePage() {
         const storageKey = getLocalStorageScoresKey();
         const savedInterimScores = storageKey ? JSON.parse(localStorage.getItem(storageKey) || '{}') : {};
 
-        setScores((prevScores) => {
-            const newScoresState: { [key: string]: ScoreData } = {};
-            currentPlayers.forEach((player) => {
-                const existingScoreFromDb = allScores[player.id]?.[selectedCourse]?.[hole];
+        const newScoresState: { [key: string]: ScoreData } = {};
+        currentPlayers.forEach((player) => {
+            const existingScoreFromDb = allScores[player.id]?.[selectedCourse]?.[hole];
+            
+            if (existingScoreFromDb !== undefined) {
+                // Priority 1: Use locked score from DB
+                newScoresState[player.id] = { score: Number(existingScoreFromDb), status: 'locked' };
+            } else {
                 const interimScore = savedInterimScores[player.id];
-                
-                if (existingScoreFromDb !== undefined) {
-                    newScoresState[player.id] = { score: Number(existingScoreFromDb), status: 'locked' };
-                } else if (interimScore && interimScore.status === 'editing') {
+                if (interimScore && interimScore.status === 'editing') {
+                    // Priority 2: Use editing score from localStorage
                     newScoresState[player.id] = { score: Number(interimScore.score), status: 'editing'};
-                } else if (prevScores[player.id]?.status === 'editing' && prevScores[player.id]?.jo === player.jo) {
-                    newScoresState[player.id] = prevScores[player.id];
                 } else {
+                    // Priority 3: Default to 1
                     newScoresState[player.id] = { score: 1, status: 'editing' };
                 }
-            });
-            return newScoresState;
+            }
         });
+        setScores(newScoresState);
         
     }, [view, selectedJo, selectedCourse, hole, allScores, currentPlayers]);
 
+    // Prevent accidental navigation when scoring
+    useEffect(() => {
+        const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+            // Prevent the browser from leaving the page without confirmation.
+            e.preventDefault();
+            // This is required for some browsers.
+            e.returnValue = '';
+        };
+
+        if (view === 'scoring') {
+            window.addEventListener('beforeunload', handleBeforeUnload);
+            
+            return () => {
+                window.removeEventListener('beforeunload', handleBeforeUnload);
+            };
+        }
+    }, [view]);
 
     // ---- Handlers ----
     const handleStartScoring = () => {
@@ -354,7 +372,7 @@ export default function RefereePage() {
                                     variant="default"
                                     size="icon"
                                     className={cn("w-11 h-11 rounded-lg", {
-                                        'bg-white hover:bg-white cursor-not-allowed border border-input': isLocked,
+                                        'bg-muted hover:bg-muted cursor-not-allowed': isLocked,
                                     })}
                                     onClick={() => {
                                         if (isLocked) return;
