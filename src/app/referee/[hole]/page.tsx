@@ -445,9 +445,9 @@ export default function RefereePage() {
                                         <span className="text-muted-foreground mx-1 sm:mx-2">/</span>
                                         <span>{selectedJo}조</span>
                                     </div>
-                                    <Button variant="outline" onClick={handleReturnToJoSelection} className="w-full sm:w-auto">
+                                    <Button variant="outline" onClick={handleReturnToJoSelection} className="w-full sm:w-auto h-9">
                                         <Pencil className="mr-2 h-4 w-4" />
-                                        선택 변경
+                                        조 변경
                                     </Button>
                                 </div>
                             </CardHeader>
