@@ -306,6 +306,28 @@ export default function ExternalScoreboard() {
         return results;
     }, [suddenDeathData, players]);
 
+    const finalDataByGroup = useMemo(() => {
+        if (!suddenDeathData?.isActive || !processedSuddenDeathData || processedSuddenDeathData.length === 0) {
+            return processedDataByGroup;
+        }
+
+        const suddenDeathRankMap = new Map(
+            processedSuddenDeathData.map(p => [p.id, p.rank])
+        );
+
+        const finalData = JSON.parse(JSON.stringify(processedDataByGroup));
+
+        for (const groupName in finalData) {
+            finalData[groupName].forEach((player: ProcessedPlayer) => {
+                if (suddenDeathRankMap.has(player.id)) {
+                    player.rank = suddenDeathRankMap.get(player.id) as number;
+                }
+            });
+        }
+
+        return finalData;
+    }, [processedDataByGroup, processedSuddenDeathData, suddenDeathData]);
+
 
     if (loading) {
         return (
@@ -328,7 +350,7 @@ export default function ExternalScoreboard() {
         </div>
     );
 
-    const visibleGroups = Object.keys(processedDataByGroup).filter(groupName => processedDataByGroup[groupName]?.some(player => player.assignedCourses.length > 0));
+    const visibleGroups = Object.keys(finalDataByGroup).filter(groupName => finalDataByGroup[groupName]?.some(player => player.assignedCourses.length > 0));
 
     return (
         <>
@@ -381,8 +403,8 @@ export default function ExternalScoreboard() {
                 {visibleGroups.length === 0 ? (
                      <NoDataContent />
                 ) : visibleGroups.map((groupName) => {
-                    const groupPlayers = processedDataByGroup[groupName];
-                    if (groupPlayers.length === 0) return null;
+                    const groupPlayers = finalDataByGroup[groupName];
+                    if (!groupPlayers || groupPlayers.length === 0) return null;
 
                     return (
                         <div key={groupName} className="mb-4">

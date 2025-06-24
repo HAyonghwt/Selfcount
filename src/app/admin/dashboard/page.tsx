@@ -89,11 +89,13 @@ export default function AdminDashboard() {
     const [courses, setCourses] = useState({});
     const [groupsData, setGroupsData] = useState({});
     const [filterGroup, setFilterGroup] = useState('all');
+    const [suddenDeathData, setSuddenDeathData] = useState<any>(null);
 
     useEffect(() => {
         const playersRef = ref(db, 'players');
         const scoresRef = ref(db, 'scores');
         const tournamentRef = ref(db, 'tournaments/current');
+        const suddenDeathRef = ref(db, 'tournaments/current/suddenDeath');
 
         const unsubPlayers = onValue(playersRef, snap => setPlayers(snap.val() || {}));
         const unsubScores = onValue(scoresRef, snap => setScores(snap.val() || {}));
@@ -102,11 +104,13 @@ export default function AdminDashboard() {
             setCourses(data.courses || {});
             setGroupsData(data.groups || {});
         });
+        const unsubSuddenDeath = onValue(suddenDeathRef, snap => setSuddenDeathData(snap.val()));
         
         return () => {
             unsubPlayers();
             unsubScores();
             unsubTournament();
+            unsubSuddenDeath();
         }
     }, []);
     
@@ -135,7 +139,6 @@ export default function AdminDashboard() {
                 const scoresForCourse = playerScoresData[courseId] || {};
                 detailedScoresForTieBreak[courseId] = scoresForCourse;
 
-                const holeScores: (number | null)[] = Array(9).fill(null);
                 let courseTotal = 0;
                 for (let i = 0; i < 9; i++) {
                     const holeScore = scoresForCourse[(i + 1).toString()];
@@ -152,7 +155,7 @@ export default function AdminDashboard() {
                 
                 totalScore += courseTotal;
                 courseScoresForTieBreak[courseId] = courseTotal;
-                coursesData[courseId] = { courseName: course.name, courseTotal, holeScores };
+                coursesData[courseId] = { courseName: course.name, courseTotal, holeScores: [] }; // holeScores not needed here to save memory
             });
 
             return {
@@ -225,7 +228,70 @@ export default function AdminDashboard() {
         return rankedData;
     }, [players, scores, courses, groupsData]);
     
-    const allGroupsList = Object.keys(processedDataByGroup);
+    const processedSuddenDeathData = useMemo(() => {
+        if (!suddenDeathData?.isActive || !suddenDeathData.players || !suddenDeathData.holes || !Array.isArray(suddenDeathData.holes)) return [];
+        
+        const participatingPlayerIds = Object.keys(suddenDeathData.players).filter(id => suddenDeathData.players[id]);
+        const allPlayersMap = new Map(Object.entries(players).map(([id, p]) => [id, p]));
+
+        const results: any[] = participatingPlayerIds.map(id => {
+            const playerInfo: any = allPlayersMap.get(id);
+            if (!playerInfo) return null;
+
+            const name = playerInfo.type === 'team' ? `${playerInfo.p1_name} / ${playerInfo.p2_name}` : playerInfo.name;
+
+            let totalScore = 0;
+            let holesPlayed = 0;
+            suddenDeathData.holes.forEach((hole:number) => {
+                const score = suddenDeathData.scores?.[id]?.[hole];
+                if (score !== undefined && score !== null) {
+                    totalScore += score;
+                    holesPlayed++;
+                }
+            });
+            return { id, name, totalScore, holesPlayed };
+        }).filter(Boolean);
+
+        results.sort((a, b) => {
+            if (a.holesPlayed !== b.holesPlayed) return b.holesPlayed - a.holesPlayed;
+            if (a.totalScore !== b.totalScore) return a.totalScore - b.totalScore;
+            return a.name.localeCompare(b.name);
+        });
+
+        let rank = 1;
+        for (let i = 0; i < results.length; i++) {
+            if (i > 0 && (results[i].holesPlayed < results[i - 1].holesPlayed || (results[i].holesPlayed === results[i-1].holesPlayed && results[i].totalScore > results[i - 1].totalScore))) {
+                rank = i + 1;
+            }
+            results[i].rank = rank;
+        }
+
+        return results;
+    }, [suddenDeathData, players]);
+
+    const finalDataByGroup = useMemo(() => {
+        if (!suddenDeathData?.isActive || !processedSuddenDeathData || processedSuddenDeathData.length === 0) {
+            return processedDataByGroup;
+        }
+
+        const suddenDeathRankMap = new Map(
+            processedSuddenDeathData.map(p => [p.id, p.rank])
+        );
+
+        const finalData = JSON.parse(JSON.stringify(processedDataByGroup));
+
+        for (const groupName in finalData) {
+            finalData[groupName].forEach((player: ProcessedPlayer) => {
+                if (suddenDeathRankMap.has(player.id)) {
+                    player.rank = suddenDeathRankMap.get(player.id) as number;
+                }
+            });
+        }
+
+        return finalData;
+    }, [processedDataByGroup, processedSuddenDeathData, suddenDeathData]);
+    
+    const allGroupsList = Object.keys(finalDataByGroup);
 
     const groupProgress = useMemo(() => {
         const progressByGroup: { [key: string]: number } = {};
@@ -275,8 +341,8 @@ export default function AdminDashboard() {
         const wb = XLSX.utils.book_new();
 
         const dataToExport = (filterGroup === 'all') 
-            ? processedDataByGroup 
-            : { [filterGroup]: processedDataByGroup[filterGroup] };
+            ? finalDataByGroup 
+            : { [filterGroup]: finalDataByGroup[filterGroup] };
 
         for (const groupName in dataToExport) {
             const groupPlayers = dataToExport[groupName];
@@ -290,7 +356,30 @@ export default function AdminDashboard() {
             
             const sheetData = [headers];
 
-            groupPlayers.forEach(player => {
+            // Re-fetch full data for export to include hole scores
+            const fullPlayersDataForExport = groupPlayers.map(p => {
+                 const playerScoresData = scores[p.id] || {};
+                 const coursesData: any = {};
+                 p.assignedCourses.forEach((course: any) => {
+                    const courseId = course.id;
+                    const scoresForCourse = playerScoresData[courseId] || {};
+                    const holeScores: (number | null)[] = Array(9).fill(null);
+                    let courseTotal = 0;
+                    for (let i = 0; i < 9; i++) {
+                        const holeScore = scoresForCourse[(i + 1).toString()];
+                        if (holeScore !== undefined && holeScore !== null) {
+                            const scoreNum = Number(holeScore);
+                            holeScores[i] = scoreNum;
+                            courseTotal += scoreNum;
+                        }
+                    }
+                    coursesData[courseId] = { courseName: course.name, courseTotal, holeScores };
+                 });
+                 return {...p, coursesData};
+            });
+
+
+            fullPlayersDataForExport.forEach(player => {
                 if (player.assignedCourses.length === 0) {
                      sheetData.push([
                         player.rank !== null ? `${player.rank}위` : (player.hasForfeited ? '기권' : ''),
@@ -384,8 +473,30 @@ export default function AdminDashboard() {
             </Card>
 
             {(filterGroup === 'all' ? allGroupsList : [filterGroup]).map(groupName => {
-                const groupPlayers = processedDataByGroup[groupName];
+                const groupPlayers = finalDataByGroup[groupName];
                 if (!groupPlayers || groupPlayers.length === 0) return null;
+                
+                 // Re-fetch full data for display to include hole scores
+                const fullPlayersDataForDisplay = groupPlayers.map(p => {
+                    const playerScoresData = scores[p.id] || {};
+                    const coursesData: any = {};
+                    p.assignedCourses.forEach((course: any) => {
+                        const courseId = course.id;
+                        const scoresForCourse = playerScoresData[courseId] || {};
+                        const holeScores: (number | null)[] = Array(9).fill(null);
+                        let courseTotal = 0;
+                        for (let i = 0; i < 9; i++) {
+                            const holeScore = scoresForCourse[(i + 1).toString()];
+                            if (holeScore !== undefined && holeScore !== null) {
+                                const scoreNum = Number(holeScore);
+                                holeScores[i] = scoreNum;
+                                courseTotal += scoreNum;
+                            }
+                        }
+                        coursesData[courseId] = { courseName: course.name, courseTotal, holeScores };
+                    });
+                    return {...p, coursesData};
+                });
 
                 return (
                     <Card key={groupName}>
@@ -414,7 +525,7 @@ export default function AdminDashboard() {
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
-                                        {groupPlayers.map((player) => (
+                                        {fullPlayersDataForDisplay.map((player) => (
                                             <React.Fragment key={player.id}>
                                                 {player.assignedCourses.length > 0 ? player.assignedCourses.map((course: any, courseIndex: number) => (
                                                     <TableRow key={`${player.id}-${course.id}`} className="text-base">
