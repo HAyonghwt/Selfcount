@@ -388,31 +388,33 @@ export default function RefereePage() {
                             className="p-0"
                             onDoubleClick={isLocked ? () => handleUnlockRequest(player) : undefined}
                         >
-                             <div className="flex items-center gap-3 w-full p-2">
+                             <div className="flex items-center justify-between gap-3 w-full p-2">
                                 <div className="flex-1 min-w-0">
                                     <p className="font-bold text-xl truncate">{getPlayerName(player)}</p>
                                 </div>
-                                <Button variant="outline" size="icon" className="w-10 h-10 rounded-lg border-2" onClick={() => updateScore(player.id, -1)} disabled={isLocked}><Minus className="h-5 w-5" /></Button>
-                                <div className="w-12 text-center">
-                                    <span className={`text-3xl font-bold tabular-nums`}>{scoreData.score}</span>
+                                <div className="flex items-center gap-2 flex-shrink-0">
+                                    <Button variant="outline" size="icon" className="w-10 h-10 rounded-lg border-2" onClick={() => updateScore(player.id, -1)} disabled={isLocked}><Minus className="h-5 w-5" /></Button>
+                                    <div className="w-12 text-center">
+                                        <span className={`text-3xl font-bold tabular-nums`}>{scoreData.score}</span>
+                                    </div>
+                                    <Button variant="outline" size="icon" className="w-10 h-10 rounded-lg border-2" onClick={() => updateScore(player.id, 1)} disabled={isLocked}><Plus className="h-5 w-5" /></Button>
+                                    <Button
+                                        size="icon"
+                                        className={cn("w-10 h-10 rounded-lg", {
+                                            'bg-muted hover:bg-muted cursor-not-allowed': isLocked,
+                                        })}
+                                        onClick={() => {
+                                            if (isLocked) return;
+                                            handleSavePress(player);
+                                        }}
+                                    >
+                                        {isLocked ? (
+                                            <Lock className="w-5 h-5 text-green-500" />
+                                        ) : (
+                                            <Save className="h-5 w-5" />
+                                        )}
+                                    </Button>
                                 </div>
-                                <Button variant="outline" size="icon" className="w-10 h-10 rounded-lg border-2" onClick={() => updateScore(player.id, 1)} disabled={isLocked}><Plus className="h-5 w-5" /></Button>
-                                <Button
-                                    size="icon"
-                                    className={cn("w-10 h-10 rounded-lg", {
-                                        'bg-muted hover:bg-muted cursor-not-allowed': isLocked,
-                                    })}
-                                    onClick={() => {
-                                        if (isLocked) return;
-                                        handleSavePress(player);
-                                    }}
-                                >
-                                    {isLocked ? (
-                                        <Lock className="w-5 h-5 text-green-500" />
-                                    ) : (
-                                        <Save className="h-5 w-5" />
-                                    )}
-                                </Button>
                             </div>
                         </CardContent>
                     </Card>
@@ -510,3 +512,4 @@ export default function RefereePage() {
         </>
     );
 }
+
