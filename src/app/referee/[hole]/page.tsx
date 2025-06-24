@@ -387,7 +387,14 @@ export default function RefereePage() {
                         <CardContent className="p-2" onDoubleClick={isLocked ? () => handleUnlockRequest(player) : undefined}>
                             <div className="flex items-center gap-2">
                                 <div className="flex-1 min-w-0">
-                                    <p className="font-semibold text-lg truncate">{getPlayerName(player)}</p>
+                                    {player.type === 'team' ? (
+                                        <div>
+                                            <p className="font-semibold text-lg truncate">{player.p1_name}</p>
+                                            <p className="font-semibold text-lg truncate">{player.p2_name}</p>
+                                        </div>
+                                    ) : (
+                                        <p className="font-semibold text-xl truncate">{player.name}</p>
+                                    )}
                                 </div>
                                 <div className="flex-shrink-0 flex items-center gap-1.5">
                                     <Button variant="outline" size="icon" className="h-9 w-9 rounded-md" onClick={() => updateScore(player.id, -1)} disabled={isLocked}>
@@ -507,5 +514,3 @@ export default function RefereePage() {
         </>
     );
 }
-
-    
