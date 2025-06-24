@@ -1,3 +1,4 @@
+
 "use client"
 import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -68,7 +69,11 @@ export default function SuddenDeathPage() {
         if (!a.hasAnyScore) return 1;
         if (!b.hasAnyScore) return -1;
         if (a.total !== b.total) return a.total - b.total;
-        const sortedCourses = [...coursesForGroup].sort((c1, c2) => c2.name.localeCompare(c1.name));
+        const sortedCourses = [...coursesForGroup].sort((c1, c2) => {
+            const name1 = c1?.name || '';
+            const name2 = c2?.name || '';
+            return name2.localeCompare(name1);
+        });
         for (const course of sortedCourses) {
             const courseId = course.id;
             const aCourseScore = a.courseScores[courseId] || 0;
@@ -263,7 +268,7 @@ export default function SuddenDeathPage() {
     };
 
     const processedSuddenDeathData = useMemo(() => {
-        if (!suddenDeathData?.isActive || !suddenDeathData.players || !suddenDeathData.holes) return [];
+        if (!suddenDeathData?.isActive || !suddenDeathData.players || !suddenDeathData.holes || !Array.isArray(suddenDeathData.holes)) return [];
 
         const participatingPlayerIds = Object.keys(suddenDeathData.players).filter(id => suddenDeathData.players[id]);
         const allPlayersMap = new Map(Object.entries(players).map(([id, p]) => [id, p]));

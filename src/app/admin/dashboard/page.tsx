@@ -47,7 +47,11 @@ const tieBreak = (a: any, b: any, coursesForGroup: any[]) => {
     }
 
     // Sort courses by name in reverse alphabetical order (e.g., D, C, B, A)
-    const sortedCourses = [...coursesForGroup].sort((c1, c2) => c2.name.localeCompare(c1.name));
+    const sortedCourses = [...coursesForGroup].sort((c1, c2) => {
+        const name1 = c1?.name || '';
+        const name2 = c2?.name || '';
+        return name2.localeCompare(name1);
+    });
 
     // Compare total scores of each course in reverse alphabetical order
     for (const course of sortedCourses) {
