@@ -461,7 +461,7 @@ export default function AdminDashboard() {
             const ws: XLSX.WorkSheet = ws_data;
             ws['!merges'] = merges;
             ws['!cols'] = [
-                { wch: 8 }, { wch: 8 }, { wch: 30 }, { wch: 30 }, { wch: 15 },
+                { wch: 8 }, { wch: 8 }, { wch: 15 }, { wch: 15 }, { wch: 15 },
                 ...Array(9).fill({ wch: 5 }),
                 { wch: 10 }, { wch: 10 },
             ];
