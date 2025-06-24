@@ -467,9 +467,9 @@ export default function RefereePage() {
                     </AlertDialogHeader>
                     <div className="flex flex-col items-center justify-center p-0 text-center">
                         {playerToSave && scores[playerToSave.id] && (
-                             <div className="flex items-baseline my-4">
-                                <span className="font-extrabold text-destructive leading-none" style={{ fontSize: '5.25rem', lineHeight: '1' }}>{scores[playerToSave.id].score}</span>
-                                <span className="font-bold ml-3 text-2xl">점</span>
+                             <div className="flex items-baseline my-6">
+                                <span className="font-extrabold text-destructive leading-none" style={{ fontSize: '7rem', lineHeight: '1' }}>{scores[playerToSave.id].score}</span>
+                                <span className="font-bold ml-4 text-4xl">점</span>
                             </div>
                         )}
                         
