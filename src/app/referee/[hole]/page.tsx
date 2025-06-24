@@ -264,8 +264,9 @@ export default function RefereePage() {
     };
     
     const handleReturnToJoSelection = () => {
-        // Force-save any pending scores
         const timers = saveTimers.current;
+        const savePromises: Promise<void>[] = [];
+
         Object.entries(scores).forEach(([playerId, scoreData]) => {
             if (scoreData.status === 'saved') {
                 if (timers.has(playerId)) {
@@ -273,22 +274,24 @@ export default function RefereePage() {
                     timers.delete(playerId);
                 }
                 const scoreRef = ref(db, `scores/${playerId}/${selectedCourse}/${hole}`);
-                set(scoreRef, scoreData.score);
+                savePromises.push(set(scoreRef, scoreData.score));
             }
         });
 
-        try {
-            if(selectedGroup && selectedCourse && selectedJo) {
-                const storageKey = `parkscore-referee-scores-${selectedGroup}-${selectedCourse}-${selectedJo}`;
-                localStorage.removeItem(storageKey);
+        Promise.all(savePromises).finally(() => {
+            try {
+                if(selectedGroup && selectedCourse && selectedJo) {
+                    const storageKey = `parkscore-referee-scores-${selectedGroup}-${selectedCourse}-${selectedJo}`;
+                    localStorage.removeItem(storageKey);
+                }
+            } catch(e) {
+                console.error("Failed to clear localStorage for Jo", e);
             }
-        } catch(e) {
-            console.error("Failed to clear localStorage for Jo", e);
-        }
-
-        setView('selection');
-        setSelectedJo(''); 
-        setScores({}); 
+    
+            setView('selection');
+            setSelectedJo(''); 
+            setScores({}); 
+        });
     };
 
     const updateScore = (id: string, delta: number) => {
@@ -312,30 +315,43 @@ export default function RefereePage() {
         const playerIdToSave = player.id;
         const timers = saveTimers.current;
 
-        const newScoresState = { ...scores };
-        const dbPromises: Promise<void>[] = [];
+        const playersToLockImmediately: { pid: string; scoreData: ScoreData }[] = [];
 
-        Object.entries(newScoresState).forEach(([pid, scoreData]) => {
+        // Find players to lock (those already in countdown)
+        Object.entries(scores).forEach(([pid, scoreData]) => {
             if (pid !== playerIdToSave && scoreData.status === 'saved') {
-                if (timers.has(pid)) {
-                    clearTimeout(timers.get(pid)!);
-                    timers.delete(pid);
-                }
-                
-                const scoreRef = ref(db, `scores/${pid}/${selectedCourse}/${hole}`);
-                dbPromises.push(set(scoreRef, scoreData.score).then(() => {
-                    // This will run when the DB write is successful
-                     if (newScoresState[pid]) {
-                        newScoresState[pid] = { ...scoreData, status: 'locked' };
-                     }
-                }));
+                playersToLockImmediately.push({ pid, scoreData });
             }
         });
-        
-        newScoresState[playerIdToSave] = { score, status: 'saved', savedAt: Date.now() };
 
+        // Create DB promises for them, clearing their timers
+        const dbPromises = playersToLockImmediately.map(({ pid, scoreData }) => {
+            if (timers.has(pid)) {
+                clearTimeout(timers.get(pid)!);
+                timers.delete(pid);
+            }
+            const scoreRef = ref(db, `scores/${pid}/${selectedCourse}/${hole}`);
+            return set(scoreRef, scoreData.score);
+        });
+        
+        // Wait for all immediate saves to finish
         Promise.all(dbPromises).then(() => {
-            setScores(newScoresState);
+            // Once all are saved to DB, update the component's state in one go.
+            setScores(currentScores => {
+                const newScoresState = { ...currentScores };
+
+                // Lock the players that were just saved
+                playersToLockImmediately.forEach(({ pid, scoreData }) => {
+                    if (newScoresState[pid]) {
+                        newScoresState[pid] = { ...scoreData, status: 'locked' };
+                    }
+                });
+
+                // Set the new player's score to 'saved' to start its countdown
+                newScoresState[playerIdToSave] = { score, status: 'saved', savedAt: Date.now() };
+
+                return newScoresState;
+            });
             
             toast({
                 title: "임시 저장 완료",
@@ -368,6 +384,7 @@ export default function RefereePage() {
     const getPlayerName = (player: Player) => player.type === 'team' ? `${player.p1_name}/${player.p2_name}` : player.name;
     
     const renderSelectionScreen = () => {
+        const isGroupSelectionLocked = !!selectedGroup && !(availableJos.length > 0 && availableJos.length === completedJos.size);
         return (
             <Card>
                 <CardHeader>
@@ -375,13 +392,13 @@ export default function RefereePage() {
                     <CardDescription className="text-sm">점수를 기록할 그룹, 코스, 조를 선택하세요.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                    <Select value={selectedGroup} onValueChange={v => {setSelectedGroup(v); setSelectedCourse(''); setSelectedJo('');}} disabled={availableGroups.length > 0 && !!selectedGroup && !(availableJos.length > 0 && availableJos.length === completedJos.size)} >
+                    <Select value={selectedGroup} onValueChange={v => {setSelectedGroup(v); setSelectedCourse(''); setSelectedJo('');}} disabled={isGroupSelectionLocked} >
                         <SelectTrigger className="h-12 text-base"><SelectValue placeholder="1. 그룹 선택" /></SelectTrigger>
                         <SelectContent position="item-aligned">
                             {availableGroups.map(g => <SelectItem key={g} value={g} className="text-base">{g}</SelectItem>)}
                         </SelectContent>
                     </Select>
-                    <Select value={selectedCourse} onValueChange={v => {setSelectedCourse(v); setSelectedJo('');}} disabled={!selectedGroup || availableCoursesForGroup.length === 0}>
+                    <Select value={selectedCourse} onValueChange={v => {setSelectedCourse(v); setSelectedJo('');}} disabled={isGroupSelectionLocked || !selectedGroup || availableCoursesForGroup.length === 0}>
                         <SelectTrigger className="h-12 text-base"><SelectValue placeholder={!selectedGroup ? "그룹 먼저 선택" : (availableCoursesForGroup.length === 0 ? "배정된 코스 없음" : "2. 코스 선택")} /></SelectTrigger>
                         <SelectContent position="item-aligned">
                             {availableCoursesForGroup.map(c => <SelectItem key={c.id} value={c.id.toString()} className="text-base">{c.name}</SelectItem>)}
@@ -406,7 +423,7 @@ export default function RefereePage() {
                 </CardContent>
                 <CardFooter className="flex-col gap-2">
                      <Button className="w-full h-14 text-xl font-bold" onClick={handleStartScoring} disabled={!selectedJo}>점수기록 시작</Button>
-                     {(availableGroups.length > 0 && !!selectedGroup && !(availableJos.length > 0 && availableJos.length === completedJos.size)) && (
+                     {isGroupSelectionLocked && (
                         <Button variant="outline" className="w-full" onClick={() => { setSelectedGroup(''); setSelectedCourse(''); setSelectedJo(''); }}>그룹/코스 변경</Button>
                      )}
                 </CardFooter>
