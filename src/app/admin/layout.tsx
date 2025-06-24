@@ -12,6 +12,7 @@ import {
   Tv,
   LogOut,
   Flame,
+  ShieldCheck,
 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -36,6 +37,7 @@ const navItems = [
   { href: "/admin/players", icon: Users, label: "선수 관리" },
   { href: "/admin/scores", icon: ClipboardList, label: "점수 관리" },
   { href: "/admin/suddendeath", icon: Flame, label: "서든데스 관리" },
+  { href: "/admin/referees", icon: ShieldCheck, label: "심판 계정 관리" },
 ]
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -65,6 +67,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <Skeleton className="w-full h-10 mb-4" />
           </div>
           <div className="flex flex-col gap-1 p-2">
+            <Skeleton className="w-full h-8" />
             <Skeleton className="w-full h-8" />
             <Skeleton className="w-full h-8" />
             <Skeleton className="w-full h-8" />
