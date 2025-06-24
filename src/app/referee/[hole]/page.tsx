@@ -132,6 +132,24 @@ export default function RefereePage() {
         return completed;
     }, [allPlayers, allScores, availableJos, selectedGroup, selectedCourse, hole]);
 
+    // Automatically reset selections when a group is fully scored.
+    useEffect(() => {
+        if (selectedGroup && availableJos.length > 0 && availableJos.length === completedJos.size) {
+            toast({
+                title: "그룹 심사 완료",
+                description: `'${selectedGroup}' 그룹의 모든 조의 점수 입력이 완료되었습니다. 다른 그룹을 선택하세요.`,
+                duration: 5000,
+            });
+
+            // Reset all selections to go back to the initial screen
+            setView('selection');
+            setScores({});
+            setSelectedGroup('');
+            setSelectedCourse('');
+            setSelectedJo('');
+        }
+    }, [completedJos, availableJos, selectedGroup, toast]);
+
 
     const selectedCourseName = useMemo(() => courses.find(c => c.id.toString() === selectedCourse)?.name || '', [courses, selectedCourse]);
     
@@ -250,17 +268,8 @@ export default function RefereePage() {
         }
 
         setView('selection');
-        setScores({});
         setSelectedJo(''); // Only reset Jo
     };
-
-    const handleResetAllSelections = () => {
-        setView('selection');
-        setScores({});
-        setSelectedGroup('');
-        setSelectedCourse('');
-        setSelectedJo('');
-    }
 
     const updateScore = (id: string, delta: number) => {
         if (scores[id]?.status === 'editing') {
@@ -306,37 +315,26 @@ export default function RefereePage() {
     const getPlayerName = (player: Player) => player.type === 'team' ? `${player.p1_name}/${player.p2_name}` : player.name;
     
     const renderSelectionScreen = () => {
-        const isGroupAndCourseSelected = !!(selectedGroup && selectedCourse);
-
         return (
             <Card>
                 <CardHeader>
-                    <div className="flex justify-between items-center">
-                        <div className="flex-1">
-                            <CardTitle className="text-xl">심사 조 선택</CardTitle>
-                            <CardDescription className="text-sm">점수를 기록할 그룹, 코스, 조를 선택하세요.</CardDescription>
-                        </div>
-                        {isGroupAndCourseSelected && (
-                             <Button variant="outline" size="sm" onClick={handleResetAllSelections}>
-                                그룹/코스 변경
-                            </Button>
-                        )}
-                    </div>
+                    <CardTitle className="text-xl">심사 조 선택</CardTitle>
+                    <CardDescription className="text-sm">점수를 기록할 그룹, 코스, 조를 선택하세요.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                    <Select value={selectedGroup} onValueChange={v => {setSelectedGroup(v); setSelectedCourse(''); setSelectedJo('');}} disabled={isGroupAndCourseSelected}>
+                    <Select value={selectedGroup} onValueChange={v => {setSelectedGroup(v); setSelectedCourse(''); setSelectedJo('');}} disabled={!!selectedGroup}>
                         <SelectTrigger className="h-12 text-base"><SelectValue placeholder="1. 그룹 선택" /></SelectTrigger>
                         <SelectContent position="item-aligned">
                             {availableGroups.map(g => <SelectItem key={g} value={g} className="text-base">{g}</SelectItem>)}
                         </SelectContent>
                     </Select>
-                    <Select value={selectedCourse} onValueChange={v => {setSelectedCourse(v); setSelectedJo('');}} disabled={!selectedGroup || isGroupAndCourseSelected || availableCoursesForGroup.length === 0}>
+                    <Select value={selectedCourse} onValueChange={v => {setSelectedCourse(v); setSelectedJo('');}} disabled={!selectedGroup || !!selectedCourse || availableCoursesForGroup.length === 0}>
                         <SelectTrigger className="h-12 text-base"><SelectValue placeholder={!selectedGroup ? "그룹 먼저 선택" : (availableCoursesForGroup.length === 0 ? "배정된 코스 없음" : "2. 코스 선택")} /></SelectTrigger>
                         <SelectContent position="item-aligned">
                             {availableCoursesForGroup.map(c => <SelectItem key={c.id} value={c.id.toString()} className="text-base">{c.name}</SelectItem>)}
                         </SelectContent>
                     </Select>
-                     <Select value={selectedJo} onValueChange={setSelectedJo} disabled={!isGroupAndCourseSelected || availableJos.length === 0}>
+                     <Select value={selectedJo} onValueChange={setSelectedJo} disabled={!selectedCourse || availableJos.length === 0}>
                         <SelectTrigger className="h-12 text-base"><SelectValue placeholder={!selectedCourse ? "코스 먼저 선택" : (availableJos.length === 0 ? "배정된 선수 없음" : "3. 조 선택")} /></SelectTrigger>
                         <SelectContent position="item-aligned">
                             {availableJos.map(jo => {
