@@ -59,6 +59,10 @@ export default function RefereePage() {
     const [unlockPasswordInput, setUnlockPasswordInput] = useState('');
     const [playerToUnlock, setPlayerToUnlock] = useState<Player | null>(null);
 
+    // Ref to track view state for the beforeunload event listener
+    const viewRef = useRef(view);
+    viewRef.current = view;
+
     // Restore state from localStorage on initial load
     useEffect(() => {
         try {
@@ -221,16 +225,18 @@ export default function RefereePage() {
     // Prevent accidental navigation when scoring
     useEffect(() => {
         const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-            if (view === 'scoring') {
-                e.preventDefault();
-                e.returnValue = '';
+            // Using the ref here ensures we always have the latest view state
+            // without needing to re-attach the event listener on every view change.
+            if (viewRef.current === 'scoring') {
+                e.preventDefault(); // Standard for most browsers
+                e.returnValue = ''; // For some older browsers
             }
         };
         window.addEventListener('beforeunload', handleBeforeUnload);
         return () => {
             window.removeEventListener('beforeunload', handleBeforeUnload);
         };
-    }, [view]);
+    }, []); // Empty dependency array ensures this effect runs only once.
 
     // ---- Handlers ----
     const handleStartScoring = () => {
@@ -514,5 +520,3 @@ export default function RefereePage() {
         </>
     );
 }
-
-    
