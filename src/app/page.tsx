@@ -34,7 +34,7 @@ export default function LoginPage() {
   useEffect(() => {
     setYear(new Date().getFullYear());
 
-    if (!firebaseConfig.apiKey || firebaseConfig.apiKey === 'your-api-key') {
+    if (!db || !firebaseConfig.apiKey || firebaseConfig.apiKey === 'your-api-key') {
         setError("Firebase 연결 설정이 필요합니다. src/lib/firebase.ts 파일을 확인해주세요.");
         setConfig({ appName: 'ParkScore', userDomain: 'parkgolf.com' });
         setLoading(false);
@@ -67,8 +67,8 @@ export default function LoginPage() {
       return;
     }
 
-    if (!config) {
-        setError("설정이 로드되지 않았습니다. 잠시 후 다시 시도해주세요.");
+    if (!auth || !config) {
+        setError("설정이 로드되지 않았거나 Firebase 인증이 준비되지 않았습니다. 잠시 후 다시 시도해주세요.");
         return;
     }
 
@@ -182,13 +182,15 @@ export default function LoginPage() {
             {error && (
                 <div className="text-center text-sm font-medium text-destructive bg-red-50 border border-red-200 p-3 rounded-lg">
                     <p>{error}</p>
-                    <a href="https://console.firebase.google.com" target="_blank" rel="noopener noreferrer" className="underline text-xs">
-                        Firebase 콘솔에서 키를 복사해 붙여넣으세요.
-                    </a>
+                    {error.includes("Firebase") && (
+                        <a href="https://console.firebase.google.com" target="_blank" rel="noopener noreferrer" className="underline text-xs">
+                            Firebase 콘솔에서 키를 복사해 붙여넣으세요.
+                        </a>
+                    )}
                 </div>
             )}
             <Button type="submit" className="w-full h-12 text-lg font-bold" disabled={loading || !!error}>
-              {loading ? (
+              {loading && !error ? (
                 '설정 로딩 중...'
               ) : (
                 <>
