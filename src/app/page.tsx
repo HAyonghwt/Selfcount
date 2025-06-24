@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect } from 'react';
@@ -37,7 +36,7 @@ export default function LoginPage() {
     // Essential check: If Firebase config is missing, don't attempt to connect.
     // This prevents the app from hanging on a network request that will never resolve.
     if (!process.env.NEXT_PUBLIC_FIREBASE_API_KEY || process.env.NEXT_PUBLIC_FIREBASE_API_KEY === 'your-api-key') {
-        console.error("Firebase configuration is missing or is using placeholder values in .env.local. Please set it up.");
+        console.warn("Firebase configuration is missing or is using placeholder values in .env.local. Please set it up.");
         setError("Firebase 연결 설정이 필요합니다. .env.local 파일을 확인해주세요.");
         setConfig({ appName: 'ParkScore', userDomain: 'parkgolf.com' });
         setLoading(false); // Immediately stop loading
@@ -53,7 +52,7 @@ export default function LoginPage() {
         setConfig({ appName: 'ParkScore', userDomain: 'parkgolf.com' });
       }
     }).catch((err) => {
-        console.error("Firebase config fetch error:", err);
+        console.warn("Firebase config fetch error:", err);
         setError("Firebase 연결에 실패했습니다. .env.local 파일 설정을 확인해주세요.");
         setConfig({ appName: 'ParkScore', userDomain: 'parkgolf.com' });
     }).finally(() => {
