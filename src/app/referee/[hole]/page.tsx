@@ -86,8 +86,8 @@ export default function RefereePage() {
                 view: 'scoring'
             };
             localStorage.setItem(`refereeState_${hole}`, JSON.stringify(stateToSave));
-        } else {
-            // Clear the state if we are back to selection view or some values are missing
+        } else if (view === 'selection') {
+            // Clear the state if we are back to selection view
             localStorage.removeItem(`refereeState_${hole}`);
         }
     }, [view, selectedGroup, selectedCourse, selectedJo, hole]);
@@ -170,27 +170,33 @@ export default function RefereePage() {
         return completed;
     }, [allPlayers, allScores, availableJos, selectedGroup, selectedCourse, hole]);
 
-    const selectedCourseName = useMemo(() => courses.find(c => c.id.toString() === selectedCourse)?.name || '', [courses, selectedCourse]);
-
-    // When view changes to 'scoring', initialize the scores state.
+    // When view changes to 'scoring', initialize or sync the scores state.
     useEffect(() => {
         if (view === 'scoring' && selectedJo) {
             const playersForJo = allPlayers.filter(p => p.group === selectedGroup && p.jo.toString() === selectedJo);
+            
+            setScores(currentScores => {
+                const newScoresState: { [key: string]: ScoreData } = {};
+                playersForJo.forEach((player) => {
+                    const existingScoreFromDb = allScores[player.id]?.[selectedCourse]?.[hole];
+                    const currentLocalScoreData = currentScores[player.id];
 
-            const finalScoresState: { [key: string]: ScoreData } = {};
-            playersForJo.forEach((player) => {
-                const existingScoreFromDb = allScores[player.id]?.[selectedCourse]?.[hole];
-
-                if (existingScoreFromDb !== undefined) {
-                    finalScoresState[player.id] = { score: existingScoreFromDb, status: 'locked' };
-                } else {
-                    finalScoresState[player.id] = { score: 1, status: 'editing' };
-                }
+                    if (existingScoreFromDb !== undefined) {
+                        // DB is the source of truth for locked scores.
+                        newScoresState[player.id] = { score: existingScoreFromDb, status: 'locked' };
+                    } else if (currentLocalScoreData) {
+                        // If no DB score, but we have a local one, keep it.
+                        newScoresState[player.id] = currentLocalScoreData;
+                    } else {
+                        // Only initialize if no DB and no local score exists.
+                        newScoresState[player.id] = { score: 1, status: 'editing' };
+                    }
+                });
+                return newScoresState;
             });
-            setScores(finalScoresState);
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [view, selectedJo, allPlayers, allScores, selectedCourse, hole]); // Re-run when Jo changes or db data changes
+    }, [view, selectedJo, allPlayers, allScores, selectedCourse, hole, selectedGroup]);
     
     // Delayed saving logic
     useEffect(() => {
@@ -208,7 +214,7 @@ export default function RefereePage() {
                         timers.delete(playerId);
                         toast({ title: "저장 실패", description: err.message, variant: "destructive" });
                     });
-                }, 3000); // 3 seconds delay
+                }, 10000); // 10 seconds delay
                 timers.set(playerId, timer);
             }
         });
@@ -271,12 +277,14 @@ export default function RefereePage() {
 
         const playersToLockImmediately: { pid: string; scoreData: ScoreData }[] = [];
 
+        // Find all other players currently in 'saved' state
         Object.entries(scores).forEach(([pid, scoreData]) => {
             if (pid !== playerIdToSave && scoreData.status === 'saved') {
                 playersToLockImmediately.push({ pid, scoreData });
             }
         });
 
+        // Immediately save and lock them
         const dbPromises = playersToLockImmediately.map(({ pid, scoreData }) => {
             if (timers.has(pid)) {
                 clearTimeout(timers.get(pid)!);
@@ -290,12 +298,14 @@ export default function RefereePage() {
             setScores(currentScores => {
                 const newScoresState = { ...currentScores };
 
+                // Update the state of the now locked players
                 playersToLockImmediately.forEach(({ pid, scoreData }) => {
                     if (newScoresState[pid]) {
                         newScoresState[pid] = { ...scoreData, status: 'locked' };
                     }
                 });
 
+                // Set the newly saved player to 'saved' state
                 newScoresState[playerIdToSave] = { score, status: 'saved', savedAt: Date.now() };
 
                 return newScoresState;
@@ -333,6 +343,8 @@ export default function RefereePage() {
 
     const getPlayerName = (player: Player) => player.type === 'team' ? `${player.p1_name}/${player.p2_name}` : player.name;
     
+    const selectedCourseName = useMemo(() => courses.find(c => c.id.toString() === selectedCourse)?.name || '', [courses, selectedCourse]);
+
     if (loading) {
         return (
              <div className="bg-slate-50 min-h-screen p-2 sm:p-4 flex flex-col font-body">
@@ -374,7 +386,7 @@ export default function RefereePage() {
                             {availableJos.map(jo => {
                                 const isCompleted = completedJos.has(jo);
                                 return (
-                                    <SelectItem key={jo} value={jo.toString()}>
+                                    <SelectItem key={jo} value={jo.toString()} disabled={!isCompleted && Object.values(scores).some(s => s.status === 'saved')}>
                                         <div className="flex items-center justify-between w-full">
                                             <span>{jo}조</span>
                                             {isCompleted && <Lock className="h-4 w-4 text-muted-foreground" />}
@@ -403,7 +415,7 @@ export default function RefereePage() {
                 const isLocked = scoreData.status === 'locked';
 
                 const progressValue = isSaved && scoreData.savedAt 
-                    ? ((now - scoreData.savedAt) / 3000) * 100
+                    ? ((now - scoreData.savedAt) / 10000) * 100
                     : 0;
 
                 return (
@@ -420,13 +432,13 @@ export default function RefereePage() {
                                 </div>
                                 <Button variant="outline" size="icon" className="w-11 h-11 rounded-lg border-2 flex-shrink-0" onClick={() => updateScore(player.id, 1)} disabled={!isEditing}><Plus className="h-6 w-6" /></Button>
                             </div>
-                            <div className="w-11 h-11 flex-shrink-0">
+                            <div className="w-24 h-11 flex-shrink-0">
                                 {isEditing && <Button variant="default" size="icon" className="w-full h-full rounded-lg" onClick={() => handleSavePress(player)}><Save className="h-6 w-6" /></Button>}
                                 {isSaved && (
-                                    <div className="flex flex-col items-center justify-center h-full w-full text-center relative border border-dashed border-primary/50 rounded-lg cursor-pointer" onClick={() => handleImmediateLock(player.id)}>
-                                        <p className="text-xs text-primary font-bold leading-tight">즉시잠금</p>
-                                        <Progress value={progressValue} className="h-0.5 mt-0.5 w-10/12 mx-auto" />
-                                    </div>
+                                    <Button variant="secondary" className="w-full h-full text-center relative border border-dashed border-primary/50 rounded-lg cursor-pointer text-xs leading-tight font-bold" onClick={() => handleImmediateLock(player.id)}>
+                                        <div className='absolute bottom-0 left-0 top-0 bg-primary/30' style={{width: `${progressValue}%`}}></div>
+                                        <span className="relative">즉시잠금</span>
+                                    </Button>
                                 )}
                                 {isLocked && (
                                     <div className="flex items-center justify-center h-full w-full bg-muted text-muted-foreground rounded-lg">
