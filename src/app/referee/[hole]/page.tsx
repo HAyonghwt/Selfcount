@@ -1,19 +1,15 @@
 
 "use client";
 
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Minus, Plus, Save, Lock, ArrowLeft } from 'lucide-react';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Progress } from '@/components/ui/progress';
 import { db } from '@/lib/firebase';
-import { ref, onValue, set, update } from 'firebase/database';
+import { ref, onValue, set } from 'firebase/database';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useToast } from "@/hooks/use-toast";
-
 
 interface Player {
     id: string;
@@ -27,13 +23,11 @@ interface Player {
 interface Course { id: number; name:string; isActive: boolean; }
 interface ScoreData {
     score: number;
-    status: 'editing' | 'saved' | 'locked';
-    savedAt?: number;
+    status: 'editing' | 'locked';
 }
 
 export default function RefereePage() {
     const params = useParams();
-    const { toast } = useToast();
     const hole = params.hole;
 
     // Data from Firebase
@@ -51,7 +45,6 @@ export default function RefereePage() {
     
     // Local state for scoring UI
     const [scores, setScores] = useState<{ [key: string]: ScoreData }>({});
-    const saveTimers = useRef<Map<string, NodeJS.Timeout>>(new Map());
 
     // Restore state from localStorage on initial load
     useEffect(() => {
@@ -74,7 +67,7 @@ export default function RefereePage() {
         }
     }, [hole]);
     
-    // Save state to localStorage when scoring
+    // Save view state to localStorage
     useEffect(() => {
         if (view === 'scoring' && selectedGroup && selectedCourse && selectedJo) {
             const stateToSave = {
@@ -85,7 +78,6 @@ export default function RefereePage() {
             };
             localStorage.setItem(`refereeState_${hole}`, JSON.stringify(stateToSave));
         } else if (view === 'selection') {
-            // Clear the state if we are back to selection view
             localStorage.removeItem(`refereeState_${hole}`);
         }
     }, [view, selectedGroup, selectedCourse, selectedJo, hole]);
@@ -157,77 +149,55 @@ export default function RefereePage() {
         return completed;
     }, [allPlayers, allScores, availableJos, selectedGroup, selectedCourse, hole]);
 
-    const selectedCourseName = useMemo(() => courses.find(c => c.id.toString() === selectedCourse)?.name || '', [courses, selectedCourse]);
+    const getLocalStorageScoresKey = () => {
+        if (!hole || !selectedGroup || !selectedCourse || !selectedJo) return null;
+        return `refereeScores_${hole}_${selectedGroup}_${selectedCourse}_${selectedJo}`;
+    }
 
-    // When view changes to 'scoring', or when players for a Jo are determined, initialize or sync the scores state.
+    // Save interim scores to localStorage
     useEffect(() => {
-        if (view !== 'scoring' || !selectedJo) {
-            // When not in scoring view, there are no players, so scores should be empty.
-            if(Object.keys(scores).length > 0) setScores({});
+        const key = getLocalStorageScoresKey();
+        if (key && view === 'scoring' && Object.keys(scores).length > 0) {
+            const scoresToSave = Object.entries(scores).reduce((acc, [playerId, data]) => {
+                if (data.status === 'editing') {
+                    acc[playerId] = data;
+                }
+                return acc;
+            }, {});
+            localStorage.setItem(key, JSON.stringify(scoresToSave));
+        }
+    }, [scores, hole, selectedGroup, selectedCourse, selectedJo, view]);
+
+
+    // Initialize or sync the scores state.
+    useEffect(() => {
+        if (view !== 'scoring' || !selectedJo || !currentPlayers.length) {
             return;
         }
 
-        const playersForJo = allPlayers.filter(p => p.group === selectedGroup && p.jo.toString() === selectedJo);
-        if (playersForJo.length === 0) return;
+        const storageKey = getLocalStorageScoresKey();
+        const savedInterimScores = storageKey ? JSON.parse(localStorage.getItem(storageKey) || '{}') : {};
 
         const newScoresState: { [key: string]: ScoreData } = {};
-        let stateNeedsUpdate = false;
-
-        playersForJo.forEach((player) => {
+        
+        currentPlayers.forEach((player) => {
             const existingScoreFromDb = allScores[player.id]?.[selectedCourse]?.[hole];
-            const currentLocalScore = scores[player.id];
+            const interimScore = savedInterimScores[player.id];
 
             if (existingScoreFromDb !== undefined) {
-                // If DB has a score, it's locked.
-                 if (!currentLocalScore || currentLocalScore.score !== existingScoreFromDb || currentLocalScore.status !== 'locked') {
-                    newScoresState[player.id] = { score: existingScoreFromDb, status: 'locked' };
-                    stateNeedsUpdate = true;
-                } else {
-                    newScoresState[player.id] = currentLocalScore;
-                }
+                newScoresState[player.id] = { score: Number(existingScoreFromDb), status: 'locked' };
+            } else if (interimScore) {
+                newScoresState[player.id] = { score: Number(interimScore.score), status: 'editing'};
             } else {
-                // If no score in DB, retain local state or initialize.
-                if (currentLocalScore) {
-                     newScoresState[player.id] = currentLocalScore;
-                } else {
-                    newScoresState[player.id] = { score: 1, status: 'editing' };
-                    stateNeedsUpdate = true;
-                }
+                newScoresState[player.id] = { score: 1, status: 'editing' };
             }
         });
 
-        // Only update state if there's a meaningful change to avoid re-renders
-        if (stateNeedsUpdate || Object.keys(scores).length !== Object.keys(newScoresState).length) {
-            setScores(newScoresState);
+        if (JSON.stringify(scores) !== JSON.stringify(newScoresState)) {
+             setScores(newScoresState);
         }
-    }, [view, selectedGroup, selectedJo, selectedCourse, hole, allPlayers, allScores, scores]);
-
-
-    // Delayed saving logic
-    useEffect(() => {
-        const timers = saveTimers.current;
-
-        Object.entries(scores).forEach(([playerId, scoreData]) => {
-            if (scoreData.status === 'saved' && !timers.has(playerId)) {
-                const timer = setTimeout(() => {
-                    const scoreRef = ref(db, `/scores/${playerId}/${selectedCourse}/${hole}`);
-                    set(scoreRef, scoreData.score).then(() => {
-                        setScores(prev => (prev[playerId]?.status === 'saved') ? { ...prev, [playerId]: { ...prev[playerId], status: 'locked' } } : prev);
-                        timers.delete(playerId);
-                    }).catch(err => {
-                        // On failure, revert to editing so user can try again
-                        setScores(prev => ({...prev, [playerId]: {...prev[playerId], status: 'editing'}}));
-                        timers.delete(playerId);
-                    });
-                }, 3000); // 3 seconds delay now
-                timers.set(playerId, timer);
-            }
-        });
-
-        return () => {
-            timers.forEach(timer => clearTimeout(timer));
-        };
-    }, [scores, selectedCourse, hole]);
+        
+    }, [view, selectedJo, selectedCourse, hole, allScores, currentPlayers]);
 
 
     // ---- Handlers ----
@@ -238,25 +208,12 @@ export default function RefereePage() {
     };
     
     const handleReturnToJoSelection = () => {
-        const timers = saveTimers.current;
-        const updates = {};
-
-        Object.entries(scores).forEach(([playerId, scoreData]) => {
-            if (scoreData.status === 'saved') {
-                if (timers.has(playerId)) {
-                    clearTimeout(timers.get(playerId)!);
-                    timers.delete(playerId);
-                }
-                updates[`/scores/${playerId}/${selectedCourse}/${hole}`] = scoreData.score;
-            }
-        });
-        
-        const savePromise = Object.keys(updates).length > 0 ? update(ref(db), updates) : Promise.resolve();
-
-        savePromise.finally(() => {
-            setView('selection');
-            setSelectedJo(''); 
-        });
+        const storageKey = getLocalStorageScoresKey();
+        if (storageKey) {
+            localStorage.removeItem(storageKey);
+        }
+        setView('selection');
+        setSelectedJo(''); 
     };
 
     const updateScore = (id: string, delta: number) => {
@@ -269,64 +226,30 @@ export default function RefereePage() {
     };
 
     const handleSavePress = (playerToSave: Player) => {
-        if (scores[playerToSave.id]?.status !== 'editing') return;
-        const timers = saveTimers.current;
+        const scoreData = scores[playerToSave.id];
+        if (!scoreData || scoreData.status !== 'editing') return;
 
-        const updates = {};
-        const playersToLockImmediately: string[] = [];
-
-        // Find all other players currently in 'saved' state
-        Object.entries(scores).forEach(([pid, scoreData]) => {
-            if (pid !== playerToSave.id && scoreData.status === 'saved') {
-                if (timers.has(pid)) {
-                    clearTimeout(timers.get(pid)!);
-                    timers.delete(pid);
-                }
-                updates[`/scores/${pid}/${selectedCourse}/${hole}`] = scoreData.score;
-                playersToLockImmediately.push(pid);
+        const scoreRef = ref(db, `/scores/${playerToSave.id}/${selectedCourse}/${hole}`);
+        
+        set(scoreRef, scoreData.score).then(() => {
+            setScores(prev => ({
+                ...prev,
+                [playerToSave.id]: { ...prev[playerToSave.id], status: 'locked' }
+            }));
+            const storageKey = getLocalStorageScoresKey();
+            if (storageKey) {
+                const savedInterimScores = JSON.parse(localStorage.getItem(storageKey) || '{}');
+                delete savedInterimScores[playerToSave.id];
+                localStorage.setItem(storageKey, JSON.stringify(savedInterimScores));
             }
+        }).catch(err => {
+            console.error("Failed to save score:", err);
+            // Optionally, show an error to the user, but request was to remove toasts.
         });
-        
-        const dbPromise = Object.keys(updates).length > 0 ? update(ref(db), updates) : Promise.resolve();
-        
-        dbPromise.finally(() => {
-             setScores(currentScores => {
-                const newScoresState = { ...currentScores };
-                playersToLockImmediately.forEach((pid) => {
-                    if (newScoresState[pid]) {
-                        newScoresState[pid] = { ...newScoresState[pid], status: 'locked' };
-                    }
-                });
-                newScoresState[playerToSave.id] = { ...currentScores[playerToSave.id], status: 'saved', savedAt: Date.now() };
-                return newScoresState;
-            });
-        });
-    };
-    
-    const handleImmediateLock = (playerId: string) => {
-        const scoreData = scores[playerId];
-        if (scoreData?.status !== 'saved') return;
-
-        const timers = saveTimers.current;
-        if (timers.has(playerId)) {
-            clearTimeout(timers.get(playerId)!);
-            timers.delete(playerId);
-        }
-
-        const scoreRef = ref(db, `scores/${playerId}/${selectedCourse}/${hole}`);
-        set(scoreRef, scoreData.score)
-            .then(() => {
-                setScores(prev => ({
-                    ...prev,
-                    [playerId]: { ...prev[playerId], status: 'locked' }
-                }));
-            })
-            .catch(err => {
-                setScores(prev => ({...prev, [playerId]: {...prev[playerId], status: 'editing'}}));
-            });
     };
 
     const getPlayerName = (player: Player) => player.type === 'team' ? `${player.p1_name}/${player.p2_name}` : player.name;
+    const selectedCourseName = useMemo(() => courses.find(c => c.id.toString() === selectedCourse)?.name || '', [courses, selectedCourse]);
     
     if (loading) {
         return (
@@ -393,13 +316,7 @@ export default function RefereePage() {
                 const scoreData = scores[player.id];
                 if (!scoreData) return null;
 
-                const isEditing = scoreData.status === 'editing';
-                const isSaved = scoreData.status === 'saved';
                 const isLocked = scoreData.status === 'locked';
-                
-                const progressValue = isSaved && scoreData.savedAt 
-                    ? Math.min(((Date.now() - scoreData.savedAt) / 3000) * 100, 100)
-                    : 0;
 
                 return (
                     <Card key={player.id} className="overflow-hidden">
@@ -411,25 +328,22 @@ export default function RefereePage() {
                             
                             <div className="flex items-center gap-2 flex-shrink-0">
                                 <div className="flex items-center gap-1">
-                                    <Button variant="outline" size="icon" className="w-11 h-11 rounded-lg border-2" onClick={() => updateScore(player.id, -1)} disabled={!isEditing}><Minus className="h-6 w-6" /></Button>
+                                    <Button variant="outline" size="icon" className="w-11 h-11 rounded-lg border-2" onClick={() => updateScore(player.id, -1)} disabled={isLocked}><Minus className="h-6 w-6" /></Button>
                                     <div className="relative w-10 text-center">
                                         <span className={`text-4xl font-bold tabular-nums`}>{scoreData.score}</span>
                                     </div>
-                                    <Button variant="outline" size="icon" className="w-11 h-11 rounded-lg border-2" onClick={() => updateScore(player.id, 1)} disabled={!isEditing}><Plus className="h-6 w-6" /></Button>
+                                    <Button variant="outline" size="icon" className="w-11 h-11 rounded-lg border-2" onClick={() => updateScore(player.id, 1)} disabled={isLocked}><Plus className="h-6 w-6" /></Button>
                                 </div>
                                 
                                 <div className="w-24 h-11">
-                                    {isEditing && <Button variant="default" size="icon" className="w-full h-full rounded-lg" onClick={() => handleSavePress(player)}><Save className="h-6 w-6" /></Button>}
-                                    {isSaved && (
-                                         <Button variant="secondary" className="w-full h-full text-center relative border border-dashed border-primary/50 rounded-lg cursor-pointer text-xs leading-tight font-bold" onClick={() => handleImmediateLock(player.id)}>
-                                            <Progress value={progressValue} className="absolute bottom-0 left-0 h-full w-full opacity-30" />
-                                            <span className="relative">즉시잠금</span>
-                                        </Button>
-                                    )}
-                                    {isLocked && (
+                                    {isLocked ? (
                                         <div className="flex items-center justify-center h-full w-full bg-muted text-muted-foreground rounded-lg">
                                             <Lock className="w-6 h-6 text-green-500" />
                                         </div>
+                                    ) : (
+                                        <Button variant="default" className="w-full h-full rounded-lg" onClick={() => handleSavePress(player)}>
+                                            <Save className="h-6 w-6" />
+                                        </Button>
                                     )}
                                 </div>
                             </div>
