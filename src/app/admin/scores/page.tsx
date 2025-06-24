@@ -5,7 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Search } from 'lucide-react';
+import { Label } from '@/components/ui/label';
+import { Search, Save } from 'lucide-react';
 import {
   Select,
   SelectContent,
@@ -35,6 +36,7 @@ export default function ScoreManagementPage() {
     const [allPlayers, setAllPlayers] = useState({});
     const [allCourses, setAllCourses] = useState({});
     const [flatScores, setFlatScores] = useState<ScoreEntry[]>([]);
+    const [unlockPassword, setUnlockPassword] = useState('');
 
     const [editingCell, setEditingCell] = useState<string | null>(null);
     const [editValue, setEditValue] = useState<number | string>('');
@@ -127,6 +129,16 @@ export default function ScoreManagementPage() {
             toast({ title: "수정 실패", description: err.message });
         });
     };
+    
+    const handleSaveUnlockPassword = () => {
+        if (unlockPassword.trim() === '') {
+            toast({ title: '오류', description: '비밀번호를 입력해주세요.', variant: 'destructive' });
+            return;
+        }
+        set(ref(db, 'config/scoreUnlockPassword'), unlockPassword)
+            .then(() => toast({ title: '성공', description: '잠금 해제 비밀번호가 저장되었습니다.' }))
+            .catch(err => toast({ title: '저장 실패', description: err.message, variant: 'destructive' }));
+    };
 
     const availableGroups = [...new Set(flatScores.map(s => s.group))];
     const availableCourses = [...new Set(flatScores.map(s => s.course))];
@@ -147,6 +159,29 @@ export default function ScoreManagementPage() {
                         <Select value={filterGroup} onValueChange={setFilterGroup}><SelectTrigger className="w-full md:w-[180px] h-12"><SelectValue placeholder="그룹 선택" /></SelectTrigger><SelectContent><SelectItem value="all">모든 그룹</SelectItem>{availableGroups.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}</SelectContent></Select>
                         <Select value={filterCourse} onValueChange={setFilterCourse}><SelectTrigger className="w-full md:w-[180px] h-12"><SelectValue placeholder="코스 선택" /></SelectTrigger><SelectContent><SelectItem value="all">모든 코스</SelectItem>{availableCourses.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent></Select>
                     </div>
+                </CardContent>
+            </Card>
+
+            <Card>
+                <CardHeader>
+                    <CardTitle>점수 수정 잠금해제 설정</CardTitle>
+                    <CardDescription>심판 페이지에서 잠긴 점수를 수정할 때 사용할 비밀번호를 설정합니다.</CardDescription>
+                </CardHeader>
+                <CardContent className="flex flex-col sm:flex-row gap-4 items-end">
+                    <div className="space-y-2 flex-1 w-full">
+                        <Label htmlFor="unlock-password">잠금 해제 비밀번호</Label>
+                        <Input
+                            id="unlock-password"
+                            type="password"
+                            value={unlockPassword}
+                            onChange={e => setUnlockPassword(e.target.value)}
+                            placeholder="새로운 비밀번호 입력"
+                        />
+                    </div>
+                    <Button onClick={handleSaveUnlockPassword}>
+                        <Save className="mr-2 h-4 w-4" />
+                        비밀번호 저장
+                    </Button>
                 </CardContent>
             </Card>
 
@@ -222,5 +257,3 @@ export default function ScoreManagementPage() {
         </div>
     );
 }
-
-    

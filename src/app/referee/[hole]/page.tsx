@@ -5,6 +5,8 @@ import { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Minus, Plus, Save, Lock, ArrowLeft } from 'lucide-react';
 import { db } from '@/lib/firebase';
@@ -40,6 +42,7 @@ export default function RefereePage() {
     const [courses, setCourses] = useState<Course[]>([]);
     const [groupsData, setGroupsData] = useState<any>({});
     const [loading, setLoading] = useState(true);
+    const [unlockPasswordFromDb, setUnlockPasswordFromDb] = useState('');
 
     // UI State
     const [view, setView] = useState<'selection' | 'scoring'>('selection');
@@ -50,6 +53,11 @@ export default function RefereePage() {
     // Local state for scoring UI
     const [scores, setScores] = useState<{ [key: string]: ScoreData }>({});
     const [playerToSave, setPlayerToSave] = useState<Player | null>(null);
+
+    // Unlock modal state
+    const [isUnlockModalOpen, setIsUnlockModalOpen] = useState(false);
+    const [unlockPasswordInput, setUnlockPasswordInput] = useState('');
+    const [playerToUnlock, setPlayerToUnlock] = useState<Player | null>(null);
 
     // Restore state from localStorage on initial load
     useEffect(() => {
@@ -93,6 +101,7 @@ export default function RefereePage() {
         const playersRef = ref(db, 'players');
         const scoresRef = ref(db, 'scores');
         const tournamentRef = ref(db, 'tournaments/current');
+        const passwordRef = ref(db, 'config/scoreUnlockPassword');
 
         const unsubPlayers = onValue(playersRef, (snapshot) => setAllPlayers(Object.entries(snapshot.val() || {}).map(([id, player]) => ({ id, ...player as object } as Player))));
         const unsubScores = onValue(scoresRef, (snapshot) => setAllScores(snapshot.val() || {}));
@@ -102,11 +111,13 @@ export default function RefereePage() {
             setGroupsData(data.groups || {});
             setLoading(false);
         });
+        const unsubPassword = onValue(passwordRef, (snapshot) => setUnlockPasswordFromDb(snapshot.val() || ''));
 
         return () => {
             unsubPlayers();
             unsubScores();
             unsubTournament();
+            unsubPassword();
         };
     }, []);
 
@@ -193,15 +204,12 @@ export default function RefereePage() {
             const existingScoreFromDb = allScores[player.id]?.[selectedCourse]?.[hole];
             
             if (existingScoreFromDb !== undefined) {
-                // Priority 1: Use locked score from DB
                 newScoresState[player.id] = { score: Number(existingScoreFromDb), status: 'locked' };
             } else {
                 const interimScore = savedInterimScores[player.id];
                 if (interimScore && interimScore.status === 'editing') {
-                    // Priority 2: Use editing score from localStorage
                     newScoresState[player.id] = { score: Number(interimScore.score), status: 'editing'};
                 } else {
-                    // Priority 3: Default to 1
                     newScoresState[player.id] = { score: 1, status: 'editing' };
                 }
             }
@@ -213,9 +221,7 @@ export default function RefereePage() {
     // Prevent accidental navigation when scoring
     useEffect(() => {
         const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-            // Prevent the browser from leaving the page without confirmation.
             e.preventDefault();
-            // This is required for some browsers.
             e.returnValue = '';
         };
 
@@ -267,9 +273,7 @@ export default function RefereePage() {
 
         const scoreRef = ref(db, `/scores/${playerToSave.id}/${selectedCourse}/${hole}`);
         
-        set(scoreRef, scoreData.score).then(() => {
-            // Don't show toast, UI change is enough
-        }).catch(err => {
+        set(scoreRef, scoreData.score).catch(err => {
             console.error("Failed to save score:", err);
             toast({
                 title: "저장 실패",
@@ -280,6 +284,35 @@ export default function RefereePage() {
             setPlayerToSave(null);
         });
     };
+    
+    const handleUnlockRequest = (player: Player) => {
+        if (scores[player.id]?.status === 'locked') {
+            setPlayerToUnlock(player);
+            setIsUnlockModalOpen(true);
+        }
+    };
+
+    const handleConfirmUnlock = () => {
+        if (!playerToUnlock || !unlockPasswordFromDb) {
+            toast({ title: '오류', description: '잠금 해제 비밀번호가 설정되지 않았습니다.', variant: 'destructive' });
+            return;
+        }
+
+        if (unlockPasswordInput === unlockPasswordFromDb) {
+            setScores(prev => ({
+                ...prev,
+                [playerToUnlock.id]: { ...prev[playerToUnlock.id], status: 'editing' }
+            }));
+            toast({ title: '성공', description: '잠금이 해제되었습니다. 점수를 수정하세요.' });
+            setIsUnlockModalOpen(false);
+            setUnlockPasswordInput('');
+            setPlayerToUnlock(null);
+        } else {
+            toast({ title: '오류', description: '비밀번호가 올바르지 않습니다.', variant: 'destructive' });
+            setUnlockPasswordInput('');
+        }
+    };
+
 
     const getPlayerName = (player: Player) => player.type === 'team' ? `${player.p1_name}/${player.p2_name}` : player.name;
     const selectedCourseName = useMemo(() => courses.find(c => c.id.toString() === selectedCourse)?.name || '', [courses, selectedCourse]);
@@ -353,7 +386,10 @@ export default function RefereePage() {
 
                 return (
                     <Card key={player.id} className="overflow-hidden">
-                        <CardContent className="p-0">
+                        <CardContent
+                            className="p-0"
+                            onDoubleClick={isLocked ? () => handleUnlockRequest(player) : undefined}
+                        >
                             <div className="flex items-center gap-2 w-full p-2">
                                 <div className="flex-1 min-w-0">
                                     <p className="font-bold text-lg truncate pr-2">{getPlayerName(player)}</p>
@@ -426,7 +462,7 @@ export default function RefereePage() {
             
             <AlertDialog open={!!playerToSave} onOpenChange={(open) => !open && setPlayerToSave(null)}>
                 <AlertDialogContent>
-                     <AlertDialogHeader>
+                    <AlertDialogHeader>
                         <AlertDialogTitle className="text-2xl font-bold text-center" style={{ fontSize: '1.95rem', lineHeight: '2.2rem' }}>
                             {playerToSave ? getPlayerName(playerToSave) : ''}
                         </AlertDialogTitle>
@@ -446,6 +482,32 @@ export default function RefereePage() {
                     <AlertDialogFooter className="grid grid-cols-2 gap-4 pt-4">
                         <AlertDialogCancel onClick={() => setPlayerToSave(null)} className="h-11 px-6 text-base mt-0">취소</AlertDialogCancel>
                         <AlertDialogAction onClick={handleConfirmSave} className="h-11 px-6 text-base">확인</AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+            
+            <AlertDialog open={isUnlockModalOpen} onOpenChange={setIsUnlockModalOpen}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>점수 잠금 해제</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            이 점수는 이미 저장되어 잠겨있습니다. 수정하려면 관리자가 설정한 잠금 해제 비밀번호를 입력하세요.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <div className="space-y-2 py-2">
+                        <Label htmlFor="unlock-password-input">비밀번호</Label>
+                        <Input
+                            id="unlock-password-input"
+                            type="password"
+                            value={unlockPasswordInput}
+                            onChange={e => setUnlockPasswordInput(e.target.value)}
+                            autoFocus
+                            onKeyDown={(e) => e.key === 'Enter' && handleConfirmUnlock()}
+                        />
+                    </div>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel onClick={() => setUnlockPasswordInput('')}>취소</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleConfirmUnlock}>확인</AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
