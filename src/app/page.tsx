@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect } from 'react';
@@ -40,6 +41,10 @@ export default function LoginPage() {
       } else {
         setConfig({ appName: 'ParkScore', userDomain: 'parkgolf.com' });
       }
+    }).catch((err) => {
+        console.error("Firebase config fetch error:", err);
+        setError("Firebase 연결에 실패했습니다. .env.local 파일 설정을 확인해주세요.");
+        setConfig({ appName: 'ParkScore', userDomain: 'parkgolf.com' });
     }).finally(() => {
         setLoading(false);
     });
