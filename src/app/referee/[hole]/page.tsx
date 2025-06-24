@@ -50,7 +50,6 @@ export default function RefereePage() {
     const [scores, setScores] = useState<{ [key: string]: ScoreData }>({});
     const [playerToSave, setPlayerToSave] = useState<Player | null>(null);
 
-
     // Restore state from localStorage on initial load
     useEffect(() => {
         try {
@@ -181,6 +180,7 @@ export default function RefereePage() {
     // Initialize or sync the scores state.
     useEffect(() => {
         if (view !== 'scoring' || !selectedJo || !currentPlayers.length) {
+            setScores({});
             return;
         }
 
@@ -192,13 +192,9 @@ export default function RefereePage() {
             currentPlayers.forEach((player) => {
                 const existingScoreFromDb = allScores[player.id]?.[selectedCourse]?.[hole];
                 const interimScore = savedInterimScores[player.id];
-                const currentEditingScore = prevScores[player.id];
-    
+                
                 if (existingScoreFromDb !== undefined) {
                     newScoresState[player.id] = { score: Number(existingScoreFromDb), status: 'locked' };
-                } else if (currentEditingScore && currentEditingScore.status === 'editing') {
-                    // Preserve currently edited score if it exists and is not locked
-                    newScoresState[player.id] = currentEditingScore;
                 } else if (interimScore) {
                     newScoresState[player.id] = { score: Number(interimScore.score), status: 'editing'};
                 } else {
@@ -417,21 +413,21 @@ export default function RefereePage() {
                 <AlertDialogContent>
                     <div className="flex flex-col items-center justify-center p-4 text-center">
                         {playerToSave && (
-                             <p className="text-2xl font-bold mb-2">{getPlayerName(playerToSave)}</p>
+                             <p className="text-5xl font-bold mb-4">{getPlayerName(playerToSave)}</p>
                         )}
                        
                         {playerToSave && scores[playerToSave.id] && (
-                             <div className="flex items-baseline my-4">
-                                <span className="text-7xl font-extrabold text-destructive leading-none">{scores[playerToSave.id].score}</span>
-                                <span className="text-2xl font-bold ml-2">점</span>
+                             <div className="flex items-baseline my-6">
+                                <span className="text-9xl font-extrabold text-destructive leading-none">{scores[playerToSave.id].score}</span>
+                                <span className="text-5xl font-bold ml-4">점</span>
                             </div>
                         )}
                         
-                        <p className="text-lg font-semibold mt-2">저장하시겠습니까?</p>
+                        <p className="text-3xl font-semibold mt-2">저장하시겠습니까?</p>
                     </div>
-                    <AlertDialogFooter className="sm:justify-center gap-2">
-                        <AlertDialogCancel onClick={() => setPlayerToSave(null)} className="flex-1">취소</AlertDialogCancel>
-                        <AlertDialogAction onClick={handleConfirmSave} className="flex-1">확인 및 저장</AlertDialogAction>
+                    <AlertDialogFooter className="flex-row justify-center gap-4 pt-4">
+                        <AlertDialogCancel onClick={() => setPlayerToSave(null)} className="h-14 px-8 text-xl">취소</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleConfirmSave} className="h-14 px-8 text-xl">확인 및 저장</AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
