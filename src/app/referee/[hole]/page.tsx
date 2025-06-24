@@ -6,9 +6,8 @@ import { useParams } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Minus, Plus, Save, Lock, ArrowLeft, CheckCircle2 } from 'lucide-react';
+import { Minus, Plus, Save, Lock, ArrowLeft } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { useToast } from '@/hooks/use-toast';
 import { Progress } from '@/components/ui/progress';
 import { db } from '@/lib/firebase';
 import { ref, onValue, set } from 'firebase/database';
@@ -33,7 +32,6 @@ interface ScoreData {
 export default function RefereePage() {
     const params = useParams();
     const hole = params.hole;
-    const { toast } = useToast();
 
     // Data from Firebase
     const [allPlayers, setAllPlayers] = useState<Player[]>([]);
@@ -134,11 +132,14 @@ export default function RefereePage() {
 
     const selectedCourseName = useMemo(() => courses.find(c => c.id.toString() === selectedCourse)?.name || '', [courses, selectedCourse]);
 
-    // When view changes to 'scoring', initialize or intelligently update the scores state
+    // When view changes to 'scoring', initialize the scores state.
+    // This effect should only run when the Jo to be scored changes, not on every DB update.
     useEffect(() => {
         if (view === 'scoring' && selectedGroup && selectedCourse && selectedJo) {
+            const playersForJo = allPlayers.filter(p => p.group === selectedGroup && p.jo.toString() === selectedJo);
+
             const finalScoresState: { [key: string]: ScoreData } = {};
-            currentPlayers.forEach((player) => {
+            playersForJo.forEach((player) => {
                 const existingScoreFromDb = allScores[player.id]?.[selectedCourse]?.[hole];
 
                 if (existingScoreFromDb !== undefined) {
@@ -149,7 +150,8 @@ export default function RefereePage() {
             });
             setScores(finalScoresState);
         }
-    }, [view, currentPlayers, allScores, selectedCourse, selectedJo, hole, selectedGroup]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [view, selectedGroup, selectedCourse, selectedJo]);
     
     // Delayed saving logic
     useEffect(() => {
@@ -181,12 +183,6 @@ export default function RefereePage() {
     const handleStartScoring = () => {
         if (selectedGroup && selectedCourse && selectedJo) {
             setView('scoring');
-        } else {
-            toast({
-                title: "선택 필요",
-                description: "그룹, 코스, 조를 모두 선택해주세요.",
-                duration: 3000,
-            });
         }
     };
     
@@ -265,7 +261,7 @@ export default function RefereePage() {
                 return newScoresState;
             });
         }).catch(err => {
-             toast({ title: "오류", description: `이전 점수를 저장하는 중 오류 발생: ${err.message}`, variant: "destructive" });
+             // Silently fail as per user request to remove toasts
         });
 
         setConfirmingPlayer(null);
@@ -291,7 +287,6 @@ export default function RefereePage() {
             })
             .catch(err => {
                 setScores(prev => ({...prev, [playerId]: {...prev[playerId], status: 'editing'}}));
-                 toast({ title: "오류", description: `즉시 잠금에 실패했습니다: ${err.message}`, variant: "destructive" });
             });
     };
 
@@ -323,7 +318,7 @@ export default function RefereePage() {
                             {availableJos.map(jo => {
                                 const isCompleted = completedJos.has(jo);
                                 return (
-                                    <SelectItem key={jo} value={jo.toString()} disabled={isCompleted && selectedJo !== jo.toString()}>
+                                    <SelectItem key={jo} value={jo.toString()}>
                                         <div className="flex items-center justify-between w-full">
                                             <span>{jo}조</span>
                                             {isCompleted && <Lock className="h-4 w-4 text-muted-foreground" />}
@@ -466,5 +461,3 @@ export default function RefereePage() {
         </div>
     );
 }
-
-    
