@@ -1,6 +1,7 @@
 
 "use client"
 import React, { useEffect, useState, useMemo, useRef } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { db } from '@/lib/firebase';
 import { ref, onValue } from 'firebase/database';
 import { Flame, ChevronUp, ChevronDown } from 'lucide-react';
@@ -87,6 +88,8 @@ export default function ExternalScoreboard() {
     const [teamSuddenDeathData, setTeamSuddenDeathData] = useState<any>(null);
     const [filterGroup, setFilterGroup] = useState('all');
     const scrollContainerRef = useRef<HTMLDivElement>(null);
+    const searchParams = useSearchParams();
+    const showAdminControls = searchParams.get('admin') === 'true';
     
     useEffect(() => {
         const playersRef = ref(db, 'players');
@@ -385,7 +388,7 @@ export default function ExternalScoreboard() {
             });
         }
     };
-
+    
     if (loading) {
         return (
             <div className="bg-black min-h-screen text-white p-8 flex items-center justify-center">
@@ -433,8 +436,8 @@ export default function ExternalScoreboard() {
                                 <th className="py-2 px-2 w-48 text-center align-middle font-bold border-r border-red-800/50">선수명(팀명)</th>
                                 <th className="py-2 px-2 w-48 text-center align-middle font-bold border-r border-red-800/50">소속</th>
                                 {data.holes?.sort((a:number,b:number) => a-b).map((hole:number) => <th key={hole} className="py-2 px-2 w-16 text-center align-middle font-bold border-r border-red-800/50">{hole}홀</th>)}
-                                <th className="py-2 px-2 w-20 text-center align-middle font-bold border-r border-red-800/50">합계</th>
-                                <th className="py-2 px-2 w-20 text-center align-middle font-bold">순위</th>
+                                <th className="py-2 px-2 min-w-20 text-center align-middle font-bold border-r border-red-800/50">합계</th>
+                                <th className="py-2 px-2 min-w-20 text-center align-middle font-bold">순위</th>
                             </tr>
                         </thead>
                         <tbody className="text-xl">
@@ -547,39 +550,39 @@ export default function ExternalScoreboard() {
                     )
                 })}
             </div>
-            <div className="fixed top-4 right-4 flex items-center gap-4 z-50">
-                <div className="flex items-center gap-2">
-                    <Label htmlFor="group-filter" className="font-bold text-sm text-gray-300">그룹 선택</Label>
-                     <Select value={filterGroup} onValueChange={setFilterGroup}>
-                        <SelectTrigger id="group-filter" className="w-[200px] h-9 bg-gray-800/80 backdrop-blur-sm border-gray-600 text-white focus:ring-yellow-400">
-                            <SelectValue placeholder="그룹을 선택하세요" />
-                        </SelectTrigger>
-                        <SelectContent className="bg-gray-900 text-white border-gray-700">
-                            <SelectItem value="all">모든 그룹 보기</SelectItem>
-                            {allGroupsList.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}
-                        </SelectContent>
-                    </Select>
-                </div>
+            {showAdminControls && (
+                <div className="fixed top-4 right-4 flex items-center gap-4 z-50">
+                    <div className="flex items-center gap-2">
+                        <Label htmlFor="group-filter" className="font-bold text-sm text-gray-300">그룹 선택</Label>
+                        <Select value={filterGroup} onValueChange={setFilterGroup}>
+                            <SelectTrigger id="group-filter" className="w-[200px] h-9 bg-gray-800/80 backdrop-blur-sm border-gray-600 text-white focus:ring-yellow-400">
+                                <SelectValue placeholder="그룹을 선택하세요" />
+                            </SelectTrigger>
+                            <SelectContent className="bg-gray-900 text-white border-gray-700">
+                                <SelectItem value="all">모든 그룹 보기</SelectItem>
+                                {allGroupsList.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}
+                            </SelectContent>
+                        </Select>
+                    </div>
 
-                <div className="flex flex-col gap-2 group">
-                    <button
-                        onClick={() => handleScroll(-50)}
-                        aria-label="Scroll Up"
-                        className="bg-gray-800/70 text-white p-2 rounded-full hover:bg-gray-700 transition-opacity opacity-0 group-hover:opacity-100 duration-300"
-                    >
-                        <ChevronUp className="h-6 w-6" />
-                    </button>
-                    <button
-                        onClick={() => handleScroll(50)}
-                        aria-label="Scroll Down"
-                        className="bg-gray-800/70 text-white p-2 rounded-full hover:bg-gray-700 transition-opacity opacity-0 group-hover:opacity-100 duration-300"
-                    >
-                        <ChevronDown className="h-6 w-6" />
-                    </button>
+                    <div className="flex flex-col gap-2 group">
+                        <button
+                            onClick={() => handleScroll(-50)}
+                            aria-label="Scroll Up"
+                            className="bg-gray-800/70 text-white p-2 rounded-full hover:bg-gray-700 transition-opacity opacity-0 group-hover:opacity-100 duration-300"
+                        >
+                            <ChevronUp className="h-6 w-6" />
+                        </button>
+                        <button
+                            onClick={() => handleScroll(50)}
+                            aria-label="Scroll Down"
+                            className="bg-gray-800/70 text-white p-2 rounded-full hover:bg-gray-700 transition-opacity opacity-0 group-hover:opacity-100 duration-300"
+                        >
+                            <ChevronDown className="h-6 w-6" />
+                        </button>
+                    </div>
                 </div>
-            </div>
+            )}
         </>
     );
 }
-
-    
