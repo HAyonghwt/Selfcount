@@ -55,3 +55,22 @@ npm run dev
 ```
 
 브라우저에서 [http://localhost:3000](http://localhost:3000)을 열어 앱을 확인하세요.
+
+## 6. 배포 (Firebase App Hosting)
+
+이 앱은 Firebase App Hosting을 사용하여 쉽게 배포할 수 있도록 설정되어 있습니다. GitHub에 코드를 올린 후, 다음 단계에 따라 실제 웹사이트를 배포할 수 있습니다.
+
+1.  **Firebase 콘솔 연결**:
+    *   사용자의 Firebase 프로젝트로 이동하여 왼쪽 메뉴에서 **빌드 > App Hosting**을 선택합니다.
+    *   GitHub 계정과 이 프로젝트의 저장소(repository)를 연결하여 새 백엔드를 만듭니다.
+
+2.  **환경 변수 설정**:
+    *   백엔드 설정 과정에서 **환경 변수(Environment Variables)**를 구성하는 단계가 나타납니다. 이 단계가 가장 중요합니다.
+    *   로컬 컴퓨터에 있는 **`.env.local`** 파일의 내용을 여기에 입력해야 합니다.
+    *   예를 들어, Firebase 콘솔에 `NEXT_PUBLIC_FIREBASE_API_KEY`라는 입력란이 보이면, `.env.local` 파일에서 해당 값을 복사하여 붙여넣습니다. 다른 모든 Firebase 관련 변수도 동일하게 설정합니다.
+
+3.  **배포 완료**:
+    *   환경 변수 설정을 완료하고 배포를 시작합니다.
+    *   이제 Firebase App Hosting이 GitHub에서 코드를 가져와 빌드하고, 우리가 안전하게 입력한 환경 변수(API 키 등)를 주입하여 라이브 앱을 완성합니다.
+
+이 과정을 통해 민감한 정보는 GitHub에 노출되지 않고, 실제 운영되는 서버에만 안전하게 보관됩니다.
