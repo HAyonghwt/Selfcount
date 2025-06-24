@@ -6,7 +6,7 @@ import { useParams } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Minus, Plus, Save, Lock, CheckCircle2, ArrowLeft } from 'lucide-react';
+import { Minus, Plus, Save, Lock, ArrowLeft } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useToast } from '@/hooks/use-toast';
 import { Progress } from '@/components/ui/progress';
@@ -132,89 +132,23 @@ export default function RefereePage() {
         return completed;
     }, [allPlayers, allScores, availableJos, selectedGroup, selectedCourse, hole]);
 
-    // Automatically reset selections when a group is fully scored.
-    useEffect(() => {
-        if (selectedGroup && availableJos.length > 0 && availableJos.length > 0 && availableJos.length === completedJos.size) {
-            toast({
-                title: "그룹 심사 완료",
-                description: `'${selectedGroup}' 그룹의 모든 조의 점수 입력이 완료되었습니다. 다른 그룹을 선택하세요.`,
-                duration: 3000,
-            });
-            setView('selection');
-            setScores({});
-            setSelectedGroup('');
-            setSelectedCourse('');
-            setSelectedJo('');
-        }
-    }, [completedJos, availableJos, selectedGroup, toast]);
-
-
-    const selectedCourseName = useMemo(() => courses.find(c => c.id.toString() === selectedCourse)?.name || '', [courses, selectedCourse]);
-    
     // When view changes to 'scoring', initialize or intelligently update the scores state
     useEffect(() => {
         if (view === 'scoring' && selectedGroup && selectedCourse && selectedJo) {
-            let restoredScores: { [key: string]: ScoreData } = {};
-            try {
-                const storageKey = `parkscore-referee-scores-${selectedGroup}-${selectedCourse}-${selectedJo}`;
-                const savedScoresJSON = localStorage.getItem(storageKey);
-                if (savedScoresJSON) {
-                    restoredScores = JSON.parse(savedScoresJSON);
-                }
-            } catch (e) {
-                console.error("Could not restore scores from localStorage:", e);
-            }
-            
             const finalScoresState: { [key: string]: ScoreData } = {};
             currentPlayers.forEach((player) => {
                 const existingScoreFromDb = allScores[player.id]?.[selectedCourse]?.[hole];
-                const restoredPlayerData = restoredScores[player.id];
 
                 if (existingScoreFromDb !== undefined) {
                     finalScoresState[player.id] = { score: existingScoreFromDb, status: 'locked' };
-                } else if (restoredPlayerData) {
-                    finalScoresState[player.id] = {
-                        ...restoredPlayerData,
-                        status: restoredPlayerData.status === 'locked' ? 'editing' : restoredPlayerData.status
-                    };
                 } else {
                     finalScoresState[player.id] = { score: 1, status: 'editing' };
                 }
             });
-
             setScores(finalScoresState);
         }
     }, [view, currentPlayers, allScores, selectedCourse, selectedJo, hole, selectedGroup]);
-
-
-    // Persist scores to localStorage on change to prevent data loss on refresh
-    useEffect(() => {
-        if (view === 'scoring' && Object.keys(scores).length > 0 && selectedGroup && selectedCourse && selectedJo) {
-            try {
-                const storageKey = `parkscore-referee-scores-${selectedGroup}-${selectedCourse}-${selectedJo}`;
-                localStorage.setItem(storageKey, JSON.stringify(scores));
-            } catch (e) {
-                console.error("Failed to save scores to localStorage", e);
-            }
-        }
-    }, [scores, view, selectedGroup, selectedCourse, selectedJo]);
-
-
-    // Cleanup localStorage when all players in the Jo are locked
-    useEffect(() => {
-        if (view === 'scoring' && currentPlayers.length > 0) {
-            const allLocked = currentPlayers.every(p => scores[p.id]?.status === 'locked');
-            if (allLocked) {
-                try {
-                    const storageKey = `parkscore-referee-scores-${selectedGroup}-${selectedCourse}-${selectedJo}`;
-                    localStorage.removeItem(storageKey);
-                } catch (e) {
-                    console.error("Failed to clear localStorage after all scores locked.", e);
-                }
-            }
-        }
-    }, [scores, view, currentPlayers, selectedGroup, selectedCourse, selectedJo]);
-
+    
     // Delayed saving logic
     useEffect(() => {
         const timers = saveTimers.current;
@@ -239,7 +173,7 @@ export default function RefereePage() {
         return () => {
             timers.forEach(timer => clearTimeout(timer));
         };
-    }, [scores, selectedCourse, hole, currentPlayers, toast]);
+    }, [scores, selectedCourse, hole, toast]);
 
 
     // ---- Handlers ----
@@ -271,15 +205,6 @@ export default function RefereePage() {
         });
 
         Promise.all(savePromises).finally(() => {
-            try {
-                if(selectedGroup && selectedCourse && selectedJo) {
-                    const storageKey = `parkscore-referee-scores-${selectedGroup}-${selectedCourse}-${selectedJo}`;
-                    localStorage.removeItem(storageKey);
-                }
-            } catch(e) {
-                console.error("Failed to clear localStorage for Jo", e);
-            }
-    
             setView('selection');
             setSelectedJo(''); 
             setScores({}); 
@@ -309,14 +234,12 @@ export default function RefereePage() {
 
         const playersToLockImmediately: { pid: string; scoreData: ScoreData }[] = [];
 
-        // Find players to lock (those already in countdown)
         Object.entries(scores).forEach(([pid, scoreData]) => {
             if (pid !== playerIdToSave && scoreData.status === 'saved') {
                 playersToLockImmediately.push({ pid, scoreData });
             }
         });
 
-        // Create DB promises for them, clearing their timers
         const dbPromises = playersToLockImmediately.map(({ pid, scoreData }) => {
             if (timers.has(pid)) {
                 clearTimeout(timers.get(pid)!);
@@ -326,20 +249,16 @@ export default function RefereePage() {
             return set(scoreRef, scoreData.score);
         });
         
-        // Wait for all immediate saves to finish
         Promise.all(dbPromises).then(() => {
-            // Once all are saved to DB, update the component's state in one go.
             setScores(currentScores => {
                 const newScoresState = { ...currentScores };
 
-                // Lock the players that were just saved
                 playersToLockImmediately.forEach(({ pid, scoreData }) => {
                     if (newScoresState[pid]) {
                         newScoresState[pid] = { ...scoreData, status: 'locked' };
                     }
                 });
 
-                // Set the new player's score to 'saved' to start its countdown
                 newScoresState[playerIdToSave] = { score, status: 'saved', savedAt: Date.now() };
 
                 return newScoresState;
@@ -453,14 +372,13 @@ export default function RefereePage() {
                                 {isEditing && <Button variant="default" size="icon" className="w-full h-full rounded-lg" onClick={() => handleSavePress(player)}><Save className="h-6 w-6" /></Button>}
                                 {isSaved && (
                                     <div className="flex flex-col items-center justify-center h-full w-full text-center relative border border-dashed border-primary/50 rounded-lg cursor-pointer" onClick={() => handleImmediateLock(player.id)}>
-                                        <CheckCircle2 className="absolute top-1 right-1 w-3 h-3 text-primary" />
                                         <p className="text-xs text-primary font-bold leading-tight">즉시잠금</p>
                                         <Progress value={progressValue} className="h-0.5 mt-0.5 w-10/12 mx-auto" />
                                     </div>
                                 )}
                                 {isLocked && (
                                     <div className="flex items-center justify-center h-full w-full bg-muted text-muted-foreground rounded-lg">
-                                        <CheckCircle2 className="w-6 h-6 text-green-500" />
+                                        <Lock className="w-6 h-6 text-green-500" />
                                     </div>
                                 )}
                             </div>
@@ -486,6 +404,8 @@ export default function RefereePage() {
             </div>
         )
     }
+
+    const selectedCourseName = useMemo(() => courses.find(c => c.id.toString() === selectedCourse)?.name || '', [courses, selectedCourse]);
 
     return (
         <div className="bg-slate-50 min-h-screen p-2 sm:p-4 flex flex-col font-body">
@@ -547,5 +467,3 @@ export default function RefereePage() {
         </div>
     );
 }
-
-    
