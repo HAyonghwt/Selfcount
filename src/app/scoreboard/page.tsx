@@ -1,8 +1,8 @@
-
 "use client"
 import React, { useEffect, useState, useMemo } from 'react';
 import { db } from '@/lib/firebase';
 import { ref, onValue } from 'firebase/database';
+import { Flame } from 'lucide-react';
 
 interface ProcessedPlayer {
     id: string;
@@ -39,10 +39,8 @@ const tieBreak = (a: any, b: any, coursesForGroup: any[]) => {
         return a.total - b.total;
     }
 
-    // Sort courses by name in reverse alphabetical order (e.g., D, C, B, A)
     const sortedCourses = [...coursesForGroup].sort((c1, c2) => c2.name.localeCompare(c1.name));
 
-    // Compare total scores of each course in reverse alphabetical order
     for (const course of sortedCourses) {
         const courseId = course.id;
         const aCourseScore = a.courseScores[courseId] || 0;
@@ -52,7 +50,6 @@ const tieBreak = (a: any, b: any, coursesForGroup: any[]) => {
         }
     }
     
-    // If still tied, compare hole scores on the last course (alphabetically), from 9 to 1.
     if (sortedCourses.length > 0) {
         const lastCourseId = sortedCourses[0].id;
         const aHoleScores = a.detailedScores[lastCourseId] || {};
@@ -76,11 +73,13 @@ export default function ExternalScoreboard() {
     const [scores, setScores] = useState({});
     const [tournament, setTournament] = useState<any>({});
     const [groupsData, setGroupsData] = useState<any>({});
+    const [suddenDeathData, setSuddenDeathData] = useState<any>(null);
     
     useEffect(() => {
         const playersRef = ref(db, 'players');
         const scoresRef = ref(db, 'scores');
         const tournamentRef = ref(db, 'tournaments/current');
+        const suddenDeathRef = ref(db, 'tournaments/current/suddenDeath');
 
         const unsubPlayers = onValue(playersRef, snap => setPlayers(snap.val() || {}));
         const unsubScores = onValue(scoresRef, snap => setScores(snap.val() || {}));
@@ -90,6 +89,7 @@ export default function ExternalScoreboard() {
             setGroupsData(data.groups || {});
             setLoading(false);
         });
+        const unsubSuddenDeath = onValue(suddenDeathRef, snap => setSuddenDeathData(snap.val()));
 
         const timer = setTimeout(() => setLoading(false), 5000);
 
@@ -97,6 +97,7 @@ export default function ExternalScoreboard() {
             unsubPlayers();
             unsubScores();
             unsubTournament();
+            unsubSuddenDeath();
             clearTimeout(timer);
         };
     }, []);
@@ -133,12 +134,12 @@ export default function ExternalScoreboard() {
                     const holeScore = scoresForCourse[(i + 1).toString()];
                     if (holeScore !== undefined && holeScore !== null) {
                         const scoreNum = Number(holeScore);
-                        holeScores[i] = scoreNum;
-                        courseTotal += scoreNum;
-                        hasAnyScore = true;
                         if (scoreNum === 0) {
                             hasForfeited = true;
                         }
+                        holeScores[i] = scoreNum;
+                        courseTotal += scoreNum;
+                        hasAnyScore = true;
                     }
                 }
                 
@@ -223,29 +224,20 @@ export default function ExternalScoreboard() {
 
         for (const groupName in processedDataByGroup) {
             const groupPlayers = processedDataByGroup[groupName];
-
             if (!groupPlayers || groupPlayers.length === 0) {
-                progressByGroup[groupName] = 0;
-                continue;
+                progressByGroup[groupName] = 0; continue;
             }
-
             const playerGroupData = groupsData[groupName];
             const assignedCourseIds = playerGroupData?.courses ? Object.keys(playerGroupData.courses).filter(id => playerGroupData.courses[id]) : [];
-            const coursesForGroup = allCourses.filter((c: any) => assignedCourseIds.includes(c.id.toString()));
-
+            const coursesForGroup = allCourses.filter((c: any) => assignedCourseIds.includes(c.id.toString()) && c.isActive !== false);
 
             if (!coursesForGroup || coursesForGroup.length === 0) {
-                progressByGroup[groupName] = 0;
-                continue;
+                progressByGroup[groupName] = 0; continue;
             }
-            
             const totalPossibleScoresInGroup = groupPlayers.length * coursesForGroup.length * 9;
-
             if (totalPossibleScoresInGroup === 0) {
-                progressByGroup[groupName] = 0;
-                continue;
+                progressByGroup[groupName] = 0; continue;
             }
-            
             let totalScoresEnteredInGroup = 0;
             groupPlayers.forEach((player: any) => {
                  if (scores[player.id]) {
@@ -257,13 +249,55 @@ export default function ExternalScoreboard() {
                     }
                  }
             });
-            
             const progress = Math.round((totalScoresEnteredInGroup / totalPossibleScoresInGroup) * 100);
             progressByGroup[groupName] = isNaN(progress) ? 0 : progress;
         }
-
         return progressByGroup;
     }, [processedDataByGroup, scores, groupsData, tournament.courses]);
+
+    const processedSuddenDeathData = useMemo(() => {
+        if (!suddenDeathData?.isActive || !suddenDeathData.players || !suddenDeathData.holes) return [];
+        
+        const participatingPlayerIds = Object.keys(suddenDeathData.players).filter(id => suddenDeathData.players[id]);
+        const allPlayersMap = new Map(Object.entries(players).map(([id, p]) => [id, p]));
+
+        const results: any[] = participatingPlayerIds.map(id => {
+            const playerInfo: any = allPlayersMap.get(id);
+            const name = playerInfo.type === 'team' ? `${playerInfo.p1_name} / ${playerInfo.p2_name}` : playerInfo.name;
+            const club = playerInfo.type === 'team' ? playerInfo.p1_affiliation : playerInfo.affiliation;
+
+            const scoresPerHole: { [hole: string]: number | null } = {};
+            let totalScore = 0;
+            let holesPlayed = 0;
+            suddenDeathData.holes.forEach((hole:number) => {
+                const score = suddenDeathData.scores?.[id]?.[hole];
+                if (score !== undefined && score !== null) {
+                    scoresPerHole[hole] = score;
+                    totalScore += score;
+                    holesPlayed++;
+                } else {
+                    scoresPerHole[hole] = null;
+                }
+            });
+            return { id, name, club, scoresPerHole, totalScore, holesPlayed };
+        });
+
+        results.sort((a, b) => {
+            if (a.holesPlayed !== b.holesPlayed) return b.holesPlayed - a.holesPlayed;
+            if (a.totalScore !== b.totalScore) return a.totalScore - b.totalScore;
+            return a.name.localeCompare(b.name);
+        });
+
+        let rank = 1;
+        for (let i = 0; i < results.length; i++) {
+            if (i > 0 && (results[i].holesPlayed < results[i - 1].holesPlayed || (results[i].holesPlayed === results[i-1].holesPlayed && results[i].totalScore > results[i - 1].totalScore))) {
+                rank = i + 1;
+            }
+            results[i].rank = rank;
+        }
+
+        return results;
+    }, [suddenDeathData, players]);
 
 
     if (loading) {
@@ -289,19 +323,49 @@ export default function ExternalScoreboard() {
 
     const visibleGroups = Object.keys(processedDataByGroup).filter(groupName => processedDataByGroup[groupName]?.some(player => player.assignedCourses.length > 0));
 
-
     return (
         <>
             <style>{`
-                .scoreboard-container::-webkit-scrollbar {
-                    display: none;
-                }
-                .scoreboard-container {
-                    -ms-overflow-style: none;  /* IE and Edge */
-                    scrollbar-width: none;  /* Firefox */
-                }
+                .scoreboard-container::-webkit-scrollbar { display: none; }
+                .scoreboard-container { -ms-overflow-style: none; scrollbar-width: none; }
             `}</style>
             <div className="scoreboard-container bg-black h-screen overflow-y-auto text-gray-200 p-2 sm:p-4 md:p-6 font-sans">
+                {suddenDeathData?.isActive && (
+                    <div className="mb-6">
+                        <header className="flex justify-center items-baseline border-b-4 border-red-500 pb-2 mb-2">
+                            <h1 className="text-2xl md:text-4xl font-bold text-red-400 flex items-center gap-3">
+                                <Flame className="h-8 w-8 animate-pulse" />
+                                서든데스 플레이오프
+                                <Flame className="h-8 w-8 animate-pulse" />
+                            </h1>
+                        </header>
+                        <div className="overflow-x-auto bg-gray-900/50 rounded-lg border-2 border-red-500/50">
+                            <table className="w-full text-center border-collapse">
+                                <thead className="text-red-300 text-base">
+                                    <tr className="border-b-2 border-red-600/70">
+                                        <th className="py-2 px-2 w-48 text-center align-middle font-bold border-r border-red-800/50">선수명(팀명)</th>
+                                        <th className="py-2 px-2 w-48 text-center align-middle font-bold border-r border-red-800/50">소속</th>
+                                        {suddenDeathData.holes?.sort((a:number,b:number) => a-b).map((hole:number) => <th key={hole} className="py-2 px-2 w-16 text-center align-middle font-bold border-r border-red-800/50">{hole}홀</th>)}
+                                        <th className="py-2 px-2 w-20 text-center align-middle font-bold border-r border-red-800/50">합계</th>
+                                        <th className="py-2 px-2 w-20 text-center align-middle font-bold">순위</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="text-xl">
+                                    {processedSuddenDeathData.map(player => (
+                                        <tr key={player.id} className="border-b border-red-800/50 last:border-0">
+                                            <td className="py-1 px-2 text-center align-middle font-semibold border-r border-red-800/50">{player.name}</td>
+                                            <td className="py-1 px-2 text-center align-middle text-gray-400 border-r border-red-800/50">{player.club}</td>
+                                            {suddenDeathData.holes.map((hole:number) => <td key={hole} className="py-1 px-2 align-middle font-mono font-bold text-2xl border-r border-red-800/50">{player.scoresPerHole[hole] ?? '-'}</td>)}
+                                            <td className="py-1 px-2 align-middle font-bold text-2xl border-r border-red-800/50">{player.totalScore}</td>
+                                            <td className="py-1 px-2 align-middle font-bold text-yellow-300 text-2xl">{player.rank}위</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                )}
+                
                 {visibleGroups.length === 0 ? (
                      <NoDataContent />
                 ) : visibleGroups.map((groupName) => {
@@ -353,7 +417,7 @@ export default function ExternalScoreboard() {
                                                             </>
                                                         )}
                                                         <td className="py-0.5 px-1 w-32 align-middle text-center border-r border-gray-800">{player.coursesData[course.id]?.courseName}</td>
-                                                        {player.coursesData[course.id]?.holeScores.map((score, i) => <td key={i} className={`py-0.5 px-1 align-middle font-mono font-bold text-xl border-r border-gray-800 ${i % 2 !== 0 ? 'bg-gray-800/50' : ''}`}>{score === null ? '-' : score}</td>)}
+                                                        {player.coursesData[course.id]?.holeScores.map((score, i) => <td key={i} className={`py-0.5 px-1 align-middle font-mono font-bold text-xl border-r border-gray-800 ${i % 2 !== 0 ? 'bg-gray-800/50' : ''}`}>{score === null ? '-' : (score === 0 ? '기권' : score)}</td>)}
                                                         <td className="py-0.5 px-1 align-middle font-bold text-gray-300 text-xl border-r border-gray-800">{player.hasForfeited ? '기권' : (player.hasAnyScore ? player.coursesData[course.id]?.courseTotal : '-')}</td>
                                                         {courseIndex === 0 && (
                                                             <>
