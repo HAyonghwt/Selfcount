@@ -170,33 +170,30 @@ export default function RefereePage() {
         return completed;
     }, [allPlayers, allScores, availableJos, selectedGroup, selectedCourse, hole]);
 
-    // When view changes to 'scoring', initialize or sync the scores state.
+    // When view changes to 'scoring', or when players for a Jo are determined, initialize or sync the scores state.
     useEffect(() => {
-        if (view === 'scoring' && selectedJo) {
-            const playersForJo = allPlayers.filter(p => p.group === selectedGroup && p.jo.toString() === selectedJo);
-            
-            setScores(currentScores => {
-                const newScoresState: { [key: string]: ScoreData } = {};
-                playersForJo.forEach((player) => {
-                    const existingScoreFromDb = allScores[player.id]?.[selectedCourse]?.[hole];
-                    const currentLocalScoreData = currentScores[player.id];
+        if (view !== 'scoring' || !currentPlayers.length) return;
 
-                    if (existingScoreFromDb !== undefined) {
-                        // DB is the source of truth for locked scores.
-                        newScoresState[player.id] = { score: existingScoreFromDb, status: 'locked' };
-                    } else if (currentLocalScoreData) {
-                        // If no DB score, but we have a local one, keep it.
-                        newScoresState[player.id] = currentLocalScoreData;
-                    } else {
-                        // Only initialize if no DB and no local score exists.
-                        newScoresState[player.id] = { score: 1, status: 'editing' };
-                    }
-                });
-                return newScoresState;
+        setScores(currentScores => {
+            const newScoresState: { [key: string]: ScoreData } = {};
+            currentPlayers.forEach((player) => {
+                const existingScoreFromDb = allScores[player.id]?.[selectedCourse]?.[hole];
+                const currentLocalScoreData = currentScores[player.id];
+
+                if (existingScoreFromDb !== undefined) {
+                    newScoresState[player.id] = { score: existingScoreFromDb, status: 'locked' };
+                } else if (currentLocalScoreData) {
+                    // If no DB score, but we have a local one, keep it.
+                    newScoresState[player.id] = currentLocalScoreData;
+                } else {
+                    // Only initialize if no DB and no local score exists.
+                    newScoresState[player.id] = { score: 1, status: 'editing' };
+                }
             });
-        }
+            return newScoresState;
+        });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [view, selectedJo, allPlayers, allScores, selectedCourse, hole, selectedGroup]);
+    }, [view, currentPlayers, allScores, selectedCourse, hole]);
     
     // Delayed saving logic
     useEffect(() => {
@@ -212,7 +209,6 @@ export default function RefereePage() {
                     }).catch(err => {
                         setScores(prev => ({...prev, [playerId]: {...prev[playerId], status: 'editing'}}));
                         timers.delete(playerId);
-                        toast({ title: "저장 실패", description: err.message, variant: "destructive" });
                     });
                 }, 10000); // 10 seconds delay
                 timers.set(playerId, timer);
@@ -222,7 +218,7 @@ export default function RefereePage() {
         return () => {
             timers.forEach(timer => clearTimeout(timer));
         };
-    }, [scores, selectedCourse, hole, toast]);
+    }, [scores, selectedCourse, hole]);
 
 
     // ---- Handlers ----
@@ -311,7 +307,7 @@ export default function RefereePage() {
                 return newScoresState;
             });
         }).catch(err => {
-             toast({ title: "저장 실패", description: err.message, variant: "destructive" });
+            // Do not show toast.
         });
 
         setConfirmingPlayer(null);
@@ -337,7 +333,6 @@ export default function RefereePage() {
             })
             .catch(err => {
                 setScores(prev => ({...prev, [playerId]: {...prev[playerId], status: 'editing'}}));
-                toast({ title: "저장 실패", description: err.message, variant: "destructive" });
             });
     };
 
@@ -386,7 +381,7 @@ export default function RefereePage() {
                             {availableJos.map(jo => {
                                 const isCompleted = completedJos.has(jo);
                                 return (
-                                    <SelectItem key={jo} value={jo.toString()} disabled={!isCompleted && Object.values(scores).some(s => s.status === 'saved')}>
+                                    <SelectItem key={jo} value={jo.toString()} disabled={isCompleted && Object.values(scores).some(s => s.status === 'saved')}>
                                         <div className="flex items-center justify-between w-full">
                                             <span>{jo}조</span>
                                             {isCompleted && <Lock className="h-4 w-4 text-muted-foreground" />}
