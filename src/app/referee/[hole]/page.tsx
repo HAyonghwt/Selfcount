@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Minus, Plus, Save, Lock, ArrowLeft } from 'lucide-react';
+import { Minus, Plus, Save, Lock, Pencil } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { ref, onValue, set } from 'firebase/database';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -384,23 +384,22 @@ export default function RefereePage() {
 
                 return (
                     <Card key={player.id} className="overflow-hidden">
-                        <CardContent className="p-2" onDoubleClick={isLocked ? () => handleUnlockRequest(player) : undefined}>
-                            <div className="flex items-center justify-between gap-2">
-                                <div className="flex-1 min-w-0 pr-2">
-                                    <p className="font-bold text-lg truncate">{getPlayerName(player)}</p>
+                        <CardContent className="p-3" onDoubleClick={isLocked ? () => handleUnlockRequest(player) : undefined}>
+                            <div className="flex items-center justify-between gap-3">
+                                <div className="flex-1 min-w-0">
+                                    <p className="font-bold text-xl truncate">{getPlayerName(player)}</p>
                                 </div>
-                                <div className="flex-none flex items-center gap-1.5">
-                                    <Button variant="outline" size="icon" className="w-10 h-10 rounded-md border-2" onClick={() => updateScore(player.id, -1)} disabled={isLocked}>
+                                <div className="flex-none flex items-center gap-2">
+                                    <Button variant="outline" size="icon" className="h-10 w-10 rounded-lg" onClick={() => updateScore(player.id, -1)} disabled={isLocked}>
                                         <Minus className="h-5 w-5" />
                                     </Button>
-                                    <span className="text-4xl font-bold tabular-nums w-12 text-center">{scoreData.score}</span>
-                                    <Button variant="outline" size="icon" className="w-10 h-10 rounded-md border-2" onClick={() => updateScore(player.id, 1)} disabled={isLocked}>
+                                    <span className="text-3xl font-bold tabular-nums w-10 text-center">{scoreData.score}</span>
+                                    <Button variant="outline" size="icon" className="h-10 w-10 rounded-lg" onClick={() => updateScore(player.id, 1)} disabled={isLocked}>
                                         <Plus className="h-5 w-5" />
                                     </Button>
-                                    <div className="w-px bg-border h-8 mx-1"></div>
                                     <Button
                                         size="icon"
-                                        className={cn("w-10 h-10 rounded-md", {
+                                        className={cn("h-10 w-10 rounded-lg", {
                                             'bg-muted hover:bg-muted cursor-not-allowed': isLocked,
                                         })}
                                         onClick={() => {
@@ -408,13 +407,13 @@ export default function RefereePage() {
                                             handleSavePress(player);
                                         }}
                                     >
-                                        {isLocked ? <Lock className="w-5 h-5 text-green-500" /> : <Save className="h-5 w-5" />}
+                                        {isLocked ? <Lock className="h-5 w-5 text-green-500" /> : <Save className="h-5 w-5" />}
                                     </Button>
                                 </div>
                             </div>
                         </CardContent>
                     </Card>
-                )
+                );
             })}
         </div>
     );
@@ -431,17 +430,17 @@ export default function RefereePage() {
                     {view === 'scoring' && (
                         <Card>
                             <CardHeader className="p-3">
-                                <div className="flex justify-between items-center gap-2">
+                                <div className="flex flex-col sm:flex-row justify-between items-center gap-2">
                                     <div className="text-lg sm:text-xl font-bold text-center break-keep">
-                                        <span>{selectedGroup}</span> 
-                                        <span className="text-muted-foreground mx-1">/</span> 
+                                        <span>{selectedGroup}</span>
+                                        <span className="text-muted-foreground mx-1 sm:mx-2">/</span>
                                         <span>{selectedCourseName}</span>
-                                        <span className="text-muted-foreground mx-1">/</span>
+                                        <span className="text-muted-foreground mx-1 sm:mx-2">/</span>
                                         <span>{selectedJo}조</span>
                                     </div>
-                                    <Button variant="outline" size="sm" onClick={handleReturnToJoSelection}>
-                                        <ArrowLeft className="mr-1 h-3 w-3" />
-                                        다른 조 선택
+                                    <Button variant="outline" onClick={handleReturnToJoSelection} className="w-full sm:w-auto">
+                                        <Pencil className="mr-2 h-4 w-4" />
+                                        선택 변경
                                     </Button>
                                 </div>
                             </CardHeader>
