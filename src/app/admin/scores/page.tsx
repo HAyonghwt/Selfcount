@@ -100,7 +100,7 @@ export default function ScoreManagementPage() {
     const filteredScores = useMemo(() => {
         return flatScores.filter(score => {
             const nameMatch = score.name.toLowerCase().includes(searchTerm.toLowerCase());
-            const groupMatch = filterGroup === 'all' || score.group === filterGroup;
+            const groupMatch = filterGroup === 'all' || score.group === groupMatch;
             const courseMatch = filterCourse === 'all' || score.course === filterCourse;
             return nameMatch && groupMatch && courseMatch;
         });
@@ -166,18 +166,20 @@ export default function ScoreManagementPage() {
             <Card>
                 <CardHeader>
                     <CardTitle>점수 수정 잠금해제 설정</CardTitle>
-                    <CardDescription>심판 페이지에서 잠긴 점수를 수정할 때 사용할 비밀번호를 설정합니다.</CardDescription>
+                    <CardDescription>심판 페이지에서 잠긴 점수를 수정할 때 사용할 숫자 비밀번호를 설정합니다.</CardDescription>
                 </CardHeader>
                 <CardContent className="flex flex-col sm:flex-row gap-4 items-end">
                     <div className="space-y-2 flex-1 w-full">
-                        <Label htmlFor="unlock-password">잠금 해제 비밀번호</Label>
+                        <Label htmlFor="unlock-password">잠금 해제 비밀번호 (숫자)</Label>
                         <div className="relative">
                             <Input
                                 id="unlock-password"
                                 type={showPassword ? 'text' : 'password'}
+                                inputMode="numeric"
+                                pattern="[0-9]*"
                                 value={unlockPassword}
                                 onChange={e => setUnlockPassword(e.target.value)}
-                                placeholder="새로운 비밀번호 입력"
+                                placeholder="숫자 비밀번호 입력"
                                 className="pr-10"
                             />
                             <Button
