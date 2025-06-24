@@ -45,7 +45,11 @@ const tieBreak = (a: any, b: any, coursesForGroup: any[]) => {
     if (a.total !== b.total) {
         return a.total - b.total;
     }
-    const sortedCourses = [...coursesForGroup].sort((c1, c2) => c2.id - c1.id);
+
+    // Sort courses by name in reverse alphabetical order (e.g., D, C, B, A)
+    const sortedCourses = [...coursesForGroup].sort((c1, c2) => c2.name.localeCompare(c1.name));
+
+    // Compare total scores of each course in reverse alphabetical order
     for (const course of sortedCourses) {
         const courseId = course.id;
         const aCourseScore = a.courseScores[courseId] || 0;
@@ -54,10 +58,12 @@ const tieBreak = (a: any, b: any, coursesForGroup: any[]) => {
             return aCourseScore - bCourseScore;
         }
     }
-    for (const course of sortedCourses) {
-        const courseId = course.id;
-        const aHoleScores = a.detailedScores[courseId] || {};
-        const bHoleScores = b.detailedScores[courseId] || {};
+    
+    // If still tied, compare hole scores on the last course (alphabetically), from 9 to 1.
+    if (sortedCourses.length > 0) {
+        const lastCourseId = sortedCourses[0].id;
+        const aHoleScores = a.detailedScores[lastCourseId] || {};
+        const bHoleScores = b.detailedScores[lastCourseId] || {};
         for (let i = 9; i >= 1; i--) {
             const hole = i.toString();
             const aHole = aHoleScores[hole] || 0;
@@ -67,6 +73,7 @@ const tieBreak = (a: any, b: any, coursesForGroup: any[]) => {
             }
         }
     }
+
     return 0;
 };
 
@@ -172,31 +179,42 @@ export default function AdminDashboard() {
 
         const rankedData: { [key: string]: ProcessedPlayer[] } = {};
         for (const groupName in groupedData) {
-            const allCoursesList = Object.values(courses);
-            const coursesForGroup = groupedData[groupName][0]?.assignedCourses || allCoursesList;
-            const groupPlayers = groupedData[groupName].sort((a,b) => tieBreak(a, b, coursesForGroup));
+            const coursesForGroup = groupedData[groupName][0]?.assignedCourses || Object.values(courses);
             
-            const finalPlayers: ProcessedPlayer[] = [];
-            let currentRank = 0;
-            let numRankedPlayers = 0;
+            const playersToSort = groupedData[groupName].filter(p => p.hasAnyScore && !p.hasForfeited);
+            const otherPlayers = groupedData[groupName].filter(p => !p.hasAnyScore || p.hasForfeited);
 
-            for (const player of groupPlayers) {
-                if (player.hasForfeited || !player.hasAnyScore) {
-                    finalPlayers.push({ ...player, rank: null });
-                    continue;
-                }
+            if (playersToSort.length > 0) {
+                const leaderScore = playersToSort.reduce((min, p) => Math.min(min, p.totalScore), Infinity);
 
-                numRankedPlayers++;
-                
-                const prevRankedPlayer = finalPlayers.slice().reverse().find(p => p.rank !== null);
-                
-                if (prevRankedPlayer && tieBreak(player, prevRankedPlayer, coursesForGroup) === 0) {
-                    finalPlayers.push({ ...player, rank: prevRankedPlayer.rank });
-                } else {
-                    currentRank = numRankedPlayers;
-                    finalPlayers.push({ ...player, rank: currentRank });
+                playersToSort.sort((a, b) => {
+                    if (a.totalScore !== b.totalScore) return a.totalScore - b.totalScore;
+                    if (a.totalScore === leaderScore) return a.name.localeCompare(b.name);
+                    return tieBreak(a, b, coursesForGroup);
+                });
+
+                let rank = 1;
+                playersToSort[0].rank = rank;
+                for (let i = 1; i < playersToSort.length; i++) {
+                    const prev = playersToSort[i-1];
+                    const curr = playersToSort[i];
+                    
+                    let isTied = false;
+                    if (curr.totalScore === prev.totalScore) {
+                        if (curr.totalScore === leaderScore) isTied = true;
+                        else isTied = tieBreak(curr, prev, coursesForGroup) === 0;
+                    }
+
+                    if (isTied) {
+                        curr.rank = prev.rank;
+                    } else {
+                        rank = i + 1;
+                        curr.rank = rank;
+                    }
                 }
             }
+            
+            const finalPlayers = [...playersToSort, ...otherPlayers.map(p => ({ ...p, rank: null }))];
             rankedData[groupName] = finalPlayers;
         }
         
@@ -437,5 +455,3 @@ export default function AdminDashboard() {
         </div>
     );
 }
-
-
