@@ -385,22 +385,31 @@ export default function RefereePage() {
                 return (
                     <Card key={player.id} className="overflow-hidden">
                         <CardContent
-                            className="p-0"
+                            className="p-3"
                             onDoubleClick={isLocked ? () => handleUnlockRequest(player) : undefined}
                         >
-                             <div className="flex items-center justify-between gap-3 w-full p-2">
-                                <div className="flex-1 min-w-0">
-                                    <p className="font-bold text-xl truncate">{getPlayerName(player)}</p>
+                            <div className="flex flex-col gap-2">
+                                <div>
+                                    <p className="font-bold text-lg text-center truncate">{getPlayerName(player)}</p>
                                 </div>
-                                <div className="flex items-center gap-2 flex-shrink-0">
-                                    <Button variant="outline" size="icon" className="w-10 h-10 rounded-lg border-2" onClick={() => updateScore(player.id, -1)} disabled={isLocked}><Minus className="h-5 w-5" /></Button>
-                                    <div className="w-12 text-center">
-                                        <span className={`text-3xl font-bold tabular-nums`}>{scoreData.score}</span>
+                                <div className="flex items-center justify-around gap-2 w-full">
+                                    <Button variant="outline" size="icon" className="w-12 h-12 rounded-lg border-2" onClick={() => updateScore(player.id, -1)} disabled={isLocked}>
+                                        <Minus className="h-6 w-6" />
+                                    </Button>
+                                    
+                                    <div className="flex-1 text-center">
+                                        <span className="text-5xl font-bold tabular-nums">{scoreData.score}</span>
                                     </div>
-                                    <Button variant="outline" size="icon" className="w-10 h-10 rounded-lg border-2" onClick={() => updateScore(player.id, 1)} disabled={isLocked}><Plus className="h-5 w-5" /></Button>
+                                    
+                                    <Button variant="outline" size="icon" className="w-12 h-12 rounded-lg border-2" onClick={() => updateScore(player.id, 1)} disabled={isLocked}>
+                                        <Plus className="h-6 w-6" />
+                                    </Button>
+
+                                    <div className="w-px bg-border h-10 mx-1"></div>
+
                                     <Button
                                         size="icon"
-                                        className={cn("w-10 h-10 rounded-lg", {
+                                        className={cn("w-12 h-12 rounded-lg", {
                                             'bg-muted hover:bg-muted cursor-not-allowed': isLocked,
                                         })}
                                         onClick={() => {
@@ -409,9 +418,9 @@ export default function RefereePage() {
                                         }}
                                     >
                                         {isLocked ? (
-                                            <Lock className="w-5 h-5 text-green-500" />
+                                            <Lock className="w-6 h-6 text-green-500" />
                                         ) : (
-                                            <Save className="h-5 w-5" />
+                                            <Save className="h-6 w-6" />
                                         )}
                                     </Button>
                                 </div>
@@ -466,7 +475,7 @@ export default function RefereePage() {
                     <div className="flex flex-col items-center justify-center p-0 text-center">
                         {playerToSave && scores[playerToSave.id] && (
                              <div className="flex items-baseline my-2">
-                                <span className="font-extrabold text-destructive leading-none" style={{ fontSize: '4.5rem', lineHeight: '1' }}>{scores[playerToSave.id].score}</span>
+                                <span className="font-extrabold text-destructive leading-none" style={{ fontSize: '3.5rem', lineHeight: '1' }}>{scores[playerToSave.id].score}</span>
                                 <span className="font-bold ml-2 text-base">점</span>
                             </div>
                         )}
@@ -512,4 +521,3 @@ export default function RefereePage() {
         </>
     );
 }
-
