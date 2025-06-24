@@ -203,7 +203,6 @@ export default function ExternalScoreboard() {
 
                 playersToSort.sort((a, b) => {
                     if (a.totalScore !== b.totalScore) return a.totalScore - b.totalScore;
-                    // If sudden death is active for this group, keep leaders tied. Otherwise, apply tie-break.
                     if (a.totalScore === leaderScore && isSuddenDeathActiveForThisGroup) {
                         return a.name.localeCompare(b.name);
                     }
@@ -218,9 +217,11 @@ export default function ExternalScoreboard() {
                     
                     let isTied = false;
                     if (curr.totalScore === prev.totalScore) {
-                         // Leaders are only tied if sudden death is active.
-                         if (curr.totalScore === leaderScore && isSuddenDeathActiveForThisGroup) isTied = true;
-                         else isTied = tieBreak(curr, prev, coursesForGroup) === 0;
+                         if (curr.totalScore === leaderScore && isSuddenDeathActiveForThisGroup) {
+                            isTied = true;
+                         } else {
+                            isTied = tieBreak(curr, prev, coursesForGroup) === 0;
+                         }
                     }
 
                     if (isTied) {
@@ -550,3 +551,5 @@ export default function ExternalScoreboard() {
         </>
     );
 }
+
+    

@@ -221,8 +221,11 @@ export default function AdminDashboard() {
                     
                     let isTied = false;
                     if (curr.totalScore === prev.totalScore) {
-                        if (curr.totalScore === leaderScore && isSuddenDeathActiveForThisGroup) isTied = true;
-                        else isTied = tieBreak(curr, prev, coursesForGroup) === 0;
+                        if (curr.totalScore === leaderScore && isSuddenDeathActiveForThisGroup) {
+                            isTied = true;
+                        } else {
+                            isTied = tieBreak(curr, prev, coursesForGroup) === 0;
+                        }
                     }
 
                     if (isTied) {
@@ -617,3 +620,5 @@ export default function AdminDashboard() {
         </div>
     );
 }
+
+    
