@@ -4,8 +4,8 @@ import './globals.css';
 import { Toaster } from "@/components/ui/toaster"
 
 export const metadata: Metadata = {
-  title: '파크골프대회',
-  description: '파크골프대회 점수 관리 시스템',
+  title: 'ParkScore | 파크골프 점수 관리',
+  description: '파크골프 대회 점수 관리 시스템',
 };
 
 
