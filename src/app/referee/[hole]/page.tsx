@@ -197,9 +197,7 @@ export default function RefereePage() {
                     newScoresState[player.id] = { score: Number(existingScoreFromDb), status: 'locked' };
                 } else if (interimScore && interimScore.status === 'editing') {
                     newScoresState[player.id] = { score: Number(interimScore.score), status: 'editing'};
-                } else if (prevScores[player.id]?.status === 'editing' && !selectedJo) {
-                    // This case is tricky, preserve editing score if group/course changes but jo is same.
-                    // Simplified: only re-init if the jo changes.
+                } else if (prevScores[player.id]?.status === 'editing' && prevScores[player.id]?.jo === player.jo) {
                     newScoresState[player.id] = prevScores[player.id];
                 } else {
                     newScoresState[player.id] = { score: 1, status: 'editing' };
@@ -351,11 +349,9 @@ export default function RefereePage() {
                                     <Button variant="outline" size="icon" className="w-11 h-11 rounded-lg border-2" onClick={() => updateScore(player.id, 1)} disabled={isLocked}><Plus className="h-6 w-6" /></Button>
                                 </div>
                                 
-                                <Button asChild variant="default" className="w-11 h-11 rounded-lg" onClick={() => handleSavePress(player)} disabled={isLocked}>
+                                <Button variant="default" size="icon" className="w-11 h-11 rounded-lg" onClick={() => handleSavePress(player)} disabled={isLocked}>
                                     {isLocked ? (
-                                        <div className="flex items-center justify-center h-full w-full bg-muted text-muted-foreground rounded-lg">
-                                            <Lock className="w-6 h-6 text-green-500" />
-                                        </div>
+                                        <Lock className="w-6 h-6 text-green-500" />
                                     ) : (
                                         <Save className="h-6 w-6" />
                                     )}
@@ -406,17 +402,17 @@ export default function RefereePage() {
                 <AlertDialogContent>
                     <div className="flex flex-col items-center justify-center p-4 text-center">
                         {playerToSave && (
-                             <p className="text-3xl font-bold mb-4">{getPlayerName(playerToSave)}</p>
+                             <p className="text-2xl font-bold mb-2">{getPlayerName(playerToSave)}</p>
                         )}
                        
                         {playerToSave && scores[playerToSave.id] && (
-                             <div className="flex items-baseline my-4">
-                                <span className="text-7xl font-extrabold text-destructive leading-none">{scores[playerToSave.id].score}</span>
-                                <span className="text-3xl font-bold ml-2">점</span>
+                             <div className="flex items-baseline my-2">
+                                <span className="text-6xl font-extrabold text-destructive leading-none">{scores[playerToSave.id].score}</span>
+                                <span className="text-2xl font-bold ml-2">점</span>
                             </div>
                         )}
                         
-                        <p className="text-lg font-semibold mt-2">저장하시겠습니까?</p>
+                        <p className="text-base font-semibold mt-2 text-muted-foreground">저장하시겠습니까?</p>
                     </div>
                     <AlertDialogFooter className="grid grid-cols-2 gap-4 pt-4">
                         <AlertDialogCancel onClick={() => setPlayerToSave(null)} className="h-11 px-6 text-base">취소</AlertDialogCancel>
