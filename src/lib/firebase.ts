@@ -5,7 +5,7 @@ import { getAuth } from "firebase/auth";
 // IMPORTANT: This file contains sensitive API keys.
 // Do not expose this file publicly (e.g., on GitHub).
 // For production, it is STRONGLY recommended to use environment variables.
-const firebaseConfig: FirebaseOptions = {
+export const firebaseConfig: FirebaseOptions = {
   apiKey: "your-api-key",
   authDomain: "your-project-id.firebaseapp.com",
   databaseURL: "https://your-project-id.firebaseio.com",

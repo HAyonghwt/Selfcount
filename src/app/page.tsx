@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { LogIn, Tv } from 'lucide-react';
-import { auth, db } from '@/lib/firebase';
+import { auth, db, firebaseConfig } from '@/lib/firebase';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { ref, get } from 'firebase/database';
 import { useToast } from '@/hooks/use-toast';
@@ -32,6 +32,13 @@ export default function LoginPage() {
 
   useEffect(() => {
     setYear(new Date().getFullYear());
+
+    if (!firebaseConfig.apiKey || firebaseConfig.apiKey === 'your-api-key') {
+        setError("Firebase 연결 설정이 필요합니다. src/lib/firebase.ts 파일을 확인해주세요.");
+        setConfig({ appName: 'ParkScore', userDomain: 'parkgolf.com' });
+        setLoading(false);
+        return;
+    }
 
     const configRef = ref(db, 'config');
     get(configRef).then((snapshot) => {
