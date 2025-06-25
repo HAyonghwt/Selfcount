@@ -271,7 +271,10 @@ export default function RefereePage() {
     };
     
     const handleBackToSelectionClick = () => {
-        const action = () => setView('selection');
+        const action = () => {
+            setView('selection');
+            setSelectedJo(''); // Reset Jo selection when going back
+        };
         if (hasUnsavedChanges) {
             setPendingNavAction(() => action);
             setConfirmNavDialogOpen(true);
@@ -495,7 +498,7 @@ export default function RefereePage() {
                     {view === 'scoring' && (
                        <Card>
                             <CardHeader className="p-3 space-y-2">
-                                <div className="text-base sm:text-lg font-bold text-center text-muted-foreground break-words">
+                                <div className="text-base sm:text-lg font-bold text-center text-foreground break-words">
                                     <span>{selectedGroup}</span>
                                     <span className="mx-1">/</span>
                                     <span>{selectedCourseName}</span>
@@ -599,4 +602,3 @@ export default function RefereePage() {
         </>
     );
 }
-
