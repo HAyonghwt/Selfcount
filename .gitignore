@@ -27,10 +27,7 @@ yarn-error.log*
 pnpm-debug.log*
 
 # local env files
-.env.development.local
-.env.test.local
-.env.production.local
-.env.local
+.env*.local
 
 # vercel
 .vercel
@@ -38,7 +35,3 @@ pnpm-debug.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
-
-# genkit
-.genkit/
-.genkit-cache/

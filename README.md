@@ -26,23 +26,21 @@ npm install
 
 ### 4. Firebase 설정
 
-이 앱을 Firebase 프로젝트에 연결하려면, 소스 코드의 특정 파일을 수정해야 합니다.
+이 앱을 Firebase 프로젝트에 연결하려면, 환경 변수를 설정해야 합니다.
 
-1.  **`src/lib/firebase.ts`** 파일을 엽니다.
-2.  파일 안에 있는 `firebaseConfig` 객체를 찾습니다.
-3.  `your-api-key`, `your-project-id` 등으로 되어 있는 **플레이스홀더 값들을 실제 사용자의 Firebase 프로젝트 값으로 교체**합니다. 이 값들은 Firebase 콘솔의 프로젝트 설정에서 찾을 수 있습니다.
+1.  프로젝트의 루트 디렉토리에 있는 `.env.example` 파일을 복사하여 `.env.local`이라는 새 파일을 만듭니다.
+2.  Firebase 콘솔의 프로젝트 설정에서 웹 앱의 설정 값을 찾습니다.
+3.  `.env.local` 파일을 열고, 각 변수에 맞는 실제 Firebase 프로젝트 값을 붙여넣습니다.
 
-    ```typescript
-    // src/lib/firebase.ts
+    ```bash
+    # .env.local
 
-    const firebaseConfig: FirebaseOptions = {
-      apiKey: "여기에-실제-API-키를-넣으세요",
-      authDomain: "여기에-실제-인증-도메인을-넣으세요",
-      // ... 다른 값들도 모두 채워주세요
-    };
+    NEXT_PUBLIC_FIREBASE_API_KEY="여기에-실제-API-키를-넣으세요"
+    NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN="여기에-실제-인증-도메인을-넣으세요"
+    # ... 다른 값들도 모두 채워주세요
     ```
 
-**경고:** 이 파일에는 민감한 정보가 포함되어 있으므로, 이 코드를 공개된 GitHub 저장소에 올릴 경우 키가 노출될 위험이 있습니다. 비공개 저장소를 사용하거나, 프로덕션 환경에서는 환경 변수를 사용하는 것을 강력히 권장합니다.
+**경고:** `.env.local` 파일은 민감한 정보를 포함하고 있으므로, 절대로 공개된 GitHub 저장소에 올리면 안 됩니다. 이 프로젝트의 `.gitignore` 파일에 이미 `.env.local`이 포함되어 있어 자동으로 제외되지만, 항상 주의해야 합니다.
 
 ### 5. 개발 서버 실행
 

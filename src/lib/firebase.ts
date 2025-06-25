@@ -2,21 +2,21 @@ import { initializeApp, getApp, getApps, type FirebaseOptions } from "firebase/a
 import { getDatabase } from "firebase/database";
 import { getAuth } from "firebase/auth";
 
-// IMPORTANT: This file contains sensitive API keys.
-// Do not expose this file publicly (e.g., on GitHub).
-// For production, it is STRONGLY recommended to use environment variables.
+// IMPORTANT: This file reads sensitive API keys from environment variables.
+// For production, it is STRONGLY recommended to use your hosting provider's environment variable settings.
+// For local development, create a `.env.local` file in the root directory.
 export const firebaseConfig: FirebaseOptions = {
-  apiKey: "AIzaSyAM6GtB8HB8pw0VPSmZxk7xOxB2n1iXFP8",
-  authDomain: "dehoi-1.firebaseapp.com",
-  databaseURL: "https://dehoi-1-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId: "dehoi-1",
-  storageBucket: "dehoi-1.firebasestorage.app",
-  messagingSenderId: "81139018391",
-  appId: "1:81139018391:web:88d8e15e245181c2c557d2"
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  databaseURL: process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID
 };
 
 // Initialize Firebase only if the config is not a placeholder
-const app = firebaseConfig.apiKey !== "your-api-key" && getApps().length === 0 
+const app = firebaseConfig.apiKey && getApps().length === 0 
   ? initializeApp(firebaseConfig) 
   : getApps().length > 0 ? getApp() : null;
 
