@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -33,6 +33,7 @@ interface ScoreData {
 
 export default function RefereePage() {
     const params = useParams();
+    const router = useRouter();
     const hole = params.hole;
     const { toast } = useToast();
 
@@ -227,18 +228,26 @@ export default function RefereePage() {
         const handleBeforeUnload = (event: BeforeUnloadEvent) => {
             if (hasUnsavedChanges) {
                 event.preventDefault();
-                // Most modern browsers ignore this and show a generic message,
-                // but it's required for legacy browser compatibility.
                 event.returnValue = '저장되지 않은 변경사항이 있습니다. 정말로 페이지를 떠나시겠습니까?';
             }
         };
 
+        const handlePopState = (event: PopStateEvent) => {
+             if (hasUnsavedChanges) {
+                history.pushState(null, '', window.location.href);
+                setPendingNavAction(() => () => router.back());
+                setConfirmNavDialogOpen(true);
+            }
+        };
+
         window.addEventListener('beforeunload', handleBeforeUnload);
+        window.addEventListener('popstate', handlePopState);
 
         return () => {
             window.removeEventListener('beforeunload', handleBeforeUnload);
+            window.removeEventListener('popstate', handlePopState);
         };
-    }, [hasUnsavedChanges]);
+    }, [hasUnsavedChanges, router]);
 
 
     // Initialize or sync the scores state.
