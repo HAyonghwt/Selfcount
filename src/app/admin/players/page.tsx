@@ -672,6 +672,7 @@ export default function PlayerManagementPage() {
                                         value={individualSearchTerm}
                                         onChange={(e) => setIndividualSearchTerm(e.target.value)}
                                         className="pl-10"
+                                        autoComplete="off"
                                     />
                                 </div>
                                 <Table>
@@ -795,6 +796,7 @@ export default function PlayerManagementPage() {
                                         value={teamSearchTerm}
                                         onChange={(e) => setTeamSearchTerm(e.target.value)}
                                         className="pl-10"
+                                        autoComplete="off"
                                     />
                                 </div>
                                 <Table>
