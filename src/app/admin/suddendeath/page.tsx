@@ -367,6 +367,15 @@ export default function SuddenDeathPage() {
         const processedData = isIndividual ? processedIndividualSuddenDeathData : processedTeamSuddenDeathData;
         const suddenDeathScores = isIndividual ? individualSuddenDeathScores : teamSuddenDeathScores;
 
+        const playersGroupedByGroup = tiedPlayers.reduce((acc, player) => {
+            const groupName = player.group || '미지정';
+            if (!acc[groupName]) {
+                acc[groupName] = [];
+            }
+            acc[groupName].push(player);
+            return acc;
+        }, {} as Record<string, Player[]>);
+
         return (
             <div className="space-y-6">
                 <Card>
@@ -375,22 +384,29 @@ export default function SuddenDeathPage() {
                         <CardDescription>플레이오프를 진행할 선수, 코스, 홀을 선택하고 시작하세요.</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-6">
-                        {tiedPlayers.length > 0 ? (
-                            <div className="space-y-4">
+                        {Object.keys(playersGroupedByGroup).length > 0 ? (
+                            <div className="space-y-6">
                                 <div>
-                                    <Label className="font-semibold">1. 참가 선수 선택 ({tiedPlayers.length}명 동점)</Label>
-                                    <div className="p-4 border rounded-md grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-2">
-                                        {tiedPlayers.map(player => (
-                                            <div key={player.id} className="flex items-center space-x-3">
-                                                <Checkbox
-                                                    id={`${type}-player-${player.id}`}
-                                                    checked={selectedPlayers[player.id] || false}
-                                                    onCheckedChange={(checked) => setSelectedPlayers(prev => ({...prev, [player.id]: !!checked}))}
-                                                    disabled={suddenDeathData?.isActive}
-                                                />
-                                                <Label htmlFor={`${type}-player-${player.id}`} className="font-medium text-base">
-                                                    {player.name} <span className="text-muted-foreground text-sm">({player.affiliation})</span>
-                                                </Label>
+                                    <Label className="font-semibold text-base">1. 참가 선수 선택</Label>
+                                    <div className="space-y-4 mt-2">
+                                        {Object.entries(playersGroupedByGroup).map(([groupName, tiedPlayersInGroup]) => (
+                                            <div key={groupName} className="p-4 border rounded-md">
+                                                <p className="font-bold mb-3">{groupName} 그룹 ({tiedPlayersInGroup.length}명 동점)</p>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                                    {tiedPlayersInGroup.map(player => (
+                                                        <div key={player.id} className="flex items-center space-x-3">
+                                                            <Checkbox
+                                                                id={`${type}-player-${player.id}`}
+                                                                checked={selectedPlayers[player.id] || false}
+                                                                onCheckedChange={(checked) => setSelectedPlayers(prev => ({...prev, [player.id]: !!checked}))}
+                                                                disabled={suddenDeathData?.isActive}
+                                                            />
+                                                            <Label htmlFor={`${type}-player-${player.id}`} className="font-medium text-base">
+                                                                {player.name} <span className="text-muted-foreground text-sm">({player.affiliation})</span>
+                                                            </Label>
+                                                        </div>
+                                                    ))}
+                                                </div>
                                             </div>
                                         ))}
                                     </div>
