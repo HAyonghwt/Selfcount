@@ -1,6 +1,7 @@
 
 "use client";
 import React, { useState, useEffect, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
@@ -9,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { db } from '@/lib/firebase';
 import { ref, onValue } from 'firebase/database';
 import { useToast } from '@/hooks/use-toast';
+import { ToastAction } from '@/components/ui/toast';
 
 interface ProcessedPlayer {
     id: string;
@@ -77,6 +79,7 @@ const tieBreak = (a: any, b: any, sortedCourses: any[]) => {
 
 export default function AdminDashboard() {
     const { toast } = useToast();
+    const router = useRouter();
     const [players, setPlayers] = useState({});
     const [scores, setScores] = useState({});
     const [courses, setCourses] = useState({});
@@ -84,6 +87,7 @@ export default function AdminDashboard() {
     const [filterGroup, setFilterGroup] = useState('all');
     const [individualSuddenDeathData, setIndividualSuddenDeathData] = useState<any>(null);
     const [teamSuddenDeathData, setTeamSuddenDeathData] = useState<any>(null);
+    const [notifiedSuddenDeathGroups, setNotifiedSuddenDeathGroups] = useState<Set<string>>(new Set());
 
     useEffect(() => {
         const playersRef = ref(db, 'players');
@@ -366,6 +370,41 @@ export default function AdminDashboard() {
         return progressByGroup;
     }, [processedDataByGroup, scores]);
 
+    useEffect(() => {
+        if (!groupProgress || !finalDataByGroup) return;
+
+        Object.keys(groupProgress).forEach(groupName => {
+            // Check if group is 100% complete and not yet notified
+            if (groupProgress[groupName] === 100 && !notifiedSuddenDeathGroups.has(groupName)) {
+                const playersInGroup = finalDataByGroup[groupName];
+                if (playersInGroup) {
+                    const tiedFirstPlace = playersInGroup.filter(p => p.rank === 1);
+                    
+                    // Check if there are 2 or more players tied for first
+                    if (tiedFirstPlace.length > 1) {
+                        toast({
+                            title: `🚨 서든데스 필요: ${groupName}`,
+                            description: `${groupName} 그룹의 경기가 완료되었으며, 1위 동점자가 발생했습니다. 서든데스 관리가 필요합니다.`,
+                            action: (
+                                <ToastAction altText="관리하기" onClick={() => router.push('/admin/suddendeath')}>
+                                    관리하기
+                                </ToastAction>
+                            ),
+                            duration: 30000 // Keep the toast on screen longer
+                        });
+                        
+                        // Add to notified set to prevent re-triggering
+                        setNotifiedSuddenDeathGroups(prev => {
+                            const newSet = new Set(prev);
+                            newSet.add(groupName);
+                            return newSet;
+                        });
+                    }
+                }
+            }
+        });
+    }, [groupProgress, finalDataByGroup, notifiedSuddenDeathGroups, toast, router]);
+
     const handleExportToExcel = async () => {
         const XLSX = await import('xlsx');
         const wb = XLSX.utils.book_new();
@@ -620,7 +659,5 @@ export default function AdminDashboard() {
         </div>
     );
 }
-
-    
 
     
