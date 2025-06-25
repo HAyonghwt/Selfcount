@@ -34,7 +34,7 @@ interface ProcessedPlayer {
 }
 
 // Helper function for tie-breaking using back-count method
-const tieBreak = (a: any, b: any, coursesForGroup: any[]) => {
+const tieBreak = (a: any, b: any, sortedCourses: any[]) => {
     if (a.hasForfeited && !b.hasForfeited) return 1;
     if (!a.hasForfeited && b.hasForfeited) return -1;
     
@@ -45,13 +45,6 @@ const tieBreak = (a: any, b: any, coursesForGroup: any[]) => {
     if (a.total !== b.total) {
         return a.total - b.total;
     }
-
-    // Sort courses by name in reverse alphabetical order (e.g., D, C, B, A)
-    const sortedCourses = [...coursesForGroup].sort((c1, c2) => {
-        const name1 = c1?.name || '';
-        const name2 = c2?.name || '';
-        return name2.localeCompare(name1);
-    });
 
     // Compare total scores of each course in reverse alphabetical order
     for (const course of sortedCourses) {
@@ -194,6 +187,13 @@ export default function AdminDashboard() {
         for (const groupName in groupedData) {
             const coursesForGroup = groupedData[groupName][0]?.assignedCourses || Object.values(courses);
             
+            // Optimization: Pre-sort courses for tie-breaking
+            const sortedCoursesForTieBreak = [...coursesForGroup].sort((c1, c2) => {
+                const name1 = c1?.name || '';
+                const name2 = c2?.name || '';
+                return name2.localeCompare(name1);
+            });
+
             const playersToSort = groupedData[groupName].filter(p => p.hasAnyScore && !p.hasForfeited);
             const otherPlayers = groupedData[groupName].filter(p => !p.hasAnyScore || p.hasForfeited);
             
@@ -210,7 +210,7 @@ export default function AdminDashboard() {
                     if (a.totalScore === leaderScore && isSuddenDeathActiveForThisGroup) {
                         return a.name.localeCompare(b.name);
                     }
-                    return tieBreak(a, b, coursesForGroup);
+                    return tieBreak(a, b, sortedCoursesForTieBreak);
                 });
 
                 let rank = 1;
@@ -224,7 +224,7 @@ export default function AdminDashboard() {
                         if (curr.totalScore === leaderScore && isSuddenDeathActiveForThisGroup) {
                             isTied = true;
                         } else {
-                            isTied = tieBreak(curr, prev, coursesForGroup) === 0;
+                            isTied = tieBreak(curr, prev, sortedCoursesForTieBreak) === 0;
                         }
                     }
 
@@ -620,5 +620,7 @@ export default function AdminDashboard() {
         </div>
     );
 }
+
+    
 
     

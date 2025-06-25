@@ -33,7 +33,7 @@ interface ProcessedPlayer {
     assignedCourses: any[];
 }
 
-const tieBreak = (a: any, b: any, coursesForGroup: any[]) => {
+const tieBreak = (a: any, b: any, sortedCourses: any[]) => {
     if (a.hasForfeited && !b.hasForfeited) return 1;
     if (!a.hasForfeited && b.hasForfeited) return -1;
 
@@ -44,12 +44,6 @@ const tieBreak = (a: any, b: any, coursesForGroup: any[]) => {
     if (a.total !== b.total) {
         return a.total - b.total;
     }
-
-    const sortedCourses = [...coursesForGroup].sort((c1, c2) => {
-        const name1 = c1?.name || '';
-        const name2 = c2?.name || '';
-        return name2.localeCompare(name1);
-    });
 
     for (const course of sortedCourses) {
         const courseId = course.id;
@@ -196,6 +190,13 @@ export default function ExternalScoreboard() {
         for (const groupName in groupedData) {
             const coursesForGroup = groupedData[groupName][0]?.assignedCourses || [];
             
+            // Optimization: Pre-sort courses for tie-breaking
+            const sortedCoursesForTieBreak = [...coursesForGroup].sort((c1, c2) => {
+                const name1 = c1?.name || '';
+                const name2 = c2?.name || '';
+                return name2.localeCompare(name1);
+            });
+
             const playersToSort = groupedData[groupName].filter(p => p.hasAnyScore && !p.hasForfeited);
             const otherPlayers = groupedData[groupName].filter(p => !p.hasAnyScore || p.hasForfeited);
             
@@ -212,7 +213,7 @@ export default function ExternalScoreboard() {
                     if (a.totalScore === leaderScore && isSuddenDeathActiveForThisGroup) {
                         return a.name.localeCompare(b.name);
                     }
-                    return tieBreak(a, b, coursesForGroup);
+                    return tieBreak(a, b, sortedCoursesForTieBreak);
                 });
 
                 let rank = 1;
@@ -226,7 +227,7 @@ export default function ExternalScoreboard() {
                          if (curr.totalScore === leaderScore && isSuddenDeathActiveForThisGroup) {
                             isTied = true;
                          } else {
-                            isTied = tieBreak(curr, prev, coursesForGroup) === 0;
+                            isTied = tieBreak(curr, prev, sortedCoursesForTieBreak) === 0;
                          }
                     }
 
@@ -582,5 +583,7 @@ export default function ExternalScoreboard() {
         </>
     );
 }
+
+    
 
     
