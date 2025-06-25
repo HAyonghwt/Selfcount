@@ -259,21 +259,13 @@ export default function RefereePage() {
             setView('scoring');
         }
     };
-
-    const handleJoChange = (newJoValue: string) => {
-        const action = () => setSelectedJo(newJoValue);
-        if (hasUnsavedChanges) {
-            setPendingNavAction(() => action);
-            setConfirmNavDialogOpen(true);
-        } else {
-            action();
-        }
-    };
     
     const handleBackToSelectionClick = () => {
         const action = () => {
             setView('selection');
-            setSelectedJo(''); // Reset Jo selection when going back
+            setSelectedGroup('');
+            setSelectedCourse('');
+            setSelectedJo('');
         };
         if (hasUnsavedChanges) {
             setPendingNavAction(() => action);
@@ -360,7 +352,7 @@ export default function RefereePage() {
         return (
              <div className="bg-slate-50 min-h-screen p-2 sm:p-4 flex flex-col font-body">
                 <header className="text-center mb-4">
-                    <h1 className="text-3xl font-extrabold text-primary break-keep leading-tight">{hole}번홀 점수 기록</h1>
+                    <h1 className="text-3xl font-extrabold text-primary break-keep leading-tight">{hole}번홀 심판</h1>
                 </header>
                 <div className="space-y-4">
                     <Skeleton className="h-32 w-full" />
@@ -485,8 +477,8 @@ export default function RefereePage() {
         <>
             <div className="bg-slate-50 min-h-screen p-2 sm:p-4 flex flex-col font-body">
                 <header className="flex justify-between items-center mb-4">
-                     <h1 className="text-2xl sm:text-3xl font-extrabold text-primary break-keep leading-tight">{hole}번홀 점수 기록</h1>
-                    {view === 'scoring' && (
+                    <h1 className="text-2xl sm:text-3xl font-extrabold text-primary break-keep leading-tight">{hole}번홀 심판</h1>
+                     {view === 'scoring' && (
                         <Button variant="outline" onClick={handleBackToSelectionClick} className="h-9 text-xs sm:text-sm flex-shrink-0">
                             <ArrowLeft className="mr-1 sm:mr-2 h-4 w-4" />
                             그룹/코스 변경
@@ -503,7 +495,7 @@ export default function RefereePage() {
                                     <span className="mx-1">/</span>
                                     <span>{selectedCourseName}</span>
                                 </div>
-                                <Select value={selectedJo} onValueChange={handleJoChange}>
+                                <Select value={selectedJo} onValueChange={setSelectedJo}>
                                     <SelectTrigger className="w-full h-12 text-lg font-bold">
                                         <SelectValue placeholder="조 선택" />
                                     </SelectTrigger>
