@@ -199,6 +199,21 @@ export default function RefereePage() {
         return Object.values(scores).some(s => s.status === 'editing');
     }, [scores]);
 
+    useEffect(() => {
+        const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+            if (hasUnsavedChanges) {
+                event.preventDefault();
+                event.returnValue = '저장되지 않은 변경사항이 있습니다. 정말로 페이지를 떠나시겠습니까?';
+            }
+        };
+
+        window.addEventListener('beforeunload', handleBeforeUnload);
+
+        return () => {
+            window.removeEventListener('beforeunload', handleBeforeUnload);
+        };
+    }, [hasUnsavedChanges]);
+
 
     const getLocalStorageScoresKey = () => {
         if (!hole || !selectedGroup || !selectedCourse || !selectedJo) return null;
@@ -222,33 +237,6 @@ export default function RefereePage() {
             }
         }
     }, [scores, hole, selectedGroup, selectedCourse, selectedJo, view]);
-
-    // Browser-level navigation confirmation
-    useEffect(() => {
-        const handleBeforeUnload = (event: BeforeUnloadEvent) => {
-            if (hasUnsavedChanges) {
-                event.preventDefault();
-                event.returnValue = '저장되지 않은 변경사항이 있습니다. 정말로 페이지를 떠나시겠습니까?';
-            }
-        };
-
-        const handlePopState = (event: PopStateEvent) => {
-             if (hasUnsavedChanges) {
-                history.pushState(null, '', window.location.href);
-                setPendingNavAction(() => () => router.back());
-                setConfirmNavDialogOpen(true);
-            }
-        };
-
-        window.addEventListener('beforeunload', handleBeforeUnload);
-        window.addEventListener('popstate', handlePopState);
-
-        return () => {
-            window.removeEventListener('beforeunload', handleBeforeUnload);
-            window.removeEventListener('popstate', handlePopState);
-        };
-    }, [hasUnsavedChanges, router]);
-
 
     // Initialize or sync the scores state.
     useEffect(() => {
@@ -508,7 +496,7 @@ export default function RefereePage() {
                      {view === 'scoring' && (
                         <Button variant="outline" onClick={handleBackToSelectionClick} className="h-9 text-xs sm:text-sm flex-shrink-0">
                             <ArrowLeft className="mr-1 sm:mr-2 h-4 w-4" />
-                            코스/그룹 변경
+                            그룹/코스 변경
                         </Button>
                     )}
                 </header>
@@ -522,7 +510,15 @@ export default function RefereePage() {
                                     <span className="mx-1">/</span>
                                     <span>{selectedCourseName}</span>
                                 </div>
-                                <Select value={selectedJo} onValueChange={setSelectedJo}>
+                                <Select value={selectedJo} onValueChange={(value) => {
+                                    const action = () => setSelectedJo(value);
+                                    if (hasUnsavedChanges) {
+                                        setPendingNavAction(() => action);
+                                        setConfirmNavDialogOpen(true);
+                                    } else {
+                                        action();
+                                    }
+                                }}>
                                     <SelectTrigger className="w-full h-12 text-lg font-bold">
                                         <SelectValue placeholder="조 선택" />
                                     </SelectTrigger>
