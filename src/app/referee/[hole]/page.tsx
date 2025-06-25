@@ -58,25 +58,9 @@ export default function RefereePage() {
     const [isUnlockModalOpen, setIsUnlockModalOpen] = useState(false);
     const [unlockPasswordInput, setUnlockPasswordInput] = useState('');
     const [playerToUnlock, setPlayerToUnlock] = useState<Player | null>(null);
-
-    // This is the most robust, standard way to prevent page navigation.
-    // It runs once when the component mounts and stays active.
-    useEffect(() => {
-        const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-            e.preventDefault();
-            // This is required for legacy browsers and some modern ones.
-            // The actual text is not displayed in most modern browsers.
-            e.returnValue = "Are you sure you want to leave?";
-        };
-        
-        window.addEventListener('beforeunload', handleBeforeUnload);
-
-        // Cleanup the event listener when the component unmounts
-        return () => {
-            window.removeEventListener('beforeunload', handleBeforeUnload);
-        };
-    }, []); // Empty dependency array ensures this effect runs only once.
-
+    
+    // Change Jo confirmation dialog
+    const [isChangeJoDialogOpen, setChangeJoDialogOpen] = useState(false);
 
     // Restore state from localStorage on initial load
     useEffect(() => {
@@ -244,7 +228,11 @@ export default function RefereePage() {
             setView('scoring');
         }
     };
-    
+
+    const hasUnsavedChanges = useMemo(() => {
+        return Object.values(scores).some(s => s.status === 'editing');
+    }, [scores]);
+
     const handleReturnToJoSelection = () => {
         const storageKey = getLocalStorageScoresKey();
         if (storageKey) {
@@ -254,6 +242,14 @@ export default function RefereePage() {
         setSelectedJo(''); 
     };
 
+    const handleChangeJoClick = () => {
+        if (hasUnsavedChanges) {
+            setChangeJoDialogOpen(true);
+        } else {
+            handleReturnToJoSelection();
+        }
+    };
+    
     const updateScore = (id: string, delta: number) => {
         if (scores[id]?.status === 'editing') {
             setScores(prev => ({
@@ -451,7 +447,7 @@ export default function RefereePage() {
                                         <span className="text-muted-foreground mx-1 sm:mx-2">/</span>
                                         <span>{selectedJo}조</span>
                                     </div>
-                                    <Button variant="outline" onClick={handleReturnToJoSelection} className="w-full sm:w-auto h-9">
+                                    <Button variant="outline" onClick={handleChangeJoClick} className="w-full sm:w-auto h-9">
                                         <Pencil className="mr-2 h-4 w-4" />
                                         조 변경
                                     </Button>
@@ -514,6 +510,26 @@ export default function RefereePage() {
                     <AlertDialogFooter>
                         <AlertDialogCancel onClick={() => setUnlockPasswordInput('')}>취소</AlertDialogCancel>
                         <AlertDialogAction onClick={handleConfirmUnlock}>확인</AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
+            <AlertDialog open={isChangeJoDialogOpen} onOpenChange={setChangeJoDialogOpen}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>저장되지 않은 점수가 있습니다</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            조를 변경하면 현재 입력한 내용이 사라집니다. 정말로 변경하시겠습니까?
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>취소</AlertDialogCancel>
+                        <AlertDialogAction onClick={() => {
+                            handleReturnToJoSelection();
+                            setChangeJoDialogOpen(false);
+                        }}>
+                            변경
+                        </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
