@@ -60,9 +60,6 @@ export default function RefereePage() {
     const [unlockPasswordInput, setUnlockPasswordInput] = useState('');
     const [playerToUnlock, setPlayerToUnlock] = useState<Player | null>(null);
     
-    // Navigation confirmation dialog
-    const [isConfirmNavDialogOpen, setConfirmNavDialogOpen] = useState(false);
-    const [pendingNavAction, setPendingNavAction] = useState<(() => void) | null>(null);
 
     // Restore state from localStorage on initial load
     useEffect(() => {
@@ -199,6 +196,22 @@ export default function RefereePage() {
         return Object.values(scores).some(s => s.status === 'editing');
     }, [scores]);
 
+    useEffect(() => {
+        const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+            if (hasUnsavedChanges) {
+                e.preventDefault();
+                e.returnValue = ''; // Required for most browsers
+            }
+        };
+
+        window.addEventListener('beforeunload', handleBeforeUnload);
+
+        return () => {
+            window.removeEventListener('beforeunload', handleBeforeUnload);
+        };
+    }, [hasUnsavedChanges]);
+
+
     const getLocalStorageScoresKey = () => {
         if (!hole || !selectedGroup || !selectedCourse || !selectedJo) return null;
         return `refereeScores_${hole}_${selectedGroup}_${selectedCourse}_${selectedJo}`;
@@ -260,24 +273,10 @@ export default function RefereePage() {
     };
     
     const handleBackToSelectionClick = () => {
-        const action = () => {
-            setView('selection');
-            setSelectedGroup('');
-            setSelectedCourse('');
-            setSelectedJo('');
-        };
-        if (hasUnsavedChanges) {
-            setPendingNavAction(() => action);
-            setConfirmNavDialogOpen(true);
-        } else {
-            action();
-        }
-    };
-    
-    const handleConfirmNavigation = () => {
-        pendingNavAction?.();
-        setConfirmNavDialogOpen(false);
-        setPendingNavAction(null);
+        setView('selection');
+        setSelectedGroup('');
+        setSelectedCourse('');
+        setSelectedJo('');
     };
 
     const updateScore = (id: string, delta: number) => {
@@ -494,15 +493,7 @@ export default function RefereePage() {
                                     <span className="mx-1">/</span>
                                     <span>{selectedCourseName}</span>
                                 </div>
-                                <Select value={selectedJo} onValueChange={(value) => {
-                                    const action = () => setSelectedJo(value);
-                                    if (hasUnsavedChanges) {
-                                        setPendingNavAction(() => action);
-                                        setConfirmNavDialogOpen(true);
-                                    } else {
-                                        action();
-                                    }
-                                }}>
+                                <Select value={selectedJo} onValueChange={setSelectedJo}>
                                     <SelectTrigger className="w-full h-12 text-lg font-bold">
                                         <SelectValue placeholder="조 선택" />
                                     </SelectTrigger>
@@ -578,23 +569,6 @@ export default function RefereePage() {
                     <AlertDialogFooter>
                         <AlertDialogCancel onClick={() => setUnlockPasswordInput('')}>취소</AlertDialogCancel>
                         <AlertDialogAction onClick={handleConfirmUnlock}>확인</AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
-
-            <AlertDialog open={isConfirmNavDialogOpen} onOpenChange={setConfirmNavDialogOpen}>
-                <AlertDialogContent>
-                    <AlertDialogHeader>
-                        <AlertDialogTitle>저장되지 않은 점수가 있습니다</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            페이지를 벗어나면 현재 입력한 내용이 사라집니다. 정말로 이동하시겠습니까?
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel onClick={() => setPendingNavAction(null)}>취소</AlertDialogCancel>
-                        <AlertDialogAction onClick={handleConfirmNavigation}>
-                            이동
-                        </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
