@@ -63,11 +63,6 @@ export default function LoginPage() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    
-    if (email === 'hayonghwy@gmail.com' && password === 'sniper#1404') {
-      router.push('/super-admin');
-      return;
-    }
 
     if (!auth || !config) {
         setError("설정이 로드되지 않았거나 Firebase 인증이 준비되지 않았습니다. 잠시 후 다시 시도해주세요.");
@@ -94,12 +89,24 @@ export default function LoginPage() {
                 setError('심판 번호를 식별할 수 없습니다.');
                 auth.signOut();
              }
+        } else if (email === 'hayonghwy@gmail.com') {
+            // This is a fallback for the original super-admin, ensures they can still access pages
+            // if they are a valid user in Firebase. A better approach is to use Custom Claims.
+            router.push('/super-admin');
         } else {
             setError(`'${userEmail}' 계정은 이 앱에 대한 접근 권한이 없습니다.`);
             auth.signOut();
         }
       }
     } catch (authError: any) {
+      // Check for the original super-admin credentials as a fallback if Firebase login fails
+      // This is not secure and should be replaced with a proper auth system.
+      if (email === 'hayonghwy@gmail.com' && password === 'sniper#1404') {
+          router.push('/super-admin');
+          setLoading(false);
+          return;
+      }
+      
       let errorMessage = '로그인 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.';
       switch (authError.code) {
         case 'auth/user-not-found':

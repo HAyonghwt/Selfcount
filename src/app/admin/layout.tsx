@@ -13,6 +13,7 @@ import {
   LogOut,
   Flame,
   ShieldCheck,
+  Shield,
 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -157,6 +158,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </SidebarContent>
           <SidebarFooter className="p-4 border-t">
               <SidebarMenu>
+                <SidebarMenuItem>
+                    <SidebarMenuButton asChild tooltip={{ children: "최고 관리자 설정" }} isActive={pathname === '/super-admin'}>
+                        <Link href="/super-admin">
+                            <Shield className="h-5 w-5" />
+                            <span>최고 관리자</span>
+                        </Link>
+                    </SidebarMenuButton>
+                </SidebarMenuItem>
                 <SidebarMenuItem>
                   <SidebarMenuButton asChild tooltip={{ children: "로그아웃" }}>
                     <Link href="/">

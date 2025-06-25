@@ -130,10 +130,10 @@ export default function SuperAdminPage() {
                         <Save className="mr-2 h-4 w-4" />
                         {loading ? '저장 중...' : '설정 저장'}
                     </Button>
-                    <Button variant="outline" asChild>
-                        <Link href="/">
+                     <Button variant="outline" asChild>
+                        <Link href="/admin">
                             <LogOut className="mr-2 h-4 w-4" />
-                            로그아웃
+                            관리자 패널로 돌아가기
                         </Link>
                     </Button>
                 </div>
@@ -163,7 +163,7 @@ export default function SuperAdminPage() {
                             <div className="space-y-2">
                                 <Label htmlFor="refereePassword">심판 공용 비밀번호</Label>
                                 <Input id="refereePassword" value={config.refereePassword} onChange={handleInputChange} placeholder="예: 123456" />
-                                <p className="text-xs text-muted-foreground">모든 심판 계정(referee1, referee2...)에 공통으로 사용할 비밀번호입니다.</p>
+                                <p className="text-xs text-muted-foreground">모든 심판 계정(referee1, referee2...)의 공용 비밀번호입니다. 설정 후 Firebase 콘솔에서 각 심판 계정의 비밀번호를 직접 변경해주셔야 합니다.</p>
                             </div>
                         </CardContent>
                     </Card>
