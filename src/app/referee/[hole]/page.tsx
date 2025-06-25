@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useMemo } from 'react';
@@ -7,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Minus, Plus, Save, Lock, Pencil, Trophy } from 'lucide-react';
+import { Minus, Plus, Save, Lock, Trophy, ArrowLeft } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { ref, onValue, set } from 'firebase/database';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -58,8 +59,9 @@ export default function RefereePage() {
     const [unlockPasswordInput, setUnlockPasswordInput] = useState('');
     const [playerToUnlock, setPlayerToUnlock] = useState<Player | null>(null);
     
-    // Change Jo confirmation dialog
-    const [isChangeJoDialogOpen, setChangeJoDialogOpen] = useState(false);
+    // Navigation confirmation dialog
+    const [isConfirmNavDialogOpen, setConfirmNavDialogOpen] = useState(false);
+    const [pendingNavAction, setPendingNavAction] = useState<(() => void) | null>(null);
 
     // Restore state from localStorage on initial load
     useEffect(() => {
@@ -150,9 +152,7 @@ export default function RefereePage() {
             return new Set<number>();
         }
     
-        // Filter players for the selected group once
         const groupPlayers = allPlayers.filter(p => p.group === selectedGroup);
-        // Get unique Jos for that group
         const josInGroup = [...new Set(groupPlayers.map(p => p.jo))];
     
         const completed = new Set<number>();
@@ -259,24 +259,33 @@ export default function RefereePage() {
             setView('scoring');
         }
     };
-    
-    const handleReturnToJoSelection = () => {
-        const storageKey = getLocalStorageScoresKey();
-        if (storageKey) {
-            localStorage.removeItem(storageKey);
+
+    const handleJoChange = (newJoValue: string) => {
+        const action = () => setSelectedJo(newJoValue);
+        if (hasUnsavedChanges) {
+            setPendingNavAction(() => action);
+            setConfirmNavDialogOpen(true);
+        } else {
+            action();
         }
-        setView('selection');
-        setSelectedJo(''); 
+    };
+    
+    const handleBackToSelectionClick = () => {
+        const action = () => setView('selection');
+        if (hasUnsavedChanges) {
+            setPendingNavAction(() => action);
+            setConfirmNavDialogOpen(true);
+        } else {
+            action();
+        }
+    };
+    
+    const handleConfirmNavigation = () => {
+        pendingNavAction?.();
+        setConfirmNavDialogOpen(false);
+        setPendingNavAction(null);
     };
 
-    const handleChangeJoClick = () => {
-        if (hasUnsavedChanges) {
-            setChangeJoDialogOpen(true);
-        } else {
-            handleReturnToJoSelection();
-        }
-    };
-    
     const updateScore = (id: string, delta: number) => {
         if (scores[id]?.status === 'editing') {
             setScores(prev => ({
@@ -483,16 +492,33 @@ export default function RefereePage() {
                         <Card>
                             <CardHeader className="p-3">
                                 <div className="flex flex-col sm:flex-row justify-between items-center gap-2">
-                                    <div className="text-lg sm:text-xl font-bold text-center break-keep">
+                                    <div className="text-lg sm:text-xl font-bold text-center break-keep flex items-center gap-x-2">
                                         <span>{selectedGroup}</span>
-                                        <span className="text-muted-foreground mx-1 sm:mx-2">/</span>
+                                        <span className="text-muted-foreground">/</span>
                                         <span>{selectedCourseName}</span>
-                                        <span className="text-muted-foreground mx-1 sm:mx-2">/</span>
-                                        <span>{selectedJo}조</span>
+                                        <span className="text-muted-foreground">/</span>
+                                        <Select value={selectedJo} onValueChange={handleJoChange}>
+                                            <SelectTrigger className="w-[120px] h-10 font-bold text-lg px-3">
+                                                <SelectValue placeholder="조 선택" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {availableJos.map(jo => {
+                                                    const isCompleted = completedJos.has(jo);
+                                                    return (
+                                                        <SelectItem key={jo} value={jo.toString()}>
+                                                            <div className="flex items-center justify-between w-full gap-4">
+                                                                <span>{jo}조</span>
+                                                                {isCompleted && <Lock className="h-4 w-4 text-muted-foreground" />}
+                                                            </div>
+                                                        </SelectItem>
+                                                    );
+                                                })}
+                                            </SelectContent>
+                                        </Select>
                                     </div>
-                                    <Button variant="outline" onClick={handleChangeJoClick} className="w-full sm:w-auto h-9">
-                                        <Pencil className="mr-2 h-4 w-4" />
-                                        조 변경
+                                    <Button variant="outline" onClick={handleBackToSelectionClick} className="w-full sm:w-auto h-9">
+                                        <ArrowLeft className="mr-2 h-4 w-4" />
+                                        그룹/코스 변경
                                     </Button>
                                 </div>
                             </CardHeader>
@@ -557,21 +583,18 @@ export default function RefereePage() {
                 </AlertDialogContent>
             </AlertDialog>
 
-            <AlertDialog open={isChangeJoDialogOpen} onOpenChange={setChangeJoDialogOpen}>
+            <AlertDialog open={isConfirmNavDialogOpen} onOpenChange={setConfirmNavDialogOpen}>
                 <AlertDialogContent>
                     <AlertDialogHeader>
                         <AlertDialogTitle>저장되지 않은 점수가 있습니다</AlertDialogTitle>
                         <AlertDialogDescription>
-                            조를 변경하면 현재 입력한 내용이 사라집니다. 정말로 변경하시겠습니까?
+                            페이지를 벗어나면 현재 입력한 내용이 사라집니다. 정말로 이동하시겠습니까?
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                        <AlertDialogCancel>취소</AlertDialogCancel>
-                        <AlertDialogAction onClick={() => {
-                            handleReturnToJoSelection();
-                            setChangeJoDialogOpen(false);
-                        }}>
-                            변경
+                        <AlertDialogCancel onClick={() => setPendingNavAction(null)}>취소</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleConfirmNavigation}>
+                            이동
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
@@ -579,3 +602,4 @@ export default function RefereePage() {
         </>
     );
 }
+
