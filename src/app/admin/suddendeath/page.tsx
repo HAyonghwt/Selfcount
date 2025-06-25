@@ -229,18 +229,26 @@ export default function SuddenDeathPage() {
             rankedData[groupName] = [...playersToSort, ...otherPlayers.map(p => ({ ...p, rank: null }))];
         }
 
-        const allRankedPlayers = Object.values(rankedData).flat();
-        const individualPlayers = allRankedPlayers.filter(p => p.type === 'individual');
-        const teamPlayers = allRankedPlayers.filter(p => p.type === 'team');
-        
-        const findTies = (players: Player[]) => {
-            if (!players || players.length === 0) return [];
-            const firstPlacePlayers = players.filter(p => p.rank === 1);
-            return firstPlacePlayers.length > 1 ? firstPlacePlayers : [];
-        };
+        const individualTies: Player[] = [];
+        const teamTies: Player[] = [];
 
-        setTiedIndividualPlayers(findTies(individualPlayers));
-        setTiedTeamPlayers(findTies(teamPlayers));
+        for (const groupName in rankedData) {
+            const playersInGroup = rankedData[groupName];
+            if (!playersInGroup || playersInGroup.length === 0) continue;
+
+            const firstPlacePlayers = playersInGroup.filter(p => p.rank === 1);
+            
+            if (firstPlacePlayers.length > 1) {
+                if (firstPlacePlayers[0].type === 'individual') {
+                    individualTies.push(...firstPlacePlayers);
+                } else if (firstPlacePlayers[0].type === 'team') {
+                    teamTies.push(...firstPlacePlayers);
+                }
+            }
+        }
+        
+        setTiedIndividualPlayers(individualTies);
+        setTiedTeamPlayers(teamTies);
 
     }, [players, scores, courses, groupsData]);
 
