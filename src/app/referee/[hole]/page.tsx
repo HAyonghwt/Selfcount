@@ -218,21 +218,22 @@ export default function RefereePage() {
         
     }, [view, selectedJo, selectedCourse, hole, allScores, currentPlayers]);
 
-    // Prevent accidental navigation when scoring
+    // Prevent accidental navigation from the moment the page loads.
     useEffect(() => {
         const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+            // Standard way to prevent navigation.
             e.preventDefault();
+            // Required for legacy browsers.
             e.returnValue = '';
         };
 
-        if (view === 'scoring') {
-            window.addEventListener('beforeunload', handleBeforeUnload);
-            
-            return () => {
-                window.removeEventListener('beforeunload', handleBeforeUnload);
-            };
-        }
-    }, [view]);
+        window.addEventListener('beforeunload', handleBeforeUnload);
+
+        // Cleanup: remove the event listener when the component is unmounted.
+        return () => {
+            window.removeEventListener('beforeunload', handleBeforeUnload);
+        };
+    }, []); // The empty dependency array `[]` ensures this effect runs only once when the component mounts.
 
     // ---- Handlers ----
     const handleStartScoring = () => {
