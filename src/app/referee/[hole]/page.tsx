@@ -59,6 +59,25 @@ export default function RefereePage() {
     const [unlockPasswordInput, setUnlockPasswordInput] = useState('');
     const [playerToUnlock, setPlayerToUnlock] = useState<Player | null>(null);
 
+    // This is the most robust, standard way to prevent page navigation.
+    // It runs once when the component mounts and stays active.
+    useEffect(() => {
+        const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+            e.preventDefault();
+            // This is required for legacy browsers and some modern ones.
+            // The actual text is not displayed in most modern browsers.
+            e.returnValue = "Are you sure you want to leave?";
+        };
+        
+        window.addEventListener('beforeunload', handleBeforeUnload);
+
+        // Cleanup the event listener when the component unmounts
+        return () => {
+            window.removeEventListener('beforeunload', handleBeforeUnload);
+        };
+    }, []); // Empty dependency array ensures this effect runs only once.
+
+
     // Restore state from localStorage on initial load
     useEffect(() => {
         try {
@@ -218,22 +237,6 @@ export default function RefereePage() {
         
     }, [view, selectedJo, selectedCourse, hole, allScores, currentPlayers]);
 
-    // Prevent accidental navigation from the moment the page loads.
-    useEffect(() => {
-        const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-            // Standard way to prevent navigation.
-            e.preventDefault();
-            // Required for legacy browsers.
-            e.returnValue = '';
-        };
-
-        window.addEventListener('beforeunload', handleBeforeUnload);
-
-        // Cleanup: remove the event listener when the component is unmounted.
-        return () => {
-            window.removeEventListener('beforeunload', handleBeforeUnload);
-        };
-    }, []); // The empty dependency array `[]` ensures this effect runs only once when the component mounts.
 
     // ---- Handlers ----
     const handleStartScoring = () => {
