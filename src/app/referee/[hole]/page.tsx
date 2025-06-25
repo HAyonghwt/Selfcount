@@ -222,6 +222,24 @@ export default function RefereePage() {
         }
     }, [scores, hole, selectedGroup, selectedCourse, selectedJo, view]);
 
+    // Browser-level navigation confirmation
+    useEffect(() => {
+        const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+            if (hasUnsavedChanges) {
+                event.preventDefault();
+                // Most modern browsers ignore this and show a generic message,
+                // but it's required for legacy browser compatibility.
+                event.returnValue = '저장되지 않은 변경사항이 있습니다. 정말로 페이지를 떠나시겠습니까?';
+            }
+        };
+
+        window.addEventListener('beforeunload', handleBeforeUnload);
+
+        return () => {
+            window.removeEventListener('beforeunload', handleBeforeUnload);
+        };
+    }, [hasUnsavedChanges]);
+
 
     // Initialize or sync the scores state.
     useEffect(() => {
@@ -481,7 +499,7 @@ export default function RefereePage() {
                      {view === 'scoring' && (
                         <Button variant="outline" onClick={handleBackToSelectionClick} className="h-9 text-xs sm:text-sm flex-shrink-0">
                             <ArrowLeft className="mr-1 sm:mr-2 h-4 w-4" />
-                            그룹/코스 변경
+                            코스/그룹 변경
                         </Button>
                     )}
                 </header>
