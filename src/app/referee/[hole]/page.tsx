@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Minus, Plus, Save, Lock, Pencil } from 'lucide-react';
+import { Minus, Plus, Save, Lock, Pencil, CheckCircle } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { ref, onValue, set } from 'firebase/database';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -167,6 +167,14 @@ export default function RefereePage() {
     
         return completed;
     }, [allPlayers, allScores, availableJos, selectedGroup, selectedCourse, hole]);
+
+    const isCurrentJoComplete = useMemo(() => {
+        if (view !== 'scoring' || currentPlayers.length === 0 || Object.keys(scores).length < currentPlayers.length) {
+            return false;
+        }
+        return currentPlayers.every(player => scores[player.id]?.status === 'locked');
+    }, [view, currentPlayers, scores]);
+
 
     const getLocalStorageScoresKey = () => {
         if (!hole || !selectedGroup || !selectedCourse || !selectedJo) return null;
@@ -376,56 +384,79 @@ export default function RefereePage() {
         );
     }
 
-    const renderScoringScreen = () => (
-        <div className="flex-1 flex flex-col space-y-3">
-            {currentPlayers.map(player => {
-                const scoreData = scores[player.id];
-                if (!scoreData) return null;
+    const renderScoringScreen = () => {
+        if (isCurrentJoComplete) {
+            return (
+                <Card className="border-green-400 bg-green-50 text-green-900 mt-4">
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2 text-2xl">
+                            <CheckCircle className="h-8 w-8 text-green-600" />
+                            심사 완료!
+                        </CardTitle>
+                        <CardDescription className="text-green-800 pt-2 text-base">
+                           {selectedGroup} {selectedJo}조의 {hole}번홀 점수 입력이 모두 완료되었습니다. 수고하셨습니다.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <p className="text-base">
+                            상단의 '조 변경' 버튼을 눌러 다음 조를 선택해주세요.
+                        </p>
+                    </CardContent>
+                </Card>
+            );
+        }
 
-                const isLocked = scoreData.status === 'locked';
+        return (
+            <div className="flex-1 flex flex-col space-y-3">
+                {currentPlayers.map(player => {
+                    const scoreData = scores[player.id];
+                    if (!scoreData) return null;
 
-                return (
-                    <Card key={player.id} className="overflow-hidden">
-                        <CardContent className="p-2" onDoubleClick={isLocked ? () => handleUnlockRequest(player) : undefined}>
-                            <div className="flex items-center gap-2">
-                                <div className="flex-1 min-w-0">
-                                    {player.type === 'team' ? (
-                                        <div>
-                                            <p className="font-semibold text-xl truncate">{player.p1_name}</p>
-                                            <p className="font-semibold text-xl truncate">{player.p2_name}</p>
-                                        </div>
-                                    ) : (
-                                        <p className="font-semibold text-xl truncate">{player.name}</p>
-                                    )}
+                    const isLocked = scoreData.status === 'locked';
+
+                    return (
+                        <Card key={player.id} className="overflow-hidden">
+                            <CardContent className="p-2" onDoubleClick={isLocked ? () => handleUnlockRequest(player) : undefined}>
+                                <div className="flex items-center gap-2">
+                                    <div className="flex-1 min-w-0">
+                                        {player.type === 'team' ? (
+                                            <div>
+                                                <p className="font-semibold text-xl truncate">{player.p1_name}</p>
+                                                <p className="font-semibold text-xl truncate">{player.p2_name}</p>
+                                            </div>
+                                        ) : (
+                                            <p className="font-semibold text-xl truncate">{player.name}</p>
+                                        )}
+                                    </div>
+                                    <div className="flex-shrink-0 flex items-center gap-1.5">
+                                        <Button variant="outline" size="icon" className="h-10 w-10 rounded-md" onClick={() => updateScore(player.id, -1)} disabled={isLocked}>
+                                            <Minus className="h-5 w-5" />
+                                        </Button>
+                                        <span className="text-3xl font-bold tabular-nums w-12 text-center">{scoreData.score}</span>
+                                        <Button variant="outline" size="icon" className="h-10 w-10 rounded-md" onClick={() => updateScore(player.id, 1)} disabled={isLocked}>
+                                            <Plus className="h-5 w-5" />
+                                        </Button>
+                                        <Button
+                                            size="icon"
+                                            className={cn("h-10 w-10 rounded-md", {
+                                                'bg-muted hover:bg-muted cursor-not-allowed': isLocked,
+                                            })}
+                                            onClick={() => {
+                                                if (isLocked) return;
+                                                handleSavePress(player);
+                                            }}
+                                        >
+                                            {isLocked ? <Lock className="h-5 w-5 text-green-500" /> : <Save className="h-5 w-5" />}
+                                        </Button>
+                                    </div>
                                 </div>
-                                <div className="flex-shrink-0 flex items-center gap-1.5">
-                                    <Button variant="outline" size="icon" className="h-10 w-10 rounded-md" onClick={() => updateScore(player.id, -1)} disabled={isLocked}>
-                                        <Minus className="h-5 w-5" />
-                                    </Button>
-                                    <span className="text-3xl font-bold tabular-nums w-12 text-center">{scoreData.score}</span>
-                                    <Button variant="outline" size="icon" className="h-10 w-10 rounded-md" onClick={() => updateScore(player.id, 1)} disabled={isLocked}>
-                                        <Plus className="h-5 w-5" />
-                                    </Button>
-                                    <Button
-                                        size="icon"
-                                        className={cn("h-10 w-10 rounded-md", {
-                                            'bg-muted hover:bg-muted cursor-not-allowed': isLocked,
-                                        })}
-                                        onClick={() => {
-                                            if (isLocked) return;
-                                            handleSavePress(player);
-                                        }}
-                                    >
-                                        {isLocked ? <Lock className="h-5 w-5 text-green-500" /> : <Save className="h-5 w-5" />}
-                                    </Button>
-                                </div>
-                            </div>
-                        </CardContent>
-                    </Card>
-                );
-            })}
-        </div>
-    );
+                            </CardContent>
+                        </Card>
+                    );
+                })}
+            </div>
+        );
+    }
 
     return (
         <>
