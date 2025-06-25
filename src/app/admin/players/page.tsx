@@ -668,6 +668,8 @@ export default function PlayerManagementPage() {
                                 <div className="relative mb-4">
                                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                                     <Input
+                                        id="individual-player-search"
+                                        name="individual-player-search"
                                         placeholder="선수명, 소속, 조 번호로 검색"
                                         value={individualSearchTerm}
                                         onChange={(e) => setIndividualSearchTerm(e.target.value)}
@@ -792,6 +794,8 @@ export default function PlayerManagementPage() {
                                 <div className="relative mb-4">
                                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                                     <Input
+                                        id="team-player-search"
+                                        name="team-player-search"
                                         placeholder="팀원명, 소속, 조 번호로 검색"
                                         value={teamSearchTerm}
                                         onChange={(e) => setTeamSearchTerm(e.target.value)}

@@ -155,7 +155,14 @@ export default function ScoreManagementPage() {
                     <div className="flex flex-col md:flex-row gap-4 p-4 bg-muted/50 rounded-lg">
                         <div className="relative flex-1">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                            <Input placeholder="선수명으로 검색..." className="pl-10 h-12" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} autoComplete="new-password" />
+                            <Input 
+                                id="score-search"
+                                name="score-search"
+                                placeholder="선수명으로 검색..." 
+                                className="pl-10 h-12" 
+                                value={searchTerm} 
+                                onChange={e => setSearchTerm(e.target.value)} 
+                                autoComplete="new-password" />
                         </div>
                         <Select value={filterGroup} onValueChange={setFilterGroup}><SelectTrigger className="w-full md:w-[180px] h-12"><SelectValue placeholder="그룹 선택" /></SelectTrigger><SelectContent><SelectItem value="all">모든 그룹</SelectItem>{availableGroups.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}</SelectContent></Select>
                         <Select value={filterCourse} onValueChange={setFilterCourse}><SelectTrigger className="w-full md:w-[180px] h-12"><SelectValue placeholder="코스 선택" /></SelectTrigger><SelectContent><SelectItem value="all">모든 코스</SelectItem>{availableCourses.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent></Select>
