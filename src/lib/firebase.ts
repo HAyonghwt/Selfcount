@@ -16,9 +16,11 @@ export const firebaseConfig: FirebaseOptions = {
 };
 
 // Initialize Firebase only if the config is not a placeholder
-const app = firebaseConfig.apiKey && getApps().length === 0 
-  ? initializeApp(firebaseConfig) 
-  : getApps().length > 0 ? getApp() : null;
+const app = firebaseConfig.apiKey
+  ? getApps().length === 0 
+    ? initializeApp(firebaseConfig) 
+    : getApp()
+  : null;
 
 // Ensure db and auth are only initialized if app exists.
 // Export them so they can be used throughout the app.
