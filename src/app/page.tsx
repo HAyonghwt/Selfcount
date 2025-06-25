@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect } from 'react';
@@ -141,6 +142,7 @@ export default function LoginPage() {
                 width={80}
                 height={80}
                 className="h-20 w-20"
+                priority
             />
           </div>
           <CardTitle className="text-3xl font-bold font-headline">
@@ -163,6 +165,7 @@ export default function LoginPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 className="h-12 text-base"
                 disabled={loading || isConfigMissing}
+                autoComplete="off"
               />
             </div>
             <div className="space-y-2">
@@ -175,6 +178,7 @@ export default function LoginPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 className="h-12 text-base"
                 disabled={loading || isConfigMissing}
+                autoComplete="off"
               />
             </div>
             {error && (
