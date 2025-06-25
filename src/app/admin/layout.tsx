@@ -51,14 +51,18 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   React.useEffect(() => {
     setIsClient(true)
-    const configRef = ref(db, 'config');
-    get(configRef).then((snapshot) => {
-        if (snapshot.exists() && snapshot.val().appName) {
-            setAppName(snapshot.val().appName);
-        } else {
-            setAppName('ParkScore');
-        }
-    });
+    if (db) {
+      const configRef = ref(db, 'config');
+      get(configRef).then((snapshot) => {
+          if (snapshot.exists() && snapshot.val().appName) {
+              setAppName(snapshot.val().appName);
+          } else {
+              setAppName('ParkScore');
+          }
+      });
+    } else {
+        setAppName('ParkScore');
+    }
   }, [])
 
   // Render a skeleton layout on the server and during initial client render
