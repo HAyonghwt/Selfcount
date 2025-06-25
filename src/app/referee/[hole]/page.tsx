@@ -199,22 +199,6 @@ export default function RefereePage() {
         return Object.values(scores).some(s => s.status === 'editing');
     }, [scores]);
 
-    useEffect(() => {
-        const handleBeforeUnload = (event: BeforeUnloadEvent) => {
-            if (hasUnsavedChanges) {
-                event.preventDefault();
-                event.returnValue = '저장되지 않은 변경사항이 있습니다. 정말로 페이지를 떠나시겠습니까?';
-            }
-        };
-
-        window.addEventListener('beforeunload', handleBeforeUnload);
-
-        return () => {
-            window.removeEventListener('beforeunload', handleBeforeUnload);
-        };
-    }, [hasUnsavedChanges]);
-
-
     const getLocalStorageScoresKey = () => {
         if (!hole || !selectedGroup || !selectedCourse || !selectedJo) return null;
         return `refereeScores_${hole}_${selectedGroup}_${selectedCourse}_${selectedJo}`;
