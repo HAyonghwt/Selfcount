@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Minus, Plus, Save, Lock, Pencil, CheckCircle } from 'lucide-react';
+import { Minus, Plus, Save, Lock, Pencil, Trophy } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { ref, onValue, set } from 'firebase/database';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -174,16 +174,25 @@ export default function RefereePage() {
         return completed;
     }, [allPlayers, allScores, selectedGroup, selectedCourse, hole]);
 
-    const isCurrentJoComplete = useMemo(() => {
-        if (view !== 'scoring' || !currentPlayers.length) {
+    const isCourseCompleteForThisHole = useMemo(() => {
+        if (!selectedCourse || !hole || !allPlayers.length || !Object.keys(groupsData).length) {
             return false;
         }
-        // Ensure score data is available for all current players before checking status
-        if (currentPlayers.some(player => !scores[player.id])) {
+
+        const playersOnCourse = allPlayers.filter(player => {
+            const playerGroup = groupsData[player.group];
+            return playerGroup?.courses?.[selectedCourse];
+        });
+
+        if (playersOnCourse.length === 0) {
             return false;
         }
-        return currentPlayers.every(player => scores[player.id]?.status === 'locked');
-    }, [view, currentPlayers, scores]);
+
+        return playersOnCourse.every(player => {
+            return allScores[player.id]?.[selectedCourse]?.[hole] !== undefined;
+        });
+
+    }, [selectedCourse, hole, allPlayers, allScores, groupsData]);
 
     const hasUnsavedChanges = useMemo(() => {
         return Object.values(scores).some(s => s.status === 'editing');
@@ -395,29 +404,22 @@ export default function RefereePage() {
     }
 
     const renderScoringScreen = () => {
-        if (isCurrentJoComplete) {
-            return (
-                <Card className="border-green-400 bg-green-50 text-green-900 mt-4">
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2 text-2xl">
-                            <CheckCircle className="h-8 w-8 text-green-600" />
-                            심사 완료!
-                        </CardTitle>
-                        <CardDescription className="text-green-800 pt-2 text-base">
-                           {selectedGroup} {selectedJo}조의 {hole}번홀 점수 입력이 모두 완료되었습니다. 수고하셨습니다.
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <p className="text-base">
-                            상단의 '조 변경' 버튼을 눌러 다음 조를 선택해주세요.
-                        </p>
-                    </CardContent>
-                </Card>
-            );
-        }
-
         return (
             <div className="flex-1 flex flex-col space-y-3">
+                {isCourseCompleteForThisHole && (
+                    <Card className="border-green-400 bg-green-50 text-green-900 mt-4">
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-3 text-2xl">
+                                <Trophy className="h-8 w-8 text-yellow-500" />
+                                {selectedCourseName} 심사 완료!
+                            </CardTitle>
+                            <CardDescription className="text-green-800 pt-2 text-base">
+                                이 홀의 모든 조 점수 입력이 완료되었습니다. 수고하셨습니다!
+                            </CardDescription>
+                        </CardHeader>
+                    </Card>
+                )}
+
                 {currentPlayers.map(player => {
                     const scoreData = scores[player.id];
                     if (!scoreData) return null;
