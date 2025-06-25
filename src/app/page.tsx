@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect } from 'react';
@@ -31,11 +30,14 @@ export default function LoginPage() {
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // This check is now a constant to easily disable the form.
+  const isConfigMissing = !firebaseConfig.apiKey;
+
   useEffect(() => {
     setYear(new Date().getFullYear());
 
-    if (!firebaseConfig.apiKey) {
-        setError("Firebase 연결 설정이 필요합니다. .env.local 파일을 확인하거나 호스팅 환경 변수를 설정해주세요.");
+    if (isConfigMissing) {
+        setError("Firebase 연결 설정이 필요합니다. Netlify의 환경 변수(Environment variables) 설정이 올바른지 확인해주세요. 'NEXT_PUBLIC_'으로 시작하는 모든 키가 정확히 입력되었는지 다시 한번 확인이 필요합니다.");
         setConfig({ appName: 'ParkScore', userDomain: 'parkgolf.com' });
         setLoading(false);
         return;
@@ -56,7 +58,7 @@ export default function LoginPage() {
     }).finally(() => {
         setLoading(false);
     });
-  }, []);
+  }, [isConfigMissing]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -146,10 +148,10 @@ export default function LoginPage() {
             />
           </div>
           <CardTitle className="text-3xl font-bold font-headline">
-            {loading ? <Skeleton className="h-9 w-48 mx-auto" /> : (config?.appName || 'ParkScore')}
+            {loading && !config ? <Skeleton className="h-9 w-48 mx-auto" /> : (config?.appName || 'ParkScore')}
           </CardTitle>
           <CardDescription className="text-muted-foreground pt-2">
-            {loading ? <Skeleton className="h-5 w-40 mx-auto" /> : `관리자/심판으로 로그인 하세요.`}
+            {loading && !config ? <Skeleton className="h-5 w-40 mx-auto" /> : `관리자/심판으로 로그인 하세요.`}
           </CardDescription>
         </CardHeader>
         <CardContent className="p-6 pt-2">
@@ -164,7 +166,7 @@ export default function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="h-12 text-base"
-                disabled={loading}
+                disabled={loading || isConfigMissing}
               />
             </div>
             <div className="space-y-2">
@@ -176,7 +178,7 @@ export default function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="h-12 text-base"
-                disabled={loading}
+                disabled={loading || isConfigMissing}
               />
             </div>
             {error && (
@@ -184,9 +186,9 @@ export default function LoginPage() {
                     <p>{error}</p>
                 </div>
             )}
-            <Button type="submit" className="w-full h-12 text-lg font-bold" disabled={loading || !firebaseConfig.apiKey}>
-              {loading ? (
-                '설정 로딩 중...'
+            <Button type="submit" className="w-full h-12 text-lg font-bold" disabled={loading || isConfigMissing}>
+              {loading && !isConfigMissing ? (
+                '로그인 중...'
               ) : (
                 <>
                   <LogIn className="mr-2 h-5 w-5" />
