@@ -358,7 +358,6 @@ export default function RefereePage() {
              <div className="bg-slate-50 min-h-screen p-2 sm:p-4 flex flex-col font-body">
                 <header className="text-center mb-4">
                     <h1 className="text-3xl font-extrabold text-primary break-keep leading-tight">{hole}번홀 점수 기록</h1>
-                    <p className="text-muted-foreground text-base">담당 심판용 페이지</p>
                 </header>
                 <div className="space-y-4">
                     <Skeleton className="h-32 w-full" />
@@ -482,45 +481,43 @@ export default function RefereePage() {
     return (
         <>
             <div className="bg-slate-50 min-h-screen p-2 sm:p-4 flex flex-col font-body">
-                <header className="text-center mb-4">
-                    <h1 className="text-3xl font-extrabold text-primary break-keep leading-tight">{hole}번홀 점수 기록</h1>
-                    <p className="text-muted-foreground text-base">담당 심판용 페이지</p>
+                <header className="flex justify-between items-center mb-4">
+                     <h1 className="text-2xl sm:text-3xl font-extrabold text-primary break-keep leading-tight">{hole}번홀 점수 기록</h1>
+                    {view === 'scoring' && (
+                        <Button variant="outline" onClick={handleBackToSelectionClick} className="h-9 text-xs sm:text-sm flex-shrink-0">
+                            <ArrowLeft className="mr-1 sm:mr-2 h-4 w-4" />
+                            그룹/코스 변경
+                        </Button>
+                    )}
                 </header>
 
                 <div className="flex-1 flex flex-col space-y-4">
                     {view === 'scoring' && (
-                        <Card>
-                            <CardHeader className="p-3">
-                                <div className="flex flex-col sm:flex-row justify-between items-center gap-2">
-                                    <div className="text-lg sm:text-xl font-bold text-center break-keep flex items-center gap-x-2">
-                                        <span>{selectedGroup}</span>
-                                        <span className="text-muted-foreground">/</span>
-                                        <span>{selectedCourseName}</span>
-                                        <span className="text-muted-foreground">/</span>
-                                        <Select value={selectedJo} onValueChange={handleJoChange}>
-                                            <SelectTrigger className="w-[120px] h-10 font-bold text-lg px-3">
-                                                <SelectValue placeholder="조 선택" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                {availableJos.map(jo => {
-                                                    const isCompleted = completedJos.has(jo);
-                                                    return (
-                                                        <SelectItem key={jo} value={jo.toString()}>
-                                                            <div className="flex items-center justify-between w-full gap-4">
-                                                                <span>{jo}조</span>
-                                                                {isCompleted && <Lock className="h-4 w-4 text-muted-foreground" />}
-                                                            </div>
-                                                        </SelectItem>
-                                                    );
-                                                })}
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-                                    <Button variant="outline" onClick={handleBackToSelectionClick} className="w-full sm:w-auto h-9">
-                                        <ArrowLeft className="mr-2 h-4 w-4" />
-                                        그룹/코스 변경
-                                    </Button>
+                       <Card>
+                            <CardHeader className="p-3 space-y-2">
+                                <div className="text-base sm:text-lg font-bold text-center text-muted-foreground break-words">
+                                    <span>{selectedGroup}</span>
+                                    <span className="mx-1">/</span>
+                                    <span>{selectedCourseName}</span>
                                 </div>
+                                <Select value={selectedJo} onValueChange={handleJoChange}>
+                                    <SelectTrigger className="w-full h-12 text-lg font-bold">
+                                        <SelectValue placeholder="조 선택" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {availableJos.map(jo => {
+                                            const isCompleted = completedJos.has(jo);
+                                            return (
+                                                <SelectItem key={jo} value={jo.toString()}>
+                                                    <div className="flex items-center justify-between w-full gap-4">
+                                                        <span>{jo}조</span>
+                                                        {isCompleted && <Lock className="h-4 w-4 text-muted-foreground" />}
+                                                    </div>
+                                                </SelectItem>
+                                            );
+                                        })}
+                                    </SelectContent>
+                                </Select>
                             </CardHeader>
                         </Card>
                     )}
