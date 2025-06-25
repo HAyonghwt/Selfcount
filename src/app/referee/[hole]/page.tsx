@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useMemo } from 'react';
@@ -175,6 +174,10 @@ export default function RefereePage() {
         return currentPlayers.every(player => scores[player.id]?.status === 'locked');
     }, [view, currentPlayers, scores]);
 
+    const hasUnsavedChanges = useMemo(() => {
+        return Object.values(scores).some(s => s.status === 'editing');
+    }, [scores]);
+
 
     const getLocalStorageScoresKey = () => {
         if (!hole || !selectedGroup || !selectedCourse || !selectedJo) return null;
@@ -236,11 +239,7 @@ export default function RefereePage() {
             setView('scoring');
         }
     };
-
-    const hasUnsavedChanges = useMemo(() => {
-        return Object.values(scores).some(s => s.status === 'editing');
-    }, [scores]);
-
+    
     const handleReturnToJoSelection = () => {
         const storageKey = getLocalStorageScoresKey();
         if (storageKey) {
