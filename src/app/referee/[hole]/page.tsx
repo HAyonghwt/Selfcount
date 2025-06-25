@@ -146,12 +146,19 @@ export default function RefereePage() {
     }, [allPlayers, selectedGroup, selectedJo]);
     
     const completedJos = useMemo(() => {
-        if (!selectedGroup || !selectedCourse || !hole) return new Set<number>();
+        if (!selectedGroup || !selectedCourse || !hole || !allPlayers.length || !Object.keys(allScores).length) {
+            return new Set<number>();
+        }
+    
+        // Filter players for the selected group once
+        const groupPlayers = allPlayers.filter(p => p.group === selectedGroup);
+        // Get unique Jos for that group
+        const josInGroup = [...new Set(groupPlayers.map(p => p.jo))];
     
         const completed = new Set<number>();
     
-        availableJos.forEach(joNum => {
-            const playersInThisJo = allPlayers.filter(p => p.group === selectedGroup && p.jo === joNum);
+        josInGroup.forEach(joNum => {
+            const playersInThisJo = groupPlayers.filter(p => p.jo === joNum);
     
             if (playersInThisJo.length === 0) return;
     
@@ -165,10 +172,14 @@ export default function RefereePage() {
         });
     
         return completed;
-    }, [allPlayers, allScores, availableJos, selectedGroup, selectedCourse, hole]);
+    }, [allPlayers, allScores, selectedGroup, selectedCourse, hole]);
 
     const isCurrentJoComplete = useMemo(() => {
-        if (view !== 'scoring' || currentPlayers.length === 0 || Object.keys(scores).length < currentPlayers.length) {
+        if (view !== 'scoring' || !currentPlayers.length) {
+            return false;
+        }
+        // Ensure score data is available for all current players before checking status
+        if (currentPlayers.some(player => !scores[player.id])) {
             return false;
         }
         return currentPlayers.every(player => scores[player.id]?.status === 'locked');
