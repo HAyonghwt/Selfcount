@@ -202,13 +202,51 @@ export default function PlayerManagementPage() {
                     return;
                 }
 
-                if (allPlayers.length + newPlayers.length > maxPlayers) {
-                    toast({
-                        title: '선수 등록 제한',
-                        description: `엑셀 파일의 선수(${newPlayers.length}명)를 추가하면 최대 인원(${maxPlayers}명)을 초과합니다. 현재 ${allPlayers.length}명 등록됨.`,
-                    });
-                    return;
-                }
+                // --- 조별 인원(팀) 제한 검증 시작 ---
+const groupJoLimit = type === 'individual' ? 4 : 2;
+// 기존 선수/팀 + 신규 업로드를 그룹/조별로 집계
+const groupJoMap: { [key: string]: { [key: string]: number } } = {};
+// 기존
+allPlayers.filter(p => p.type === type).forEach(p => {
+    const g = p.group || '';
+    const j = p.jo || '';
+    if (!groupJoMap[g]) groupJoMap[g] = {};
+    if (!groupJoMap[g][j]) groupJoMap[g][j] = 0;
+    groupJoMap[g][j]++;
+});
+// 신규
+newPlayers.forEach(p => {
+    const g = p.group || '';
+    const j = p.jo || '';
+    if (!groupJoMap[g]) groupJoMap[g] = {};
+    if (!groupJoMap[g][j]) groupJoMap[g][j] = 0;
+    groupJoMap[g][j]++;
+});
+// 초과 조 찾기
+const overList: string[] = [];
+Object.entries(groupJoMap).forEach(([g, jos]) => {
+    Object.entries(jos).forEach(([j, cnt]) => {
+        if (cnt > groupJoLimit) {
+            overList.push(`${g} 그룹 ${j}조: ${cnt}${type === 'individual' ? '명' : '팀'} (최대 ${groupJoLimit}${type === 'individual' ? '명' : '팀'})`);
+        }
+    });
+});
+if (overList.length > 0) {
+    toast({
+        title: '조별 인원(팀) 초과',
+        description: overList.join('\n') + '\n조별 최대 인원을 초과하여 등록할 수 없습니다.',
+    });
+    return;
+}
+// --- 조별 인원(팀) 제한 검증 끝 ---
+
+if (allPlayers.length + newPlayers.length > maxPlayers) {
+    toast({
+        title: '선수 등록 제한',
+        description: `엑셀 파일의 선수(${newPlayers.length}명)를 추가하면 최대 인원(${maxPlayers}명)을 초과합니다. 현재 ${allPlayers.length}명 등록됨.`,
+    });
+    return;
+}
                 
                 const updates: { [key: string]: any } = {};
                 newPlayers.forEach(player => {
