@@ -16,6 +16,7 @@ import {
 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
+import { useIsMobile } from "@/hooks/use-mobile"
 import {
   SidebarProvider,
   Sidebar,
@@ -26,9 +27,11 @@ import {
   SidebarMenuButton,
   SidebarFooter,
   SidebarSeparator,
+  SidebarTrigger,
+  useSidebar,
 } from "@/components/ui/sidebar"
 import { Skeleton } from "@/components/ui/skeleton"
-import { get, ref } from "firebase/database"
+import { get, ref, update } from "firebase/database"
 import { db } from "@/lib/firebase"
 
 const mainNavItems = [
@@ -40,13 +43,14 @@ const mainNavItems = [
 const secondaryNavItems = [
   { href: "/admin/scores", icon: ClipboardList, label: "점수 관리" },
   { href: "/admin/suddendeath", icon: Flame, label: "서든데스 관리" },
+  { href: "/admin/gift-event", icon: Trophy, label: "경품 행사" },
   { href: "/admin/referees", icon: ShieldCheck, label: "심판 계정 보기" },
 ];
 
-
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname()
-  const [isClient, setIsClient] = React.useState(false)
+  const isMobile = useIsMobile();
+  const pathname = usePathname();
+  const [isClient, setIsClient] = React.useState(false);
   const [appName, setAppName] = React.useState('');
 
   React.useEffect(() => {
@@ -89,91 +93,123 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       </div>
     )
   }
-  
+
   return (
     <SidebarProvider>
-      <div className="flex h-screen bg-background">
-        <Sidebar collapsible="icon" className="border-r">
-          <SidebarHeader className="p-4">
-            <div className="flex items-center gap-3">
-              <Image 
-                src="/logo.png" 
-                alt={`${appName} 로고`}
-                width={40}
-                height={40}
-                className="h-10 w-10"
-              />
-              <div className="group-data-[collapsible=icon]:hidden transition-opacity duration-200">
-                <h1 className="text-xl font-bold font-headline">{appName || <Skeleton className="h-6 w-32" />}</h1>
-                <p className="text-xs text-muted-foreground">관리자 패널</p>
-              </div>
-            </div>
-          </SidebarHeader>
-          <SidebarContent>
-            <SidebarMenu>
-               <SidebarMenuItem>
-                  <SidebarMenuButton asChild tooltip={{ children: "외부 전광판" }}>
-                     <Link href="/scoreboard" target="_blank" rel="noopener noreferrer">
-                        <Tv className="h-5 w-5 text-primary" />
-                        <span className="text-primary font-semibold">외부 전광판</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-
-              <SidebarSeparator className="my-2" />
-
-              {mainNavItems.map((item) => (
-                <SidebarMenuItem key={item.href}>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={pathname === item.href}
-                    tooltip={{ children: item.label }}
-                  >
-                    <Link href={item.href}>
-                      <item.icon className="h-5 w-5" />
-                      <span>{item.label}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-
-              <SidebarSeparator className="my-2" />
-
-              {secondaryNavItems.map((item) => (
-                 <SidebarMenuItem key={item.href}>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={pathname === item.href}
-                    tooltip={{ children: item.label }}
-                  >
-                    <Link href={item.href}>
-                      <item.icon className="h-5 w-5" />
-                      <span>{item.label}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarContent>
-          <SidebarFooter className="p-4 border-t">
-              <SidebarMenu>
-                <SidebarMenuItem>
-                  <SidebarMenuButton asChild tooltip={{ children: "로그아웃" }}>
-                    <Link href="/">
-                      <LogOut className="h-5 w-5" />
-                      <span>로그아웃</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              </SidebarMenu>
-          </SidebarFooter>
-        </Sidebar>
-        <main className="flex-1 bg-secondary/40 overflow-y-auto">
-           <div className="p-4 sm:p-6">
-            {children}
-          </div>
-        </main>
-      </div>
+      <SidebarContentWithSidebarHooks
+        isMobile={isMobile}
+        pathname={pathname}
+        appName={appName}
+        children={children}
+      />
     </SidebarProvider>
+  );
+}
+
+import { useRouter } from "next/navigation";
+
+function SidebarContentWithSidebarHooks({ isMobile, pathname, appName, children }: { isMobile: boolean, pathname: string, appName: string, children: React.ReactNode }) {
+  const { setOpenMobile } = useSidebar();
+  const router = useRouter();
+
+  const handleMenuClick = (href: string) => (e: React.MouseEvent) => {
+    if (isMobile) {
+      e.preventDefault();
+      setOpenMobile(false);
+      setTimeout(() => {
+        router.push(href);
+      }, 200); // Sheet 닫힘 애니메이션 후 이동
+    }
+    // 데스크탑은 Link 기본 동작
+  }
+
+  return (
+    <div className="flex h-screen bg-background">
+      {/* 모바일에서만 항상 보이는 햄버거 버튼 */}
+      <div className="md:hidden">
+        <SidebarTrigger className="z-50 fixed top-4 left-4" />
+      </div>
+
+      <Sidebar collapsible={isMobile ? "offcanvas" : "icon"} className="border-r">
+        <SidebarHeader className="p-4">
+          <div className="flex items-center gap-3">
+            <Image 
+              src="/logo.png" 
+              alt={`${appName} 로고`}
+              width={40}
+              height={40}
+              className="h-10 w-10"
+            />
+            <div className="group-data-[collapsible=icon]:hidden transition-opacity duration-200">
+              <h1 className="text-xl font-bold font-headline">{appName || <Skeleton className="h-6 w-32" />}</h1>
+              <p className="text-xs text-muted-foreground">관리자 패널</p>
+            </div>
+          </div>
+        </SidebarHeader>
+        <SidebarContent>
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton asChild tooltip={{ children: "외부 전광판" }}>
+                <Link href="/scoreboard" target="_blank" rel="noopener noreferrer" className="text-black" onClick={handleMenuClick("/scoreboard")}>
+                  <Tv className="h-5 w-5 text-primary" />
+                  <span className="text-primary font-semibold">외부 전광판</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+
+            <SidebarSeparator className="my-2" />
+
+            {mainNavItems.map((item) => (
+              <SidebarMenuItem key={item.href}>
+                <SidebarMenuButton
+                  asChild
+                  isActive={pathname === item.href}
+                  tooltip={{ children: item.label }}
+                >
+                  <Link href={item.href} className="text-black" onClick={handleMenuClick(item.href)}>
+                    <item.icon className="h-5 w-5" />
+                    <span>{item.label}</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            ))}
+
+            <SidebarSeparator className="my-2" />
+
+            {secondaryNavItems.map((item) => (
+              <SidebarMenuItem key={item.href}>
+                <SidebarMenuButton
+                  asChild
+                  isActive={pathname === item.href}
+                  tooltip={{ children: item.label }}
+                >
+                  <Link href={item.href} className="text-black" onClick={handleMenuClick(item.href)}>
+                    <item.icon className="h-5 w-5" />
+                    <span>{item.label}</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            ))}
+          </SidebarMenu>
+        </SidebarContent>
+        <SidebarFooter className="p-4 border-t">
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton asChild tooltip={{ children: "로그아웃" }}>
+                <Link href="/" className="text-black">
+                  <LogOut className="h-5 w-5" />
+                  <span>로그아웃</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarFooter>
+      </Sidebar>
+      <main className="flex-1 bg-secondary/40 overflow-y-auto">
+        <div className="p-4 sm:p-6">
+          {children}
+        </div>
+      </main>
+    </div>
   )
 }

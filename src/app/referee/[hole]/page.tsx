@@ -50,7 +50,25 @@ export default function RefereePage() {
     const [selectedGroup, setSelectedGroup] = useState<string>('');
     const [selectedCourse, setSelectedCourse] = useState<string>('');
     const [selectedJo, setSelectedJo] = useState<string>('');
-    
+
+    // 임시: 뒤로가기 경고 다이얼로그 상태
+    const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
+    const [pendingBackType, setPendingBackType] = useState<'button'|'popstate'|null>(null);
+
+    // leave confirm용 함수 (JSX에서 참조)
+    const confirmLeave = () => {
+        setShowLeaveConfirm(false);
+        setPendingBackType(null);
+        setView('selection');
+        setSelectedGroup('');
+        setSelectedCourse('');
+        setSelectedJo('');
+    };
+    const cancelLeave = () => {
+        setShowLeaveConfirm(false);
+        setPendingBackType(null);
+    };
+
     // Local state for scoring UI
     const [scores, setScores] = useState<{ [key: string]: ScoreData }>({});
     const [playerToSave, setPlayerToSave] = useState<Player | null>(null);
@@ -60,6 +78,26 @@ export default function RefereePage() {
     const [unlockPasswordInput, setUnlockPasswordInput] = useState('');
     const [playerToUnlock, setPlayerToUnlock] = useState<Player | null>(null);
     
+
+    // popstate(브라우저 뒤로가기)에서 경고 다이얼로그
+    useEffect(() => {
+        const onPopState = (e: PopStateEvent) => {
+            if (view === 'scoring') {
+                setPendingBackType('popstate');
+                setShowLeaveConfirm(true);
+                window.history.pushState(null, '', window.location.href);
+            }
+        };
+        if (typeof window !== 'undefined') {
+            window.addEventListener('popstate', onPopState);
+            if (view === 'scoring') window.history.pushState(null, '', window.location.href);
+        }
+        return () => {
+            if (typeof window !== 'undefined') {
+                window.removeEventListener('popstate', onPopState);
+            }
+        };
+    }, [view]);
 
     // Restore state from localStorage on initial load
     useEffect(() => {
@@ -477,7 +515,7 @@ export default function RefereePage() {
                 <header className="flex justify-between items-center mb-4">
                     <h1 className="text-2xl sm:text-3xl font-extrabold text-primary break-keep leading-tight">{hole}번홀 심판</h1>
                      {view === 'scoring' && (
-                        <Button variant="outline" onClick={handleBackToSelectionClick} className="h-9 text-xs sm:text-sm flex-shrink-0">
+                        <Button variant="outline" onClick={handleBackToSelectionClick} className="h-9 text-base sm:text-lg font-bold flex-shrink-0">
                             <ArrowLeft className="mr-1 sm:mr-2 h-4 w-4" />
                             그룹/코스 변경
                         </Button>
@@ -488,7 +526,7 @@ export default function RefereePage() {
                     {view === 'scoring' && (
                        <Card>
                             <CardHeader className="p-3 space-y-2">
-                                <div className="text-base sm:text-lg font-bold text-center text-foreground break-words">
+                                <div className="text-xl sm:text-2xl font-extrabold text-center text-foreground break-words">
                                     <span>{selectedGroup}</span>
                                     <span className="mx-1">/</span>
                                     <span>{selectedCourseName}</span>
@@ -572,6 +610,21 @@ export default function RefereePage() {
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
+        {/* 나가기 경고 다이얼로그 */}
+        <AlertDialog open={showLeaveConfirm} onOpenChange={(open) => { if (!open) cancelLeave(); }}>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>심판중인 페이지에서 나가겠습니까?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        입력 중인 점수가 저장되지 않을 수 있습니다.<br />정말 나가시겠습니까?
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel onClick={cancelLeave}>취소</AlertDialogCancel>
+                    <AlertDialogAction onClick={confirmLeave}>확인</AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
         </>
     );
 }

@@ -1,4 +1,3 @@
-
 "use client"
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { db } from '@/lib/firebase';
@@ -7,7 +6,8 @@ import { Flame, ChevronUp, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-
+import GiftEventDisplay from '@/components/gift-event/GiftEventDisplay';
+import GiftEventStandby from '@/components/gift-event/GiftEventStandby';
 
 interface ProcessedPlayer {
     id: string;
@@ -71,7 +71,30 @@ const tieBreak = (a: any, b: any, sortedCourses: any[]) => {
     return 0;
 };
 
-export default function ExternalScoreboard() {
+export default function ScoreboardPage() {
+  const [giftEventStatus, setGiftEventStatus] = useState<string>('');
+  useEffect(() => {
+    const statusRef = ref(db, 'giftEvent/status');
+    const unsub = onValue(statusRef, snap => setGiftEventStatus(snap.val() || ''));
+    return () => unsub();
+  }, []);
+
+  useEffect(() => {
+    console.log('giftEventStatus:', giftEventStatus);
+  }, [giftEventStatus]);
+
+  if (giftEventStatus === 'waiting') {
+    return <GiftEventStandby />;
+  }
+  if (giftEventStatus === 'started' || giftEventStatus === 'running' || giftEventStatus === 'drawing' || giftEventStatus === 'winner') {
+    return <GiftEventDisplay />;
+  }
+  // 점수표 기본 화면
+  return <ExternalScoreboard />;
+}
+
+// 기존 점수표 함수는 이름만 변경해서 아래에 유지
+function ExternalScoreboard() {
     const [loading, setLoading] = useState(true);
     const [players, setPlayers] = useState({});
     const [scores, setScores] = useState({});
@@ -487,24 +510,17 @@ export default function ExternalScoreboard() {
                                 <table className="w-full text-center border-collapse border-l border-r border-gray-800">
                                     <thead className="text-gray-400 text-sm">
                                         <tr className="border-b-2 border-gray-600">
-                                            <th className="py-1 px-1 w-12 text-center align-middle font-bold border-r border-gray-800">조</th>
-                                            <th className="py-1 px-1 w-44 text-center align-middle font-bold border-r border-gray-800">선수명(팀명)</th>
-                                            <th className="py-1 px-1 w-24 text-center align-middle font-bold border-r border-gray-800">소속</th>
-                                            <th className="py-1 px-1 w-24 text-center align-middle font-bold border-r border-gray-800">코스</th>
+                                            <th rowSpan={2} className="py-1 px-1 w-12 text-center align-middle font-bold border-r border-gray-800">조</th>
+                                            <th rowSpan={2} className="py-1 px-1 text-center align-middle font-bold border-r border-gray-800 w-44 md:w-44 sm:w-auto whitespace-nowrap">선수명(팀명)</th>
+                                            <th rowSpan={2} className="py-1 px-1 text-center align-middle font-bold border-r border-gray-800 w-24 md:w-24 sm:w-auto whitespace-nowrap">소속</th>
+                                            <th rowSpan={2} className="py-1 px-1 text-center align-middle font-bold border-r border-gray-800 w-24 md:w-24 sm:w-auto whitespace-nowrap">코스</th>
                                             <th colSpan={9} className="py-1 px-1 text-center align-middle font-bold border-r border-gray-800">HOLE</th>
-                                            <th className="py-1 px-1 min-w-[4rem] text-center align-middle font-bold border-r border-gray-800">합계</th>
-                                            <th className="py-1 px-1 min-w-[4rem] text-center align-middle font-bold text-yellow-400 border-r border-gray-800">총타수</th>
-                                            <th className="py-1 px-1 min-w-[4rem] text-center align-middle font-bold">순위</th>
+                                            <th rowSpan={2} className="py-1 px-1 min-w-[4rem] text-center align-middle font-bold border-r border-gray-800">합계</th>
+                                            <th rowSpan={2} className="py-1 px-1 min-w-[4rem] text-center align-middle font-bold text-yellow-400 border-r border-gray-800">총타수</th>
+                                            <th rowSpan={2} className="py-1 px-1 min-w-[4rem] text-center align-middle font-bold">순위</th>
                                         </tr>
                                         <tr className="border-b border-gray-600">
-                                            <th className="py-1 px-1 align-middle border-r border-gray-800"></th>
-                                            <th className="py-1 px-1 align-middle border-r border-gray-800"></th>
-                                            <th className="py-1 px-1 align-middle border-r border-gray-800"></th>
-                                            <th className="py-1 px-1 align-middle border-r border-gray-800"></th>
                                             {Array.from({length: 9}).map((_, i) => <th key={i} className={`py-1 px-1 font-bold text-base align-middle border-r border-gray-800 min-w-[2.5rem] ${i % 2 !== 0 ? 'bg-gray-800/50' : ''}`}>{i + 1}</th>)}
-                                            <th className="py-1 px-1 align-middle border-r border-gray-800"></th>
-                                            <th className="py-1 px-1 align-middle border-r border-gray-800"></th>
-                                            <th className="py-1 px-1 align-middle"></th>
                                         </tr>
                                     </thead>
                                     <tbody className="text-base">
@@ -515,11 +531,11 @@ export default function ExternalScoreboard() {
                                                         {courseIndex === 0 && (
                                                             <>
                                                                 <td rowSpan={player.assignedCourses.length || 1} className="py-0.5 px-1 align-middle font-bold border-r border-gray-800">{player.jo}</td>
-                                                                <td rowSpan={player.assignedCourses.length || 1} className="py-0.5 px-1 w-44 text-center align-middle font-semibold border-r border-gray-800">{player.name}</td>
-                                                                <td rowSpan={player.assignedCourses.length || 1} className="py-0.5 px-1 w-24 text-center align-middle text-gray-400 border-r border-gray-800">{player.club}</td>
+                                                                <td rowSpan={player.assignedCourses.length || 1} className="py-0.5 px-1 text-center align-middle font-semibold border-r border-gray-800 w-44 md:w-44 sm:w-auto whitespace-nowrap">{player.name}</td>
+                                                                <td rowSpan={player.assignedCourses.length || 1} className="py-0.5 px-1 text-center align-middle text-gray-400 border-r border-gray-800 w-24 md:w-24 sm:w-auto whitespace-nowrap">{player.club}</td>
                                                             </>
                                                         )}
-                                                        <td className="py-0.5 px-1 w-24 align-middle text-center border-r border-gray-800">{player.coursesData[course.id]?.courseName}</td>
+                                                        <td className="py-0.5 px-1 align-middle text-center border-r border-gray-800 w-24 md:w-24 sm:w-auto whitespace-nowrap">{player.coursesData[course.id]?.courseName}</td>
                                                         {player.coursesData[course.id]?.holeScores.map((score, i) => <td key={i} className={cn(`py-0.5 px-1 align-middle font-mono font-bold border-r border-gray-800 ${i % 2 !== 0 ? 'bg-gray-800/50' : ''}`, score === 0 ? 'text-xs' : 'text-xl')}>{score === null ? '-' : (score === 0 ? '기권' : score)}</td>)}
                                                         <td className={cn("py-0.5 px-1 align-middle font-bold text-gray-300 border-r border-gray-800", player.hasForfeited ? 'text-xs' : 'text-xl')}>{player.hasForfeited ? '기권' : (player.hasAnyScore ? player.coursesData[course.id]?.courseTotal : '-')}</td>
                                                         {courseIndex === 0 && (
@@ -532,8 +548,8 @@ export default function ExternalScoreboard() {
                                                 )) : (
                                                     <tr className="border-b border-gray-800 last:border-0">
                                                         <td className="py-0.5 px-1 align-middle font-bold border-r border-gray-800">{player.jo}</td>
-                                                        <td className="py-0.5 px-1 w-44 text-center align-middle font-semibold border-r border-gray-800">{player.name}</td>
-                                                        <td className="py-0.5 px-1 w-24 text-center align-middle text-gray-400 border-r border-gray-800">{player.club}</td>
+                                                        <td className="py-0.5 px-1 text-center align-middle font-semibold border-r border-gray-800 w-44 md:w-44 sm:w-auto whitespace-nowrap">{player.name}</td>
+                                                        <td className="py-0.5 px-1 text-center align-middle text-gray-400 border-r border-gray-800 w-24 md:w-24 sm:w-auto whitespace-nowrap">{player.club}</td>
                                                         <td colSpan={11} className="py-0.5 px-1 align-middle text-center text-gray-500 border-r border-gray-800">표시하도록 설정된 코스가 없습니다.</td>
                                                         <td className={cn("py-0.5 px-1 align-middle font-bold text-yellow-400 border-r border-gray-800", player.hasForfeited ? "text-xs" : "text-xl")}>{player.hasForfeited ? '기권' : (player.hasAnyScore ? player.totalScore : '-')}</td>
                                                         <td className={cn("py-0.5 px-1 align-middle font-bold", player.hasForfeited ? "text-xs" : "text-xl")}>{player.rank !== null ? `${player.rank}위` : (player.hasForfeited ? '기권' : '')}</td>
