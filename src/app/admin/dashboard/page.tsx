@@ -11,6 +11,7 @@ import { db } from '@/lib/firebase';
 import { ref, onValue } from 'firebase/database';
 import { useToast } from '@/hooks/use-toast';
 import { ToastAction } from '@/components/ui/toast';
+import ExternalScoreboardInfo from '@/components/ExternalScoreboardInfo';
 
 interface ProcessedPlayer {
     id: string;
@@ -78,6 +79,10 @@ const tieBreak = (a: any, b: any, sortedCourses: any[]) => {
 
 
 export default function AdminDashboard() {
+    // 항상 현재 도메인 기준으로 절대주소 생성
+    const externalScoreboardUrl = typeof window !== 'undefined'
+        ? `${window.location.origin}/scoreboard`
+        : '/scoreboard';
     const { toast } = useToast();
     const router = useRouter();
     const [players, setPlayers] = useState({});
@@ -533,7 +538,9 @@ export default function AdminDashboard() {
     };
 
     return (
-        <div className="space-y-6">
+        <>
+            <ExternalScoreboardInfo url={externalScoreboardUrl} />
+            <div className="space-y-6">
             <Card>
                 <CardHeader>
                     <CardTitle className="text-2xl font-bold font-headline">홈 전광판 (관리자용)</CardTitle>
@@ -605,9 +612,9 @@ export default function AdminDashboard() {
                                         <TableRow>
                                             <TableHead className="w-16 text-center px-2 py-2 border-r">순위</TableHead>
                                             <TableHead className="w-16 text-center px-2 py-2 border-r">조</TableHead>
-                                            <TableHead className="w-28 px-2 py-2 border-r">선수명(팀명)</TableHead>
-                                            <TableHead className="w-28 px-2 py-2 border-r">소속</TableHead>
-                                            <TableHead className="w-28 px-2 py-2 border-r">코스</TableHead>
+                                            <TableHead className="px-2 py-2 border-r text-center whitespace-nowrap" style={{minWidth:'90px',maxWidth:'260px',flexGrow:1}}>선수명(팀명)</TableHead>
+                                            <TableHead className="px-2 py-2 border-r text-center whitespace-nowrap" style={{minWidth:'80px',maxWidth:'200px',flexGrow:1}}>소속</TableHead>
+                                            <TableHead className="px-2 py-2 border-r text-center whitespace-nowrap" style={{minWidth:'80px',maxWidth:'200px',flexGrow:1}}>코스</TableHead>
                                             {Array.from({length: 9}).map((_, i) => <TableHead key={i} className="w-10 text-center px-2 py-2 border-r">{i + 1}</TableHead>)}
                                             <TableHead className="w-24 text-center px-2 py-2 border-r">합계</TableHead>
                                             <TableHead className="w-24 text-center px-2 py-2">총타수</TableHead>
@@ -622,12 +629,12 @@ export default function AdminDashboard() {
                                                             <>
                                                                 <TableCell rowSpan={player.assignedCourses.length || 1} className="text-center align-middle font-bold text-lg px-2 py-1 border-r">{player.rank !== null ? `${player.rank}위` : (player.hasForfeited ? '기권' : '-')}</TableCell>
                                                                 <TableCell rowSpan={player.assignedCourses.length || 1} className="text-center align-middle font-medium px-2 py-1 border-r">{player.jo}</TableCell>
-                                                                <TableCell rowSpan={player.assignedCourses.length || 1} className="align-middle font-semibold px-2 py-1 border-r">{player.name}</TableCell>
-                                                                <TableCell rowSpan={player.assignedCourses.length || 1} className="align-middle text-muted-foreground px-2 py-1 border-r">{player.affiliation}</TableCell>
+                                                                <TableCell rowSpan={player.assignedCourses.length || 1} className="align-middle font-semibold px-2 py-1 border-r text-center whitespace-nowrap" style={{minWidth:'90px',maxWidth:'260px',flexGrow:1}}>{player.name}</TableCell>
+                                                                <TableCell rowSpan={player.assignedCourses.length || 1} className="align-middle text-muted-foreground px-2 py-1 border-r text-center whitespace-nowrap" style={{minWidth:'80px',maxWidth:'200px',flexGrow:1}}>{player.affiliation}</TableCell>
                                                             </>
                                                         )}
                                                         
-                                                        <TableCell className="font-medium px-2 py-1 border-r">{player.coursesData[course.id]?.courseName}</TableCell>
+                                                        <TableCell className="font-medium px-2 py-1 border-r text-center whitespace-nowrap" style={{minWidth:'80px',maxWidth:'200px',flexGrow:1}}>{player.coursesData[course.id]?.courseName}</TableCell>
                                                         
                                                         {player.coursesData[course.id]?.holeScores.map((score, i) => <TableCell key={i} className="text-center font-mono px-2 py-1 border-r">{score === null ? '-' : score}</TableCell>)}
                                                         
@@ -641,8 +648,8 @@ export default function AdminDashboard() {
                                                     <TableRow key={`${player.id}-no-course`} className="text-base text-muted-foreground">
                                                          <TableCell className="text-center align-middle font-bold text-lg px-2 py-1 border-r">{player.rank !== null ? `${player.rank}위` : (player.hasForfeited ? '기권' : '-')}</TableCell>
                                                          <TableCell className="text-center align-middle font-medium px-2 py-1 border-r">{player.jo}</TableCell>
-                                                         <TableCell className="align-middle font-semibold px-2 py-1 border-r">{player.name}</TableCell>
-                                                         <TableCell className="align-middle px-2 py-1 border-r">{player.affiliation}</TableCell>
+                                                         <TableCell className="align-middle font-semibold px-2 py-1 border-r text-center">{player.name}</TableCell>
+                                                         <TableCell className="align-middle px-2 py-1 border-r text-center">{player.affiliation}</TableCell>
                                                          <TableCell colSpan={11} className="text-center px-2 py-1 border-r">이 그룹에 배정된 코스가 없습니다.</TableCell>
                                                          <TableCell className="text-center align-middle font-bold text-primary text-lg px-2 py-1">{player.hasForfeited ? '기권' : (player.hasAnyScore ? player.totalScore : '-')}</TableCell>
                                                     </TableRow>
@@ -657,6 +664,7 @@ export default function AdminDashboard() {
                 )
             })}
         </div>
+        </>
     );
 }
 
