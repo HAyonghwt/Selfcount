@@ -36,7 +36,7 @@ export default function ScoreManagementPage() {
     const [allPlayers, setAllPlayers] = useState({});
     const [allCourses, setAllCourses] = useState({});
     const [flatScores, setFlatScores] = useState<ScoreEntry[]>([]);
-    const [unlockPassword, setUnlockPassword] = useState('');
+    const [unlockPassword, setUnlockPassword] = useState(''); // 초기값을 빈 문자열로 유지 (345678 제거)
     const [showPassword, setShowPassword] = useState(false);
 
     const [editingCell, setEditingCell] = useState<string | null>(null);
@@ -44,7 +44,7 @@ export default function ScoreManagementPage() {
     const [scoreToUpdate, setScoreToUpdate] = useState<ScoreEntry | null>(null);
     const { toast } = useToast();
 
-    const [searchTerm, setSearchTerm] = useState('');
+    const [searchTerm, setSearchTerm] = useState(''); // 초기값을 빈 문자열로 유지 (admin@test.cpm 제거)
     const [filterGroup, setFilterGroup] = useState('all');
     const [filterCourse, setFilterCourse] = useState('all');
 
@@ -188,6 +188,7 @@ export default function ScoreManagementPage() {
                                 onChange={e => setUnlockPassword(e.target.value)}
                                 placeholder="숫자 비밀번호 입력"
                                 className="pr-10"
+                                autoComplete="new-password"
                             />
                             <Button
                                 type="button"

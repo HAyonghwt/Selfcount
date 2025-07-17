@@ -35,3 +35,10 @@ pnpm-debug.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Cypress 테스트 코드 및 실행 결과
+cypress/
+cypress.config.js
+cypress.env.json
+cypress/screenshots/
+cypress/videos/
