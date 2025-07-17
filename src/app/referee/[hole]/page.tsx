@@ -512,15 +512,27 @@ export default function RefereePage() {
     return (
         <>
             <div className="bg-slate-50 min-h-screen p-2 sm:p-4 flex flex-col font-body">
-                <header className="flex justify-between items-center mb-4">
-                    <h1 className="text-2xl sm:text-3xl font-extrabold text-primary break-keep leading-tight">{hole}번홀 심판</h1>
-                     {view === 'scoring' && (
-                        <Button variant="outline" onClick={handleBackToSelectionClick} className="h-9 text-base sm:text-lg font-bold flex-shrink-0">
-                            <ArrowLeft className="mr-1 sm:mr-2 h-4 w-4" />
-                            그룹/코스 변경
-                        </Button>
-                    )}
-                </header>
+                 <header className="flex justify-between items-center mb-4">
+                     <h1 className="text-2xl sm:text-3xl font-extrabold text-primary break-keep leading-tight">{hole}번홀 심판</h1>
+                     <div className="flex gap-2 items-center">
+                         {view === 'scoring' && (
+                             <Button variant="outline" onClick={handleBackToSelectionClick} className="h-9 text-base sm:text-lg font-bold flex-shrink-0">
+                                 <ArrowLeft className="mr-1 sm:mr-2 h-4 w-4" />
+                                 그룹/코스 변경
+                             </Button>
+                         )}
+                         {view === 'selection' && (
+                             <Button variant="destructive" onClick={() => {
+                                 // 세션/로컬스토리지 정리 및 루트(로그인)로 이동
+                                 if (typeof window !== 'undefined') {
+                                     localStorage.clear();
+                                     sessionStorage.clear();
+                                     router.replace('/');
+                                 }
+                             }} className="h-9 text-base sm:text-lg font-bold flex-shrink-0 ml-2">로그아웃</Button>
+                         )}
+                     </div>
+                 </header>
 
                 <div className="flex-1 flex flex-col space-y-4">
                     {view === 'scoring' && (
