@@ -147,7 +147,7 @@ export default function RefereePage() {
         const unsubScores = onValue(scoresRef, (snapshot) => setAllScores(snapshot.val() || {}));
         const unsubTournament = onValue(tournamentRef, (snapshot) => {
             const data = snapshot.val() || {};
-            setCourses(data.courses ? Object.values(data.courses).filter((c: any) => c.isActive) : []);
+            setCourses(data.courses ? Object.values(data.courses) : []);
             setGroupsData(data.groups || {});
             setLoading(false);
         });

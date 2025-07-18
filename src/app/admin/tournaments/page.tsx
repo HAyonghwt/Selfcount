@@ -126,8 +126,12 @@ export default function TournamentManagementPage() {
     // Optimistically update UI
     setCourses(prevCourses => prevCourses.map(c => c.id === courseId ? { ...c, isActive: checked } : c));
 
-    const courseActiveRef = ref(db, `tournaments/current/courses/${courseId}/isActive`);
-    set(courseActiveRef, checked)
+    // 코스 전체 정보 동기화: name/par 등 변경사항 포함
+    const targetCourse = courses.find(c => c.id === courseId);
+    if (!targetCourse) return;
+    const updatedCourse = { ...targetCourse, isActive: checked };
+    const courseRef = ref(db, `tournaments/current/courses/${courseId}`);
+    set(courseRef, updatedCourse)
         .then(() => {
             toast({
                 title: "상태 변경 완료",
