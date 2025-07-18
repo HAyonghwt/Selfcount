@@ -35,8 +35,8 @@ const ExternalScoreboardInfo: React.FC<ExternalScoreboardInfoProps> = ({ url }) 
   };
 
   return (
-    <Card className="flex flex-col md:flex-row items-center justify-between p-4 mb-4">
-      <CardContent className="flex flex-col md:flex-row justify-between items-center p-6">
+    <Card className="external-scoreboard-card flex flex-col md:flex-row items-center justify-between p-4 mb-4">
+      <CardContent className="external-scoreboard-content flex flex-col md:flex-row justify-between items-center p-6">
         {/* 왼쪽: 안내문구 + 주소폼 */}
         <div className="flex-1 flex flex-col justify-center" style={{ minWidth: 320, maxWidth: 480, width: '100%' }}>
           <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 4, color: '#222' }}>

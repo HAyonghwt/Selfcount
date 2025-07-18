@@ -2,6 +2,224 @@
 @tailwind components;
 @tailwind utilities;
 
+@media (max-width: 639px) {
+  .external-scoreboard-card input[type="text"] {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    text-align: left !important;
+    margin: 0 auto !important;
+  }
+  .external-scoreboard-card,
+  .external-scoreboard-content {
+    width: 100% !important;
+    box-sizing: border-box !important;
+    margin: 0 auto !important;
+    padding: 12px 4px !important;
+    display: block !important;
+    text-align: left !important;
+    align-items: flex-start !important;
+    justify-content: flex-start !important;
+  }
+  .external-scoreboard-card.flex,
+  .external-scoreboard-content.flex {
+    display: block !important;
+  }
+  .external-scoreboard-card .flex,
+  .external-scoreboard-card .items-center,
+  .external-scoreboard-card .justify-between {
+    display: block !important;
+    justify-content: flex-start !important;
+    align-items: flex-start !important;
+    text-align: left !important;
+  }
+
+    justify-content: center !important;
+    align-items: center !important;
+  }
+
+  .gift-mobile-wrap {
+    padding: 4px !important;
+    font-size: 8px !important;
+    max-width: 420px !important;
+    margin: 0 auto !important;
+    min-height: 0 !important;
+    box-sizing: border-box;
+  }
+  .gift-mobile-wrap .card,
+  .gift-mobile-wrap .Card,
+  .gift-mobile-wrap .card-header,
+  .gift-mobile-wrap .CardHeader,
+  .gift-mobile-wrap .card-content,
+  .gift-mobile-wrap .CardContent {
+    padding: 4px !important;
+    border-radius: 6px !important;
+    margin-bottom: 6px !important;
+    font-size: 8px !important;
+    box-shadow: none !important;
+  }
+  .gift-mobile-wrap .card-title,
+  .gift-mobile-wrap .CardTitle {
+    font-size: 9px !important;
+    margin-bottom: 3px !important;
+    font-weight: 700 !important;
+    gap: 2px !important;
+    display: flex !important;
+    align-items: center !important;
+  }
+  .gift-mobile-wrap .card-title svg,
+  .gift-mobile-wrap .CardTitle svg {
+    width: 12px !important;
+    height: 12px !important;
+    margin-right: 1px !important;
+  }
+  .gift-mobile-wrap .card-content ul,
+  .gift-mobile-wrap .CardContent ul {
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+  .gift-mobile-wrap .card-content li,
+  .gift-mobile-wrap .CardContent li {
+    padding: 2px 1px !important;
+    font-size: 8px !important;
+    border-bottom-width: 1px !important;
+  }
+  .gift-mobile-wrap .card-content li span,
+  .gift-mobile-wrap .CardContent li span {
+    font-size: 7px !important;
+  }
+  .gift-mobile-wrap .flex {
+    gap: 4px !important;
+    display: flex !important;
+    width: 100% !important;
+    justify-content: center !important;
+    align-items: center !important;
+    flex-wrap: nowrap !important;
+  }
+  .gift-mobile-wrap button,
+  .gift-mobile-wrap .button {
+    font-size: 16px !important;
+    padding: 12px 0 !important;
+    min-width: 80px !important;
+    width: 30% !important;
+    height: 44px !important;
+    border-radius: 8px !important;
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+    box-sizing: border-box !important;
+    text-align: center !important;
+    flex-shrink: 1 !important;
+    flex-grow: 0 !important;
+    flex-basis: 30% !important;
+  }
+  .gift-mobile-wrap .button svg,
+  .gift-mobile-wrap button svg {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  .gift-mobile-wrap .mb-6 {
+    margin-bottom: 6px !important;
+  }
+  .gift-mobile-wrap .grid {
+    gap: 4px !important;
+  }
+  .gift-mobile-wrap h1 {
+    font-size: 10px !important;
+    margin-bottom: 6px !important;
+  }
+  /* gift-mobile-draw 등 기존 모바일 전용 스타일도 반드시 이 블록 내부에만 존재해야 함 */
+  .gift-mobile-draw {
+    width: 100vw !important;
+    max-width: 100vw !important;
+    overflow-x: hidden !important;
+    padding: 0 !important;
+  }
+  .gift-mobile-draw .draw-list-row {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    padding-top: 2px !important;
+    padding-bottom: 2px !important;
+    width: 96vw !important;
+    margin: 0 auto !important;
+    font-size: min(4vw, 11px) !important;
+    height: 1em !important;
+    box-sizing: border-box !important;
+  }
+  .gift-mobile-draw .draw-list-row.center {
+    font-size: min(7vw, 16px) !important;
+    height: 1.2em !important;
+    font-weight: 800 !important;
+    letter-spacing: -0.03em !important;
+    width: 96vw !important;
+    margin: 0 auto !important;
+  }
+  .gift-mobile-draw .draw-list-row > div {
+    width: 50% !important;
+    text-align: center !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    box-sizing: border-box !important;
+  }
+  .gift-mobile-draw .winner-list-box {
+    position: fixed !important;
+    right: 4px !important;
+    top: 4px !important;
+    z-index: 60 !important;
+    min-width: 90px !important;
+    max-width: 40vw !important;
+    height: 180px !important;
+    padding: 2px !important;
+  }
+  .gift-mobile-draw .winner-list-box .bg-white\/80 {
+    padding: 2px !important;
+    border-radius: 6px !important;
+    font-size: 10px !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    height: 100% !important;
+  }
+  .gift-mobile-draw .winner-list-box .text-lg {
+    font-size: 11px !important;
+    margin-bottom: 2px !important;
+  }
+  .gift-mobile-draw .winner-list-box ul {
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+  .gift-mobile-draw .winner-list-box li {
+    font-size: 9px !important;
+    gap: 2px !important;
+    padding: 0 !important;
+  }
+  .gift-mobile-draw .prize-message {
+    font-size: 14px !important;
+    white-space: normal !important;
+    word-break: keep-all !important;
+    text-align: center !important;
+  }
+  .gift-mobile-draw .prize-card {
+    padding: 8px !important;
+    margin: 0 !important;
+    min-width: 0 !important;
+    max-width: 100vw !important;
+  }
+  .gift-mobile-draw .draw-list-row {
+    font-size: 13px !important;
+    height: 24px !important;
+    padding-left: 4px !important;
+    padding-right: 4px !important;
+  }
+
+.gift-mobile-draw .prize-message {
+  font-size: 14px !important;
+  white-space: normal !important;
+  word-break: keep-all !important;
+  text-align: center !important;
 body {
   font-family: 'Noto Sans KR', sans-serif;
   font-size: 110%;
@@ -70,4 +288,5 @@ body {
   body {
     @apply bg-background text-foreground;
   }
+}
 }

@@ -128,7 +128,7 @@ export default function GiftEventAdminPage() {
   const remainingParticipants = participants.filter(p => remaining.includes(p.id));
 
   return (
-    <div className="p-4 md:p-8">
+    <div className={`p-4 md:p-8${typeof window !== 'undefined' && window.innerWidth <= 639 ? ' gift-mobile-wrap' : ''}`}>
       {/* 당첨자 추첨 후에도 GiftEventDraw가 사라지지 않도록 winner가 null이 아니면 항상 표시 */}
       {currentWinner && <GiftEventDraw winner={currentWinner} onAnimationEnd={handleWinnerAnnounce} />}
       <h1 className="text-2xl font-bold mb-6">경품 행사 관리</h1>
@@ -150,41 +150,41 @@ export default function GiftEventAdminPage() {
         </CardContent>
       </Card>
 
-      <div className="grid md:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center">
-              <Users className="mr-2" /> 추첨 대상자 ({remaining.length}명)
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="max-h-96 overflow-y-auto">
-            <ul>
-              {remainingParticipants.map(p => (
-                  <li key={p.id} className="p-2 border-b last:border-0">
-                    {p.name} <span className='text-sm text-gray-500'>({p.club})</span>
-                  </li>
-                ))}
-            </ul>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center">
-              <User className="mr-2" /> 당첨자 ({winners.length}명)
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="max-h-96 overflow-y-auto">
-            <ul>
-              {winners.map((w, index) => (
-                <li key={`${w.id}_${index}`} className="p-2 border-b last:border-0 font-semibold">
-                  {index + 1}. {w.name} <span className='text-sm text-gray-400'>({w.club})</span>        
-                </li>
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
-      </div>
+      <>
+  {/* 모든 환경에서 당첨자 → 추첨대상자 순서 */}
+  <Card>
+    <CardHeader>
+      <CardTitle className="flex items-center">
+        <User className="mr-2" /> 당첨자 ({winners.length}명)
+      </CardTitle>
+    </CardHeader>
+    <CardContent className="max-h-96 overflow-y-auto">
+      <ul>
+        {winners.map((w, index) => (
+          <li key={`${w.id}_${index}`} className="p-2 border-b last:border-0">
+            <span className={typeof window !== 'undefined' && window.innerWidth <= 639 ? 'font-semibold text-base' : 'font-semibold'}>{index + 1}. {w.name}</span> <span className={typeof window !== 'undefined' && window.innerWidth <= 639 ? 'text-base text-gray-400' : 'text-sm text-gray-400'}>({w.club})</span>
+          </li>
+        ))}
+      </ul>
+    </CardContent>
+  </Card>
+  <Card>
+    <CardHeader>
+      <CardTitle className="flex items-center">
+        <Users className="mr-2" /> 추첨 대상자 ({remaining.length}명)
+      </CardTitle>
+    </CardHeader>
+    <CardContent className="max-h-96 overflow-y-auto">
+      <ul>
+        {remainingParticipants.map(p => (
+          <li key={p.id} className="p-2 border-b last:border-0">
+            <span className={typeof window !== 'undefined' && window.innerWidth <= 639 ? 'font-semibold text-base' : ''}>{p.name}</span> <span className={typeof window !== 'undefined' && window.innerWidth <= 639 ? 'text-base text-gray-500' : 'text-sm text-gray-500'}>({p.club})</span>
+          </li>
+        ))}
+      </ul>
+    </CardContent>
+  </Card>
+</>
     </div>
   );
 }

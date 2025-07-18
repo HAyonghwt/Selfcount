@@ -132,16 +132,16 @@ export default function GiftEventDraw({ winner, onAnimationEnd }: GiftEventDrawP
   }
 
   return (
-    <div className="w-full flex flex-col items-center justify-center my-6">
+    <div className={typeof window !== 'undefined' && window.innerWidth <= 639 ? 'gift-mobile-draw mobile-draw-ui' : ''} className="w-full flex flex-col items-center justify-center my-6" style={typeof window !== 'undefined' && window.innerWidth <= 639 ? {fontSize: 12} : {}}>
       <div className="relative w-full max-w-xl flex flex-col items-center justify-center bg-gradient-to-br from-gray-900/95 via-gray-800/80 to-gray-700/70 rounded-2xl shadow-2xl p-8 border border-gray-600">
-        <div className="text-2xl font-semibold mb-8 text-blue-200 tracking-widest uppercase">Prize Draw</div>
+        <div className="text-2xl font-semibold mb-8 text-blue-200 tracking-widest uppercase" style={typeof window !== 'undefined' && window.innerWidth <= 639 ? {fontSize: 16, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'} : {}}>Prize Draw</div>
         {final ? (
-          <div className="flex flex-col items-center justify-center w-full h-[340px]">
+          <div className="flex flex-col items-center justify-center h-full prize-card" style={{ minHeight: 420 }}>
             <div className="flex flex-row items-center justify-center gap-8 w-full">
-              <div className="text-4xl md:text-5xl font-medium text-yellow-200 text-right min-w-[150px] tracking-tight drop-shadow-[0_2px_8px_rgba(255,255,200,0.18)]">{winner.club}</div>
-              <div className="text-6xl md:text-7xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 via-yellow-400 to-yellow-200 animate-pulse drop-shadow-[0_4px_24px_rgba(180,160,50,0.18)]" style={{letterSpacing:'-0.05em'}}>{winner.name}</div>
+              <div className="text-4xl md:text-5xl font-medium text-yellow-200 text-right min-w-[150px] tracking-tight drop-shadow-[0_2px_8px_rgba(255,255,200,0.18)]" style={typeof window !== 'undefined' && window.innerWidth <= 639 ? {fontSize: 18, minWidth: 60, maxWidth: 90, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'} : {}}>{winner.club}</div>
+              <div className="text-6xl md:text-7xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 via-yellow-400 to-yellow-200 animate-pulse drop-shadow-[0_4px_24px_rgba(180,160,50,0.18)]" style={typeof window !== 'undefined' && window.innerWidth <= 639 ? {fontSize: 40, letterSpacing: '-0.05em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 120} : {letterSpacing: '-0.05em'}}>{winner.name}</div>
             </div>
-            <div className="mt-12 text-3xl font-bold text-yellow-100 animate-fade-in tracking-wide drop-shadow-[0_2px_8px_rgba(255,255,200,0.32)]">축하합니다! 당첨자!</div>
+            <div className="mt-12 text-3xl font-bold text-yellow-100 animate-fade-in tracking-wide drop-shadow-[0_2px_8px_rgba(255,255,200,0.32)] prize-message" style={typeof window !== 'undefined' && window.innerWidth <= 639 ? {fontSize: 16, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 180} : {}}>축하합니다!</div>
           </div>
         ) : (
           <div className="relative w-full">
@@ -170,9 +170,9 @@ export default function GiftEventDraw({ winner, onAnimationEnd }: GiftEventDrawP
                   return (
                     <div
                       key={`${p.id}_${i}_${rolling ? rollingIndex : 'final'}`}
-                      className={`flex flex-row items-center justify-between px-8 py-2 rounded-xl transition-all duration-200 ${bg}`}
+                      className={`draw-list-row flex flex-row items-center justify-between px-8 py-2 rounded-xl transition-all duration-200 ${bg} ${i === centerRow ? 'center' : ''}`}
                       style={{
-                        fontSize: i === centerRow ? 40 : 24,
+                        fontSize: (typeof window !== 'undefined' && window.innerWidth <= 639) ? (i === centerRow ? 26 : 16) : (i === centerRow ? 40 : 24),
                         height: i === centerRow ? 64 : 44,
                         opacity,
                         filter: `blur(${blur}px)`,
@@ -211,38 +211,48 @@ export default function GiftEventDraw({ winner, onAnimationEnd }: GiftEventDrawP
           </div>
         )}
         {/* 오른쪽 위에 당첨자 명단 항상 표시 */}
-        <div style={{ position: 'fixed', right: 32, top: 32, zIndex: 60 }}>
-          <div className="bg-white/80 rounded-xl shadow-lg px-6 py-4 text-base text-gray-700 min-w-[180px] max-w-xs h-[504px] overflow-hidden">
+        <div className={`winner-list-box${typeof window !== 'undefined' && window.innerWidth <= 639 ? ' mobile-winner-list' : ''}`} style={{ position: 'fixed', right: typeof window !== 'undefined' && window.innerWidth <= 639 ? 4 : 32, top: typeof window !== 'undefined' && window.innerWidth <= 639 ? 4 : 32, zIndex: 60 }}>
+          <div className={`bg-white/80 rounded-xl shadow-lg ${typeof window !== 'undefined' && window.innerWidth <= 639 ? 'px-2 py-2 text-xs min-w-[90px] max-w-[40vw] h-[180px]' : 'px-6 py-4 text-base min-w-[180px] max-w-xs h-[504px]'} text-gray-700 overflow-hidden`}>
             <div className="font-bold mb-2 text-gray-800 text-lg">당첨자 명단</div>
-            {/**
-             * 애니메이션이 도는 중(final=false)에는 마지막 당첨자를 제외해서 보여주고,
-             * 애니메이션이 끝난 뒤(final=true)에는 전체 winners를 보여준다.
-             */}
             {(() => {
               const visibleWinners = final ? winners : winners.slice(0, -1);
-              const last14 = visibleWinners.slice(-14);
-              return (
-                <ul className="space-y-2">
-                  {last14.length === 0 && <li className="text-gray-400">아직 없음</li>}
-                  {last14.map((w, i) => (
-                    <li key={`${w.id}_${i}`} className="flex flex-row items-center gap-2">
-                      <span className="font-semibold text-yellow-600">{w.club}</span>
-                      <span className="font-bold text-pink-700">{w.name}</span>
-                    </li>
-                  ))}
-                </ul>
-              );
+              if (typeof window !== 'undefined' && window.innerWidth <= 639) {
+                // 모바일: 최근 6명만, 최신순(최근 당첨자가 맨 위)
+                const last6 = visibleWinners.slice(-6);
+                return (
+                  <ul className="space-y-2">
+                    {last6.length === 0 && <li className="text-gray-400">아직 없음</li>}
+                    {last6.map((w, i) => (
+                      <li key={`${w.id}_${i}`} className="flex flex-row items-center gap-2">
+                        <span className="font-semibold text-yellow-600">{w.club}</span>
+                        <span className="font-bold text-pink-700">{w.name}</span>
+                      </li>
+                    ))}
+                  </ul>
+                );
+              } else {
+                // PC: 기존대로 최대 14명, 오래된 순서
+                const last14 = visibleWinners.slice(-14);
+                return (
+                  <ul className="space-y-2">
+                    {last14.length === 0 && <li className="text-gray-400">아직 없음</li>}
+                    {last14.map((w, i) => (
+                      <li key={`${w.id}_${i}`} className="flex flex-row items-center gap-2">
+                        <span className="font-semibold text-yellow-600">{w.club}</span>
+                        <span className="font-bold text-pink-700">{w.name}</span>
+                      </li>
+                    ))}
+                  </ul>
+                );
+              }
             })()}
-
           </div>
         </div>
-        {final && (
+        {showConfetti && (
           <Confetti
-            width={typeof window !== 'undefined' ? window.innerWidth : 1920}
-            height={typeof window !== 'undefined' ? window.innerHeight : 1080}
+            gravity={0.1}
             numberOfPieces={100}
             recycle={true}
-            gravity={0.1}
             style={{ position: 'fixed', left: 0, top: 0, width: '100vw', height: '100vh', pointerEvents: 'none', zIndex: 50 }}
           />
         )}

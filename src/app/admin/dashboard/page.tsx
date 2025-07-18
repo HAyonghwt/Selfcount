@@ -547,24 +547,24 @@ export default function AdminDashboard() {
                     <CardDescription>현재 진행중인 대회의 실시간 점수 현황입니다.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                    <div className="flex flex-col sm:flex-row gap-4 justify-between items-center p-4 bg-muted/50 rounded-lg">
-                        <div className="flex gap-4 items-center">
-                            <Filter className="w-5 h-5 text-muted-foreground" />
-                             <Select value={filterGroup} onValueChange={setFilterGroup}>
-                                <SelectTrigger className="w-[180px]">
-                                    <SelectValue placeholder="그룹 필터" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="all">모든 그룹</SelectItem>
-                                    {allGroupsList.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                        <Button onClick={handleExportToExcel} disabled={Object.keys(players).length === 0}>
-                            <Download className="mr-2 h-4 w-4" />
-                            엑셀로 다운로드
-                        </Button>
-                    </div>
+                    <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center sm:justify-between p-4 bg-muted/50 rounded-lg">
+  <div className="flex flex-row gap-2 items-center w-full sm:w-auto">
+    <Filter className="w-5 h-5 text-muted-foreground" />
+    <Select value={filterGroup} onValueChange={setFilterGroup}>
+      <SelectTrigger className="w-[140px] sm:w-[180px]">
+        <SelectValue placeholder="그룹 필터" />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="all">모든 그룹</SelectItem>
+        {allGroupsList.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}
+      </SelectContent>
+    </Select>
+    <Button className="ml-2" onClick={handleExportToExcel} disabled={Object.keys(players).length === 0}>
+      <Download className="mr-2 h-4 w-4" />
+      엑셀로 다운로드
+    </Button>
+  </div>
+</div>
                 </CardContent>
             </Card>
 
