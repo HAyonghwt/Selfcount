@@ -27,7 +27,14 @@ const initialCourses: Course[] = [
   { id: 2, name: 'B코스', pars: [...defaultPars], isActive: true },
 ];
 
+interface EditingPar {
+  courseId: number;
+  holeIndex: number;
+  original: number | null;
+}
+
 export default function TournamentManagementPage() {
+  const [editingPar, setEditingPar] = useState<EditingPar | null>(null);
   const [tournamentName, setTournamentName] = useState('');
   const [courses, setCourses] = useState<Course[]>([]);
   const { toast } = useToast();
@@ -224,12 +231,41 @@ export default function TournamentManagementPage() {
                         {index + 1}홀
                       </Label>
                       <Input
-                        id={`par-${course.id}-${index}`}
-                        type="number"
-                        value={par === null ? '' : par}
-                        onChange={(e) => handleParChange(course.id, index, e.target.value)}
-                        className="text-center h-12 text-lg"
-                      />
+  id={`par-${course.id}-${index}`}
+  type="number"
+  value={par === null ? '' : par}
+  inputMode="numeric"
+  onFocus={e => {
+    setTimeout(() => e.target.select(), 0);
+    e.target.select();
+    setEditingPar({ courseId: course.id, holeIndex: index, original: par });
+  }}
+  onBlur={e => {
+    if (e.target.value === '' && editingPar && editingPar.courseId === course.id && editingPar.holeIndex === index) {
+      handleParChange(course.id, index, editingPar.original?.toString() ?? '');
+    }
+    setEditingPar(null);
+  }}
+  onInput={e => {
+    const target = e.target as HTMLInputElement;
+    const val = target.value.slice(-1);
+    handleParChange(course.id, index, val);
+    target.value = val;
+    if (/^\d$/.test(val)) {
+      const nextIndex = index + 1;
+      const nextCourseIdx = courses.findIndex(c => c.id === course.id) + (nextIndex >= course.pars.length ? 1 : 0);
+      const nextHoleIdx = nextIndex % course.pars.length;
+      setTimeout(() => {
+        if (nextCourseIdx < courses.length) {
+          const nextInput = document.getElementById(`par-${courses[nextCourseIdx].id}-${nextHoleIdx}`) as HTMLInputElement | null;
+          if (nextInput) nextInput.focus();
+        }
+      }, 0);
+    }
+  }}
+  onChange={() => {}}
+  className="text-center h-12 text-lg"
+/>
                     </div>
                   ))}
                 </div>

@@ -17,6 +17,7 @@ import { db } from "@/lib/firebase";
 import { ref, onValue } from "firebase/database";
 
 export default function GiftEventDraw({ winner, onAnimationEnd }: GiftEventDrawProps) {
+  const [showConfettiPowder, setShowConfettiPowder] = useState(false);
   // 임시 더미 리스트 (실제 구현시 상위에서 참가자 리스트를 prop으로 받으면 됨)
   const dummyList: Participant[] = [
     { id: "dummy1", name: "홍길동", club: "파크A" },
@@ -59,6 +60,15 @@ export default function GiftEventDraw({ winner, onAnimationEnd }: GiftEventDrawP
     if (!winner) setRolledWinnerId(null);
   }, [winner]);
 
+  // rolling, winner 상태에 따라 꽃가루 ON/OFF 항상 보장
+  useEffect(() => {
+    if (!winner || rolling) {
+      setShowConfettiPowder(false);
+    } else if (winner && !rolling) {
+      setShowConfettiPowder(true);
+    }
+  }, [winner, rolling]);
+
   // winner가 바뀔 때마다 roll() 반드시 실행
   useEffect(() => {
     if (!winner) return;
@@ -66,7 +76,6 @@ export default function GiftEventDraw({ winner, onAnimationEnd }: GiftEventDrawP
     setRolling(true);
     setFinal(false);
     setShowConfetti(false);
-    // winner가 마지막에 중앙에 오도록 리스트 뒤에 추가
     let idxList = [...dummyList, winner];
     let i = 0;
     let interval = 30;
@@ -84,13 +93,6 @@ export default function GiftEventDraw({ winner, onAnimationEnd }: GiftEventDrawP
         setRolling(false);
         setFinal(true);
         setShowConfetti(true);
-        // confetti 2초 후 사라지고, 그 후에만 onAnimationEnd 콜백 호출 (명단 추가)
-        setTimeout(() => {
-          setShowConfetti(false);
-          setTimeout(() => {
-            onAnimationEnd();
-          }, 500); // confetti 사라진 뒤 0.5초 후 콜백
-        }, 2000);
       }
     }
     roll();
@@ -98,7 +100,6 @@ export default function GiftEventDraw({ winner, onAnimationEnd }: GiftEventDrawP
       clearTimeout(timer);
     };
   }, [winner]);
-
 
   if (!winner) return null;
 
@@ -138,10 +139,22 @@ export default function GiftEventDraw({ winner, onAnimationEnd }: GiftEventDrawP
         {final ? (
           <div className="flex flex-col items-center justify-center h-full prize-card" style={{ minHeight: 420 }}>
             <div className="flex flex-row items-center justify-center gap-8 w-full">
-              <div className="text-4xl md:text-5xl font-medium text-yellow-200 text-right min-w-[150px] tracking-tight drop-shadow-[0_2px_8px_rgba(255,255,200,0.18)]" style={typeof window !== 'undefined' && window.innerWidth <= 639 ? {fontSize: 18, minWidth: 60, maxWidth: 90, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'} : {}}>{winner.club}</div>
-              <div className="text-6xl md:text-7xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 via-yellow-400 to-yellow-200 animate-pulse drop-shadow-[0_4px_24px_rgba(180,160,50,0.18)]" style={typeof window !== 'undefined' && window.innerWidth <= 639 ? {fontSize: 40, letterSpacing: '-0.05em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 120} : {letterSpacing: '-0.05em'}}>{winner.name}</div>
+              <div className="text-4xl md:text-5xl font-medium text-yellow-200 text-right min-w-[150px] tracking-tight drop-shadow-[0_2px_8px_rgba(255,255,200,0.18)]"
+  style={typeof window !== 'undefined' && window.innerWidth <= 639
+    ? {fontSize: 36, minWidth: 60, maxWidth: 180, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'}
+    : {}}
+>{winner.club}</div>
+              <div className="text-6xl md:text-7xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 via-yellow-400 to-yellow-200 animate-pulse drop-shadow-[0_4px_24px_rgba(180,160,50,0.18)]"
+  style={typeof window !== 'undefined' && window.innerWidth <= 639
+    ? {fontSize: 60, letterSpacing: '-0.05em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 180}
+    : {letterSpacing: '-0.05em'}}
+>{winner.name}</div>
             </div>
-            <div className="mt-12 text-3xl font-bold text-yellow-100 animate-fade-in tracking-wide drop-shadow-[0_2px_8px_rgba(255,255,200,0.32)] prize-message" style={typeof window !== 'undefined' && window.innerWidth <= 639 ? {fontSize: 16, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 180} : {}}>축하합니다!</div>
+            <div className="mt-12 text-3xl font-bold text-yellow-100 animate-fade-in tracking-wide drop-shadow-[0_2px_8px_rgba(255,255,200,0.32)] prize-message"
+  style={typeof window !== 'undefined' && window.innerWidth <= 639
+    ? {fontSize: 32, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 360}
+    : {}}
+>축하합니다!</div>
           </div>
         ) : (
           <div className="relative w-full">
@@ -248,14 +261,38 @@ export default function GiftEventDraw({ winner, onAnimationEnd }: GiftEventDrawP
             })()}
           </div>
         </div>
-        {showConfetti && (
-          <Confetti
-            gravity={0.1}
-            numberOfPieces={100}
-            recycle={true}
-            style={{ position: 'fixed', left: 0, top: 0, width: '100vw', height: '100vh', pointerEvents: 'none', zIndex: 50 }}
-          />
-        )}
+        <>
+  {/* 폭죽(Confetti) - 당첨자 확정 후에만 */}
+  {winner && !rolling && (
+    <Confetti
+      gravity={0.08}
+      numberOfPieces={300}
+      width={typeof window !== 'undefined' ? window.innerWidth : 1920}
+      height={typeof window !== 'undefined' ? window.innerHeight : 1080}
+      recycle={true}
+      style={{ position: 'fixed', left: 0, top: 0, width: '100vw', height: '100vh', pointerEvents: 'none', zIndex: 50 }}
+      colors={['#FFD700', '#FF69B4', '#FFFACD', '#FF6347', '#87CEFA', '#ADFF2F', '#00E6B8', '#FFB347', '#B39DDB']}
+      initialVelocityY={18}
+      initialVelocityX={8}
+      run={true}
+    />
+  )}
+  {/* 축포 가루(조각) - 당첨자 확정 시 3초간만 */}
+  {showConfettiPowder && winner && !rolling && (
+    <Confetti
+      gravity={0.04}
+      numberOfPieces={50}
+      width={typeof window !== 'undefined' ? window.innerWidth : 1920}
+      height={typeof window !== 'undefined' ? window.innerHeight : 1080}
+      recycle={true}
+      style={{ position: 'fixed', left: 0, top: 0, width: '100vw', height: '100vh', pointerEvents: 'none', zIndex: 51 }}
+      colors={['#FFD700', '#FF69B4', '#FFFACD', '#FF6347', '#87CEFA', '#ADFF2F', '#00E6B8', '#FFB347', '#B39DDB']}
+      initialVelocityY={8}
+      initialVelocityX={2}
+      run={true}
+    />
+  )}
+</>
       </div>
     </div>
   );
