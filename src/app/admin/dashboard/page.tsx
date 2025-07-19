@@ -7,6 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/ui/button';
 import { Download, Filter } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import * as XLSX from 'xlsx-js-style';
 import { db } from '@/lib/firebase';
 import { ref, onValue } from 'firebase/database';
 import { useToast } from '@/hooks/use-toast';
@@ -411,7 +412,7 @@ export default function AdminDashboard() {
     }, [groupProgress, finalDataByGroup, notifiedSuddenDeathGroups, toast, router]);
 
     const handleExportToExcel = async () => {
-        const XLSX = await import('xlsx');
+        const XLSX = await import('xlsx-js-style');
         const wb = XLSX.utils.book_new();
 
         const dataToExport = (filterGroup === 'all') 
@@ -431,12 +432,30 @@ export default function AdminDashboard() {
                 '코스 합계', '총타수'
             ];
 
-            const centerAlign = { alignment: { horizontal: "center", vertical: "center" } };
+            // 개선된 셀 스타일 정의 - XLSX 라이브러리 호환 방식
+            const borderStyle = {
+                top: { style: "thin" },
+                bottom: { style: "thin" },
+                left: { style: "thin" },
+                right: { style: "thin" }
+            };
+            
+            const centerAlign = { 
+                alignment: { horizontal: "center", vertical: "center" },
+                border: borderStyle
+            };
+            
+            const headerStyle = {
+                alignment: { horizontal: "center", vertical: "center" },
+                border: borderStyle,
+                font: { bold: true },
+                fill: { fgColor: { rgb: "E6E6FA" } }
+            };
 
             // 1. Set Headers
             headers.forEach((header, colIndex) => {
                 const cellRef = XLSX.utils.encode_cell({ r: rowIndex, c: colIndex });
-                ws_data[cellRef] = { v: header, t: 's', s: { font: { bold: true }, ...centerAlign } };
+                ws_data[cellRef] = { v: header, t: 's', s: headerStyle };
             });
             rowIndex++;
 
@@ -458,8 +477,8 @@ export default function AdminDashboard() {
                         }
                     }
                     coursesData[courseId] = { courseName: course.name, courseTotal, holeScores };
-                 });
-                 return {...p, coursesData};
+                });
+                return { ...p, coursesData };
             });
 
             // 3. Populate Data and Merges
@@ -514,14 +533,60 @@ export default function AdminDashboard() {
             // 4. Create Worksheet
             const ws: XLSX.WorkSheet = ws_data;
             ws['!merges'] = merges;
-            ws['!cols'] = [
-                { wch: 8 }, { wch: 8 }, { wch: 15 }, { wch: 15 }, { wch: 15 },
-                ...Array(9).fill({ wch: 5 }),
-                { wch: 10 }, { wch: 10 },
-            ];
             
-            const range = { s: { r: 0, c: 0 }, e: { r: rowIndex > 0 ? rowIndex - 1 : 0, c: headers.length - 1 } };
+            // 모든 셀에 스타일 재적용 - 더 확실한 방법
+            const range = { s: { r: 0, c: 0 }, e: { r: rowIndex - 1, c: headers.length - 1 } };
             ws['!ref'] = XLSX.utils.encode_range(range);
+            
+            // 모든 셀에 스타일 적용
+            for (let r = 0; r < rowIndex; r++) {
+                for (let c = 0; c < headers.length; c++) {
+                    const cellRef = XLSX.utils.encode_cell({ r, c });
+                    if (ws_data[cellRef]) {
+                        // 헤더 행 (첫 번째 행)인지 확인
+                        if (r === 0) {
+                            ws_data[cellRef].s = headerStyle;
+                        } else {
+                            ws_data[cellRef].s = centerAlign;
+                        }
+                    }
+                }
+            }
+            
+            // 셀 너비 자동 조정 - 글자수에 맞춰 동적으로 설정
+            const colWidths = headers.map((header, colIndex) => {
+                let maxWidth = header.length; // 헤더 길이를 기본값으로
+                
+                // 각 행의 데이터를 확인하여 최대 길이 계산
+                for (let r = 1; r < rowIndex; r++) {
+                    const cellRef = XLSX.utils.encode_cell({ r, c: colIndex });
+                    const cell = ws_data[cellRef];
+                    if (cell && cell.v) {
+                        const cellValue = String(cell.v);
+                        maxWidth = Math.max(maxWidth, cellValue.length);
+                    }
+                }
+                
+                // 최소 너비 6, 최대 너비 35로 확장, 여유분 +4
+                return { wch: Math.min(Math.max(maxWidth + 4, 6), 35) };
+            });
+            
+            ws['!cols'] = colWidths;
+
+            // 모든 셀에 스타일 강제 적용 (누락 셀 포함)
+            const totalRows = rowIndex;
+            for (let r = 0; r < totalRows; r++) {
+                for (let c = 0; c < headers.length; c++) {
+                    const cellRef = XLSX.utils.encode_cell({ r, c });
+                    if (ws_data[cellRef]) {
+                        // 이미 스타일이 있다면 border/align 보장
+                        ws_data[cellRef].s = { ...centerAlign, ...(ws_data[cellRef].s || {}) };
+                    } else {
+                        // 빈셀도 스타일 적용
+                        ws_data[cellRef] = { v: '', t: 's', s: centerAlign };
+                    }
+                }
+            }
 
             XLSX.utils.book_append_sheet(wb, ws, groupName);
         }
@@ -667,5 +732,3 @@ export default function AdminDashboard() {
         </>
     );
 }
-
-    
