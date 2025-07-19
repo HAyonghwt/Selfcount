@@ -157,12 +157,12 @@ function ExternalScoreboard() {
             const courseScoresForTieBreak: { [courseId: string]: number } = {};
             const detailedScoresForTieBreak: { [courseId: string]: { [holeNumber: string]: number } } = {};
 
-            activeCoursesForPlayer.forEach((course: any) => {
+            // 총타수는 모든 배정된 코스의 합계로 계산 (전광판 표시 여부와 무관)
+            allAssignedCoursesForPlayer.forEach((course: any) => {
                 const courseId = course.id;
                 const scoresForCourse = playerScoresData[courseId] || {};
                 detailedScoresForTieBreak[courseId] = scoresForCourse;
 
-                const holeScores: (number | null)[] = Array(9).fill(null);
                 let courseTotal = 0;
                 for (let i = 0; i < 9; i++) {
                     const holeScore = scoresForCourse[(i + 1).toString()];
@@ -171,7 +171,6 @@ function ExternalScoreboard() {
                         if (scoreNum === 0) {
                             hasForfeited = true;
                         }
-                        holeScores[i] = scoreNum;
                         courseTotal += scoreNum;
                         hasAnyScore = true;
                     }
@@ -179,6 +178,22 @@ function ExternalScoreboard() {
                 
                 totalScore += courseTotal;
                 courseScoresForTieBreak[courseId] = courseTotal;
+            });
+            
+            // 전광판 표시용 코스 데이터는 활성 코스만 포함
+            activeCoursesForPlayer.forEach((course: any) => {
+                const courseId = course.id;
+                const scoresForCourse = playerScoresData[courseId] || {};
+                const holeScores: (number | null)[] = Array(9).fill(null);
+                let courseTotal = 0;
+                for (let i = 0; i < 9; i++) {
+                    const holeScore = scoresForCourse[(i + 1).toString()];
+                    if (holeScore !== undefined && holeScore !== null) {
+                        const scoreNum = Number(holeScore);
+                        holeScores[i] = scoreNum;
+                        courseTotal += scoreNum;
+                    }
+                }
                 coursesData[courseId] = { courseName: course.name, courseTotal, holeScores };
             });
 

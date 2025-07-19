@@ -249,18 +249,43 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
 }
                 
                 const updates: { [key: string]: any } = {};
-                newPlayers.forEach(player => {
-                    const newPlayerKey = push(ref(db, 'players')).key;
-                    if(newPlayerKey) {
-                        updates[`/players/${newPlayerKey}`] = player;
-                    }
-                });
+            const uniqueGroups = new Set<string>();
+            
+            newPlayers.forEach(player => {
+                const newPlayerKey = push(ref(db, 'players')).key;
+                if(newPlayerKey) {
+                    updates[`/players/${newPlayerKey}`] = player;
+                }
+                // 고유한 그룹명 수집
+                if (player.group) {
+                    uniqueGroups.add(player.group);
+                }
+            });
 
-                update(ref(db), updates)
-                    .then(() => {
-                        toast({ title: '성공', description: `${newPlayers.length}명의 선수가 성공적으로 등록되었습니다.` });
-                    })
-                    .catch(err => toast({ title: '저장 실패', description: err.message }));
+            // 그룹관리에 새로운 그룹들 자동 생성
+            uniqueGroups.forEach(groupName => {
+                // 이미 존재하는 그룹인지 확인
+                if (!groupsData[groupName]) {
+                    // 모든 코스를 기본으로 할당
+                    const defaultCourses = courses.reduce((acc, course) => {
+                        acc[course.id] = true;
+                        return acc;
+                    }, {});
+                    
+                    updates[`/tournaments/current/groups/${groupName}`] = {
+                        name: groupName,
+                        courses: defaultCourses
+                    };
+                }
+            });
+
+            update(ref(db), updates)
+                .then(() => {
+                    const groupCount = uniqueGroups.size;
+                    const newGroupsText = groupCount > 0 ? ` (${groupCount}개 그룹 자동 생성)` : '';
+                    toast({ title: '성공', description: `${newPlayers.length}명의 선수가 성공적으로 등록되었습니다.${newGroupsText}` });
+                })
+                .catch(err => toast({ title: '저장 실패', description: err.message }));
 
             } catch (error) {
                 console.error("Excel upload error:", error);
