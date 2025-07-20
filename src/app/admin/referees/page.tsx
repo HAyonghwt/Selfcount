@@ -89,7 +89,7 @@ export default function RefereeManagementPage() {
                                 type={showPassword ? 'text' : 'password'}
                                 inputMode="numeric"
                                 pattern="[0-9]*"
-                                value={unlockPassword}
+                                value={unlockPassword === '' ? refereePassword : unlockPassword}
                                 onChange={e => setUnlockPassword(e.target.value)}
                                 placeholder="숫자 비밀번호 입력"
                                 className="pr-10 border rounded px-2 py-1 w-full"
@@ -144,7 +144,9 @@ export default function RefereeManagementPage() {
                                                 <code className="bg-muted px-2 py-1 rounded-md text-base">referee{hole}@{userDomain}</code>
                                             </TableCell>
                                             <TableCell>
-                                                <span className="font-mono text-base">{refereePassword}</span>
+                                                <span className="font-mono text-base">
+                                                    {showPassword ? refereePassword : refereePassword.replace(/./g, '•')}
+                                                </span>
                                             </TableCell>
                                         </TableRow>
                                     ))}

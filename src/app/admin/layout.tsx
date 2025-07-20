@@ -45,7 +45,7 @@ const secondaryNavItems = [
   { href: "/admin/gift-event", icon: Trophy, label: "경품 행사" },
   { href: "/admin/archive", icon: Trophy, label: "기록 보관함" },
 ];
-const refereeNavItem = { href: "/admin/referees", icon: ShieldCheck, label: "심판 계정 보기" };
+const refereeNavItem = { href: "/admin/referees", icon: ShieldCheck, label: "심판 관리" };
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const isMobile = useIsMobile();
