@@ -41,11 +41,11 @@ const mainNavItems = [
 ];
 
 const secondaryNavItems = [
-  { href: "/admin/scores", icon: ClipboardList, label: "점수 관리" },
   { href: "/admin/suddendeath", icon: Flame, label: "서든데스 관리" },
   { href: "/admin/gift-event", icon: Trophy, label: "경품 행사" },
-  { href: "/admin/referees", icon: ShieldCheck, label: "심판 계정 보기" },
+  { href: "/admin/archive", icon: Trophy, label: "기록 보관함" },
 ];
+const refereeNavItem = { href: "/admin/referees", icon: ShieldCheck, label: "심판 계정 보기" };
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const isMobile = useIsMobile();
@@ -157,6 +157,7 @@ function SidebarContentWithSidebarHooks({ isMobile, pathname, appName, children 
               </SidebarMenuButton>
             </SidebarMenuItem>
 
+            
             <SidebarSeparator className="my-2" />
 
             {mainNavItems.map((item) => (
@@ -190,6 +191,19 @@ function SidebarContentWithSidebarHooks({ isMobile, pathname, appName, children 
                 </SidebarMenuButton>
               </SidebarMenuItem>
             ))}
+            <SidebarSeparator className="my-2" />
+            <SidebarMenuItem key={refereeNavItem.href}>
+              <SidebarMenuButton
+                asChild
+                isActive={pathname === refereeNavItem.href}
+                tooltip={{ children: refereeNavItem.label }}
+              >
+                <Link href={refereeNavItem.href} className="text-black" onClick={handleMenuClick(refereeNavItem.href)}>
+                  <refereeNavItem.icon className="h-5 w-5" />
+                  <span>{refereeNavItem.label}</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
           </SidebarMenu>
         </SidebarContent>
         <SidebarFooter className="p-4 border-t">

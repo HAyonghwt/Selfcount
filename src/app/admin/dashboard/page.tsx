@@ -1,15 +1,16 @@
 
 "use client";
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Download, Filter } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import * as XLSX from 'xlsx-js-style';
 import { db } from '@/lib/firebase';
-import { ref, onValue } from 'firebase/database';
+import { ref, onValue, set } from 'firebase/database';
 import { useToast } from '@/hooks/use-toast';
 import { ToastAction } from '@/components/ui/toast';
 import ExternalScoreboardInfo from '@/components/ExternalScoreboardInfo';
@@ -80,6 +81,84 @@ const tieBreak = (a: any, b: any, sortedCourses: any[]) => {
 
 
 export default function AdminDashboard() {
+    // 점수 수정 모달 상태
+    const [scoreEditModal, setScoreEditModal] = useState({
+        open: false,
+        playerId: '',
+        courseId: '',
+        holeIndex: -1,
+        score: ''
+    });
+
+    // 점수 초기화 모달 상태
+    const [showResetConfirm, setShowResetConfirm] = useState(false);
+
+    // 기록 보관하기(아카이브) - 실제 구현은 추후
+    const handleArchiveScores = async () => {
+        try {
+            // 대회명 추출 (tournaments/current.name에서 직접 읽기)
+            const tournamentRef = ref(db, 'tournaments/current/name');
+            let tournamentName = '';
+            await new Promise<void>((resolve) => {
+                onValue(tournamentRef, (snap) => {
+                    tournamentName = snap.val() || '대회';
+                    resolve();
+                }, { onlyOnce: true });
+            });
+            // 날짜+시간
+            const now = new Date();
+            const pad = (n: number) => n.toString().padStart(2, '0');
+            const dateStr = `${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+            // archiveId: 날짜+시간+대회명(공백제거)
+            const archiveId = `${(tournamentName || '대회').replace(/\s/g, '')}_${now.getFullYear()}${pad(now.getMonth()+1)}`; // 대회명_YYYYMM 형식
+            // 참가자 수
+            const playerCount = Object.keys(players).length;
+            // 저장 데이터
+            const archiveData = {
+                savedAt: now.toISOString(),
+                tournamentName: tournamentName || '대회',
+                playerCount,
+                players,
+                scores,
+                courses,
+                groups: groupsData,
+                processedByGroup: finalDataByGroup // 그룹별 순위/점수 등 가공 데이터 추가 저장
+            };
+            await set(ref(db, `archives/${archiveId}`), archiveData);
+            toast({ title: '기록 보관 완료', description: `대회명: ${tournamentName || '대회'} / 참가자: ${playerCount}명`, variant: 'success' });
+        } catch (e: any) {
+            toast({ title: '보관 실패', description: e?.message || '알 수 없는 오류', variant: 'destructive' });
+        }
+    };
+
+    // 점수 초기화 기능
+    const handleResetScores = async () => {
+        try {
+            await set(ref(db, 'scores'), null); // firebase realtime db 전체 점수 초기화
+        } catch (e) {
+            // TODO: 에러 처리
+        } finally {
+            setShowResetConfirm(false);
+        }
+    };
+
+    // 점수 저장 임시 함수(실제 저장/재계산 로직은 추후 구현)
+    const handleScoreEditSave = async () => {
+    const { playerId, courseId, holeIndex, score } = scoreEditModal;
+    if (!playerId || !courseId || holeIndex === -1) {
+        setScoreEditModal({ ...scoreEditModal, open: false });
+        return;
+    }
+    try {
+        // firebase realtime db에 점수 저장
+        const scoreValue = score === '' ? null : Number(score);
+        await set(ref(db, `scores/${playerId}/${courseId}/${holeIndex + 1}`), scoreValue);
+        setScoreEditModal({ ...scoreEditModal, open: false });
+    } catch (e) {
+        setScoreEditModal({ ...scoreEditModal, open: false });
+        // TODO: 에러 토스트 등 처리
+    }
+};
     // 항상 현재 도메인 기준으로 절대주소 생성
     const externalScoreboardUrl = typeof window !== 'undefined'
         ? `${window.location.origin}/scoreboard`
@@ -163,7 +242,14 @@ export default function AdminDashboard() {
                 
                 totalScore += courseTotal;
                 courseScoresForTieBreak[courseId] = courseTotal;
-                coursesData[courseId] = { courseName: course.name, courseTotal, holeScores: [] }; // holeScores not needed here to save memory
+                coursesData[courseId] = {
+  courseName: course.name,
+  courseTotal,
+  holeScores: Array.from({ length: 9 }, (_, i) => {
+    const holeScore = scoresForCourse[(i + 1).toString()];
+    return holeScore !== undefined && holeScore !== null ? Number(holeScore) : '-';
+  })
+}; // archive 기록보관용: holeScores 실제 점수 저장
             });
 
             return {
@@ -602,6 +688,27 @@ export default function AdminDashboard() {
         XLSX.writeFile(wb, `ParkScore_전체결과_${new Date().toISOString().slice(0,10)}.xlsx`);
     };
 
+    const [searchPlayer, setSearchPlayer] = useState('');
+    const [highlightedPlayerId, setHighlightedPlayerId] = useState(null);
+    const playerRowRefs = useRef({});
+
+    const filteredPlayerResults = useMemo(() => {
+        if (!searchPlayer) return [];
+        const lowerCaseSearch = searchPlayer.toLowerCase();
+        return Object.values(finalDataByGroup).flat().filter(player => {
+            return player.name.toLowerCase().includes(lowerCaseSearch) || player.affiliation.toLowerCase().includes(lowerCaseSearch);
+        });
+    }, [searchPlayer, finalDataByGroup]);
+
+    const handlePlayerSearchSelect = (playerId: number) => {
+        setHighlightedPlayerId(playerId);
+        // rowRef가 배열 또는 undefined일 수 있음. 첫 번째 DOM 요소만 스크롤.
+        const rowRefArr = playerRowRefs.current[playerId];
+        if (Array.isArray(rowRefArr) && rowRefArr[0] && typeof rowRefArr[0].scrollIntoView === 'function') {
+            rowRefArr[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+    };
+
     return (
         <>
             <ExternalScoreboardInfo url={externalScoreboardUrl} />
@@ -612,6 +719,7 @@ export default function AdminDashboard() {
                     <CardDescription>현재 진행중인 대회의 실시간 점수 현황입니다.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                    {/* 선수 검색 입력창 */}
                     <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center sm:justify-between p-4 bg-muted/50 rounded-lg">
   <div className="flex flex-row gap-2 items-center w-full sm:w-auto">
     <Filter className="w-5 h-5 text-muted-foreground" />
@@ -624,12 +732,63 @@ export default function AdminDashboard() {
         {allGroupsList.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}
       </SelectContent>
     </Select>
-    <Button className="ml-2" onClick={handleExportToExcel} disabled={Object.keys(players).length === 0}>
-      <Download className="mr-2 h-4 w-4" />
-      엑셀로 다운로드
-    </Button>
+    <Button className="ml-2 bg-green-600 hover:bg-green-700 text-white" onClick={handleExportToExcel} disabled={Object.keys(players).length === 0}>
+  <Download className="mr-2 h-4 w-4" />
+  엑셀로 다운로드
+</Button>
+<Button className="ml-2 bg-blue-600 hover:bg-blue-700 text-white min-w-[120px] px-4 py-2 font-bold" onClick={handleArchiveScores}>
+  기록 보관하기
+</Button>
+<Button className="ml-2 bg-red-600 hover:bg-red-700 text-white min-w-[120px] px-4 py-2 font-bold" onClick={() => setShowResetConfirm(true)}>
+  점수 초기화
+</Button>
+
+{/* 점수 초기화 확인 모달 */}
+{showResetConfirm && (
+  <Dialog open={showResetConfirm} onOpenChange={setShowResetConfirm}>
+    <DialogContent>
+      <DialogHeader>
+        <DialogTitle>정말로 모든 점수를 초기화하시겠습니까?</DialogTitle>
+        <DialogDescription>이 작업은 되돌릴 수 없으며, 모든 선수의 대회 점수가 삭제됩니다.</DialogDescription>
+      </DialogHeader>
+      <div className="flex flex-row justify-end gap-2 mt-4">
+        <Button variant="outline" onClick={() => setShowResetConfirm(false)}>취소</Button>
+        <Button className="bg-red-600 hover:bg-red-700 text-white" onClick={handleResetScores}>초기화 진행</Button>
+      </div>
+    </DialogContent>
+  </Dialog>
+) }
   </div>
 </div>
+
+{/* 점수 수정용 선수/팀 검색 카드 */}
+<Card className="mb-4">
+  <div className="flex flex-row items-center justify-between w-full p-4">
+    <span className="text-base font-bold whitespace-nowrap mr-4">점수 수정을 위해 선수 검색시 사용</span>
+    <div className="flex flex-row gap-2 items-center w-full max-w-xs border rounded bg-white shadow px-3 py-2">
+      <input
+        type="text"
+        className="w-full outline-none bg-transparent"
+        placeholder="선수명 또는 팀명 검색"
+        value={searchPlayer}
+        onChange={e => setSearchPlayer(e.target.value)}
+      />
+      {searchPlayer && filteredPlayerResults.length > 0 && (
+        <div className="absolute bg-white border rounded shadow-lg z-50 mt-10 max-h-60 overflow-y-auto">
+          {filteredPlayerResults.map((result, idx) => (
+            <div
+              key={result.id}
+              className="px-3 py-2 hover:bg-primary/20 cursor-pointer"
+              onClick={() => handlePlayerSearchSelect(result.id)}
+            >
+              {result.name} <span className="text-xs text-muted-foreground">({result.group})</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  </div>
+</Card>
                 </CardContent>
             </Card>
 
@@ -686,10 +845,17 @@ export default function AdminDashboard() {
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
-                                        {fullPlayersDataForDisplay.map((player) => (
+                                         {fullPlayersDataForDisplay.map((player) => (
                                             <React.Fragment key={player.id}>
                                                 {player.assignedCourses.length > 0 ? player.assignedCourses.map((course: any, courseIndex: number) => (
-                                                    <TableRow key={`${player.id}-${course.id}`} className="text-base">
+                                                    <TableRow
+                                                        key={`${player.id}-${course.id}`}
+                                                        ref={el => {
+                                                            if (!playerRowRefs.current[player.id]) playerRowRefs.current[player.id] = [];
+                                                            playerRowRefs.current[player.id][courseIndex] = el;
+                                                        }}
+                                                        className={`text-base ${highlightedPlayerId === player.id ? 'bg-yellow-100 animate-pulse' : ''}`}
+                                                    >
                                                         {courseIndex === 0 && (
                                                             <>
                                                                 <TableCell rowSpan={player.assignedCourses.length || 1} className="text-center align-middle font-bold text-lg px-2 py-1 border-r">{player.rank !== null ? `${player.rank}위` : (player.hasForfeited ? '기권' : '-')}</TableCell>
@@ -701,7 +867,50 @@ export default function AdminDashboard() {
                                                         
                                                         <TableCell className="font-medium px-2 py-1 border-r text-center whitespace-nowrap" style={{minWidth:'80px',maxWidth:'200px',flexGrow:1}}>{player.coursesData[course.id]?.courseName}</TableCell>
                                                         
-                                                        {player.coursesData[course.id]?.holeScores.map((score, i) => <TableCell key={i} className="text-center font-mono px-2 py-1 border-r">{score === null ? '-' : score}</TableCell>)}
+                                                        {player.coursesData[course.id]?.holeScores.map((score, i) => (
+  <TableCell
+    key={i}
+    className="text-center font-mono px-2 py-1 border-r cursor-pointer hover:bg-primary/10"
+    onDoubleClick={() => {
+      setScoreEditModal({
+        open: true,
+        playerId: player.id,
+        courseId: course.id,
+        holeIndex: i,
+        score: score === null ? '' : score
+      });
+    }}
+  >
+    {score === null ? '-' : score}
+  </TableCell>
+))}
+
+{/* 점수 수정 모달 */}
+{scoreEditModal?.open && scoreEditModal.playerId === player.id && scoreEditModal.courseId === course.id && (
+  <Dialog open={scoreEditModal.open} onOpenChange={open => setScoreEditModal({ ...scoreEditModal, open })}>
+    <DialogContent>
+      <DialogHeader>
+        <DialogTitle>점수 수정</DialogTitle>
+        <DialogDescription>
+          선수: <b>{player.name}</b> / 코스: <b>{player.coursesData[course.id]?.courseName}</b> / 홀: <b>{scoreEditModal.holeIndex + 1}번</b>
+        </DialogDescription>
+      </DialogHeader>
+      <input
+        type="number"
+        className="w-full border rounded px-3 py-2 text-lg text-center"
+        value={scoreEditModal.score}
+        onChange={e => setScoreEditModal({ ...scoreEditModal, score: e.target.value })}
+        min={1}
+        max={20}
+        autoFocus
+      />
+      <DialogFooter>
+        <Button onClick={() => handleScoreEditSave()}>저장</Button>
+        <Button variant="outline" onClick={() => setScoreEditModal({ ...scoreEditModal, open: false })}>취소</Button>
+      </DialogFooter>
+    </DialogContent>
+  </Dialog>
+)}
                                                         
                                                         <TableCell className="text-center font-bold px-2 py-1 border-r">{player.hasForfeited ? '기권' : (player.hasAnyScore ? player.coursesData[course.id]?.courseTotal : '-')}</TableCell>
 
