@@ -17,7 +17,7 @@ export default function RootLayout({
   return (
     <html lang="ko" translate="no" suppressHydrationWarning>
       <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, user-scalable=yes" />
         <link rel="manifest" href="/manifest.json" />
         <meta name="theme-color" content="#e85461" />
         <link rel="apple-touch-icon" href="/icon-192x192.png"></link>

@@ -53,6 +53,15 @@ export default function RefereeManagementPage() {
 
     // 점수 수정 잠금해제 설정 상태 및 이벤트
     const [unlockPassword, setUnlockPassword] = useState('');
+    // scoreUnlockPassword를 DB에서 읽어와 unlockPassword에 세팅
+    useEffect(() => {
+        const pwRef = ref(db, 'config/scoreUnlockPassword');
+        const unsub = onValue(pwRef, (snap) => {
+            const val = snap.val() || '';
+            setUnlockPassword(val);
+        });
+        return () => unsub();
+    }, []);
     const [showPassword, setShowPassword] = useState(false);
     const [saving, setSaving] = useState(false);
     const [saveMsg, setSaveMsg] = useState<string|null>(null);
@@ -89,8 +98,8 @@ export default function RefereeManagementPage() {
                                 type={showPassword ? 'text' : 'password'}
                                 inputMode="numeric"
                                 pattern="[0-9]*"
-                                value={unlockPassword === '' ? refereePassword : unlockPassword}
-                                onChange={e => setUnlockPassword(e.target.value)}
+                                value={unlockPassword}
+                                onChange={e => setUnlockPassword(e.target.value.replace(/[^0-9]/g, '').slice(0, 4))}
                                 placeholder="숫자 비밀번호 입력"
                                 className="pr-10 border rounded px-2 py-1 w-full"
                                 autoComplete="new-password"
@@ -145,7 +154,7 @@ export default function RefereeManagementPage() {
                                             </TableCell>
                                             <TableCell>
                                                 <span className="font-mono text-base">
-                                                    {showPassword ? refereePassword : refereePassword.replace(/./g, '•')}
+                                                    {showPassword ? unlockPassword : (unlockPassword ? unlockPassword.replace(/./g, '•') : '----')}
                                                 </span>
                                             </TableCell>
                                         </TableRow>

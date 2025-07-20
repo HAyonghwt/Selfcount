@@ -3,6 +3,33 @@
 @tailwind utilities;
 
 @media (max-width: 639px) {
+  html, body {
+    min-height: 100vh !important;
+    height: auto !important;
+    width: 100vw !important;
+    min-width: 0 !important;
+    max-width: 100vw !important;
+    overflow-x: auto !important;
+    overflow-y: auto !important;
+    position: static !important;
+    box-sizing: border-box !important;
+    touch-action: manipulation !important;
+  }
+
+  /* 공통 wrapper, section 등 height/overflow 제한 해제 */
+  .main-wrapper, .content-wrapper, .container, .main-content, .page-section {
+    min-height: unset !important;
+    height: auto !important;
+    width: auto !important;
+    min-width: 0 !important;
+    max-width: 100vw !important;
+    overflow-x: auto !important;
+    overflow-y: visible !important;
+    position: static !important;
+    box-sizing: border-box !important;
+  }
+
+  /* gift-event, scoreboard 관련 클래스는 그대로 두고 나머지에만 적용 */
   .external-scoreboard-card input[type="text"] {
     width: 100% !important;
     min-width: 0 !important;
@@ -45,7 +72,7 @@
     margin: 0 auto !important;
     min-height: 0 !important;
     box-sizing: border-box;
-  }
+  } /* 유지: gift-event 관련 */
   .gift-mobile-wrap .card,
   .gift-mobile-wrap .Card,
   .gift-mobile-wrap .card-header,
