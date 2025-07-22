@@ -1,6 +1,8 @@
 
 "use client";
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { getPlayerScoreLogs, ScoreLog, logScoreChange } from '@/lib/scoreLogs';
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -93,6 +95,9 @@ export default function AdminDashboard() {
     // 점수 초기화 모달 상태
     const [showResetConfirm, setShowResetConfirm] = useState(false);
 
+    // 기권 처리 모달 상태
+    // const [forfeitModal, setForfeitModal] = useState<{ open: boolean, player: any | null }>({ open: false, player: null });
+
     // 기록 보관하기(아카이브) - 실제 구현은 추후
     const handleArchiveScores = async () => {
         try {
@@ -150,9 +155,51 @@ export default function AdminDashboard() {
         return;
     }
     try {
-        // firebase realtime db에 점수 저장
+        // 기존 점수 조회
+        const prevScore = scores?.[playerId]?.[courseId]?.[holeIndex + 1] ?? null;
         const scoreValue = score === '' ? null : Number(score);
         await set(ref(db, `scores/${playerId}/${courseId}/${holeIndex + 1}`), scoreValue);
+        // 점수 변경 로그 기록
+        if (prevScore !== scoreValue) {
+            console.log("로그 기록 시도", {
+                matchId: 'tournaments/current',
+                playerId,
+                scoreType: 'holeScore',
+                courseId,
+                holeNumber: holeIndex + 1,
+                oldValue: prevScore,
+                newValue: scoreValue,
+                modifiedBy: 'admin',
+                modifiedByType: 'admin',
+            });
+            try {
+                await logScoreChange({
+                    matchId: 'tournaments/current',
+                    playerId,
+                    scoreType: 'holeScore',
+                    courseId,
+                    holeNumber: holeIndex + 1,
+                    oldValue: prevScore,
+                    newValue: scoreValue,
+                    modifiedBy: 'admin',
+                    modifiedByType: 'admin',
+                });
+                console.log("로그 기록 성공");
+                // 점수 로그 저장 후 해당 선수 로그 즉시 갱신
+                try {
+                    const logs = await getPlayerScoreLogs(playerId);
+                    console.log('점수 로그 재조회 결과:', logs);
+                    setPlayerScoreLogs(prev => ({
+                        ...prev,
+                        [playerId]: logs
+                    }));
+                } catch (e) {
+                    console.log("점수 로그 재조회 에러", e);
+                }
+            } catch (e) {
+                console.log("로그 기록 에러", e);
+            }
+        }
         setScoreEditModal({ ...scoreEditModal, open: false });
     } catch (e) {
         setScoreEditModal({ ...scoreEditModal, open: false });
@@ -692,6 +739,34 @@ export default function AdminDashboard() {
     const [highlightedPlayerId, setHighlightedPlayerId] = useState(null);
     const playerRowRefs = useRef({});
 
+    // 선수별 점수 로그 캐시 상태 (playerId별)
+    const [playerScoreLogs, setPlayerScoreLogs] = useState<{ [playerId: string]: ScoreLog[] }>({});
+    // 로딩 상태
+    const [logsLoading, setLogsLoading] = useState(false);
+
+    // 선수별 로그 미리 불러오기 (처음 한 번만)
+    useEffect(() => {
+        const fetchLogs = async () => {
+            setLogsLoading(true);
+            const playerIds = Object.values(finalDataByGroup).flat().map((p:any) => p.id);
+            const logsMap: { [playerId: string]: ScoreLog[] } = {};
+            await Promise.all(playerIds.map(async (pid) => {
+                try {
+                    const logs = await getPlayerScoreLogs(pid);
+                    logsMap[pid] = logs;
+                } catch {
+                    logsMap[pid] = [];
+                }
+            }));
+            setPlayerScoreLogs(logsMap);
+            setLogsLoading(false);
+        };
+        if (Object.keys(finalDataByGroup).length > 0) {
+            fetchLogs();
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [finalDataByGroup]);
+
     const filteredPlayerResults = useMemo(() => {
         if (!searchPlayer) return [];
         const lowerCaseSearch = searchPlayer.toLowerCase();
@@ -708,6 +783,18 @@ export default function AdminDashboard() {
             rowRefArr[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
     };
+
+    // 기권 처리 함수
+    // async function handleForfeitPlayer(player: any) {
+    //     if (!player || !player.assignedCourses) return;
+    //     for (const course of player.assignedCourses) {
+    //         for (let hole = 1; hole <= 9; hole++) {
+    //             await set(ref(db, `scores/${player.id}/${course.id}/${hole}`), 0);
+    //         }
+    //     }
+    //     setForfeitModal({ open: false, player: null });
+    //     toast({ title: '기권 처리 완료', description: `${player.name} 선수의 모든 홀에 0점이 입력되었습니다.` });
+    // }
 
     return (
         <>
@@ -862,28 +949,66 @@ export default function AdminDashboard() {
                                                                 <TableCell rowSpan={player.assignedCourses.length || 1} className="text-center align-middle font-medium px-2 py-1 border-r">{player.jo}</TableCell>
                                                                 <TableCell rowSpan={player.assignedCourses.length || 1} className="align-middle font-semibold px-2 py-1 border-r text-center whitespace-nowrap" style={{minWidth:'90px',maxWidth:'260px',flexGrow:1}}>{player.name}</TableCell>
                                                                 <TableCell rowSpan={player.assignedCourses.length || 1} className="align-middle text-muted-foreground px-2 py-1 border-r text-center whitespace-nowrap" style={{minWidth:'80px',maxWidth:'200px',flexGrow:1}}>{player.affiliation}</TableCell>
+                                                                {/* 기권 버튼 추가 */}
+                                                                {/* <TableCell rowSpan={player.assignedCourses.length || 1} className="text-center align-middle px-2 py-1 border-r">
+                                                                    <Button
+                                                                        variant="destructive"
+                                                                        size="sm"
+                                                                        disabled={player.hasForfeited}
+                                                                        onClick={() => setForfeitModal({ open: true, player })}
+                                                                    >
+                                                                        기권
+                                                                    </Button>
+                                                                </TableCell> */}
                                                             </>
                                                         )}
                                                         
                                                         <TableCell className="font-medium px-2 py-1 border-r text-center whitespace-nowrap" style={{minWidth:'80px',maxWidth:'200px',flexGrow:1}}>{player.coursesData[course.id]?.courseName}</TableCell>
                                                         
-                                                        {player.coursesData[course.id]?.holeScores.map((score, i) => (
-  <TableCell
-    key={i}
-    className="text-center font-mono px-2 py-1 border-r cursor-pointer hover:bg-primary/10"
-    onDoubleClick={() => {
-      setScoreEditModal({
-        open: true,
-        playerId: player.id,
-        courseId: course.id,
-        holeIndex: i,
-        score: score === null ? '' : score
-      });
-    }}
-  >
-    {score === null ? '-' : score}
-  </TableCell>
-))}
+                                                        {player.coursesData[course.id]?.holeScores.map((score, i) => {
+  // 해당 셀(플레이어/코스/홀)에 대한 최근 로그 찾기
+  const logs = playerScoreLogs[player.id] || [];
+  const cellLog = logs.find(l => String(l.courseId) === String(course.id) && Number(l.holeNumber) === i + 1);
+  const isModified = !!cellLog;
+  // 툴팁 내용 구성
+  const tooltipContent = cellLog ? (
+    <div>
+      <div><b>수정자:</b> {cellLog.modifiedByType === 'admin' ? '관리자' : '심판'}</div>
+      <div><b>일시:</b> {cellLog.modifiedAt ? new Date(cellLog.modifiedAt).toLocaleString('ko-KR') : ''}</div>
+      <div><b>변경:</b> {cellLog.oldValue} → {cellLog.newValue}</div>
+      {cellLog.comment && <div><b>비고:</b> {cellLog.comment}</div>}
+    </div>
+  ) : null;
+
+  return (
+    <TableCell
+  key={i}
+  className={`text-center font-mono px-2 py-1 border-r cursor-pointer hover:bg-primary/10 ${isModified ? 'text-red-600 font-bold bg-red-50' : ''}`}
+  onDoubleClick={() => {
+    setScoreEditModal({
+      open: true,
+      playerId: player.id,
+      courseId: course.id,
+      holeIndex: i,
+      score: score === null ? '' : score
+    });
+  }}
+>
+  <TooltipProvider delayDuration={0}>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span>{score === null ? '-' : score}</span>
+      </TooltipTrigger>
+      {isModified && tooltipContent && (
+        <TooltipContent side="top" className="whitespace-pre-line">
+          {tooltipContent}
+        </TooltipContent>
+      )}
+    </Tooltip>
+  </TooltipProvider>
+</TableCell>
+  );
+})}
 
 {/* 점수 수정 모달 */}
 {scoreEditModal?.open && scoreEditModal.playerId === player.id && scoreEditModal.courseId === course.id && (
@@ -938,6 +1063,23 @@ export default function AdminDashboard() {
                 )
             })}
         </div>
+        {/* 기권 확인 모달 */}
+        {/* {forfeitModal.open && forfeitModal.player && (
+            <Dialog open={forfeitModal.open} onOpenChange={open => setForfeitModal({ open, player: open ? forfeitModal.player : null })}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>기권 처리 확인</DialogTitle>
+                        <DialogDescription>
+                            {forfeitModal.player.name} 선수의 모든 배정 코스 9홀에 0점이 입력됩니다. 진행하시겠습니까?
+                        </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setForfeitModal({ open: false, player: null })}>취소</Button>
+                        <Button variant="destructive" onClick={() => handleForfeitPlayer(forfeitModal.player)}>기권 처리</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+        )} */}
         </>
     );
 }

@@ -15,6 +15,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription } from "@/components/ui/alert-dialog";
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import { logScoreChange } from '@/lib/scoreLogs';
 
 interface Player {
     id: string;
@@ -138,10 +139,11 @@ export default function RefereePage() {
     // Data fetching
     useEffect(() => {
         setLoading(true);
-        const playersRef = ref(db, 'players');
-        const scoresRef = ref(db, 'scores');
-        const tournamentRef = ref(db, 'tournaments/current');
-        const passwordRef = ref(db, 'config/scoreUnlockPassword');
+        const dbInstance = db as import('firebase/database').Database;
+        const playersRef = ref(dbInstance, 'players');
+        const scoresRef = ref(dbInstance, 'scores');
+        const tournamentRef = ref(dbInstance, 'tournaments/current');
+        const passwordRef = ref(dbInstance, 'config/scoreUnlockPassword');
 
         const unsubPlayers = onValue(playersRef, (snapshot) => setAllPlayers(Object.entries(snapshot.val() || {}).map(([id, player]) => ({ id, ...player as object } as Player))));
         const unsubScores = onValue(scoresRef, (snapshot) => setAllScores(snapshot.val() || {}));
@@ -166,7 +168,7 @@ export default function RefereePage() {
     
     const availableCoursesForGroup = useMemo(() => {
         if (!selectedGroup) return [];
-        const group = groupsData[selectedGroup];
+        const group = groupsData[selectedGroup as string];
         if (!group || !group.courses) return [];
         const assignedCourseIds = Object.keys(group.courses).filter(id => group.courses[id]);
         return courses.filter(c => assignedCourseIds.includes(c.id.toString()));
@@ -199,7 +201,7 @@ export default function RefereePage() {
             if (playersInThisJo.length === 0) return;
     
             const allInJoAreScored = playersInThisJo.every(player => {
-                return allScores[player.id]?.[selectedCourse]?.[hole] !== undefined;
+                return allScores[player.id]?.[selectedCourse as string]?.[hole as string] !== undefined;
             });
     
             if (allInJoAreScored) {
@@ -225,7 +227,7 @@ export default function RefereePage() {
         }
 
         return playersOnCourse.every(player => {
-            return allScores[player.id]?.[selectedCourse]?.[hole] !== undefined;
+            return allScores[player.id]?.[selectedCourse as string]?.[hole as string] !== undefined;
         });
 
     }, [selectedCourse, hole, allPlayers, allScores, groupsData]);
@@ -285,7 +287,7 @@ export default function RefereePage() {
 
         const newScoresState: { [key: string]: ScoreData } = {};
         currentPlayers.forEach((player) => {
-            const existingScoreFromDb = allScores[player.id]?.[selectedCourse]?.[hole];
+            const existingScoreFromDb = allScores[player.id]?.[selectedCourse as string]?.[hole as string];
             
             if (existingScoreFromDb !== undefined) {
                 newScoresState[player.id] = { score: Number(existingScoreFromDb), status: 'locked' };
@@ -332,24 +334,60 @@ export default function RefereePage() {
         setPlayerToSave(player);
     };
 
-    const handleConfirmSave = () => {
+    const handleConfirmSave = async () => {
         if (!playerToSave) return;
-        
         const scoreData = scores[playerToSave.id];
         if (!scoreData || scoreData.status !== 'editing') return;
-
-        const scoreRef = ref(db, `/scores/${playerToSave.id}/${selectedCourse}/${hole}`);
-        
-        set(scoreRef, scoreData.score).catch(err => {
+        const dbInstance = db as import('firebase/database').Database;
+        const scoreRef = ref(dbInstance, `/scores/${playerToSave.id}/${selectedCourse}/${hole}`);
+        const prevScore = allScores[playerToSave.id]?.[selectedCourse as string]?.[hole as string] ?? null;
+        try {
+            await set(scoreRef, scoreData.score);
+            // 점수 변경 로그 기록
+            if (prevScore !== scoreData.score) {
+                await logScoreChange({
+                    matchId: 'tournaments/current',
+                    playerId: playerToSave.id,
+                    scoreType: 'holeScore',
+                    holeNumber: Number(hole),
+                    oldValue: prevScore !== null && prevScore !== undefined ? prevScore : 0,
+                    newValue: scoreData.score !== null && scoreData.score !== undefined ? scoreData.score : 0,
+                    modifiedBy: 'referee', // 필요시 실제 심판 id로 대체
+                    modifiedByType: 'judge',
+                });
+            }
+            // 0점 입력 시, 나머지 미입력 홀도 자동 0점 처리
+            if (scoreData.score === 0) {
+                for (let h = 1; h <= 9; h++) {
+                    const hStr = h.toString();
+                    if (hStr === hole) continue;
+                    const existing = allScores[playerToSave.id]?.[selectedCourse as string]?.[hStr];
+                    if (existing === undefined) {
+                        await set(ref(dbInstance, `/scores/${playerToSave.id}/${selectedCourse}/${hStr}`), 0);
+                        // 0점 자동 입력도 로그 남김
+                        await logScoreChange({
+                            matchId: 'tournaments/current',
+                            playerId: playerToSave.id,
+                            scoreType: 'holeScore',
+                            holeNumber: Number(hStr),
+                            oldValue: 0,
+                            newValue: 0,
+                            modifiedBy: 'referee',
+                            modifiedByType: 'judge',
+                        });
+                    }
+                }
+            }
+        } catch (err: any) {
             console.error("Failed to save score:", err);
             toast({
                 title: "저장 실패",
                 description: `점수를 저장하는 중 오류가 발생했습니다: ${err.message}`,
                 variant: "destructive",
             });
-        }).finally(() => {
+        } finally {
             setPlayerToSave(null);
-        });
+        }
     };
     
     const handleUnlockRequest = (player: Player) => {
@@ -463,11 +501,24 @@ export default function RefereePage() {
                     const scoreData = scores[player.id];
                     if (!scoreData) return null;
 
-                    const isLocked = scoreData.status === 'locked';
+                    // 기권 여부: 이전 홀 중 0점이 하나라도 있으면 true
+                    const currentHoleNum = Number(hole);
+                    let isForfeited = false;
+                    if (allScores[player.id] && allScores[player.id][selectedCourse as string]) {
+                        for (let h = 1; h < currentHoleNum; h++) {
+                            const prevScore = allScores[player.id]?.[selectedCourse as string]?.[h.toString()];
+                            if (prevScore === 0) {
+                                isForfeited = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    const isLocked = scoreData.status === 'locked' || isForfeited;
 
                     return (
                         <Card key={player.id} className="overflow-hidden">
-                            <CardContent className="p-2" onDoubleClick={isLocked ? () => handleUnlockRequest(player) : undefined}>
+                            <CardContent className="p-2" onDoubleClick={isLocked && !isForfeited ? () => handleUnlockRequest(player) : undefined}>
                                 <div className="flex items-center gap-2">
                                     <div className="flex-1 min-w-0">
                                         {player.type === 'team' ? (
@@ -483,7 +534,9 @@ export default function RefereePage() {
                                         <Button variant="outline" size="icon" className="h-10 w-10 rounded-md" onClick={() => updateScore(player.id, -1)} disabled={isLocked}>
                                             <Minus className="h-5 w-5" />
                                         </Button>
-                                        <span className="text-3xl font-bold tabular-nums w-12 text-center">{scoreData.score}</span>
+                                        <span className={(isForfeited || scoreData.score === 0) ? "text-xs font-bold w-12 text-center text-red-600" : "text-3xl font-bold tabular-nums w-12 text-center"}>
+                                            {(isForfeited || scoreData.score === 0) ? '기권' : scoreData.score}
+                                        </span>
                                         <Button variant="outline" size="icon" className="h-10 w-10 rounded-md" onClick={() => updateScore(player.id, 1)} disabled={isLocked}>
                                             <Plus className="h-5 w-5" />
                                         </Button>
@@ -496,6 +549,7 @@ export default function RefereePage() {
                                                 if (isLocked) return;
                                                 handleSavePress(player);
                                             }}
+                                            disabled={isLocked}
                                         >
                                             {isLocked ? <Lock className="h-5 w-5 text-green-500" /> : <Save className="h-5 w-5" />}
                                         </Button>

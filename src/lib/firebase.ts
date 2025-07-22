@@ -22,10 +22,9 @@ const app = firebaseConfig.apiKey
     : getApp()
   : null;
 
-// Ensure db and auth are only initialized if app exists.
-// Export them so they can be used throughout the app.
-// Downstream code will need to handle the possibility of them being null if the app is not configured.
+// Initialize Firebase services only if the app is properly initialized
 const db = app ? getDatabase(app) : null;
 const auth = app ? getAuth(app) : null;
 
-export { db, app, auth };
+// Export the Firebase services and the getDatabase function
+export { db, app, auth, getDatabase };

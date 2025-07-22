@@ -8,6 +8,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Label } from '@/components/ui/label';
 import GiftEventDisplay from '@/components/gift-event/GiftEventDisplay';
 import GiftEventStandby from '@/components/gift-event/GiftEventStandby';
+import { getPlayerScoreLogs, ScoreLog } from '@/lib/scoreLogs';
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip';
 
 interface ProcessedPlayer {
     id: string;
@@ -106,11 +108,16 @@ function ExternalScoreboard() {
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     
     useEffect(() => {
-        const playersRef = ref(db, 'players');
-        const scoresRef = ref(db, 'scores');
-        const tournamentRef = ref(db, 'tournaments/current');
-        const individualSuddenDeathRef = ref(db, 'tournaments/current/suddenDeath/individual');
-        const teamSuddenDeathRef = ref(db, 'tournaments/current/suddenDeath/team');
+        if (!db) {
+            setLoading(false);
+            return;
+        }
+        const dbInstance = db as import('firebase/database').Database;
+        const playersRef = ref(dbInstance, 'players');
+        const scoresRef = ref(dbInstance, 'scores');
+        const tournamentRef = ref(dbInstance, 'tournaments/current');
+        const individualSuddenDeathRef = ref(dbInstance, 'tournaments/current/suddenDeath/individual');
+        const teamSuddenDeathRef = ref(dbInstance, 'tournaments/current/suddenDeath/team');
 
         const unsubPlayers = onValue(playersRef, snap => setPlayers(snap.val() || {}));
         const unsubScores = onValue(scoresRef, snap => setScores(snap.val() || {}));
@@ -142,13 +149,13 @@ function ExternalScoreboard() {
         const allProcessedPlayers: any[] = Object.entries(players).map(([playerId, player]: [string, any]) => {
             const playerGroupData = groupsData[player.group];
             const assignedCourseIds = playerGroupData?.courses 
-                ? Object.keys(playerGroupData.courses).filter(id => playerGroupData.courses[id]) 
+                ? Object.keys(playerGroupData.courses).filter((id: string) => playerGroupData.courses[id]) 
                 : [];
             
-            const allAssignedCoursesForPlayer = allCourses.filter((c:any) => assignedCourseIds.includes(c.id.toString()));
+            const allAssignedCoursesForPlayer = allCourses.filter((c: any) => assignedCourseIds.includes(c.id.toString()));
             const activeCoursesForPlayer = allAssignedCoursesForPlayer.filter((c: any) => c.isActive !== false);
 
-            const playerScoresData = scores[playerId] || {};
+            const playerScoresData = (scores as any)[playerId] || {};
             
             let hasAnyScore = false;
             let hasForfeited = false;
@@ -215,7 +222,7 @@ function ExternalScoreboard() {
             };
         });
 
-        const groupedData = allProcessedPlayers.reduce((acc, player) => {
+        const groupedData = allProcessedPlayers.reduce((acc: Record<string, any[]>, player: any) => {
             const groupName = player.group || '미지정';
             if (!acc[groupName]) {
                 acc[groupName] = [];
@@ -229,14 +236,14 @@ function ExternalScoreboard() {
             const coursesForGroup = groupedData[groupName][0]?.assignedCourses || [];
             
             // Optimization: Pre-sort courses for tie-breaking
-            const sortedCoursesForTieBreak = [...coursesForGroup].sort((c1, c2) => {
+            const sortedCoursesForTieBreak = [...coursesForGroup].sort((c1: any, c2: any) => {
                 const name1 = c1?.name || '';
                 const name2 = c2?.name || '';
                 return name2.localeCompare(name1);
             });
 
-            const playersToSort = groupedData[groupName].filter(p => p.hasAnyScore && !p.hasForfeited);
-            const otherPlayers = groupedData[groupName].filter(p => !p.hasAnyScore || p.hasForfeited);
+            const playersToSort = groupedData[groupName].filter((p: any) => p.hasAnyScore && !p.hasForfeited);
+            const otherPlayers = groupedData[groupName].filter((p: any) => !p.hasAnyScore || p.hasForfeited);
             
             const playerType = playersToSort[0]?.type;
             const isSuddenDeathActiveForThisGroup = playerType === 'individual'
@@ -244,9 +251,9 @@ function ExternalScoreboard() {
                 : teamSuddenDeathData?.isActive;
 
             if (playersToSort.length > 0) {
-                const leaderScore = playersToSort.reduce((min, p) => Math.min(min, p.totalScore), Infinity);
+                const leaderScore = playersToSort.reduce((min: number, p: any) => Math.min(min, p.totalScore), Infinity);
 
-                playersToSort.sort((a, b) => {
+                playersToSort.sort((a: any, b: any) => {
                     if (a.totalScore !== b.totalScore) return a.totalScore - b.totalScore;
                     if (a.totalScore === leaderScore && isSuddenDeathActiveForThisGroup) {
                         return a.name.localeCompare(b.name);
@@ -278,7 +285,7 @@ function ExternalScoreboard() {
                 }
             }
             
-            const finalPlayers = [...playersToSort, ...otherPlayers.map(p => ({ ...p, rank: null }))];
+            const finalPlayers = [...playersToSort, ...otherPlayers.map((p: any) => ({ ...p, rank: null }))];
             rankedData[groupName] = finalPlayers;
         }
         
@@ -297,7 +304,7 @@ function ExternalScoreboard() {
                 progressByGroup[groupName] = 0; continue;
             }
             const playerGroupData = groupsData[groupName];
-            const assignedCourseIds = playerGroupData?.courses ? Object.keys(playerGroupData.courses).filter(id => playerGroupData.courses[id]) : [];
+            const assignedCourseIds = playerGroupData?.courses ? Object.keys(playerGroupData.courses).filter((id: string) => playerGroupData.courses[id]) : [];
             const coursesForGroup = allCourses.filter((c: any) => assignedCourseIds.includes(c.id.toString()) && c.isActive !== false);
 
             if (!coursesForGroup || coursesForGroup.length === 0) {
@@ -309,11 +316,11 @@ function ExternalScoreboard() {
             }
             let totalScoresEnteredInGroup = 0;
             groupPlayers.forEach((player: any) => {
-                 if (scores[player.id]) {
+                 if ((scores as any)[player.id]) {
                     const allAssignedCourseIds = coursesForGroup.map((c: any) => c.id.toString());
-                    for (const courseId in scores[player.id]) {
+                    for (const courseId in (scores as any)[player.id]) {
                         if (allAssignedCourseIds.includes(courseId)) {
-                             totalScoresEnteredInGroup += Object.keys(scores[player.id][courseId]).length;
+                             totalScoresEnteredInGroup += Object.keys((scores as any)[player.id][courseId]).length;
                         }
                     }
                  }
@@ -413,6 +420,50 @@ function ExternalScoreboard() {
         }
         return visibleGroups.filter(g => g === filterGroup);
     }, [filterGroup, visibleGroups]);
+
+    // 선수별 점수 로그 캐시 상태 (playerId별)
+    const [playerScoreLogs, setPlayerScoreLogs] = useState<{ [playerId: string]: ScoreLog[] }>({});
+    // 로딩 상태
+    const [logsLoading, setLogsLoading] = useState(false);
+
+    // 선수별 로그 미리 불러오기 (처음 한 번만)
+    useEffect(() => {
+        const fetchLogs = async () => {
+            setLogsLoading(true);
+            const playerIds = Object.values(finalDataByGroup).flat().map((p:any) => p.id);
+            const logsMap: { [playerId: string]: ScoreLog[] } = {};
+            await Promise.all(playerIds.map(async (pid) => {
+                try {
+                    const logs = await getPlayerScoreLogs(pid);
+                    logsMap[pid] = logs;
+                } catch {
+                    logsMap[pid] = [];
+                }
+            }));
+            setPlayerScoreLogs(logsMap);
+            setLogsLoading(false);
+        };
+        if (Object.keys(finalDataByGroup).length > 0) {
+            fetchLogs();
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [finalDataByGroup]);
+
+    // 모바일 툴팁 상태 관리 (셀별로 open)
+    const [openTooltip, setOpenTooltip] = useState<{ playerId: string; courseId: string; holeIndex: number } | null>(null);
+
+    // 모바일 외부 터치 시 툴팁 닫기
+    useEffect(() => {
+        if (!openTooltip) return;
+        const handleTouch = (e: TouchEvent) => {
+            // 셀 내부 터치면 무시
+            const tooltipEl = document.getElementById('score-tooltip-' + openTooltip.playerId + '-' + openTooltip.courseId + '-' + openTooltip.holeIndex);
+            if (tooltipEl && e.target instanceof Node && tooltipEl.contains(e.target)) return;
+            setOpenTooltip(null);
+        };
+        document.addEventListener('touchstart', handleTouch);
+        return () => document.removeEventListener('touchstart', handleTouch);
+    }, [openTooltip]);
 
 
     const handleScroll = (amount: number) => {
@@ -539,9 +590,9 @@ function ExternalScoreboard() {
                                         </tr>
                                     </thead>
                                     <tbody className="text-base">
-                                        {groupPlayers.map((player) => (
+                                        {groupPlayers.map((player: ProcessedPlayer) => (
                                             <React.Fragment key={player.id}>
-                                                 {player.assignedCourses.length > 0 ? player.assignedCourses.map((course, courseIndex) => (
+                                                 {player.assignedCourses.length > 0 ? player.assignedCourses.map((course: any, courseIndex: number) => (
                                                     <tr key={`${player.id}-${course.id}`} className="border-b border-gray-800 last:border-0">
                                                         {courseIndex === 0 && (
                                                             <>
@@ -551,7 +602,56 @@ function ExternalScoreboard() {
                                                             </>
                                                         )}
                                                         <td className="py-0.5 px-1 align-middle text-center border-r border-gray-800 w-24 md:w-24 sm:w-auto whitespace-nowrap">{player.coursesData[course.id]?.courseName}</td>
-                                                        {player.coursesData[course.id]?.holeScores.map((score, i) => <td key={i} className={cn(`py-0.5 px-1 align-middle font-mono font-bold border-r border-gray-800 ${i % 2 !== 0 ? 'bg-gray-800/50' : ''}`, score === 0 ? 'text-xs' : 'text-xl')}>{score === null ? '-' : (score === 0 ? '기권' : score)}</td>)}
+                                                        {player.coursesData[course.id]?.holeScores.map((score: any, i: number) => {
+  // 해당 셀(플레이어/코스/홀)에 대한 최근 로그 찾기
+  const logs = playerScoreLogs[player.id] || [];
+  const cellLog = logs.find(l => String((l as any).courseId) === String(course.id) && Number(l.holeNumber) === i + 1);
+  const isModified = !!cellLog;
+  // 툴팁 내용 구성
+  const tooltipContent = cellLog ? (
+    <div>
+      <div><b>수정자:</b> {cellLog.modifiedByType === 'admin' ? '관리자' : '심판'}</div>
+      <div><b>일시:</b> {cellLog.modifiedAt ? new Date(cellLog.modifiedAt).toLocaleString('ko-KR') : ''}</div>
+      <div><b>변경:</b> {cellLog.oldValue} → {cellLog.newValue}</div>
+      {cellLog.comment && <div><b>비고:</b> {cellLog.comment}</div>}
+    </div>
+  ) : null;
+
+  // 모바일: 셀 터치 시 툴팁 토글
+  const isMobile = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+  const tooltipOpen = openTooltip && openTooltip.playerId === player.id && openTooltip.courseId === course.id && openTooltip.holeIndex === i;
+
+  return (
+    <td
+      key={i}
+      className={cn(
+        `py-0.5 px-1 align-middle font-mono font-bold border-r border-gray-800 ${i % 2 !== 0 ? 'bg-gray-800/50' : ''}`,
+        score === 0 ? 'text-xs' : 'text-xl',
+        isModified ? 'text-red-600 font-bold cursor-pointer' : ''
+      )}
+      style={isModified ? { position: 'relative', zIndex: 10 } : {}}
+      onTouchStart={isModified && isMobile ? (e) => {
+        e.stopPropagation();
+        if (tooltipOpen) setOpenTooltip(null);
+        else setOpenTooltip({ playerId: player.id, courseId: course.id, holeIndex: i });
+      } : undefined}
+      id={isModified ? `score-tooltip-${player.id}-${course.id}-${i}` : undefined}
+    >
+      <TooltipProvider delayDuration={0}>
+        <Tooltip open={isMobile && isModified ? (tooltipOpen ? true : false) : undefined}>
+          <TooltipTrigger asChild>
+            <span>{score === null ? '-' : (score === 0 ? <span className="text-xs">기권</span> : score)}</span>
+          </TooltipTrigger>
+          {isModified && tooltipContent && (
+            <TooltipContent side="top" className="whitespace-pre-line">
+              {tooltipContent}
+            </TooltipContent>
+          )}
+        </Tooltip>
+      </TooltipProvider>
+    </td>
+  );
+})}
                                                         <td className={cn("py-0.5 px-1 align-middle font-bold text-gray-300 border-r border-gray-800", player.hasForfeited ? 'text-xs' : 'text-xl')}>{player.hasForfeited ? '기권' : (player.hasAnyScore ? player.coursesData[course.id]?.courseTotal : '-')}</td>
                                                         {courseIndex === 0 && (
                                                             <>
