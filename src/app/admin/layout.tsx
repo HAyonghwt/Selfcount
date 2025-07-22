@@ -219,7 +219,7 @@ function SidebarContentWithSidebarHooks({ isMobile, pathname, appName, children 
           </SidebarMenu>
         </SidebarFooter>
       </Sidebar>
-      <main className="flex-1 bg-secondary/40 overflow-y-auto">
+      <main className="flex-1 bg-secondary/40">
         <div className="p-4 sm:p-6">
           {children}
         </div>

@@ -512,19 +512,20 @@ const SidebarMenuItem = React.forwardRef<
 ))
 SidebarMenuItem.displayName = "SidebarMenuItem"
 
+// SidebarMenuButton 스타일 개선: hover/active, 라운드, 그림자, 컬러, 폰트 등 최신 트렌드 적용
 const sidebarMenuButtonVariants = cva(
-  "flex w-full items-center gap-2 rounded-md px-2 py-1.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 [&>span:last-child]:truncate [&>svg]:size-5 [&>svg]:shrink-0 [&>svg]:text-sidebar-accent-foreground",
+  "flex w-full items-center gap-2 rounded-xl px-3 py-2 transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 [&>span:last-child]:truncate [&>svg]:size-5 [&>svg]:shrink-0 [&>svg]:text-blue-500 font-semibold text-base text-gray-800 bg-white hover:bg-blue-50 active:bg-blue-100 shadow-sm hover:shadow-md",
   {
     variants: {
       variant: {
-        default: "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+        default: "hover:bg-blue-50 hover:text-blue-700 active:bg-blue-100 active:text-blue-800",
         outline:
-          "bg-background shadow-[0_0_0_1px_hsl(var(--sidebar-border))] hover:bg-sidebar-accent hover:text-sidebar-accent-foreground hover:shadow-[0_0_0_1px_hsl(var(--sidebar-accent))]",
+          "bg-white shadow-[0_0_0_1px_hsl(var(--sidebar-border))] hover:bg-blue-50 hover:text-blue-700 hover:shadow-md hover:shadow-blue-100",
       },
       size: {
-        default: "h-10 text-base !text-black",
-        sm: "h-8 text-sm !text-black",
-        lg: "h-12 text-lg !text-black group-data-[collapsible=icon]:!p-0",
+        default: "h-12 text-base",
+        sm: "h-10 text-sm",
+        lg: "h-14 text-lg",
       },
     },
     defaultVariants: {

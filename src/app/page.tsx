@@ -125,12 +125,12 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
-      <Card className="w-full max-w-md shadow-2xl">
+    <div className="flex min-h-screen flex-col items-center justify-center bg-blue-50 p-4">
+      <Card className="w-full max-w-md shadow-2xl border-blue-200">
         <CardHeader className="text-center">
-          <Button variant="secondary" className="w-full h-12 text-base font-bold mb-6" asChild>
+          <Button variant="secondary" className="w-full h-12 text-base font-bold mb-6 bg-blue-100 text-blue-700 hover:bg-blue-200 border-none" asChild>
               <Link href="/scoreboard" target="_blank" rel="noopener noreferrer">
-                  <Tv className="mr-2 h-5 w-5" />
+                  <Tv className="mr-2 h-5 w-5 text-blue-600" />
                   실시간 전광판
               </Link>
           </Button>
@@ -145,17 +145,17 @@ export default function LoginPage() {
                 priority
             />
           </div>
-          <CardTitle className="text-3xl font-bold font-headline">
+          <CardTitle className="text-3xl font-bold font-headline text-blue-800">
             {loading && !config ? <Skeleton className="h-9 w-48 mx-auto" /> : (config?.appName || 'ParkScore')}
           </CardTitle>
-          <CardDescription className="text-muted-foreground pt-2">
+          <CardDescription className="text-blue-500 pt-2">
             {loading && !config ? <Skeleton className="h-5 w-40 mx-auto" /> : `관리자/심판으로 로그인 하세요.`}
           </CardDescription>
         </CardHeader>
-        <CardContent className="p-6 pt-2">
+        <CardContent>
           <form onSubmit={handleLogin} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="email">이메일</Label>
+              <Label htmlFor="email" className="text-blue-800">이메일</Label>
               <Input
                 id="email"
                 type="email"
@@ -163,20 +163,20 @@ export default function LoginPage() {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="h-12 text-base"
+                className="h-12 text-base border-blue-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-300"
                 disabled={loading || isConfigMissing}
                 autoComplete="off"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="password">비밀번호</Label>
+              <Label htmlFor="password" className="text-blue-800">비밀번호</Label>
               <Input
                 id="password"
                 type="password"
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="h-12 text-base"
+                className="h-12 text-base border-blue-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-300"
                 disabled={loading || isConfigMissing}
                 autoComplete="off"
               />
@@ -186,12 +186,12 @@ export default function LoginPage() {
                     <p>{error}</p>
                 </div>
             )}
-            <Button type="submit" className="w-full h-12 text-lg font-bold" disabled={loading || isConfigMissing}>
+            <Button type="submit" className="w-full h-12 text-lg font-bold bg-blue-600 hover:bg-blue-700 text-white transition-colors duration-200" disabled={loading || isConfigMissing}>
               {loading && !isConfigMissing ? (
                 '로그인 중...'
               ) : (
                 <>
-                  <LogIn className="mr-2 h-5 w-5" />
+                  <LogIn className="mr-2 h-5 w-5 text-white" />
                   로그인
                 </>
               )}
@@ -199,7 +199,7 @@ export default function LoginPage() {
           </form>
         </CardContent>
       </Card>
-      <footer className="mt-8 text-center text-sm text-muted-foreground">
+      <footer className="mt-8 text-center text-sm text-blue-500">
         <p>&copy; {year} {config?.appName || 'ParkScore'}. All rights reserved.</p>
       </footer>
     </div>

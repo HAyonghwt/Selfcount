@@ -330,12 +330,8 @@ export default function AdminDashboard() {
         for (const groupName in groupedData) {
             const coursesForGroup = groupedData[groupName][0]?.assignedCourses || Object.values(courses);
             
-            // Optimization: Pre-sort courses for tie-breaking
-            const sortedCoursesForTieBreak = [...coursesForGroup].sort((c1, c2) => {
-                const name1 = c1?.name || '';
-                const name2 = c2?.name || '';
-                return name2.localeCompare(name1);
-            });
+            // 백카운트용 코스 순서: 코스관리에서 지정한 순서의 역순으로 변경
+            const sortedCoursesForTieBreak = [...coursesForGroup].reverse();
 
             const playersToSort = groupedData[groupName].filter(p => p.hasAnyScore && !p.hasForfeited);
             const otherPlayers = groupedData[groupName].filter(p => !p.hasAnyScore || p.hasForfeited);
@@ -945,7 +941,7 @@ export default function AdminDashboard() {
                                                     >
                                                         {courseIndex === 0 && (
                                                             <>
-                                                                <TableCell rowSpan={player.assignedCourses.length || 1} className="text-center align-middle font-bold text-lg px-2 py-1 border-r">{player.rank !== null ? `${player.rank}위` : (player.hasForfeited ? '기권' : '-')}</TableCell>
+                                                                <TableCell rowSpan={player.assignedCourses.length || 1} className="text-center align-middle font-bold text-lg px-2 py-1 border-r">{player.rank !== null ? `${player.rank}위` : (player.hasForfeited ? '기권' : '')}</TableCell>
                                                                 <TableCell rowSpan={player.assignedCourses.length || 1} className="text-center align-middle font-medium px-2 py-1 border-r">{player.jo}</TableCell>
                                                                 <TableCell rowSpan={player.assignedCourses.length || 1} className="align-middle font-semibold px-2 py-1 border-r text-center whitespace-nowrap" style={{minWidth:'90px',maxWidth:'260px',flexGrow:1}}>{player.name}</TableCell>
                                                                 <TableCell rowSpan={player.assignedCourses.length || 1} className="align-middle text-muted-foreground px-2 py-1 border-r text-center whitespace-nowrap" style={{minWidth:'80px',maxWidth:'200px',flexGrow:1}}>{player.affiliation}</TableCell>

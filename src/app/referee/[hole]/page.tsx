@@ -79,6 +79,59 @@ export default function RefereePage() {
     const [unlockPasswordInput, setUnlockPasswordInput] = useState('');
     const [playerToUnlock, setPlayerToUnlock] = useState<Player | null>(null);
     
+    // 1. 추가: 저장 안된 선수 체크 및 이동 시도 카운트 상태
+    const [unsavedMoveCount, setUnsavedMoveCount] = useState<{ [playerId: string]: number }>({});
+    const [showUnsavedModal, setShowUnsavedModal] = useState(false);
+    const [unsavedPlayers, setUnsavedPlayers] = useState<Player[]>([]);
+
+    // 안내 모달 상태 추가
+    const [showAllJosCompleteModal, setShowAllJosCompleteModal] = useState(false);
+
+    // handleNextGroup 함수 수정
+    const handleNextGroup = async (forceMoveOverride?: boolean) => {
+        // 저장 안된 선수(잠금 안된 선수) 찾기
+        const unsaved = currentPlayers.filter(p => scores[p.id]?.status !== 'locked');
+        if (unsaved.length > 0 && !forceMoveOverride) {
+            setUnsavedPlayers(unsaved);
+            setShowUnsavedModal(true);
+            return;
+        }
+        // 3회 이상 강제 이동 시 자동 기권 처리
+        if (unsaved.length > 0 && forceMoveOverride) {
+            let autoForfeitPlayers: string[] = [];
+            for (const p of unsaved) {
+                const count = (unsavedMoveCount[p.id] || 0) + 1;
+                if (count >= 3) {
+                    // 자동 기권 처리: 남은 홀 0점 입력
+                    for (let h = 1; h <= 9; h++) {
+                        const hStr = h.toString();
+                        if (!allScores[p.id]?.[(selectedCourse || '')]?.[hStr]) {
+                            await set(ref(db as import('firebase/database').Database, `/scores/${p.id}/${selectedCourse || ''}/${hStr}`), 0);
+                        }
+                    }
+                    autoForfeitPlayers.push(getPlayerName(p));
+                }
+                unsavedMoveCount[p.id] = count;
+            }
+            setUnsavedMoveCount({ ...unsavedMoveCount });
+            if (autoForfeitPlayers.length > 0) {
+                toast({
+                    title: '자동 기권 처리',
+                    description: `${autoForfeitPlayers.join(', ')} 선수(들)가 3회 이상 점수 미저장으로 자동 기권 처리되었습니다.`,
+                    variant: 'destructive',
+                });
+            }
+        }
+        // 다음 조 자동 이동 로직
+        const currentJoIdx = availableJos.findIndex(j => j.toString() === selectedJo);
+        if (currentJoIdx !== -1 && currentJoIdx < availableJos.length - 1) {
+            // 다음 조로 이동
+            setSelectedJo(availableJos[currentJoIdx + 1].toString());
+        } else {
+            // 마지막 조까지 입력 완료
+            setShowAllJosCompleteModal(true);
+        }
+    };
 
     // popstate(브라우저 뒤로가기)에서 경고 다이얼로그
     useEffect(() => {
@@ -559,6 +612,13 @@ export default function RefereePage() {
                         </Card>
                     );
                 })}
+                {/* 다음 조로 이동 버튼 추가 */}
+                <Button
+                    className="w-full h-14 text-xl font-bold mt-6 bg-blue-600 hover:bg-blue-700 text-white"
+                    onClick={() => handleNextGroup()}
+                >
+                    다음 조로 이동
+                </Button>
             </div>
         );
     }
@@ -691,6 +751,47 @@ export default function RefereePage() {
                 </AlertDialogFooter>
             </AlertDialogContent>
         </AlertDialog>
+        {showUnsavedModal && (
+    <AlertDialog open={showUnsavedModal} onOpenChange={setShowUnsavedModal}>
+        <AlertDialogContent>
+            <AlertDialogHeader>
+                <AlertDialogTitle className="text-xl font-bold text-destructive flex items-center gap-2">
+                    <span>⚠️</span> 점수 저장이 안된 선수가 있습니다
+                </AlertDialogTitle>
+            </AlertDialogHeader>
+            <div className="py-2">
+                {unsavedPlayers.map(p => (
+                    <div key={p.id} className="font-bold text-red-600 text-lg mb-1">{getPlayerName(p)}</div>
+                ))}
+                <div className="mt-2 text-base text-gray-700 font-semibold">
+                    그래도 다음 조로 진행하겠습니까?
+                </div>
+            </div>
+            <AlertDialogFooter>
+                <AlertDialogCancel onClick={() => setShowUnsavedModal(false)}>취소</AlertDialogCancel>
+                <AlertDialogAction onClick={() => { setShowUnsavedModal(false); handleNextGroup(true); }} className="bg-destructive hover:bg-destructive/90">그래도 이동</AlertDialogAction>
+            </AlertDialogFooter>
+        </AlertDialogContent>
+    </AlertDialog>
+)}
+        {/* 모든 조 입력 완료 안내 모달 */}
+        {showAllJosCompleteModal && (
+    <AlertDialog open={showAllJosCompleteModal} onOpenChange={setShowAllJosCompleteModal}>
+        <AlertDialogContent>
+            <AlertDialogHeader>
+                <AlertDialogTitle className="text-xl font-bold text-green-700 flex items-center gap-2">
+                    <span>🎉</span> 이 그룹의 모든 조의 점수가 입력되었습니다
+                </AlertDialogTitle>
+            </AlertDialogHeader>
+            <div className="py-2 text-lg text-center text-green-800 font-semibold">
+                수고하셨습니다!
+            </div>
+            <AlertDialogFooter>
+                <AlertDialogAction onClick={() => setShowAllJosCompleteModal(false)} className="bg-green-600 hover:bg-green-700 text-white">확인</AlertDialogAction>
+            </AlertDialogFooter>
+        </AlertDialogContent>
+    </AlertDialog>
+)}
         </>
     );
 }
