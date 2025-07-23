@@ -88,7 +88,7 @@ export default function PlayerManagementPage() {
         const unsubTournament = onValue(tournamentRef, (snapshot) => {
             const data = snapshot.val() || {};
             setGroupsData(data.groups || {});
-            setCourses(data.courses ? Object.values(data.courses).filter((c:any) => c.isActive) : []);
+            setCourses(data.courses ? Object.values(data.courses) : []); // isActive 필터 제거
         });
 
         return () => {
