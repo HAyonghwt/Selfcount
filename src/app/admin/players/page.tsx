@@ -68,9 +68,9 @@ export default function PlayerManagementPage() {
 
 
     useEffect(() => {
-        const playersRef = ref(db, 'players');
-        const configRef = ref(db, 'config');
-        const tournamentRef = ref(db, 'tournaments/current');
+        const playersRef = ref(db!, 'players');
+        const configRef = ref(db!, 'config');
+        const tournamentRef = ref(db!, 'tournaments/current');
         
         const unsubPlayers = onValue(playersRef, (snapshot) => {
             const data = snapshot.val();
@@ -155,6 +155,33 @@ export default function PlayerManagementPage() {
                 const wb = XLSX.read(data, { type: 'binary' });
                 let newPlayers: any[] = [];
 
+                // 그룹명 체크 추가
+                const sheetNames = wb.SheetNames;
+                const groupList = Object.values(groupsData).map((g: any) => g.name);
+                const missingGroups = groupList.filter(g => !sheetNames.includes(g));
+                const extraGroups = sheetNames.filter(s => !groupList.includes(s));
+                const duplicateGroups = sheetNames.filter((s, i, arr) => arr.indexOf(s) !== i);
+
+                if (extraGroups.length > 0) {
+                    toast({
+                        title: '그룹명 불일치',
+                        description: `엑셀 파일에 그룹 목록에 없는 그룹이 포함되어 있습니다: ${extraGroups.join(', ')}`,
+                    });
+                    return;
+                }
+                if (duplicateGroups.length > 0) {
+                    toast({
+                        title: '그룹명 중복',
+                        description: `엑셀 파일에 그룹명이 중복되어 있습니다: ${duplicateGroups.join(', ')}`,
+                    });
+                    return;
+                }
+                if (missingGroups.length > 0) {
+                    if (!window.confirm(`엑셀 파일에 그룹이 일부 빠져 있습니다: ${missingGroups.join(', ')}\n이대로 선수 등록을 진행하시겠습니까?`)) {
+                        return;
+                    }
+                }
+
                 wb.SheetNames.forEach(sheetName => {
                     const groupName = sheetName;
                     const ws = wb.Sheets[sheetName];
@@ -207,7 +234,7 @@ const groupJoLimit = type === 'individual' ? 4 : 2;
 // 기존 선수/팀 + 신규 업로드를 그룹/조별로 집계
 const groupJoMap: { [key: string]: { [key: string]: number } } = {};
 // 기존
-allPlayers.filter(p => p.type === type).forEach(p => {
+allPlayers.filter((p: any) => p.type === type).forEach((p: any) => {
     const g = p.group || '';
     const j = p.jo || '';
     if (!groupJoMap[g]) groupJoMap[g] = {};
@@ -215,7 +242,7 @@ allPlayers.filter(p => p.type === type).forEach(p => {
     groupJoMap[g][j]++;
 });
 // 신규
-newPlayers.forEach(p => {
+newPlayers.forEach((p: any) => {
     const g = p.group || '';
     const j = p.jo || '';
     if (!groupJoMap[g]) groupJoMap[g] = {};
@@ -224,8 +251,8 @@ newPlayers.forEach(p => {
 });
 // 초과 조 찾기
 const overList: string[] = [];
-Object.entries(groupJoMap).forEach(([g, jos]) => {
-    Object.entries(jos).forEach(([j, cnt]) => {
+Object.entries(groupJoMap).forEach(([g, jos]: [string, any]) => {
+    Object.entries(jos).forEach(([j, cnt]: [string, any]) => {
         if (cnt > groupJoLimit) {
             overList.push(`${g} 그룹 ${j}조: ${cnt}${type === 'individual' ? '명' : '팀'} (최대 ${groupJoLimit}${type === 'individual' ? '명' : '팀'})`);
         }
@@ -250,13 +277,13 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                 
                 const updates: { [key: string]: any } = {};
                 newPlayers.forEach(player => {
-                    const newPlayerKey = push(ref(db, 'players')).key;
+                    const newPlayerKey = push(ref(db!, 'players')).key;
                     if(newPlayerKey) {
                         updates[`/players/${newPlayerKey}`] = player;
                     }
                 });
 
-                update(ref(db), updates)
+                update(ref(db!), updates)
                     .then(() => {
                         toast({ title: '성공', description: `${newPlayers.length}명의 선수가 성공적으로 등록되었습니다.` });
                     })
@@ -277,7 +304,7 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
         const team = allPlayers.filter(p => p.type === 'team');
 
         const createGroupedData = (players: any[]) => {
-            const grouped = players.reduce((acc, player) => {
+            const grouped = players.reduce((acc: { [key: string]: any[] }, player: any) => {
                 const groupName = player.group || '미지정';
                 if (!acc[groupName]) {
                     acc[groupName] = [];
@@ -286,8 +313,8 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                 return acc;
             }, {} as { [key: string]: any[] });
             
-            Object.values(grouped).forEach(playerList => {
-                playerList.sort((a, b) => {
+            Object.values(grouped).forEach((playerList: any[]) => {
+                playerList.sort((a: any, b: any) => {
                     if (a.jo !== b.jo) return a.jo - b.jo;
                     const nameA = a.name || a.p1_name || '';
                     const nameB = b.name || b.p1_name || '';
@@ -311,7 +338,7 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
         const filtered: { [key: string]: any[] } = {};
         
         for (const groupName in groupedIndividualPlayers) {
-            const players = groupedIndividualPlayers[groupName].filter(p => 
+            const players = groupedIndividualPlayers[groupName].filter((p: any) => 
                 p.name.toLowerCase().includes(lowercasedFilter) ||
                 p.affiliation.toLowerCase().includes(lowercasedFilter) ||
                 p.jo.toString().includes(individualSearchTerm)
@@ -330,7 +357,7 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
         const filtered: { [key: string]: any[] } = {};
         
         for (const groupName in groupedTeamPlayers) {
-            const players = groupedTeamPlayers[groupName].filter(t => 
+            const players = groupedTeamPlayers[groupName].filter((t: any) => 
                 t.p1_name.toLowerCase().includes(lowercasedFilter) ||
                 (t.p2_name && t.p2_name.toLowerCase().includes(lowercasedFilter)) ||
                 t.p1_affiliation.toLowerCase().includes(lowercasedFilter) ||
@@ -382,7 +409,7 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
 
         const updates: { [key: string]: any } = {};
         playersToSave.forEach(player => {
-            const newPlayerKey = push(ref(db, 'players')).key;
+            const newPlayerKey = push(ref(db!, 'players')).key;
             updates[`/players/${newPlayerKey}`] = {
                 type: 'individual',
                 group: individualGroup,
@@ -392,7 +419,7 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
             };
         });
 
-        update(ref(db), updates)
+        update(ref(db!, 'players'), updates)
             .then(() => {
                 toast({ title: '성공', description: '개인전 선수들이 저장되었습니다.' });
                 setIndividualFormData(initialIndividualState);
@@ -421,7 +448,7 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
 
         const updates: { [key: string]: any } = {};
         teamsToSave.forEach(team => {
-            const newTeamKey = push(ref(db, 'players')).key;
+            const newTeamKey = push(ref(db!, 'players')).key;
             updates[`/players/${newTeamKey}`] = {
                 type: 'team',
                 group: teamGroup,
@@ -433,7 +460,7 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
             };
         });
 
-        update(ref(db), updates)
+        update(ref(db!, 'players'), updates)
             .then(() => {
                 toast({ title: '성공', description: '2인 1팀 선수들이 저장되었습니다.' });
                 setTeamFormData(initialTeamState);
@@ -442,11 +469,11 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
     };
 
     const handleDeletePlayer = (id: string) => {
-        remove(ref(db, `players/${id}`));
+        remove(ref(db!, `players/${id}`));
     };
     
     const handleResetAllPlayers = () => {
-        remove(ref(db, 'players'))
+        remove(ref(db!, 'players'))
             .then(() => toast({ title: '초기화 완료', description: '모든 선수 명단이 삭제되었습니다.'}))
             .catch(err => toast({ title: '초기화 실패', description: err.message }));
     };
@@ -462,7 +489,7 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
             return;
         }
 
-        const groupRef = ref(db, `tournaments/current/groups/${trimmedName}`);
+        const groupRef = ref(db!, `tournaments/current/groups/${trimmedName}`);
         
         const defaultCourses = courses.reduce((acc, course) => {
             acc[course.id] = true;
@@ -478,7 +505,7 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
     };
 
     const handleDeleteGroup = (groupName: string) => {
-        const groupRef = ref(db, `tournaments/current/groups/${groupName}`);
+        const groupRef = ref(db!, `tournaments/current/groups/${groupName}`);
         remove(groupRef)
             .then(() => toast({ title: '성공', description: `'${groupName}' 그룹이 삭제되었습니다.` }))
             .catch(err => toast({ title: '오류', description: err.message }));
@@ -507,7 +534,7 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
             dataToUpdate.jo = Number(dataToUpdate.jo);
         }
 
-        update(ref(db, `players/${editingPlayerId}`), dataToUpdate)
+        update(ref(db!, `players/${editingPlayerId}`), dataToUpdate)
             .then(() => {
                 toast({ title: '성공', description: '선수 정보가 수정되었습니다.' });
                 handleCancelEdit();
@@ -523,7 +550,7 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
 
     const handleSaveGroupCourses = () => {
         if (!currentEditingGroup) return;
-        const groupCoursesRef = ref(db, `tournaments/current/groups/${currentEditingGroup.name}/courses`);
+        const groupCoursesRef = ref(db!, `tournaments/current/groups/${currentEditingGroup.name}/courses`);
         set(groupCoursesRef, assignedCourses)
             .then(() => {
                 toast({ title: "저장 완료", description: `${currentEditingGroup.name} 그룹의 코스 설정이 저장되었습니다.` });
@@ -533,7 +560,7 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
             .catch((err) => toast({ title: "저장 실패", description: err.message }));
     };
 
-    const groupList = Object.values(groupsData).sort((a:any, b:any) => a.name.localeCompare(b.name));
+    const groupList = Object.values(groupsData).sort((a: any, b: any) => a.name.localeCompare(b.name));
     const groupNameList = groupList.map((g: any) => g.name);
 
   return (
@@ -727,15 +754,15 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
-                                        {Object.keys(filteredGroupedIndividualPlayers).sort().map(groupName => 
-                                            filteredGroupedIndividualPlayers[groupName].map((p, index) => (
+                                        {Object.keys(filteredGroupedIndividualPlayers).sort().map((groupName: string) => 
+                                            filteredGroupedIndividualPlayers[groupName].map((p: any, index: number) => (
                                                 editingPlayerId === p.id ? (
                                                     <TableRow key={p.id} className="bg-muted/30">
                                                         <TableCell className="px-4 py-2 text-center font-medium">{index + 1}</TableCell>
                                                         <TableCell className="px-4 py-2">
                                                             <Select value={editingPlayerData.group} onValueChange={(value) => handleEditingFormChange('group', value)}>
                                                                 <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                                                                <SelectContent>{groupNameList.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}</SelectContent>
+                                                                <SelectContent>{groupNameList.map((g: string) => <SelectItem key={g} value={g}>{g}</SelectItem>)}</SelectContent>
                                                             </Select>
                                                         </TableCell>
                                                         <TableCell className="px-4 py-2"><Input value={editingPlayerData.jo} type="number" onChange={(e) => handleEditingFormChange('jo', e.target.value)} className="h-9 w-20" /></TableCell>
@@ -853,53 +880,39 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
-                                        {Object.keys(filteredGroupedTeamPlayers).sort().map(groupName =>
-                                            filteredGroupedTeamPlayers[groupName].map((t, index) => (
+                                        {Object.keys(filteredGroupedTeamPlayers).sort().map((groupName: string) =>
+                                            filteredGroupedTeamPlayers[groupName].map((t: any, index: number) => (
                                                 editingPlayerId === t.id ? (
                                                     <TableRow key={t.id} className="bg-muted/30">
                                                         <TableCell className="px-4 py-2 text-center font-medium">{index + 1}</TableCell>
                                                         <TableCell className="px-4 py-2 align-top">
                                                             <Select value={editingPlayerData.group} onValueChange={(value) => handleEditingFormChange('group', value)}>
                                                                 <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                                                                <SelectContent>{groupNameList.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}</SelectContent>
+                                                                <SelectContent>{groupNameList.map((g: string) => <SelectItem key={g} value={g}>{g}</SelectItem>)}</SelectContent>
                                                             </Select>
                                                         </TableCell>
                                                         <TableCell className="px-4 py-2 align-top"><Input value={editingPlayerData.jo} type="number" onChange={(e) => handleEditingFormChange('jo', e.target.value)} className="h-9 w-20" /></TableCell>
-                                                        <TableCell className="px-4 py-2">
-                                                            <div className="space-y-1">
-                                                                <Input value={editingPlayerData.p1_name} onChange={(e) => handleEditingFormChange('p1_name', e.target.value)} className="h-9" placeholder="선수1 이름" />
-                                                                <Input value={editingPlayerData.p2_name} onChange={(e) => handleEditingFormChange('p2_name', e.target.value)} className="h-9" placeholder="선수2 이름" />
-                                                            </div>
-                                                        </TableCell>
-                                                        <TableCell className="px-4 py-2">
-                                                            <div className="space-y-1">
-                                                                <Input value={editingPlayerData.p1_affiliation} onChange={(e) => handleEditingFormChange('p1_affiliation', e.target.value)} className="h-9" placeholder="선수1 소속" />
-                                                                <Input value={editingPlayerData.p2_affiliation} onChange={(e) => handleEditingFormChange('p2_affiliation', e.target.value)} className="h-9" placeholder="선수2 소속" />
-                                                            </div>
-                                                        </TableCell>
-                                                        <TableCell className="text-right space-x-1 px-4 py-2 align-top">
-                                                            <Button variant="ghost" size="icon" onClick={handleUpdatePlayer}><Save className="h-4 w-4 text-primary" /></Button>
-                                                            <Button variant="ghost" size="icon" onClick={handleCancelEdit}><X className="h-4 w-4 text-muted-foreground" /></Button>
+                                                        <TableCell className="px-4 py-2 align-top"><Input value={editingPlayerData.p1_name} onChange={(e) => handleEditingFormChange('p1_name', e.target.value)} className="h-9" /></TableCell>
+                                                        <TableCell className="px-4 py-2 align-top"><Input value={editingPlayerData.p1_affiliation} onChange={(e) => handleEditingFormChange('p1_affiliation', e.target.value)} className="h-9" /></TableCell>
+                                                        <TableCell className="px-4 py-2 align-top"><Input value={editingPlayerData.p2_name} onChange={(e) => handleEditingFormChange('p2_name', e.target.value)} className="h-9" /></TableCell>
+                                                        <TableCell className="px-4 py-2 align-top"><Input value={editingPlayerData.p2_affiliation} onChange={(e) => handleEditingFormChange('p2_affiliation', e.target.value)} className="h-9" /></TableCell>
+                                                        <TableCell className="px-4 py-2 text-right align-top">
+                                                            <Button variant="outline" size="sm" onClick={handleUpdatePlayer}><Check className="w-4 h-4" /></Button>
+                                                            <Button variant="ghost" size="sm" onClick={handleCancelEdit}><X className="w-4 h-4" /></Button>
                                                         </TableCell>
                                                     </TableRow>
                                                 ) : (
                                                     <TableRow key={t.id}>
                                                         <TableCell className="px-4 py-2 text-center font-medium">{index + 1}</TableCell>
-                                                        <TableCell className="px-4 py-2">{t.group}</TableCell>
-                                                        <TableCell className="px-4 py-2">{t.jo}</TableCell>
-                                                        <TableCell className="px-4 py-2">{t.p1_name}, {t.p2_name}</TableCell>
-                                                        <TableCell className="px-4 py-2">{t.p1_affiliation}{t.p2_affiliation && t.p1_affiliation !== t.p2_affiliation ? ` / ${t.p2_affiliation}` : ''}</TableCell>
-                                                        <TableCell className="text-right space-x-2 px-4 py-2">
-                                                            <Button variant="outline" size="icon" onClick={() => handleEditClick(t)}><Edit className="h-4 w-4" /></Button>
-                                                            <AlertDialog>
-                                                                <AlertDialogTrigger asChild>
-                                                                    <Button variant="destructive" size="icon"><Trash2 className="h-4 w-4" /></Button>
-                                                                </AlertDialogTrigger>
-                                                                <AlertDialogContent>
-                                                                    <AlertDialogHeader><AlertDialogTitle>정말 삭제하시겠습니까?</AlertDialogTitle><AlertDialogDescription>{t.p1_name}, {t.p2_name} 팀의 정보를 삭제합니다.</AlertDialogDescription></AlertDialogHeader>
-                                                                    <AlertDialogFooter><AlertDialogCancel>취소</AlertDialogCancel><AlertDialogAction onClick={() => handleDeletePlayer(t.id)}>삭제</AlertDialogAction></AlertDialogFooter>
-                                                                </AlertDialogContent>
-                                                            </AlertDialog>
+                                                        <TableCell className="px-4 py-2 align-top">{t.group}</TableCell>
+                                                        <TableCell className="px-4 py-2 align-top">{t.jo}</TableCell>
+                                                        <TableCell className="px-4 py-2 align-top">{t.p1_name}</TableCell>
+                                                        <TableCell className="px-4 py-2 align-top">{t.p1_affiliation}</TableCell>
+                                                        <TableCell className="px-4 py-2 align-top">{t.p2_name}</TableCell>
+                                                        <TableCell className="px-4 py-2 align-top">{t.p2_affiliation}</TableCell>
+                                                        <TableCell className="px-4 py-2 text-right align-top">
+                                                            <Button variant="ghost" size="sm" onClick={() => handleEditClick(t)}><Edit className="w-4 h-4" /></Button>
+                                                            <Button variant="ghost" size="sm" onClick={() => handleDeletePlayer(t.id)}><Trash2 className="w-4 h-4 text-destructive" /></Button>
                                                         </TableCell>
                                                     </TableRow>
                                                 )
