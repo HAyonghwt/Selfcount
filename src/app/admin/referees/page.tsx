@@ -7,6 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { db } from '@/lib/firebase';
 import { ref, onValue } from 'firebase/database';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Eye, EyeOff } from 'lucide-react';
 
 const MAX_HOLES = 9;
 
@@ -16,6 +17,7 @@ export default function RefereeManagementPage() {
     const [refereePassword, setRefereePassword] = useState('');
 
     useEffect(() => {
+        if (!db) return;
         const configRef = ref(db, 'config');
 
         const unsubConfig = onValue(configRef, (snapshot) => {
@@ -55,6 +57,7 @@ export default function RefereeManagementPage() {
     const [unlockPassword, setUnlockPassword] = useState('');
     // scoreUnlockPassword를 DB에서 읽어와 unlockPassword에 세팅
     useEffect(() => {
+        if (!db) return;
         const pwRef = ref(db, 'config/scoreUnlockPassword');
         const unsub = onValue(pwRef, (snap) => {
             const val = snap.val() || '';
@@ -67,6 +70,7 @@ export default function RefereeManagementPage() {
     const [saveMsg, setSaveMsg] = useState<string|null>(null);
 
     const handleSaveUnlockPassword = async () => {
+        if (!db) return;
         if (unlockPassword.trim() === '') {
             setSaveMsg('비밀번호를 입력해주세요.');
             return;
@@ -153,9 +157,19 @@ export default function RefereeManagementPage() {
                                                 <code className="bg-muted px-2 py-1 rounded-md text-base">referee{hole}@{userDomain}</code>
                                             </TableCell>
                                             <TableCell>
-                                                <span className="font-mono text-base">
-                                                    {showPassword ? unlockPassword : (unlockPassword ? unlockPassword.replace(/./g, '•') : '----')}
-                                                </span>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="font-mono text-base">
+                                                        {showPassword ? refereePassword : (refereePassword ? refereePassword.replace(/./g, '•') : '----')}
+                                                    </span>
+                                                    <button
+                                                        type="button"
+                                                        className="text-muted-foreground hover:text-foreground"
+                                                        onClick={() => setShowPassword(prev => !prev)}
+                                                        aria-label={showPassword ? "비밀번호 숨기기" : "비밀번호 보기"}
+                                                    >
+                                                        {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                                                    </button>
+                                                </div>
                                             </TableCell>
                                         </TableRow>
                                     ))}

@@ -123,15 +123,23 @@ export default function RefereePage() {
                 });
             }
         }
-        // 다음 조 자동 이동 로직
-        const currentJoIdx = availableJos.findIndex(j => j.toString() === selectedJo);
-        if (currentJoIdx !== -1 && currentJoIdx < availableJos.length - 1) {
-            // 다음 조로 이동
-            setSelectedJo(availableJos[currentJoIdx + 1].toString());
-        } else {
-            // 마지막 조까지 입력 완료
-            setShowAllJosCompleteModal(true);
+        // --- 등록 순서 기준 조 이동 로직 ---
+        const allJos = availableJos;
+        const currentIdx = allJos.findIndex(j => j === selectedJo);
+        let nextJo = '';
+        for (let i = 1; i <= allJos.length; i++) {
+            const idx = (currentIdx + i) % allJos.length;
+            const candidateJo = allJos[idx];
+            if (!completedJos.has(candidateJo)) {
+                nextJo = candidateJo;
+                break;
+            }
         }
+        if (!nextJo) {
+            setShowAllJosCompleteModal(true);
+            return;
+        }
+        setSelectedJo(nextJo);
     };
 
     // popstate(브라우저 뒤로가기)에서 경고 다이얼로그
@@ -238,7 +246,16 @@ export default function RefereePage() {
     const availableJos = useMemo(() => {
         if (!selectedGroup) return [];
         const groupPlayers = allPlayers.filter(p => p.group === selectedGroup);
-        return [...new Set(groupPlayers.map(p => p.jo))].sort((a, b) => a - b);
+        const seen = new Set<string>();
+        const orderedJos: string[] = [];
+        groupPlayers.forEach(p => {
+            const joStr = p.jo.toString();
+            if (!seen.has(joStr)) {
+                seen.add(joStr);
+                orderedJos.push(joStr);
+            }
+        });
+        return orderedJos;
     }, [allPlayers, selectedGroup]);
     
     const currentPlayers = useMemo(() => {
@@ -248,16 +265,16 @@ export default function RefereePage() {
     
     const completedJos = useMemo(() => {
         if (!selectedGroup || !selectedCourse || !hole || !allPlayers.length || !Object.keys(allScores).length) {
-            return new Set<number>();
+            return new Set<string>();
         }
     
         const groupPlayers = allPlayers.filter(p => p.group === selectedGroup);
-        const josInGroup = [...new Set(groupPlayers.map(p => p.jo))];
+        const josInGroup = [...new Set(groupPlayers.map(p => p.jo.toString()))];
     
-        const completed = new Set<number>();
+        const completed = new Set<string>();
     
         josInGroup.forEach(joNum => {
-            const playersInThisJo = groupPlayers.filter(p => p.jo === joNum);
+            const playersInThisJo = groupPlayers.filter(p => p.jo.toString() === joNum);
     
             if (playersInThisJo.length === 0) return;
     
@@ -545,7 +562,7 @@ export default function RefereePage() {
                             {availableJos.map(jo => {
                                 const isCompleted = completedJos.has(jo);
                                 return (
-                                    <SelectItem key={jo} value={jo.toString()}>
+                                    <SelectItem key={jo} value={jo}>
                                         <div className="flex items-center justify-between w-full">
                                             <span>{jo}조</span>
                                             {isCompleted && <Lock className="h-4 w-4 text-muted-foreground" />}
@@ -695,7 +712,7 @@ export default function RefereePage() {
                                         {availableJos.map(jo => {
                                             const isCompleted = completedJos.has(jo);
                                             return (
-                                                <SelectItem key={jo} value={jo.toString()}>
+                                                <SelectItem key={jo} value={jo}>
                                                     <div className="flex items-center justify-between w-full gap-4">
                                                         <span>{jo}조</span>
                                                         {isCompleted && <Lock className="h-4 w-4 text-muted-foreground" />}
