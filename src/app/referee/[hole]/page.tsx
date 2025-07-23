@@ -51,6 +51,7 @@ export default function RefereePage() {
     const [selectedGroup, setSelectedGroup] = useState<string>('');
     const [selectedCourse, setSelectedCourse] = useState<string>('');
     const [selectedJo, setSelectedJo] = useState<string>('');
+    const [selectedType, setSelectedType] = useState<'individual' | 'team' | ''>('');
 
     // 임시: 뒤로가기 경고 다이얼로그 상태
     const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
@@ -217,7 +218,14 @@ export default function RefereePage() {
     }, []);
 
     // Derived data
-    const availableGroups = useMemo(() => Object.keys(groupsData).sort(), [groupsData]);
+    const availableGroups = useMemo(() => {
+        if (!selectedType) return [];
+        return Object.values(groupsData)
+            .filter((g: any) => g.type === selectedType)
+            .map((g: any) => g.name)
+            .filter(Boolean)
+            .sort();
+    }, [groupsData, selectedType]);
     
     const availableCoursesForGroup = useMemo(() => {
         if (!selectedGroup) return [];
@@ -494,23 +502,45 @@ export default function RefereePage() {
             <Card>
                 <CardHeader>
                     <CardTitle className="text-xl">심사 조 선택</CardTitle>
-                    <CardDescription className="text-sm">점수를 기록할 그룹, 코스, 조를 선택하세요.</CardDescription>
+                    <CardDescription className="text-sm">점수를 기록할 경기 형태, 그룹, 코스, 조를 선택하세요.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                    <Select value={selectedGroup} onValueChange={v => {setSelectedGroup(v); setSelectedCourse(''); setSelectedJo('');}} >
-                        <SelectTrigger className="h-12 text-base"><SelectValue placeholder="1. 그룹 선택" /></SelectTrigger>
+                    <Select value={selectedType as string} onValueChange={v => {
+                        const val = (v || '').toString();
+                        if (val === 'individual' || val === 'team') {
+                            setSelectedType(val);
+                        } else {
+                            setSelectedType('');
+                        }
+                        setSelectedGroup(''); setSelectedCourse(''); setSelectedJo('');
+                    }}>
+                        <SelectTrigger className="h-12 text-base"><SelectValue placeholder="1. 경기 형태 선택" /></SelectTrigger>
                         <SelectContent position="item-aligned">
-                            {availableGroups.map(g => <SelectItem key={g} value={g} className="text-base">{g}</SelectItem>)}
+                            <SelectItem value="individual" className="text-base">개인전</SelectItem>
+                            <SelectItem value="team" className="text-base">2인1팀</SelectItem>
                         </SelectContent>
                     </Select>
-                    <Select value={selectedCourse} onValueChange={v => {setSelectedCourse(v); setSelectedJo('');}} disabled={!selectedGroup || availableCoursesForGroup.length === 0}>
-                        <SelectTrigger className="h-12 text-base"><SelectValue placeholder={!selectedGroup ? "그룹 먼저 선택" : (availableCoursesForGroup.length === 0 ? "배정된 코스 없음" : "2. 코스 선택")} /></SelectTrigger>
+                    <Select
+                      value={selectedGroup}
+                      onValueChange={v => {
+                        setSelectedGroup((v ?? '') as string);
+                        setSelectedCourse('');
+                        setSelectedJo('');
+                      }}
+                    >
+                        <SelectTrigger className="h-12 text-base"><SelectValue placeholder={selectedType === '' ? "경기 형태 먼저 선택" : "2. 그룹 선택"} /></SelectTrigger>
+                        <SelectContent position="item-aligned">
+                            {availableGroups.map(g => <SelectItem key={g} value={g.toString()} className="text-base">{g}</SelectItem>)}
+                        </SelectContent>
+                    </Select>
+                    <Select value={selectedCourse || ''} onValueChange={v => {setSelectedCourse((v || '').toString()); setSelectedJo('');}} disabled={!selectedGroup || availableCoursesForGroup.length === 0}>
+                        <SelectTrigger className="h-12 text-base"><SelectValue placeholder={selectedGroup === '' ? "그룹 먼저 선택" : (availableCoursesForGroup.length === 0 ? "배정된 코스 없음" : "3. 코스 선택")} /></SelectTrigger>
                         <SelectContent position="item-aligned">
                             {availableCoursesForGroup.map(c => <SelectItem key={c.id} value={c.id.toString()} className="text-base">{c.name}</SelectItem>)}
                         </SelectContent>
                     </Select>
-                     <Select value={selectedJo} onValueChange={setSelectedJo} disabled={!selectedCourse || availableJos.length === 0}>
-                        <SelectTrigger className="h-12 text-base"><SelectValue placeholder={!selectedCourse ? "코스 먼저 선택" : (availableJos.length === 0 ? "배정된 선수 없음" : "3. 조 선택")} /></SelectTrigger>
+                    <Select value={selectedJo || ''} onValueChange={v => setSelectedJo((v || '').toString())} disabled={!selectedCourse || availableJos.length === 0}>
+                        <SelectTrigger className="h-12 text-base"><SelectValue placeholder={selectedCourse === '' ? "코스 먼저 선택" : (availableJos.length === 0 ? "배정된 선수 없음" : "4. 조 선택")} /></SelectTrigger>
                         <SelectContent position="item-aligned">
                             {availableJos.map(jo => {
                                 const isCompleted = completedJos.has(jo);

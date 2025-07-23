@@ -46,6 +46,7 @@ export default function PlayerManagementPage() {
     // Group management states
     const [groupsData, setGroupsData] = useState<any>({});
     const [newGroupName, setNewGroupName] = useState("");
+    const [newGroupType, setNewGroupType] = useState<'individual' | 'team'>('individual');
     const [courses, setCourses] = useState<any[]>([]);
     
     // Course assignment modal states
@@ -157,7 +158,9 @@ export default function PlayerManagementPage() {
 
                 // 그룹명 체크 추가
                 const sheetNames = wb.SheetNames;
-                const groupList = Object.values(groupsData).map((g: any) => g.name);
+                const groupList = Object.values(groupsData)
+                    .filter((g: any) => g.type === type)
+                    .map((g: any) => g.name);
                 const missingGroups = groupList.filter(g => !sheetNames.includes(g));
                 const extraGroups = sheetNames.filter(s => !groupList.includes(s));
                 const duplicateGroups = sheetNames.filter((s, i, arr) => arr.indexOf(s) !== i);
@@ -472,13 +475,21 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
         remove(ref(db!, `players/${id}`));
     };
     
-    const handleResetAllPlayers = () => {
+    // 선수만 초기화
+    const handleResetPlayers = () => {
         remove(ref(db!, 'players'))
             .then(() => toast({ title: '초기화 완료', description: '모든 선수 명단이 삭제되었습니다.'}))
             .catch(err => toast({ title: '초기화 실패', description: err.message }));
     };
+    // 그룹만 초기화
+    const handleResetGroups = () => {
+        remove(ref(db!, 'tournaments/current/groups'))
+            .then(() => toast({ title: '초기화 완료', description: '모든 그룹이 삭제되었습니다.'}))
+            .catch(err => toast({ title: '초기화 실패', description: err.message }));
+    };
     
-    const handleAddGroup = () => {
+    // 그룹 추가 핸들러를 탭 타입에 따라 받도록 수정
+    const handleAddGroup = (type: 'individual' | 'team') => {
         const trimmedName = newGroupName.trim();
         if (trimmedName === "") {
             toast({ title: '오류', description: '그룹 이름을 입력해주세요.' });
@@ -490,13 +501,12 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
         }
 
         const groupRef = ref(db!, `tournaments/current/groups/${trimmedName}`);
-        
         const defaultCourses = courses.reduce((acc, course) => {
             acc[course.id] = true;
             return acc;
         }, {});
 
-        set(groupRef, { name: trimmedName, courses: defaultCourses })
+        set(groupRef, { name: trimmedName, type, courses: defaultCourses })
             .then(() => {
                 toast({ title: '성공', description: `새 그룹 '${trimmedName}'이 추가되었습니다.` });
                 setNewGroupName("");
@@ -574,99 +584,69 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
             </CardHeader>
         </Card>
 
-        <Card>
-            <CardHeader>
-                <CardTitle>그룹 관리</CardTitle>
-                <CardDescription>대회에 사용할 그룹을 추가하거나 삭제하고, 그룹별 경기 코스를 설정합니다.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-                <div className="flex gap-2">
-                    <Input value={newGroupName} onChange={(e) => setNewGroupName(e.target.value)} placeholder="새 그룹 이름 (예: A-1 그룹, 시니어부)" onKeyDown={(e) => e.key === 'Enter' && handleAddGroup()} />
-                    <Button onClick={handleAddGroup}><PlusCircle className="mr-2 h-4 w-4" />추가</Button>
-                </div>
-                <div className="space-y-2 pt-4">
-                    <Label>현재 그룹 목록</Label>
-                     <div className="border rounded-md">
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>그룹명</TableHead>
-                                    <TableHead>배정된 코스</TableHead>
-                                    <TableHead className="text-right">관리</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {groupList.length > 0 ? (
-                                    groupList.map((group: any) => (
-                                        <TableRow key={group.name}>
-                                            <TableCell className="font-medium">{group.name}</TableCell>
-                                            <TableCell className="text-muted-foreground text-xs">
-                                                {group.courses ? 
-                                                    Object.keys(group.courses).filter(cid => group.courses[cid]).map(cid => courses.find(c => c.id.toString() === cid)?.name).join(', ')
-                                                    : '없음'
-                                                }
-                                            </TableCell>
-                                            <TableCell className="text-right space-x-2">
-                                                <Button variant="outline" size="sm" onClick={() => handleOpenCourseModal(group)}><Settings className="mr-2 h-4 w-4"/>코스 설정</Button>
-                                                <AlertDialog>
-                                                    <AlertDialogTrigger asChild>
-                                                        <Button variant="destructive" size="sm"><Trash2 className="mr-2 h-4 w-4"/>삭제</Button>
-                                                    </AlertDialogTrigger>
-                                                    <AlertDialogContent>
-                                                        <AlertDialogHeader><AlertDialogTitle>그룹을 삭제하시겠습니까?</AlertDialogTitle><AlertDialogDescription>'{group.name}' 그룹을 삭제합니다. 이 그룹에 속한 선수는 그대로 유지되지만, 그룹 필터링 등에 영향을 줄 수 있습니다.</AlertDialogDescription></AlertDialogHeader>
-                                                        <AlertDialogFooter><AlertDialogCancel>취소</AlertDialogCancel><AlertDialogAction onClick={() => handleDeleteGroup(group.name)}>삭제</AlertDialogAction></AlertDialogFooter>
-                                                    </AlertDialogContent>
-                                                </AlertDialog>
-                                            </TableCell>
-                                        </TableRow>
-                                    ))
-                                ) : (
-                                    <TableRow><TableCell colSpan={3} className="text-center h-24 text-muted-foreground">등록된 그룹이 없습니다.</TableCell></TableRow>
-                                )}
-                            </TableBody>
-                        </Table>
-                    </div>
-                </div>
-            </CardContent>
-        </Card>
-        
-        <Dialog open={isGroupCourseModalOpen} onOpenChange={setGroupCourseModalOpen}>
-            <DialogContent className="sm:max-w-md">
-                <DialogHeader>
-                    <DialogTitle>'{currentEditingGroup?.name}' 코스 설정</DialogTitle>
-                    <DialogDescription>이 그룹이 경기할 코스를 선택하세요. 코스 목록은 대회/코스 관리 페이지에서 관리할 수 있습니다.</DialogDescription>
-                </DialogHeader>
-                <div className="py-4 space-y-4">
-                    {courses.length > 0 ? courses.map(course => (
-                        <div key={course.id} className="flex items-center space-x-3">
-                            <Checkbox 
-                                id={`course-${course.id}`}
-                                checked={!!assignedCourses[course.id]}
-                                onCheckedChange={(checked) => {
-                                    setAssignedCourses(prev => ({...prev, [course.id]: !!checked}))
-                                }}
-                            />
-                            <Label htmlFor={`course-${course.id}`} className="text-base font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                                {course.name}
-                            </Label>
-                        </div>
-                    )) : (
-                        <p className="text-sm text-center text-muted-foreground py-8">설정 가능한 코스가 없습니다.<br/>코스 관리 페이지에서 코스를 먼저 추가하고 활성화해주세요.</p>
-                    )}
-                </div>
-                <DialogFooter>
-                    <DialogClose asChild><Button variant="outline">취소</Button></DialogClose>
-                    <Button onClick={handleSaveGroupCourses}><Save className="mr-2 h-4 w-4"/>저장</Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
-
-        <Tabs defaultValue="individual">
-            <TabsList className="grid w-full grid-cols-2 h-12">
-                <TabsTrigger value="individual" className="h-10 text-base"><UserPlus className="mr-2"/>개인전 선수 등록</TabsTrigger>
-                <TabsTrigger value="team" className="h-10 text-base"><Users className="mr-2"/>2인 1팀 선수 등록</TabsTrigger>
+        <Tabs defaultValue="individual-group">
+            <TabsList className="grid w-full grid-cols-2 h-12 mb-4">
+                <TabsTrigger value="individual-group" className="h-10 text-base">개인전 그룹 관리</TabsTrigger>
+                <TabsTrigger value="team-group" className="h-10 text-base">2인1팀 그룹 관리</TabsTrigger>
             </TabsList>
-            <TabsContent value="individual">
+            <TabsContent value="individual-group">
+                {/* 개인전 그룹 추가/목록/코스설정 */}
+                <Card>
+                    <CardHeader>
+                        <CardTitle>개인전 그룹 관리</CardTitle>
+                        <CardDescription>개인전 그룹을 추가하거나 삭제하고, 그룹별 경기 코스를 설정합니다.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div className="flex gap-2 items-center">
+                            <Input value={newGroupName} onChange={(e) => setNewGroupName(e.target.value)} placeholder="새 그룹 이름 (예: A-1 그룹, 시니어부)" onKeyDown={(e) => e.key === 'Enter' && handleAddGroup('individual')} />
+                            <Button onClick={() => handleAddGroup('individual')}><PlusCircle className="mr-2 h-4 w-4" />추가</Button>
+                        </div>
+                        <div className="space-y-2 pt-4">
+                            <Label>현재 개인전 그룹 목록</Label>
+                            <div className="border rounded-md">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>그룹명</TableHead>
+                                            <TableHead>배정된 코스</TableHead>
+                                            <TableHead className="text-right">관리</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {groupList.filter((g: any) => g.type === 'individual').length > 0 ? (
+                                            groupList.filter((group: any) => group.type === 'individual').map((group: any) => (
+                                                <TableRow key={group.name}>
+                                                    <TableCell className="font-medium">{group.name}</TableCell>
+                                                    <TableCell className="text-muted-foreground text-xs">
+                                                        {group.courses ? 
+                                                            Object.keys(group.courses).filter(cid => group.courses[cid]).map(cid => courses.find(c => c.id.toString() === cid)?.name).join(', ')
+                                                            : '없음'
+                                                        }
+                                                    </TableCell>
+                                                    <TableCell className="text-right space-x-2">
+                                                        <Button variant="outline" size="sm" onClick={() => handleOpenCourseModal(group)}><Settings className="mr-2 h-4 w-4"/>코스 설정</Button>
+                                                        <AlertDialog>
+                                                            <AlertDialogTrigger asChild>
+                                                                <Button variant="destructive" size="sm"><Trash2 className="mr-2 h-4 w-4"/>삭제</Button>
+                                                            </AlertDialogTrigger>
+                                                            <AlertDialogContent>
+                                                                <AlertDialogHeader><AlertDialogTitle>그룹을 삭제하시겠습니까?</AlertDialogTitle><AlertDialogDescription>'{group.name}' 그룹을 삭제합니다. 이 그룹에 속한 선수는 그대로 유지되지만, 그룹 필터링 등에 영향을 줄 수 있습니다.</AlertDialogDescription></AlertDialogHeader>
+                                                                <AlertDialogFooter><AlertDialogCancel>취소</AlertDialogCancel><AlertDialogAction onClick={() => handleDeleteGroup(group.name)}>삭제</AlertDialogAction></AlertDialogFooter>
+                                                            </AlertDialogContent>
+                                                        </AlertDialog>
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))
+                                        ) : (
+                                            <TableRow><TableCell colSpan={3} className="text-center h-24 text-muted-foreground">등록된 개인전 그룹이 없습니다.</TableCell></TableRow>
+                                        )}
+                                    </TableBody>
+                                </Table>
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
+                {/* 개인전 선수 등록 UI (기존 개인전 탭 내용) */}
                 <Card>
                     <CardHeader>
                         <CardTitle>개인전 선수 등록</CardTitle>
@@ -803,7 +783,64 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                     </CardContent>
                 </Card>
             </TabsContent>
-            <TabsContent value="team">
+            <TabsContent value="team-group">
+                {/* 2인1팀 그룹 추가/목록/코스설정 */}
+                <Card>
+                    <CardHeader>
+                        <CardTitle>2인1팀 그룹 관리</CardTitle>
+                        <CardDescription>2인1팀 그룹을 추가하거나 삭제하고, 그룹별 경기 코스를 설정합니다.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div className="flex gap-2 items-center">
+                            <Input value={newGroupName} onChange={(e) => setNewGroupName(e.target.value)} placeholder="새 그룹 이름 (예: A-1 그룹, 시니어부)" onKeyDown={(e) => e.key === 'Enter' && handleAddGroup('team')} />
+                            <Button onClick={() => handleAddGroup('team')}><PlusCircle className="mr-2 h-4 w-4" />추가</Button>
+                        </div>
+                        <div className="space-y-2 pt-4">
+                            <Label>현재 2인1팀 그룹 목록</Label>
+                            <div className="border rounded-md">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>그룹명</TableHead>
+                                            <TableHead>배정된 코스</TableHead>
+                                            <TableHead className="text-right">관리</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {groupList.filter((g: any) => g.type === 'team').length > 0 ? (
+                                            groupList.filter((group: any) => group.type === 'team').map((group: any) => (
+                                                <TableRow key={group.name}>
+                                                    <TableCell className="font-medium">{group.name}</TableCell>
+                                                    <TableCell className="text-muted-foreground text-xs">
+                                                        {group.courses ? 
+                                                            Object.keys(group.courses).filter(cid => group.courses[cid]).map(cid => courses.find(c => c.id.toString() === cid)?.name).join(', ')
+                                                            : '없음'
+                                                        }
+                                                    </TableCell>
+                                                    <TableCell className="text-right space-x-2">
+                                                        <Button variant="outline" size="sm" onClick={() => handleOpenCourseModal(group)}><Settings className="mr-2 h-4 w-4"/>코스 설정</Button>
+                                                        <AlertDialog>
+                                                            <AlertDialogTrigger asChild>
+                                                                <Button variant="destructive" size="sm"><Trash2 className="mr-2 h-4 w-4"/>삭제</Button>
+                                                            </AlertDialogTrigger>
+                                                            <AlertDialogContent>
+                                                                <AlertDialogHeader><AlertDialogTitle>그룹을 삭제하시겠습니까?</AlertDialogTitle><AlertDialogDescription>'{group.name}' 그룹을 삭제합니다. 이 그룹에 속한 선수는 그대로 유지되지만, 그룹 필터링 등에 영향을 줄 수 있습니다.</AlertDialogDescription></AlertDialogHeader>
+                                                                <AlertDialogFooter><AlertDialogCancel>취소</AlertDialogCancel><AlertDialogAction onClick={() => handleDeleteGroup(group.name)}>삭제</AlertDialogAction></AlertDialogFooter>
+                                                            </AlertDialogContent>
+                                                        </AlertDialog>
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))
+                                        ) : (
+                                            <TableRow><TableCell colSpan={3} className="text-center h-24 text-muted-foreground">등록된 2인1팀 그룹이 없습니다.</TableCell></TableRow>
+                                        )}
+                                    </TableBody>
+                                </Table>
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
+                {/* 2인1팀 선수 등록 UI (기존 2인1팀 탭 내용) */}
                 <Card>
                     <CardHeader><CardTitle>2인 1팀 선수 등록</CardTitle><CardDescription>엑셀 또는 수동으로 2인 1팀을 등록합니다.</CardDescription></CardHeader>
                     <CardContent className="space-y-6">
@@ -927,31 +964,63 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
             </TabsContent>
         </Tabs>
 
+        <Dialog open={isGroupCourseModalOpen} onOpenChange={setGroupCourseModalOpen}>
+            <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                    <DialogTitle>'{currentEditingGroup?.name}' 코스 설정</DialogTitle>
+                    <DialogDescription>이 그룹이 경기할 코스를 선택하세요. 코스 목록은 대회/코스 관리 페이지에서 관리할 수 있습니다.</DialogDescription>
+                </DialogHeader>
+                <div className="py-4 space-y-4">
+                    {courses.length > 0 ? courses.map(course => (
+                        <div key={course.id} className="flex items-center space-x-3">
+                            <Checkbox 
+                                id={`course-${course.id}`}
+                                checked={!!assignedCourses[course.id]}
+                                onCheckedChange={(checked) => {
+                                    setAssignedCourses(prev => ({...prev, [course.id]: !!checked}))
+                                }}
+                            />
+                            <Label htmlFor={`course-${course.id}`} className="text-base font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                                {course.name}
+                            </Label>
+                        </div>
+                    )) : (
+                        <p className="text-sm text-center text-muted-foreground py-8">설정 가능한 코스가 없습니다.<br/>코스 관리 페이지에서 코스를 먼저 추가하고 활성화해주세요.</p>
+                    )}
+                </div>
+                <DialogFooter>
+                    <DialogClose asChild><Button variant="outline">취소</Button></DialogClose>
+                    <Button onClick={handleSaveGroupCourses}><Save className="mr-2 h-4 w-4"/>저장</Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+
         <Card>
             <CardHeader>
-                <CardTitle>선수 데이터 초기화</CardTitle>
-                <CardDescription>
-                    모든 등록된 선수 및 팀 정보를 삭제합니다. 이 작업은 되돌릴 수 없습니다.
-                </CardDescription>
+                <CardTitle>초기화</CardTitle>
+                <CardDescription>그룹 또는 선수 명단을 각각 개별적으로 초기화할 수 있습니다. 이 작업은 되돌릴 수 없습니다.</CardDescription>
             </CardHeader>
             <CardContent>
-                <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                        <Button variant="destructive"><RotateCcw className="mr-2 h-4 w-4" /> 선수 명단 전체 초기화</Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                        <AlertDialogHeader>
-                            <AlertDialogTitle className="flex items-center gap-2"><AlertTriangle className="text-destructive"/>정말 초기화하시겠습니까?</AlertDialogTitle>
-                            <AlertDialogDescription>
-                                이 작업은 되돌릴 수 없습니다. 모든 개인전 및 2인 1팀 선수 명단이 영구적으로 삭제됩니다.
-                            </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                            <AlertDialogCancel>취소</AlertDialogCancel>
-                            <AlertDialogAction onClick={handleResetAllPlayers} className="bg-destructive hover:bg-destructive/90">초기화</AlertDialogAction>
-                        </AlertDialogFooter>
-                    </AlertDialogContent>
-                </AlertDialog>
+                <div className="flex flex-row gap-4">
+                    <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                            <Button variant="destructive" className="w-full"><RotateCcw className="mr-2 h-4 w-4" /> 그룹 초기화</Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                            <AlertDialogHeader><AlertDialogTitle>정말 그룹을 모두 삭제하시겠습니까?</AlertDialogTitle><AlertDialogDescription>모든 그룹이 삭제됩니다. 이 작업은 되돌릴 수 없습니다.</AlertDialogDescription></AlertDialogHeader>
+                            <AlertDialogFooter><AlertDialogCancel>취소</AlertDialogCancel><AlertDialogAction onClick={handleResetGroups}>그룹 초기화</AlertDialogAction></AlertDialogFooter>
+                        </AlertDialogContent>
+                    </AlertDialog>
+                    <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                            <Button variant="destructive" className="w-full"><RotateCcw className="mr-2 h-4 w-4" /> 선수 명단 초기화</Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                            <AlertDialogHeader><AlertDialogTitle>정말 선수 명단을 모두 삭제하시겠습니까?</AlertDialogTitle><AlertDialogDescription>모든 등록된 선수 및 팀 정보가 삭제됩니다. 이 작업은 되돌릴 수 없습니다.</AlertDialogDescription></AlertDialogHeader>
+                            <AlertDialogFooter><AlertDialogCancel>취소</AlertDialogCancel><AlertDialogAction onClick={handleResetPlayers}>선수 명단 초기화</AlertDialogAction></AlertDialogFooter>
+                        </AlertDialogContent>
+                    </AlertDialog>
+                </div>
             </CardContent>
         </Card>
     </div>
