@@ -73,6 +73,63 @@ const tieBreak = (a: any, b: any, sortedCourses: any[]) => {
     return 0;
 };
 
+// Par 계산 함수
+function getParForHole(tournament: any, courseId: string, holeIdx: number) {
+  const course = tournament?.courses?.[courseId];
+  if (!course || !Array.isArray(course.pars)) return null;
+  return course.pars[holeIdx] ?? null;
+}
+function getTotalParForPlayer(tournament: any, assignedCourses: any[]) {
+  let total = 0;
+  assignedCourses.forEach(course => {
+    const courseData = tournament?.courses?.[course.id];
+    if (courseData && Array.isArray(courseData.pars)) {
+      total += courseData.pars.reduce((a, b) => a + (b || 0), 0);
+    }
+  });
+  return total;
+}
+
+// 코스별 합계 및 ±타수 계산 함수
+function getCourseSumAndPlusMinus(tournament: any, course: any, holeScores: (number | null)[]) {
+  let sum = 0;
+  let parSum = 0;
+  if (!course || !Array.isArray(course.pars)) return { sum: 0, pm: null };
+  for (let i = 0; i < 9; i++) {
+    const score = holeScores[i];
+    const par = course.pars[i] ?? null;
+    if (score !== null && score !== undefined && par !== null && par !== undefined) {
+      sum += score;
+      parSum += par;
+    }
+  }
+  return { sum, pm: parSum > 0 ? sum - parSum : null };
+}
+
+// 총타수/±타수 계산을 '입력된 홀만' 기준으로 변경
+function getPlayerTotalAndPlusMinus(tournament: any, player: any) {
+  let total = 0;
+  let parTotal = 0;
+  let playedHoles = 0;
+  player.assignedCourses.forEach((course: any) => {
+    const courseData = tournament?.courses?.[course.id];
+    const holeScores = player.coursesData[course.id]?.holeScores || [];
+    if (courseData && Array.isArray(courseData.pars)) {
+      for (let i = 0; i < 9; i++) {
+        const score = holeScores[i];
+        const par = courseData.pars[i] ?? null;
+        if (score !== null && score !== undefined && par !== null && par !== undefined) {
+          total += score;
+          parTotal += par;
+          playedHoles++;
+        }
+      }
+    }
+  });
+  // playedHoles가 0이면 null 반환
+  return playedHoles > 0 ? { total, pm: total - parTotal } : { total: 0, pm: null };
+}
+
 export default function ScoreboardPage() {
   const [giftEventStatus, setGiftEventStatus] = useState<string>('');
   useEffect(() => {
@@ -231,60 +288,34 @@ function ExternalScoreboard() {
             return acc;
         }, {} as Record<string, any[]>);
 
+        // 순위 정렬: 이븐 대비 ±타수 기준(작은 순)
         const rankedData: { [key: string]: ProcessedPlayer[] } = {};
         for (const groupName in groupedData) {
             const coursesForGroup = groupedData[groupName][0]?.assignedCourses || [];
-            
-            // Optimization: Pre-sort courses for tie-breaking
-            const sortedCoursesForTieBreak = [...coursesForGroup].sort((c1: any, c2: any) => {
-                const name1 = c1?.name || '';
-                const name2 = c2?.name || '';
-                return name2.localeCompare(name1);
+            // 각 선수별 전체 Par 계산
+            groupedData[groupName].forEach((player: any) => {
+                const { total, pm } = getPlayerTotalAndPlusMinus(tournament, player);
+                player.totalScore = total;
+                player.plusMinus = player.hasAnyScore && !player.hasForfeited ? pm : null;
             });
-
+            // 정렬: plusMinus(±타수) 기준, 같으면 기존 tie-break
             const playersToSort = groupedData[groupName].filter((p: any) => p.hasAnyScore && !p.hasForfeited);
             const otherPlayers = groupedData[groupName].filter((p: any) => !p.hasAnyScore || p.hasForfeited);
-            
-            const playerType = playersToSort[0]?.type;
-            const isSuddenDeathActiveForThisGroup = playerType === 'individual'
-                ? individualSuddenDeathData?.isActive
-                : teamSuddenDeathData?.isActive;
-
-            if (playersToSort.length > 0) {
-                const leaderScore = playersToSort.reduce((min: number, p: any) => Math.min(min, p.totalScore), Infinity);
-
-                playersToSort.sort((a: any, b: any) => {
-                    if (a.totalScore !== b.totalScore) return a.totalScore - b.totalScore;
-                    if (a.totalScore === leaderScore && isSuddenDeathActiveForThisGroup) {
-                        return a.name.localeCompare(b.name);
-                    }
-                    return tieBreak(a, b, sortedCoursesForTieBreak);
-                });
-
-                let rank = 1;
-                playersToSort[0].rank = rank;
-                for (let i = 1; i < playersToSort.length; i++) {
-                    const prev = playersToSort[i-1];
-                    const curr = playersToSort[i];
-                    
-                    let isTied = false;
-                    if (curr.totalScore === prev.totalScore) {
-                         if (curr.totalScore === leaderScore && isSuddenDeathActiveForThisGroup) {
-                            isTied = true;
-                         } else {
-                            isTied = tieBreak(curr, prev, sortedCoursesForTieBreak) === 0;
-                         }
-                    }
-
-                    if (isTied) {
-                        curr.rank = prev.rank;
-                    } else {
-                        rank = i + 1;
-                        curr.rank = rank;
-                    }
+            // 순위 정렬도 plusMinus(진행한 홀만 기준)로만 하도록 보장
+            playersToSort.sort((a: any, b: any) => {
+                if (a.plusMinus !== b.plusMinus) return a.plusMinus - b.plusMinus;
+                return tieBreak(a, b, coursesForGroup);
+            });
+            let rank = 1;
+            playersToSort[0] && (playersToSort[0].rank = rank);
+            for (let i = 1; i < playersToSort.length; i++) {
+                if (playersToSort[i].plusMinus === playersToSort[i-1].plusMinus) {
+                    playersToSort[i].rank = playersToSort[i-1].rank;
+                } else {
+                    rank = i + 1;
+                    playersToSort[i].rank = rank;
                 }
             }
-            
             const finalPlayers = [...playersToSort, ...otherPlayers.map((p: any) => ({ ...p, rank: null }))];
             rankedData[groupName] = finalPlayers;
         }
@@ -621,6 +652,12 @@ function ExternalScoreboard() {
   const isMobile = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
   const tooltipOpen = openTooltip && openTooltip.playerId === player.id && openTooltip.courseId === course.id && openTooltip.holeIndex === i;
 
+  const par = getParForHole(tournament, course.id, i);
+  let pm = null;
+  if (par !== null && score !== null && score !== undefined) {
+    pm = score - par;
+  }
+
   return (
     <td
       key={i}
@@ -640,7 +677,21 @@ function ExternalScoreboard() {
       <TooltipProvider delayDuration={0}>
         <Tooltip open={isMobile && isModified ? (tooltipOpen ? true : false) : undefined}>
           <TooltipTrigger asChild>
-            <span>{score === null ? '-' : (score === 0 ? <span className="text-xs">기권</span> : score)}</span>
+            <span>
+              {score === null ? '-' : (score === 0 ? <span className="text-xs">기권</span> : score)}
+              {/* ±타수 표기 */}
+              {pm !== null && score !== 0 && (
+                <span
+                  className={cn(
+                    "ml-1 text-xs align-middle",
+                    pm < 0 ? "text-blue-400" : pm > 0 ? "text-red-400" : "text-gray-400"
+                  )}
+                  style={{ fontSize: '0.7em', fontWeight: 600 }}
+                >
+                  {pm === 0 ? 'E' : (pm > 0 ? `+${pm}` : pm)}
+                </span>
+              )}
+            </span>
           </TooltipTrigger>
           {isModified && tooltipContent && (
             <TooltipContent side="top" className="whitespace-pre-line">
@@ -652,10 +703,39 @@ function ExternalScoreboard() {
     </td>
   );
 })}
-                                                        <td className={cn("py-0.5 px-1 align-middle font-bold text-gray-300 border-r border-gray-800", player.hasForfeited ? 'text-xs' : 'text-xl')}>{player.hasForfeited ? '기권' : (player.hasAnyScore ? player.coursesData[course.id]?.courseTotal : '-')}</td>
+                                                        {(() => {
+  let courseSumElem = '-';
+  if (player.hasAnyScore && !player.hasForfeited) {
+    const courseData = tournament?.courses?.[course.id];
+    const { sum, pm } = getCourseSumAndPlusMinus(tournament, courseData, player.coursesData[course.id]?.holeScores || []);
+    courseSumElem = (
+      <span>
+        {sum}
+        {pm !== null && (
+          <span className={cn("ml-1 align-middle text-xs", pm < 0 ? "text-blue-400" : pm > 0 ? "text-red-400" : "text-gray-400")} style={{ fontSize: '0.7em', fontWeight: 600 }}>
+            {pm === 0 ? 'E' : (pm > 0 ? `+${pm}` : pm)}
+          </span>
+        )}
+      </span>
+    );
+  } else if (player.hasForfeited) {
+    courseSumElem = '기권';
+  }
+  return <td className={cn("py-0.5 px-1 align-middle font-bold text-gray-300 border-r border-gray-800", player.hasForfeited ? 'text-xs' : 'text-xl')}>{courseSumElem}</td>;
+})()}
                                                         {courseIndex === 0 && (
                                                             <>
-                                                                <td rowSpan={player.assignedCourses.length || 1} className={cn("py-0.5 px-1 align-middle font-bold text-yellow-400 border-r border-gray-800", player.hasForfeited ? "text-xs" : "text-xl")}>{player.hasForfeited ? '기권' : (player.hasAnyScore ? player.totalScore : '-')}</td>
+                                                                <td rowSpan={player.assignedCourses.length || 1} className={cn("py-0.5 px-1 align-middle font-bold text-yellow-400 border-r border-gray-800", player.hasForfeited ? "text-xs" : "text-xl")}>{player.hasForfeited ? '기권' : (player.hasAnyScore ? (
+  <span>
+    {player.totalScore}
+    {player.plusMinus !== null && (
+      <span className={cn("ml-1 align-middle text-xs", player.plusMinus < 0 ? "text-blue-400" : player.plusMinus > 0 ? "text-red-400" : "text-gray-400")} style={{ fontSize: '0.7em', fontWeight: 600 }}>
+        {player.plusMinus === 0 ? 'E' : (player.plusMinus > 0 ? `+${player.plusMinus}` : player.plusMinus)}
+      </span>
+    )}
+  </span>
+) : '-')}
+</td>
                                                                 <td rowSpan={player.assignedCourses.length || 1} className={cn("py-0.5 px-1 align-middle font-bold", player.hasForfeited ? "text-xs" : "text-xl")}>{player.rank !== null ? `${player.rank}위` : (player.hasForfeited ? '기권' : '')}</td>
                                                             </>
                                                         )}

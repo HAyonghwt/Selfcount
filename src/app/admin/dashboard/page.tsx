@@ -220,6 +220,73 @@ export default function AdminDashboard() {
     const [individualSuddenDeathData, setIndividualSuddenDeathData] = useState<any>(null);
     const [teamSuddenDeathData, setTeamSuddenDeathData] = useState<any>(null);
     const [notifiedSuddenDeathGroups, setNotifiedSuddenDeathGroups] = useState<Set<string>>(new Set());
+    const [scoreCheckModal, setScoreCheckModal] = useState<{ open: boolean, groupName: string, missingScores: any[], resultMsg?: string }>({ open: false, groupName: '', missingScores: [] });
+    const [autoFilling, setAutoFilling] = useState(false);
+
+    // 그룹별 순위/백카운트/서든데스 상태 체크 함수
+    const getGroupRankStatusMsg = (groupName: string) => {
+        const groupPlayers = finalDataByGroup[groupName];
+        if (!groupPlayers || groupPlayers.length === 0) return '선수 데이터가 없습니다.';
+        const completedPlayers = groupPlayers.filter((p: any) => p.hasAnyScore && !p.hasForfeited);
+        if (completedPlayers.length === 0) return '점수 입력된 선수가 없습니다.';
+        // 1위 동점자 체크 (서든데스 필요 여부)
+        const firstRankPlayers = completedPlayers.filter((p: any) => p.rank === 1);
+        if (firstRankPlayers.length > 1) {
+            return `1위 동점자(${firstRankPlayers.length}명)가 있습니다. 서든데스가 필요합니다.`;
+        }
+        // 정상적으로 순위가 모두 부여된 경우
+        return '순위 계산이 정상적으로 완료되었습니다.';
+    };
+
+    // 누락 점수 0점 처리 함수 (컴포넌트 상단에 위치)
+    const handleAutoFillZero = async () => {
+        if (!scoreCheckModal.missingScores.length) return;
+        setAutoFilling(true);
+        try {
+            const { ref, set } = await import('firebase/database');
+            const promises = scoreCheckModal.missingScores.map(item =>
+                set(ref(db, `scores/${item.playerId}/${item.courseId}/${item.hole}`), 0)
+            );
+            await Promise.all(promises);
+            toast({ title: '누락 점수 자동 입력 완료', description: `${scoreCheckModal.missingScores.length}개 점수가 0점으로 입력되었습니다.` });
+            // 0점 입력 후, 순위/백카운트/서든데스 상태 안내
+            setScoreCheckModal({ open: true, groupName: scoreCheckModal.groupName, missingScores: [], resultMsg: getGroupRankStatusMsg(scoreCheckModal.groupName) });
+        } catch (e: any) {
+            toast({ title: '자동 입력 실패', description: e?.message || '오류가 발생했습니다.' });
+            setScoreCheckModal({ ...scoreCheckModal, open: false });
+        }
+        setAutoFilling(false);
+    };
+
+    // 점수 누락 체크 함수 (컴포넌트 상단에 위치)
+    const checkGroupScoreCompletion = (groupName: string, groupPlayers: any[]) => {
+        const missingScores: { playerId: string; playerName: string; courseId: string; courseName: string; hole: number }[] = [];
+        groupPlayers.forEach((player: any) => {
+            if (!player.assignedCourses) return;
+            player.assignedCourses.forEach((course: any) => {
+                const courseId = course.id;
+                const courseName = course.name;
+                for (let hole = 1; hole <= 9; hole++) {
+                    const score = scores?.[player.id]?.[courseId]?.[hole];
+                    if (score === undefined || score === null) {
+                        missingScores.push({
+                            playerId: player.id,
+                            playerName: player.name,
+                            courseId,
+                            courseName,
+                            hole
+                        });
+                    }
+                }
+            });
+        });
+        // 점수 누락이 없으면 바로 순위/백카운트/서든데스 상태 안내
+        if (missingScores.length === 0) {
+            setScoreCheckModal({ open: true, groupName, missingScores, resultMsg: getGroupRankStatusMsg(groupName) });
+        } else {
+            setScoreCheckModal({ open: true, groupName, missingScores });
+        }
+    };
 
     useEffect(() => {
         const playersRef = ref(db, 'players');
@@ -792,6 +859,69 @@ export default function AdminDashboard() {
     //     toast({ title: '기권 처리 완료', description: `${player.name} 선수의 모든 홀에 0점이 입력되었습니다.` });
     // }
 
+    // 자동 기권 처리 함수 (조별, 3홀 이상 미입력)
+    async function autoForfeitPlayersByMissingScores({ players, scores, groupsData, toast }: any) {
+        if (!players || !scores || !groupsData) return;
+        const alreadyForfeited: Set<string> = new Set();
+        for (const groupName in groupsData) {
+            const group = groupsData[groupName];
+            if (!group || !group.players) continue;
+            const playerIds: string[] = Object.keys(group.players).filter(pid => group.players[pid]);
+            if (playerIds.length === 0) continue;
+            // 코스 정보
+            const courseIds: string[] = group.courses ? Object.keys(group.courses).filter(cid => group.courses[cid]) : [];
+            for (const courseId of courseIds) {
+                // 1~9홀 중, 이 코스에서 "최소 한 명 이상 점수 입력된 홀" 찾기
+                const holesWithAnyScore: number[] = [];
+                for (let hole = 1; hole <= 9; hole++) {
+                    if (playerIds.some(pid => scores?.[pid]?.[courseId]?.[hole] !== undefined && scores?.[pid]?.[courseId]?.[hole] !== null)) {
+                        holesWithAnyScore.push(hole);
+                    }
+                }
+                // 각 선수별로, 해당 코스에서 미입력 홀 카운트
+                for (const pid of playerIds) {
+                    // 이미 기권된 선수는 스킵
+                    let forfeited = false;
+                    for (let h = 1; h <= 9; h++) {
+                        if (scores?.[pid]?.[courseId]?.[h] === 0) forfeited = true;
+                    }
+                    if (forfeited) {
+                        alreadyForfeited.add(pid);
+                        continue;
+                    }
+                    let missingCount = 0;
+                    for (const hole of holesWithAnyScore) {
+                        const val = scores?.[pid]?.[courseId]?.[hole];
+                        if (val === undefined || val === null) missingCount++;
+                    }
+                    if (missingCount >= 3 && !alreadyForfeited.has(pid)) {
+                        // 자동 기권 처리: 해당 선수의 모든 배정 코스/홀 0점 입력
+                        for (const cid of courseIds) {
+                            for (let h = 1; h <= 9; h++) {
+                                if (scores?.[pid]?.[cid]?.[h] !== 0) {
+                                    await set(ref(db, `scores/${pid}/${cid}/${h}`), 0);
+                                }
+                            }
+                        }
+                        alreadyForfeited.add(pid);
+                        // 관리자에게 토스트 알림
+                        toast({
+                            title: '자동 기권 처리',
+                            description: `조: ${groupName}, 선수: ${players[pid]?.name || pid} (3홀 이상 미입력)`,
+                            variant: 'destructive',
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    // useEffect로 scores, players, groupsData 변경 시 자동 기권 체크
+    useEffect(() => {
+        autoForfeitPlayersByMissingScores({ players, scores, groupsData, toast });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [scores, players, groupsData]);
+
     return (
         <>
             <ExternalScoreboardInfo url={externalScoreboardUrl} />
@@ -800,6 +930,7 @@ export default function AdminDashboard() {
                 <CardHeader>
                     <CardTitle className="text-2xl font-bold font-headline">홈 전광판 (관리자용)</CardTitle>
                     <CardDescription>현재 진행중인 대회의 실시간 점수 현황입니다.</CardDescription>
+                    {/* 임시 콘솔 출력 버튼 제거됨 */}
                 </CardHeader>
                 <CardContent className="space-y-4">
                     {/* 선수 검색 입력창 */}
@@ -878,34 +1009,19 @@ export default function AdminDashboard() {
             {(filterGroup === 'all' ? allGroupsList : [filterGroup]).map(groupName => {
                 const groupPlayers = finalDataByGroup[groupName];
                 if (!groupPlayers || groupPlayers.length === 0) return null;
-                
-                 // Re-fetch full data for display to include hole scores
-                const fullPlayersDataForDisplay = groupPlayers.map(p => {
-                    const playerScoresData = scores[p.id] || {};
-                    const coursesData: any = {};
-                    p.assignedCourses.forEach((course: any) => {
-                        const courseId = course.id;
-                        const scoresForCourse = playerScoresData[courseId] || {};
-                        const holeScores: (number | null)[] = Array(9).fill(null);
-                        let courseTotal = 0;
-                        for (let i = 0; i < 9; i++) {
-                            const holeScore = scoresForCourse[(i + 1).toString()];
-                            if (holeScore !== undefined && holeScore !== null) {
-                                const scoreNum = Number(holeScore);
-                                holeScores[i] = scoreNum;
-                                courseTotal += scoreNum;
-                            }
-                        }
-                        coursesData[courseId] = { courseName: course.name, courseTotal, holeScores };
-                    });
-                    return {...p, coursesData};
-                });
 
                 return (
                     <Card key={groupName}>
                         <CardHeader className="flex flex-row items-center justify-between">
-                            <div>
+                            <div className="flex flex-col gap-2">
                                 <CardTitle className="text-xl font-bold font-headline">{groupName}</CardTitle>
+                                {/* 경기완료/순위 계산 확인 버튼 */}
+                                <button
+                                    className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-bold w-fit"
+                                    onClick={() => checkGroupScoreCompletion(groupName, groupPlayers)}
+                                >
+                                    경기완료/순위 계산 확인
+                                </button>
                             </div>
                             <div className="text-right">
                                 <p className="font-bold text-primary">{groupProgress[groupName]}%</p>
@@ -928,7 +1044,7 @@ export default function AdminDashboard() {
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
-                                         {fullPlayersDataForDisplay.map((player) => (
+                                         {groupPlayers.map((player) => (
                                             <React.Fragment key={player.id}>
                                                 {player.assignedCourses.length > 0 ? player.assignedCourses.map((course: any, courseIndex: number) => (
                                                     <TableRow
@@ -1059,6 +1175,50 @@ export default function AdminDashboard() {
                 )
             })}
         </div>
+        {/* 점수 누락 현황 모달 */}
+        <Dialog open={scoreCheckModal.open} onOpenChange={open => setScoreCheckModal({ ...scoreCheckModal, open })}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>경기완료/순위 계산 확인</DialogTitle>
+                    <DialogDescription>
+                        {scoreCheckModal.missingScores.length === 0 ? (
+                            <span className="text-green-600 font-bold">모든 점수가 100% 입력되어 있습니다!</span>
+                        ) : (
+                            <span className="text-red-600 font-bold">누락된 점수가 {scoreCheckModal.missingScores.length}개 있습니다.</span>
+                        )}
+                    </DialogDescription>
+                </DialogHeader>
+                {scoreCheckModal.missingScores.length > 0 && (
+                    <div className="max-h-60 overflow-y-auto border rounded p-2 mb-2 bg-muted/30">
+                        <ul className="text-sm">
+                            {scoreCheckModal.missingScores.map((item, idx) => (
+                                <li key={idx}>
+                                    <b>{item.playerName}</b> - {item.courseName} {item.hole}번 홀
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
+                )}
+                {/* 순위/백카운트/서든데스 안내 메시지 */}
+                {scoreCheckModal.resultMsg && (
+                    <div className="mt-4 p-3 rounded bg-blue-50 text-blue-900 font-bold text-center border">
+                        {scoreCheckModal.resultMsg}
+                    </div>
+                )}
+                <DialogFooter>
+                    {scoreCheckModal.missingScores.length > 0 ? (
+                        <>
+                            <Button className="bg-red-600 hover:bg-red-700 text-white" onClick={handleAutoFillZero} disabled={autoFilling}>
+                                {autoFilling ? '입력 중...' : '누락 점수 0점으로 자동 입력'}
+                            </Button>
+                            <Button variant="outline" onClick={() => setScoreCheckModal({ ...scoreCheckModal, open: false })} disabled={autoFilling}>닫기</Button>
+                        </>
+                    ) : (
+                        <Button onClick={() => setScoreCheckModal({ ...scoreCheckModal, open: false })}>확인</Button>
+                    )}
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
         {/* 기권 확인 모달 */}
         {/* {forfeitModal.open && forfeitModal.player && (
             <Dialog open={forfeitModal.open} onOpenChange={open => setForfeitModal({ open, player: open ? forfeitModal.player : null })}>

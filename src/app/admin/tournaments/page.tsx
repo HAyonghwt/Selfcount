@@ -157,6 +157,14 @@ export default function TournamentManagementPage() {
   }
 
   const handleSaveChanges = () => {
+    // 모든 코스의 Par 합계 체크
+    for (const course of courses) {
+      const parSum = course.pars.reduce((a, b) => a + (b || 0), 0);
+      if (parSum !== 33) {
+        alert(`${course.name}의 총 Par가 33이 아닙니다! (현재: ${parSum})\n다시 확인해 주세요.`);
+        return;
+      }
+    }
     const coursesObject = courses.reduce((acc, course) => {
         acc[course.id] = course;
         return acc;
@@ -223,7 +231,10 @@ export default function TournamentManagementPage() {
                 </div>
               </CardHeader>
               <CardContent className="p-4">
-                 <p className="text-sm text-muted-foreground mb-4">홀별 기준 타수(Par)를 입력하세요. 총 Par: {course.pars.reduce((a, b) => a + (b || 0), 0)}</p>
+                <p className="text-sm text-muted-foreground mb-4 flex items-center gap-2">
+                  홀별 기준 타수(Par)를 입력하세요.
+                  <span className="ml-2 font-bold text-lg text-primary">총 Par: {course.pars.reduce((a, b) => a + (b || 0), 0)}</span>
+                </p>
                 <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-9 gap-4">
                   {course.pars.map((par, index) => (
                     <div key={index} className="space-y-1">
