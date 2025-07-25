@@ -35,7 +35,7 @@ interface ScoreData {
 export default function RefereePage() {
     const params = useParams();
     const router = useRouter();
-    const hole = params.hole;
+    const hole = String(params.hole ?? '');
     const { toast } = useToast();
 
     // Data from Firebase
@@ -432,27 +432,48 @@ export default function RefereePage() {
                     newValue: scoreData.score !== null && scoreData.score !== undefined ? scoreData.score : 0,
                     modifiedBy: 'referee', // 필요시 실제 심판 id로 대체
                     modifiedByType: 'judge',
+                    comment: `코스: ${selectedCourse}`
                 });
             }
-            // 0점 입력 시, 나머지 미입력 홀도 자동 0점 처리
+            // 0점 입력 시, 소속 그룹의 모든 코스/홀에 0점 처리
             if (scoreData.score === 0) {
-                for (let h = 1; h <= 9; h++) {
-                    const hStr = h.toString();
-                    if (hStr === hole) continue;
-                    const existing = allScores[playerToSave.id]?.[selectedCourse as string]?.[hStr];
-                    if (existing === undefined) {
-                        await set(ref(dbInstance, `/scores/${playerToSave.id}/${selectedCourse}/${hStr}`), 0);
-                        // 0점 자동 입력도 로그 남김
-                        await logScoreChange({
-                            matchId: 'tournaments/current',
-                            playerId: playerToSave.id,
-                            scoreType: 'holeScore',
-                            holeNumber: Number(hStr),
-                            oldValue: 0,
-                            newValue: 0,
-                            modifiedBy: 'referee',
-                            modifiedByType: 'judge',
-                        });
+                // 그룹 정보에서 배정된 코스 id 목록 추출
+                const group = groupsData[playerToSave.group];
+                const assignedCourseIds = group && group.courses ? Object.keys(group.courses).filter((cid: any) => group.courses[cid]) : [];
+                for (const cid of assignedCourseIds) {
+                    const courseObj = courses.find((c: any) => c.id.toString() === cid.toString());
+                    const courseName = courseObj ? courseObj.name : cid;
+                    for (let h = 1; h <= 9; h++) {
+                        const existing = allScores[playerToSave.id]?.[cid]?.[h.toString()];
+                        if (cid === selectedCourse && h === Number(hole)) {
+                            // 직접 입력한 코스/홀
+                            await set(ref(dbInstance, `/scores/${playerToSave.id}/${cid}/${h}`), 0);
+                            await logScoreChange({
+                                matchId: 'tournaments/current',
+                                playerId: playerToSave.id,
+                                scoreType: 'holeScore',
+                                holeNumber: h,
+                                oldValue: existing === undefined || existing === null || existing === '' || isNaN(Number(existing)) ? 0 : Number(existing),
+                                newValue: 0,
+                                modifiedBy: 'referee',
+                                modifiedByType: 'judge',
+                                comment: `심판 직접 기권 (코스: ${courseName}, 홀: ${h})`
+                            });
+                        } else if (existing === undefined || existing === null || existing === '' || isNaN(Number(existing))) {
+                            // 나머지 미입력 홀
+                            await set(ref(dbInstance, `/scores/${playerToSave.id}/${cid}/${h}`), 0);
+                            await logScoreChange({
+                                matchId: 'tournaments/current',
+                                playerId: playerToSave.id,
+                                scoreType: 'holeScore',
+                                holeNumber: h,
+                                oldValue: existing === undefined || existing === null || existing === '' || isNaN(Number(existing)) ? 0 : Number(existing),
+                                newValue: 0,
+                                modifiedBy: 'referee',
+                                modifiedByType: 'judge',
+                                comment: `심판페이지에서 기권 처리 (코스: ${courseName}, 홀: ${h})`
+                            });
+                        }
                     }
                 }
             }
@@ -740,8 +761,10 @@ export default function RefereePage() {
                     <div className="flex flex-col items-center justify-center p-0 text-center">
                         {playerToSave && scores[playerToSave.id] && (
                              <div className="flex items-baseline my-6">
-                                <span className="font-extrabold text-destructive leading-none" style={{ fontSize: '7rem', lineHeight: '1' }}>{scores[playerToSave.id].score}</span>
-                                <span className="font-bold ml-4 text-4xl">점</span>
+                                <span className="font-extrabold text-destructive leading-none" style={{ fontSize: '7rem', lineHeight: '1' }}>
+                                  {scores[playerToSave.id].score === 0 ? "기권" : scores[playerToSave.id].score}
+                                </span>
+                                <span className="font-bold ml-4 text-4xl">{scores[playerToSave.id].score === 0 ? "" : "점"}</span>
                             </div>
                         )}
                         
@@ -808,15 +831,16 @@ export default function RefereePage() {
             </AlertDialogHeader>
             <div className="py-2">
                 {unsavedPlayers.map(p => (
-                    <div key={p.id} className="font-bold text-red-600 text-lg mb-1">{getPlayerName(p)}</div>
+                    <div key={p.id} className="font-bold text-red-600 text-lg mb-1">
+                      {getPlayerName(p)}<span className="ml-1 text-gray-700">의 점수를 저장하고 이동하세요</span>
+                    </div>
                 ))}
-                <div className="mt-2 text-base text-gray-700 font-semibold">
-                    그래도 다음 조로 진행하겠습니까?
+                <div className="mt-2 text-base text-yellow-700 font-semibold">
+                    만약 기권자가 있으면 기권(점수0)으로 저장해 주세요
                 </div>
             </div>
             <AlertDialogFooter>
-                <AlertDialogCancel onClick={() => setShowUnsavedModal(false)}>취소</AlertDialogCancel>
-                <AlertDialogAction onClick={() => { setShowUnsavedModal(false); handleNextGroup(true); }} className="bg-destructive hover:bg-destructive/90">그래도 이동</AlertDialogAction>
+                <AlertDialogAction onClick={() => setShowUnsavedModal(false)} className="bg-blue-600 hover:bg-blue-700 text-white">확인</AlertDialogAction>
             </AlertDialogFooter>
         </AlertDialogContent>
     </AlertDialog>

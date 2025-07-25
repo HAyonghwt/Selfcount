@@ -33,6 +33,7 @@ interface ProcessedPlayer {
     courseScores: { [courseId: string]: number };
     detailedScores: { [courseId: string]: { [holeNumber: string]: number } };
     assignedCourses: any[];
+    allAssignedCourses: any[]; // 전체 배정 코스(온오프 무관)
 }
 
 const tieBreak = (a: any, b: any, sortedCourses: any[]) => {
@@ -130,6 +131,29 @@ function getPlayerTotalAndPlusMinus(tournament: any, player: any) {
   return playedHoles > 0 ? { total, pm: total - parTotal } : { total: 0, pm: null };
 }
 
+// getPlayerTotalAndPlusMinusAllCourses 함수 추가 (assignedCourses가 아니라 전체 배정 코스 기준)
+function getPlayerTotalAndPlusMinusAllCourses(tournament: any, player: any, allAssignedCourses: any[]) {
+  let total = 0;
+  let parTotal = 0;
+  let playedHoles = 0;
+  allAssignedCourses.forEach((course: any) => {
+    const courseData = tournament?.courses?.[course.id];
+    const scoresForCourse = (player.detailedScores?.[course.id]) || {};
+    if (courseData && Array.isArray(courseData.pars)) {
+      for (let i = 0; i < 9; i++) {
+        const score = scoresForCourse[(i + 1).toString()];
+        const par = courseData.pars[i] ?? null;
+        if (score !== null && score !== undefined && par !== null && par !== undefined) {
+          total += score;
+          parTotal += par;
+          playedHoles++;
+        }
+      }
+    }
+  });
+  return playedHoles > 0 ? { total, pm: total - parTotal } : { total: 0, pm: null };
+}
+
 export default function ScoreboardPage() {
   const [giftEventStatus, setGiftEventStatus] = useState<string>('');
   useEffect(() => {
@@ -169,7 +193,7 @@ function ExternalScoreboard() {
             setLoading(false);
             return;
         }
-        const dbInstance = db as import('firebase/database').Database;
+        const dbInstance = db as any;
         const playersRef = ref(dbInstance, 'players');
         const scoresRef = ref(dbInstance, 'scores');
         const tournamentRef = ref(dbInstance, 'tournaments/current');
@@ -275,7 +299,8 @@ function ExternalScoreboard() {
                 total: totalScore,
                 courseScores: courseScoresForTieBreak,
                 detailedScores: detailedScoresForTieBreak,
-                assignedCourses: activeCoursesForPlayer
+                assignedCourses: activeCoursesForPlayer,
+                allAssignedCourses: allAssignedCoursesForPlayer // 전체 배정 코스(온오프 무관)
             };
         });
 
@@ -291,29 +316,48 @@ function ExternalScoreboard() {
         // 순위 정렬: 이븐 대비 ±타수 기준(작은 순)
         const rankedData: { [key: string]: ProcessedPlayer[] } = {};
         for (const groupName in groupedData) {
-            const coursesForGroup = groupedData[groupName][0]?.assignedCourses || [];
-            // 각 선수별 전체 Par 계산
-            groupedData[groupName].forEach((player: any) => {
-                const { total, pm } = getPlayerTotalAndPlusMinus(tournament, player);
-                player.totalScore = total;
-                player.plusMinus = player.hasAnyScore && !player.hasForfeited ? pm : null;
-            });
-            // 정렬: plusMinus(±타수) 기준, 같으면 기존 tie-break
+            // 코스 추가 역순으로 백카운트
+            const coursesForGroup = [...(groupedData[groupName][0]?.assignedCourses || [])].filter(c => c && c.id !== undefined).reverse();
             const playersToSort = groupedData[groupName].filter((p: any) => p.hasAnyScore && !p.hasForfeited);
             const otherPlayers = groupedData[groupName].filter((p: any) => !p.hasAnyScore || p.hasForfeited);
-            // 순위 정렬도 plusMinus(진행한 홀만 기준)로만 하도록 보장
-            playersToSort.sort((a: any, b: any) => {
-                if (a.plusMinus !== b.plusMinus) return a.plusMinus - b.plusMinus;
-                return tieBreak(a, b, coursesForGroup);
-            });
-            let rank = 1;
-            playersToSort[0] && (playersToSort[0].rank = rank);
-            for (let i = 1; i < playersToSort.length; i++) {
-                if (playersToSort[i].plusMinus === playersToSort[i-1].plusMinus) {
-                    playersToSort[i].rank = playersToSort[i-1].rank;
-                } else {
-                    rank = i + 1;
-                    playersToSort[i].rank = rank;
+            // 1위 동점자 모두 1위, 그 다음 등수부터 백카운트로 순위 부여
+            if (playersToSort.length > 0) {
+                // plusMinus(±타수) 기준 오름차순 정렬, tieBreak(백카운트) 적용
+                playersToSort.sort((a: any, b: any) => {
+                    const aPM = getPlayerTotalAndPlusMinusAllCourses(tournament, a, a.allAssignedCourses).pm ?? 0;
+                    const bPM = getPlayerTotalAndPlusMinusAllCourses(tournament, b, b.allAssignedCourses).pm ?? 0;
+                    if (aPM !== bPM) return aPM - bPM;
+                    return tieBreak(a, b, coursesForGroup);
+                });
+                // 1위 동점자 처리: 최소 pm만 1위
+                const minPM = getPlayerTotalAndPlusMinusAllCourses(tournament, playersToSort[0], playersToSort[0].allAssignedCourses).pm;
+                let rank = 1;
+                let oneRankCount = 0;
+                for (let i = 0; i < playersToSort.length; i++) {
+                    const currPM = getPlayerTotalAndPlusMinusAllCourses(tournament, playersToSort[i], playersToSort[i].allAssignedCourses).pm;
+                    if (currPM === minPM) {
+                        playersToSort[i].rank = 1;
+                        oneRankCount++;
+                    } else {
+                        break;
+                    }
+                }
+                // 2위 이하(실제로는 1위 동점자 수+1 등수부터) 백카운트 등수 부여
+                rank = oneRankCount + 1;
+                for (let i = oneRankCount; i < playersToSort.length; i++) {
+                    const prev = playersToSort[i - 1];
+                    const curr = playersToSort[i];
+                    const prevPM = getPlayerTotalAndPlusMinusAllCourses(tournament, prev, prev.allAssignedCourses).pm;
+                    const currPM = getPlayerTotalAndPlusMinusAllCourses(tournament, curr, curr.allAssignedCourses).pm;
+                    if (
+                        currPM === prevPM &&
+                        tieBreak(curr, prev, coursesForGroup) === 0
+                    ) {
+                        curr.rank = playersToSort[i - 1].rank;
+                    } else {
+                        curr.rank = rank;
+                    }
+                    rank++;
                 }
             }
             const finalPlayers = [...playersToSort, ...otherPlayers.map((p: any) => ({ ...p, rank: null }))];
@@ -575,6 +619,49 @@ function ExternalScoreboard() {
         )
     }
 
+    // 그룹별 현재 진행중인 코스와 진행률 계산 함수
+    const getCurrentCourseAndProgress = (groupName: string) => {
+        const groupPlayers = finalDataByGroup[groupName];
+        if (!groupPlayers || groupPlayers.length === 0) return { courseName: null, progress: null };
+        const playerGroupData = groupsData[groupName];
+        const allCourses = Object.values(tournament.courses || {}).filter(Boolean);
+        const assignedCourseIds = playerGroupData?.courses ? Object.keys(playerGroupData.courses).filter((id: string) => playerGroupData.courses[id]) : [];
+        const coursesForGroup = allCourses.filter((c: any) => assignedCourseIds.includes(c.id.toString()) && c.isActive !== false);
+        if (!coursesForGroup || coursesForGroup.length === 0) return { courseName: null, progress: null };
+        // 진행중인 코스: 9홀 모두 입력되지 않은 첫 번째 코스
+        let currentCourse: any = null;
+        let currentProgress: number | null = null;
+        for (const course of coursesForGroup as any[]) {
+            let totalScoresEntered = 0;
+            groupPlayers.forEach((player: any) => {
+                const scoresForCourse = (scores as any)[player.id]?.[course.id];
+                if (scoresForCourse) {
+                    totalScoresEntered += Object.keys(scoresForCourse).length;
+                }
+            });
+            const totalPossible = groupPlayers.length * 9;
+            if (totalScoresEntered < totalPossible) {
+                currentCourse = course;
+                currentProgress = Math.round((totalScoresEntered / totalPossible) * 100);
+                break;
+            }
+        }
+        // 모두 완료된 경우 마지막 코스 기준
+        if (!currentCourse) {
+            currentCourse = coursesForGroup[coursesForGroup.length - 1];
+            let totalScoresEntered = 0;
+            groupPlayers.forEach((player: any) => {
+                const scoresForCourse = (scores as any)[player.id]?.[currentCourse.id];
+                if (scoresForCourse) {
+                    totalScoresEntered += Object.keys(scoresForCourse).length;
+                }
+            });
+            const totalPossible = groupPlayers.length * 9;
+            currentProgress = Math.round((totalScoresEntered / totalPossible) * 100);
+        }
+        return { courseName: currentCourse && typeof currentCourse === 'object' && 'name' in currentCourse ? currentCourse.name : null, progress: currentProgress };
+    };
+
     return (
         <>
             <style>{`
@@ -601,7 +688,16 @@ function ExternalScoreboard() {
                                 <h1 className="text-xl md:text-2xl font-bold text-yellow-300">
                                     {tournament.name || '파크골프 토너먼트'} ({groupName})
                                 </h1>
-                                <div className="text-xl md:text-2xl font-bold text-green-400">{groupProgress[groupName]}% 진행</div>
+                                <div className="text-xl md:text-2xl font-bold text-green-400">
+                                    {(() => {
+                                        const { courseName, progress } = getCurrentCourseAndProgress(groupName);
+                                        if (courseName && progress !== null) {
+                                            return <span>{courseName}: {progress}% 진행&nbsp;|&nbsp;전체: {groupProgress[groupName]}% 진행</span>;
+                                        } else {
+                                            return <span>전체: {groupProgress[groupName]}% 진행</span>;
+                                        }
+                                    })()}
+                                </div>
                             </header>
                             <div className="overflow-x-auto">
                                 <table className="w-full text-center border-collapse border-l border-r border-gray-800">
@@ -678,19 +774,25 @@ function ExternalScoreboard() {
         <Tooltip open={isMobile && isModified ? (tooltipOpen ? true : false) : undefined}>
           <TooltipTrigger asChild>
             <span>
-              {score === null ? '-' : (score === 0 ? <span className="text-xs">기권</span> : score)}
-              {/* ±타수 표기 */}
-              {pm !== null && score !== 0 && (
-                <span
-                  className={cn(
-                    "ml-1 text-xs align-middle",
-                    pm < 0 ? "text-blue-400" : pm > 0 ? "text-red-400" : "text-gray-400"
-                  )}
-                  style={{ fontSize: '0.7em', fontWeight: 600 }}
-                >
-                  {pm === 0 ? 'E' : (pm > 0 ? `+${pm}` : pm)}
-                </span>
-              )}
+              {score === null ?
+                '-' :
+                score === 0 ?
+                  <span className="text-xs">기권</span> :
+                  <>
+                    {String(score)}
+                    {pm !== null && (
+                      <span
+                        className={cn(
+                          "ml-1 text-xs align-middle",
+                          pm < 0 ? "text-blue-400" : pm > 0 ? "text-red-400" : "text-gray-400"
+                        )}
+                        style={{ fontSize: '0.7em', fontWeight: 600 }}
+                      >
+                        {pm === 0 ? 'E' : (pm > 0 ? `+${pm}` : pm)}
+                      </span>
+                    )}
+                  </>
+              }
             </span>
           </TooltipTrigger>
           {isModified && tooltipContent && (
@@ -725,16 +827,27 @@ function ExternalScoreboard() {
 })()}
                                                         {courseIndex === 0 && (
                                                             <>
-                                                                <td rowSpan={player.assignedCourses.length || 1} className={cn("py-0.5 px-1 align-middle font-bold text-yellow-400 border-r border-gray-800", player.hasForfeited ? "text-xs" : "text-xl")}>{player.hasForfeited ? '기권' : (player.hasAnyScore ? (
-  <span>
-    {player.totalScore}
-    {player.plusMinus !== null && (
-      <span className={cn("ml-1 align-middle text-xs", player.plusMinus < 0 ? "text-blue-400" : player.plusMinus > 0 ? "text-red-400" : "text-gray-400")} style={{ fontSize: '0.7em', fontWeight: 600 }}>
-        {player.plusMinus === 0 ? 'E' : (player.plusMinus > 0 ? `+${player.plusMinus}` : player.plusMinus)}
-      </span>
-    )}
-  </span>
-) : '-')}
+                                                                <td rowSpan={player.assignedCourses.length || 1} className="py-0.5 px-1 align-middle font-bold text-yellow-300 text-2xl border-r border-gray-800">
+  {player.hasForfeited ? '기권' : (player.hasAnyScore ? (
+    <span>
+      {isValidNumber(player.totalScore) ? player.totalScore : '-'}
+      {(() => {
+        const { pm } = getPlayerTotalAndPlusMinusAllCourses(tournament, player, player.allAssignedCourses);
+        if (pm === null || pm === undefined) return null;
+        return (
+          <span
+            className={
+              'ml-1 align-middle text-xs ' +
+              (pm < 0 ? 'text-blue-400' : pm > 0 ? 'text-red-400' : 'text-gray-400')
+            }
+            style={{ fontSize: '0.67em', fontWeight: 600 }}
+          >
+            {pm === 0 ? 'E' : (pm > 0 ? `+${pm}` : pm)}
+          </span>
+        );
+      })()}
+    </span>
+  ) : '-')}
 </td>
                                                                 <td rowSpan={player.assignedCourses.length || 1} className={cn("py-0.5 px-1 align-middle font-bold", player.hasForfeited ? "text-xs" : "text-xl")}>{player.rank !== null ? `${player.rank}위` : (player.hasForfeited ? '기권' : '')}</td>
                                                             </>
@@ -794,6 +907,8 @@ function ExternalScoreboard() {
         </>
     );
 }
+
+function isValidNumber(v: any) { return typeof v === 'number' && !isNaN(v); }
 
     
 

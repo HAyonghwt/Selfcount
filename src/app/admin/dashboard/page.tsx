@@ -1,4 +1,3 @@
-
 "use client";
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { getPlayerScoreLogs, ScoreLog, logScoreChange } from '@/lib/scoreLogs';
@@ -38,6 +37,8 @@ interface ProcessedPlayer {
     courseScores: { [courseId: string]: number };
     detailedScores: { [courseId: string]: { [holeNumber: string]: number } };
     assignedCourses: any[];
+    totalPar: number; // 파합계
+    plusMinus: number | null; // ±타수
 }
 
 // Helper function for tie-breaking using back-count method
@@ -55,9 +56,12 @@ const tieBreak = (a: any, b: any, sortedCourses: any[]) => {
 
     // Compare total scores of each course in reverse alphabetical order
     for (const course of sortedCourses) {
+        if (!course || course.id === undefined || course.id === null) continue; // 안전장치
         const courseId = course.id;
-        const aCourseScore = a.courseScores[courseId] || 0;
-        const bCourseScore = b.courseScores[courseId] || 0;
+        const aScoreObj = a.courseScores || {};
+        const bScoreObj = b.courseScores || {};
+        const aCourseScore = aScoreObj[courseId] ?? 0;
+        const bCourseScore = bScoreObj[courseId] ?? 0;
         if (aCourseScore !== bCourseScore) {
             return aCourseScore - bCourseScore;
         }
@@ -65,15 +69,20 @@ const tieBreak = (a: any, b: any, sortedCourses: any[]) => {
     
     // If still tied, compare hole scores on the last course (alphabetically), from 9 to 1.
     if (sortedCourses.length > 0) {
-        const lastCourseId = sortedCourses[0].id;
-        const aHoleScores = a.detailedScores[lastCourseId] || {};
-        const bHoleScores = b.detailedScores[lastCourseId] || {};
-        for (let i = 9; i >= 1; i--) {
-            const hole = i.toString();
-            const aHole = aHoleScores[hole] || 0;
-            const bHole = bHoleScores[hole] || 0;
-            if (aHole !== bHole) {
-                return aHole - bHole;
+        const lastCourse = sortedCourses[0];
+        if (lastCourse && lastCourse.id !== undefined && lastCourse.id !== null) {
+            const lastCourseId = lastCourse.id;
+            const aDetailObj = a.detailedScores || {};
+            const bDetailObj = b.detailedScores || {};
+            const aHoleScores = aDetailObj[lastCourseId] || {};
+            const bHoleScores = bDetailObj[lastCourseId] || {};
+            for (let i = 9; i >= 1; i--) {
+                const hole = i.toString();
+                const aHole = aHoleScores[hole] || 0;
+                const bHole = bHoleScores[hole] || 0;
+                if (aHole !== bHole) {
+                    return aHole - bHole;
+                }
             }
         }
     }
@@ -81,8 +90,44 @@ const tieBreak = (a: any, b: any, sortedCourses: any[]) => {
     return 0;
 };
 
+// 파합계(기본파) 계산 함수
+function getTotalParForPlayer(courses: any, assignedCourses: any[]) {
+  let total = 0;
+  assignedCourses.forEach(course => {
+    const courseData = courses[course.id];
+    if (courseData && Array.isArray(courseData.pars)) {
+      total += courseData.pars.reduce((a: number, b: number) => a + (b || 0), 0);
+    }
+  });
+  return total;
+}
+
+// 외부 전광판과 완전히 동일한 ± 및 총타수 계산 함수
+function getPlayerTotalAndPlusMinus(courses: any, player: any) {
+  let total = 0;
+  let parTotal = 0;
+  let playedHoles = 0;
+  player.assignedCourses.forEach((course: any) => {
+    const courseData = courses[course.id];
+    const holeScores = player.coursesData[course.id]?.holeScores || [];
+    if (courseData && Array.isArray(courseData.pars)) {
+      for (let i = 0; i < 9; i++) {
+        const score = holeScores[i];
+        const par = courseData.pars[i] ?? null;
+        if (typeof score === 'number' && typeof par === 'number') {
+          total += score;
+          parTotal += par;
+          playedHoles++;
+        }
+      }
+    }
+  });
+  return playedHoles > 0 ? { total, plusMinus: total - parTotal } : { total: null, plusMinus: null };
+}
 
 export default function AdminDashboard() {
+    // 안전한 number 체크 함수
+    const isValidNumber = (v: any) => typeof v === 'number' && !isNaN(v);
     // 점수 수정 모달 상태
     const [scoreEditModal, setScoreEditModal] = useState({
         open: false,
@@ -139,7 +184,38 @@ export default function AdminDashboard() {
     // 점수 초기화 기능
     const handleResetScores = async () => {
         try {
-            await set(ref(db, 'scores'), null); // firebase realtime db 전체 점수 초기화
+            if (filterGroup === 'all') {
+                // 전체 점수 초기화
+                await set(ref(db, 'scores'), null);
+            } else {
+                // 특정 그룹만 초기화
+                const groupPlayers = finalDataByGroup[filterGroup] || [];
+                const updates: any = {};
+                groupPlayers.forEach((player: any) => {
+                    if (!player.assignedCourses) return;
+                    player.assignedCourses.forEach((course: any) => {
+                        for (let h = 1; h <= 9; h++) {
+                            updates[`${player.id}/${course.id}/${h}`] = null;
+                        }
+                    });
+                });
+                if (Object.keys(updates).length > 0) {
+                    await set(ref(db, 'scores'), {
+                        ...(scores || {}),
+                        ...Object.keys(scores || {}).reduce((acc, pid) => {
+                            acc[pid] = { ...(scores[pid] || {}) };
+                            return acc;
+                        }, {}),
+                        ...Object.keys(updates).reduce((acc, path) => {
+                            const [pid, cid, h] = path.split('/');
+                            if (!acc[pid]) acc[pid] = {};
+                            if (!acc[pid][cid]) acc[pid][cid] = {};
+                            acc[pid][cid][h] = null;
+                            return acc;
+                        }, {})
+                    });
+                }
+            }
         } catch (e) {
             // TODO: 에러 처리
         } finally {
@@ -155,41 +231,66 @@ export default function AdminDashboard() {
         return;
     }
     try {
-        // 기존 점수 조회
-        const prevScore = scores?.[playerId]?.[courseId]?.[holeIndex + 1] ?? null;
         const scoreValue = score === '' ? null : Number(score);
+        // 0점(기권) 입력 시: 소속 그룹의 모든 코스/홀에 0점 입력
+        if (scoreValue === 0) {
+            // 선수 정보 찾기
+            const player = players[playerId];
+            if (player && player.group && groupsData[player.group]) {
+                const group = groupsData[player.group];
+                // 그룹에 배정된 코스 id 목록
+                const assignedCourseIds = group.courses ? Object.keys(group.courses).filter((cid: any) => group.courses[cid]) : [];
+                for (const cid of assignedCourseIds) {
+                    for (let h = 1; h <= 9; h++) {
+                        const prevScore = scores?.[playerId]?.[cid]?.[h];
+                        if (prevScore === undefined || prevScore === null) {
+                            if (!db) continue;
+                            await set(ref(db, `scores/${playerId}/${cid}/${h}`), 0);
+                            await logScoreChange({
+                                matchId: 'tournaments/current',
+                                playerId,
+                                scoreType: 'holeScore',
+                                holeNumber: h,
+                                oldValue: null,
+                                newValue: 0,
+                                modifiedBy: 'admin',
+                                modifiedByType: 'admin',
+                                comment: `기권 처리(미입력 홀만, courseId=${cid})`
+                            });
+                        }
+                    }
+                }
+            }
+            setScoreEditModal({ ...scoreEditModal, open: false });
+            // 점수 로그 재조회
+            try {
+                const logs = await getPlayerScoreLogs(playerId);
+                setPlayerScoreLogs((prev: any) => ({ ...prev, [playerId]: logs }));
+            } catch {}
+            return;
+        }
+        // 기존 점수 조회(0점이 아닐 때만 기존 방식)
+        const prevScore = scores?.[playerId]?.[courseId]?.[holeIndex + 1] ?? null;
+        if (!db) return;
         await set(ref(db, `scores/${playerId}/${courseId}/${holeIndex + 1}`), scoreValue);
         // 점수 변경 로그 기록
         if (prevScore !== scoreValue) {
-            console.log("로그 기록 시도", {
-                matchId: 'tournaments/current',
-                playerId,
-                scoreType: 'holeScore',
-                courseId,
-                holeNumber: holeIndex + 1,
-                oldValue: prevScore,
-                newValue: scoreValue,
-                modifiedBy: 'admin',
-                modifiedByType: 'admin',
-            });
             try {
                 await logScoreChange({
                     matchId: 'tournaments/current',
                     playerId,
                     scoreType: 'holeScore',
-                    courseId,
                     holeNumber: holeIndex + 1,
                     oldValue: prevScore,
                     newValue: scoreValue,
                     modifiedBy: 'admin',
                     modifiedByType: 'admin',
+                    comment: `코스: ${courseId}`
                 });
-                console.log("로그 기록 성공");
                 // 점수 로그 저장 후 해당 선수 로그 즉시 갱신
                 try {
                     const logs = await getPlayerScoreLogs(playerId);
-                    console.log('점수 로그 재조회 결과:', logs);
-                    setPlayerScoreLogs(prev => ({
+                    setPlayerScoreLogs((prev: any) => ({
                         ...prev,
                         [playerId]: logs
                     }));
@@ -212,10 +313,10 @@ export default function AdminDashboard() {
         : '/scoreboard';
     const { toast } = useToast();
     const router = useRouter();
-    const [players, setPlayers] = useState({});
-    const [scores, setScores] = useState({});
-    const [courses, setCourses] = useState({});
-    const [groupsData, setGroupsData] = useState({});
+    const [players, setPlayers] = useState<any>({});
+    const [scores, setScores] = useState<any>({});
+    const [courses, setCourses] = useState<any>({});
+    const [groupsData, setGroupsData] = useState<any>({});
     const [filterGroup, setFilterGroup] = useState('all');
     const [individualSuddenDeathData, setIndividualSuddenDeathData] = useState<any>(null);
     const [teamSuddenDeathData, setTeamSuddenDeathData] = useState<any>(null);
@@ -321,51 +422,39 @@ export default function AdminDashboard() {
 
         const allProcessedPlayers: any[] = Object.entries(players).map(([playerId, player]: [string, any]) => {
             const playerGroupData = groupsData[player.group];
+            // 그룹별 코스설정만을 기준으로 assignedCourses 생성 (샘플 방식 적용)
             const assignedCourseIds = playerGroupData?.courses 
-                ? Object.keys(playerGroupData.courses).filter(id => playerGroupData.courses[id]) 
+                ? Object.keys(playerGroupData.courses).filter(cid => playerGroupData.courses[cid] === true || playerGroupData.courses[cid] === "true")
                 : [];
-            
-            const coursesForPlayer = allCoursesList.filter(c => assignedCourseIds.includes(c.id.toString()));
-
+            // courses 객체에서 해당 id만 찾아 배열로 만듦 (id 타입 일치 보장)
+            const coursesForPlayer = assignedCourseIds
+                .map(cid => {
+                    const key = Object.keys(courses).find(k => String(k) === String(cid));
+                    return key ? courses[key] : undefined;
+                })
+                .filter(Boolean);
+            // 디버깅용 콘솔 출력
+            console.log('playerId:', playerId, 'group:', player.group, 'assignedCourseIds:', assignedCourseIds, 'coursesForPlayer:', coursesForPlayer.map(c => c && c.id));
             const playerScoresData = scores[playerId] || {};
-            let totalScore = 0;
             const coursesData: any = {};
-            const courseScoresForTieBreak: { [courseId: string]: number } = {};
-            const detailedScoresForTieBreak: { [courseId: string]: { [holeNumber: string]: number } } = {};
-            let hasAnyScore = false;
-            let hasForfeited = false;
-
             coursesForPlayer.forEach((course: any) => {
                 const courseId = course.id;
                 const scoresForCourse = playerScoresData[courseId] || {};
-                detailedScoresForTieBreak[courseId] = scoresForCourse;
-
-                let courseTotal = 0;
-                for (let i = 0; i < 9; i++) {
-                    const holeScore = scoresForCourse[(i + 1).toString()];
-                    if (holeScore !== undefined && holeScore !== null) {
-                        const scoreNum = Number(holeScore);
-                        // holeScores[i] = scoreNum; // Not used on this page
-                        courseTotal += scoreNum;
-                        hasAnyScore = true;
-                        if (scoreNum === 0) {
-                            hasForfeited = true;
-                        }
-                    }
-                }
-                
-                totalScore += courseTotal;
-                courseScoresForTieBreak[courseId] = courseTotal;
                 coursesData[courseId] = {
-  courseName: course.name,
-  courseTotal,
-  holeScores: Array.from({ length: 9 }, (_, i) => {
-    const holeScore = scoresForCourse[(i + 1).toString()];
-    return holeScore !== undefined && holeScore !== null ? Number(holeScore) : '-';
-  })
-}; // archive 기록보관용: holeScores 실제 점수 저장
+                  courseName: course.name,
+                  courseTotal: Object.values(scoresForCourse).reduce((acc: number, s: any) => typeof s === 'number' ? acc + s : acc, 0),
+                  holeScores: Array.from({ length: 9 }, (_, i) => {
+                    const holeScore = scoresForCourse[(i + 1).toString()];
+                    return typeof holeScore === 'number' ? holeScore : null;
+                  })
+                };
             });
-
+            // 외부 전광판과 동일하게 ± 및 총타수 계산
+            const { total, plusMinus } = getPlayerTotalAndPlusMinus(courses, {
+              ...player,
+              assignedCourses: coursesForPlayer,
+              coursesData
+            });
             return {
                 id: playerId,
                 jo: player.jo,
@@ -373,17 +462,14 @@ export default function AdminDashboard() {
                 affiliation: player.type === 'team' ? player.p1_affiliation : player.affiliation,
                 group: player.group,
                 type: player.type,
-                totalScore,
+                totalScore: total,
                 coursesData,
-                hasAnyScore,
-                hasForfeited,
-                total: totalScore,
-                courseScores: courseScoresForTieBreak,
-                detailedScores: detailedScoresForTieBreak,
-                assignedCourses: coursesForPlayer
+                hasAnyScore: total !== null,
+                hasForfeited: Object.values(coursesData).some((cd: any) => cd.holeScores.some((s: any) => s === 0)),
+                assignedCourses: coursesForPlayer,
+                plusMinus
             };
         });
-
         const groupedData = allProcessedPlayers.reduce((acc, player) => {
             const groupName = player.group || '미지정';
             if (!acc[groupName]) {
@@ -392,63 +478,53 @@ export default function AdminDashboard() {
             acc[groupName].push(player);
             return acc;
         }, {} as Record<string, any[]>);
-
         const rankedData: { [key: string]: ProcessedPlayer[] } = {};
         for (const groupName in groupedData) {
-            const coursesForGroup = groupedData[groupName][0]?.assignedCourses || Object.values(courses);
-            
-            // 백카운트용 코스 순서: 코스관리에서 지정한 순서의 역순으로 변경
-            const sortedCoursesForTieBreak = [...coursesForGroup].reverse();
-
-            const playersToSort = groupedData[groupName].filter(p => p.hasAnyScore && !p.hasForfeited);
-            const otherPlayers = groupedData[groupName].filter(p => !p.hasAnyScore || p.hasForfeited);
-            
-            const playerType = playersToSort[0]?.type;
-            const isSuddenDeathActiveForThisGroup = playerType === 'individual'
-                ? individualSuddenDeathData?.isActive
-                : teamSuddenDeathData?.isActive;
-
+            // 코스 추가 역순에서 undefined/null/잘못된 객체 제거
+            const coursesForGroup = [...(groupedData[groupName][0]?.assignedCourses || [])].filter(c => c && c.id !== undefined).reverse();
+            const playersToSort = groupedData[groupName].filter((p: any) => p.hasAnyScore && !p.hasForfeited);
+            const otherPlayers = groupedData[groupName].filter((p: any) => !p.hasAnyScore || p.hasForfeited);
             if (playersToSort.length > 0) {
-                const leaderScore = playersToSort.reduce((min, p) => Math.min(min, p.totalScore), Infinity);
-
-                playersToSort.sort((a, b) => {
-                    if (a.totalScore !== b.totalScore) return a.totalScore - b.totalScore;
-                    if (a.totalScore === leaderScore && isSuddenDeathActiveForThisGroup) {
-                        return a.name.localeCompare(b.name);
-                    }
-                    return tieBreak(a, b, sortedCoursesForTieBreak);
+                // 1. plusMinus 오름차순 정렬, tieBreak(백카운트) 적용
+                playersToSort.sort((a: any, b: any) => {
+                    if (a.plusMinus !== b.plusMinus) return a.plusMinus - b.plusMinus;
+                    return tieBreak(a, b, coursesForGroup);
                 });
-
+                // 2. 1위 동점자 모두 rank=1, 그 다음 선수부터 등수 건너뛰기
+                const minPlusMinus = playersToSort[0].plusMinus;
                 let rank = 1;
-                playersToSort[0].rank = rank;
-                for (let i = 1; i < playersToSort.length; i++) {
-                    const prev = playersToSort[i-1];
-                    const curr = playersToSort[i];
-                    
-                    let isTied = false;
-                    if (curr.totalScore === prev.totalScore) {
-                        if (curr.totalScore === leaderScore && isSuddenDeathActiveForThisGroup) {
-                            isTied = true;
-                        } else {
-                            isTied = tieBreak(curr, prev, sortedCoursesForTieBreak) === 0;
-                        }
-                    }
-
-                    if (isTied) {
-                        curr.rank = prev.rank;
+                let oneRankCount = 0;
+                // 1위 동점자 처리
+                for (let i = 0; i < playersToSort.length; i++) {
+                    if (playersToSort[i].plusMinus === minPlusMinus) {
+                        playersToSort[i].rank = 1;
+                        oneRankCount++;
                     } else {
-                        rank = i + 1;
-                        curr.rank = rank;
+                        break;
                     }
                 }
+                // 2위 이하(실제로는 1위 동점자 수+1 등수부터) 백카운트 등수 부여
+                rank = oneRankCount + 1;
+                for (let i = oneRankCount; i < playersToSort.length; i++) {
+                    // 바로 앞 선수와 plusMinus, tieBreak 모두 같으면 같은 등수, 아니면 증가
+                    const prev = playersToSort[i - 1];
+                    const curr = playersToSort[i];
+                    if (
+                        curr.plusMinus === prev.plusMinus &&
+                        tieBreak(curr, prev, coursesForGroup) === 0
+                    ) {
+                        curr.rank = playersToSort[i - 1].rank;
+                    } else {
+                        curr.rank = rank;
+                    }
+                    rank++;
+                }
             }
-            
-            const finalPlayers = [...playersToSort, ...otherPlayers.map(p => ({ ...p, rank: null }))];
+            const finalPlayers = [...playersToSort, ...otherPlayers.map((p: any) => ({ ...p, rank: null }))];
             rankedData[groupName] = finalPlayers;
         }
-        
         return rankedData;
-    }, [players, scores, courses, groupsData, individualSuddenDeathData, teamSuddenDeathData]);
+    }, [players, scores, courses, groupsData]);
     
     const processSuddenDeath = (suddenDeathData: any) => {
         if (!suddenDeathData?.isActive || !suddenDeathData.players || !suddenDeathData.holes || !Array.isArray(suddenDeathData.holes)) return [];
@@ -594,7 +670,6 @@ export default function AdminDashboard() {
                             ),
                             duration: 30000 // Keep the toast on screen longer
                         });
-                        
                         // Add to notified set to prevent re-triggering
                         setNotifiedSuddenDeathGroups(prev => {
                             const newSet = new Set(prev);
@@ -605,7 +680,7 @@ export default function AdminDashboard() {
                 }
             }
         });
-    }, [groupProgress, finalDataByGroup, notifiedSuddenDeathGroups, toast, router]);
+    }, [groupProgress, finalDataByGroup, notifiedSuddenDeathGroups]);
 
     const handleExportToExcel = async () => {
         const XLSX = await import('xlsx-js-style');
@@ -962,8 +1037,16 @@ export default function AdminDashboard() {
   <Dialog open={showResetConfirm} onOpenChange={setShowResetConfirm}>
     <DialogContent>
       <DialogHeader>
-        <DialogTitle>정말로 모든 점수를 초기화하시겠습니까?</DialogTitle>
-        <DialogDescription>이 작업은 되돌릴 수 없으며, 모든 선수의 대회 점수가 삭제됩니다.</DialogDescription>
+        <DialogTitle>
+          {filterGroup === 'all'
+            ? '정말로 모든 점수를 초기화하시겠습니까?'
+            : `정말로 ${filterGroup} 그룹의 점수를 초기화하시겠습니까?`}
+        </DialogTitle>
+        <DialogDescription>
+          {filterGroup === 'all'
+            ? '이 작업은 되돌릴 수 없으며, 모든 선수의 대회 점수가 삭제됩니다.'
+            : '이 작업은 되돌릴 수 없으며, 이 그룹의 모든 점수가 삭제됩니다.'}
+        </DialogDescription>
       </DialogHeader>
       <div className="flex flex-row justify-end gap-2 mt-4">
         <Button variant="outline" onClick={() => setShowResetConfirm(false)}>취소</Button>
@@ -1091,34 +1174,53 @@ export default function AdminDashboard() {
       {cellLog.comment && <div><b>비고:</b> {cellLog.comment}</div>}
     </div>
   ) : null;
-
+  // 파 정보
+  const courseData = courses[course.id];
+  const par = courseData && Array.isArray(courseData.pars) ? courseData.pars[i] : null;
+  let pm = null;
+  if (isValidNumber(score) && isValidNumber(par)) {
+    pm = score - par;
+  }
   return (
     <TableCell
-  key={i}
-  className={`text-center font-mono px-2 py-1 border-r cursor-pointer hover:bg-primary/10 ${isModified ? 'text-red-600 font-bold bg-red-50' : ''}`}
-  onDoubleClick={() => {
-    setScoreEditModal({
-      open: true,
-      playerId: player.id,
-      courseId: course.id,
-      holeIndex: i,
-      score: score === null ? '' : score
-    });
-  }}
->
-  <TooltipProvider delayDuration={0}>
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <span>{score === null ? '-' : score}</span>
-      </TooltipTrigger>
-      {isModified && tooltipContent && (
-        <TooltipContent side="top" className="whitespace-pre-line">
-          {tooltipContent}
-        </TooltipContent>
-      )}
-    </Tooltip>
-  </TooltipProvider>
-</TableCell>
+      key={i}
+      className={`text-center font-mono px-2 py-1 border-r cursor-pointer hover:bg-primary/10 ${isModified ? 'text-red-600 font-bold bg-red-50' : ''}`}
+      onDoubleClick={() => {
+        setScoreEditModal({
+          open: true,
+          playerId: player.id,
+          courseId: course.id,
+          holeIndex: i,
+          score: score === null ? '' : score
+        });
+      }}
+    >
+      <TooltipProvider delayDuration={0}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span>
+              {isValidNumber(score) ? score : '-'}
+              {/* ±타수 표기 */}
+              {isValidNumber(pm) && score !== 0 && (
+                <span
+                  className={
+                    'ml-1 text-xs align-middle ' + (pm < 0 ? 'text-blue-400' : pm > 0 ? 'text-red-400' : 'text-gray-400')
+                  }
+                  style={{ fontSize: '0.7em', fontWeight: 600 }}
+                >
+                  {pm === 0 ? 'E' : (pm > 0 ? `+${pm}` : pm)}
+                </span>
+              )}
+            </span>
+          </TooltipTrigger>
+          {isModified && tooltipContent && (
+            <TooltipContent side="top" className="whitespace-pre-line">
+              {tooltipContent}
+            </TooltipContent>
+          )}
+        </Tooltip>
+      </TooltipProvider>
+    </TableCell>
   );
 })}
 
@@ -1130,6 +1232,8 @@ export default function AdminDashboard() {
         <DialogTitle>점수 수정</DialogTitle>
         <DialogDescription>
           선수: <b>{player.name}</b> / 코스: <b>{player.coursesData[course.id]?.courseName}</b> / 홀: <b>{scoreEditModal.holeIndex + 1}번</b>
+          <br />
+          입력 점수: <b>{scoreEditModal.score === "0" ? "기권" : scoreEditModal.score}</b>
         </DialogDescription>
       </DialogHeader>
       <input
@@ -1137,22 +1241,189 @@ export default function AdminDashboard() {
         className="w-full border rounded px-3 py-2 text-lg text-center"
         value={scoreEditModal.score}
         onChange={e => setScoreEditModal({ ...scoreEditModal, score: e.target.value })}
-        min={1}
+        min={0}
         max={20}
         autoFocus
       />
+      {(scoreEditModal.score === 0 || scoreEditModal.score === "0") && (
+        <div className="mt-2 text-red-600 text-center font-bold text-lg">기권</div>
+      )}
       <DialogFooter>
         <Button onClick={() => handleScoreEditSave()}>저장</Button>
         <Button variant="outline" onClick={() => setScoreEditModal({ ...scoreEditModal, open: false })}>취소</Button>
+        {/* 기권 해제 버튼: 0점(기권) 상태에서만 노출 */}
+        {(scoreEditModal.score === 0 || scoreEditModal.score === "0") && (
+          <Button
+            className="bg-yellow-500 hover:bg-yellow-600 text-white ml-2"
+            onClick={async () => {
+              // 선수, 코스, 그룹 정보 찾기
+              const player = Object.values(finalDataByGroup).flat().find((p: any) => p.id === scoreEditModal.playerId);
+              if (!player) return;
+              // 선수의 모든 배정 코스/홀 복구
+              const logs = playerScoreLogs[player.id] || [];
+              let anyRestored = false;
+              for (const course of player.assignedCourses) {
+                for (let h = 1; h <= 9; h++) {
+                  // 현재 점수가 0(기권)인 경우만 복구
+                  if (scores?.[player.id]?.[course.id]?.[h] === 0) {
+                    // 해당 홀의 로그 중, 0점(기권) 처리 이전의 마지막 점수 찾기
+                    const zeroLogIdx = logs.findIndex(l =>
+                      l.holeNumber === h &&
+                      l.newValue === 0 &&
+                      l.comment && l.comment.includes(`courseId=${course.id}`)
+                    );
+                    let restoreValue = null;
+                    if (zeroLogIdx !== -1) {
+                      for (let j = zeroLogIdx - 1; j >= 0; j--) {
+                        const l = logs[j];
+                        if (
+                          l.holeNumber === h &&
+                          l.comment && l.comment.includes(`courseId=${course.id}`)
+                        ) {
+                          restoreValue = l.newValue;
+                          break;
+                        }
+                      }
+                    }
+                    // 복구(없으면 null)
+                    await set(ref(db, `scores/${player.id}/${course.id}/${h}`), restoreValue);
+                    await logScoreChange({
+                      matchId: 'tournaments/current',
+                      playerId: player.id,
+                      scoreType: 'holeScore',
+                      courseId: course.id,
+                      holeNumber: h,
+                      oldValue: 0,
+                      newValue: restoreValue === null ? null : restoreValue,
+                      modifiedBy: 'admin',
+                      modifiedByType: 'admin',
+                      comment: '기권 해제 복구'
+                    });
+                    anyRestored = true;
+                  }
+                }
+              }
+              if (anyRestored) {
+                toast({ title: '기권 해제 완료', description: '기권 처리 이전의 점수로 복구되었습니다.' });
+                // 점수 로그 재조회
+                try {
+                  const logs = await getPlayerScoreLogs(player.id);
+                  setPlayerScoreLogs(prev => ({ ...prev, [player.id]: logs }));
+                } catch {}
+              } else {
+                toast({ title: '복구할 점수가 없습니다.', description: '이미 기권이 해제된 상태입니다.' });
+              }
+              setScoreEditModal({ ...scoreEditModal, open: false });
+            }}
+          >
+            기권 해제
+          </Button>
+        )}
+        {/* 안내문구 */}
+        {(scoreEditModal.score === 0 || scoreEditModal.score === "0") && (
+          <div className="w-full text-center text-sm text-yellow-700 mt-2">기권 처리 이전의 모든 점수를 복구합니다.</div>
+        )}
       </DialogFooter>
     </DialogContent>
   </Dialog>
 )}
                                                         
-                                                        <TableCell className="text-center font-bold px-2 py-1 border-r">{player.hasForfeited ? '기권' : (player.hasAnyScore ? player.coursesData[course.id]?.courseTotal : '-')}</TableCell>
+                                                        <TableCell className="text-center font-bold px-2 py-1 border-r">
+  {(() => {
+    let courseSumElem = '-';
+    if (player.hasAnyScore && !player.hasForfeited) {
+      const courseData = courses[course.id];
+      let sum = 0, parSum = 0;
+      if (courseData && Array.isArray(courseData.pars)) {
+        for (let i = 0; i < 9; i++) {
+          const s = player.coursesData[course.id]?.holeScores[i];
+          const p = courseData.pars[i];
+          if (isValidNumber(s) && isValidNumber(p)) {
+            sum += s;
+            parSum += p;
+          }
+        }
+      }
+      const pm = isValidNumber(sum) && isValidNumber(parSum) && parSum > 0 ? sum - parSum : null;
+      courseSumElem = (
+        <span>
+          {isValidNumber(sum) ? sum : '-'}
+          {isValidNumber(pm) && (
+            <span className={
+              'ml-1 align-middle text-xs ' + (pm < 0 ? 'text-blue-400' : pm > 0 ? 'text-red-400' : 'text-gray-400')
+            } style={{ fontSize: '0.7em', fontWeight: 600 }}>
+              {pm === 0 ? 'E' : (pm > 0 ? `+${pm}` : pm)}
+            </span>
+          )}
+        </span>
+      );
+    } else if (player.hasForfeited) {
+      courseSumElem = '기권';
+    }
+    return courseSumElem;
+  })()}
+</TableCell>
 
                                                         {courseIndex === 0 && (
-                                                            <TableCell rowSpan={player.assignedCourses.length || 1} className="text-center align-middle font-bold text-primary text-lg px-2 py-1">{player.hasForfeited ? '기권' : (player.hasAnyScore ? player.totalScore : '-')}</TableCell>
+                                                            <TableCell rowSpan={player.assignedCourses.length || 1} className="text-center align-middle font-bold text-primary text-lg px-2 py-1">
+                                                              {player.hasForfeited ? (
+                                                                <TooltipProvider delayDuration={0}>
+                                                                  <Tooltip>
+                                                                    <TooltipTrigger asChild>
+                                                                      <span className="text-red-600 font-bold cursor-pointer">기권</span>
+                                                                    </TooltipTrigger>
+                                                                    <TooltipContent side="top" className="whitespace-pre-line">
+                                                                      {(() => {
+                                                                        const logs = playerScoreLogs[player.id] || [];
+                                                                        // '심판 직접 기권' 로그가 있으면 그 로그만 표시, 없으면 기존 방식
+                                                                        const directForfeitLog = logs.find(l => l.newValue === 0 && l.modifiedByType === 'judge' && l.comment && l.comment.includes('심판 직접 기권'));
+                                                                        let forfeitLog = directForfeitLog;
+                                                                        if (!forfeitLog) {
+                                                                          // 없으면 기존 방식(심판페이지에서 기권 처리 중 가장 오래된 것)
+                                                                          const forfeitLogs = logs
+                                                                            .filter(l => l.newValue === 0 && l.modifiedByType === 'judge' && l.comment && l.comment.includes('심판페이지에서 기권 처리'))
+                                                                            .sort((a, b) => a.modifiedAt - b.modifiedAt);
+                                                                          forfeitLog = forfeitLogs[0];
+                                                                        }
+                                                                        if (forfeitLog) {
+                                                                          // comment 예시: "심판 직접 기권 (코스: 1구장 A코스, 홀: 8)"
+                                                                          let displayComment = '';
+                                                                          const match = forfeitLog.comment && forfeitLog.comment.match(/코스: ([^,]+), 홀: (\d+)/);
+                                                                          if (match) {
+                                                                            const courseName = match[1];
+                                                                            const holeNum = match[2];
+                                                                            displayComment = `${courseName}, ${holeNum}번홀 심판이 기권처리`;
+                                                                          } else {
+                                                                            displayComment = forfeitLog.comment || '';
+                                                                          }
+                                                                          return (
+                                                                            <div>
+                                                                              <div><b>기권 처리자:</b> 심판</div>
+                                                                              <div>{forfeitLog.modifiedAt ? new Date(forfeitLog.modifiedAt).toLocaleString('ko-KR') : ''}</div>
+                                                                              <div>{displayComment}</div>
+                                                                            </div>
+                                                                          );
+                                                                        } else {
+                                                                          return <div>심판페이지에서 기권 처리 내역이 없습니다.</div>;
+                                                                        }
+                                                                      })()}
+                                                                    </TooltipContent>
+                                                                  </Tooltip>
+                                                                </TooltipProvider>
+                                                              ) : (
+                                                                player.hasAnyScore ? (
+                                                                  <span>
+                                                                    {isValidNumber(player.totalScore) ? player.totalScore : '-'}
+                                                                    {isValidNumber(player.plusMinus) && (
+                                                                      <span className={
+                                                                        'ml-1 align-middle text-xs ' + (player.plusMinus < 0 ? 'text-blue-400' : player.plusMinus > 0 ? 'text-red-400' : 'text-gray-400')
+                                                                      } style={{ fontSize: '0.7em', fontWeight: 600 }}>
+                                                                        {player.plusMinus === 0 ? 'E' : (player.plusMinus > 0 ? `+${player.plusMinus}` : player.plusMinus)}
+                                                                      </span>
+                                                                    )}
+                                                                  </span>
+                                                                ) : '-')}
+                                                            </TableCell>
                                                         )}
                                                     </TableRow>
                                                 )) : (
