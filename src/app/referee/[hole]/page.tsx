@@ -108,9 +108,12 @@ export default function RefereePage() {
                         const hStr = h.toString();
                         if (!allScores[p.id]?.[(selectedCourse || '')]?.[hStr]) {
                             await set(ref(db as import('firebase/database').Database, `/scores/${p.id}/${selectedCourse || ''}/${hStr}`), 0);
-                        }
-                    }
-                    autoForfeitPlayers.push(getPlayerName(p));
+                                            }
+                }
+                const playerName = getPlayerName(p);
+                if (playerName) {
+                    autoForfeitPlayers.push(playerName);
+                }
                 }
                 unsavedMoveCount[p.id] = count;
             }

@@ -145,6 +145,10 @@ export default function AdminDashboard() {
 
     // 기록 보관하기(아카이브) - 실제 구현은 추후
     const handleArchiveScores = async () => {
+        if (!db) {
+            toast({ title: '오류', description: '데이터베이스 연결이 없습니다.', variant: 'destructive' });
+            return;
+        }
         try {
             // 대회명 추출 (tournaments/current.name에서 직접 읽기)
             const tournamentRef = ref(db, 'tournaments/current/name');
@@ -175,7 +179,7 @@ export default function AdminDashboard() {
                 processedByGroup: finalDataByGroup // 그룹별 순위/점수 등 가공 데이터 추가 저장
             };
             await set(ref(db, `archives/${archiveId}`), archiveData);
-            toast({ title: '기록 보관 완료', description: `대회명: ${tournamentName || '대회'} / 참가자: ${playerCount}명`, variant: 'success' });
+            toast({ title: '기록 보관 완료', description: `대회명: ${tournamentName || '대회'} / 참가자: ${playerCount}명` });
         } catch (e: any) {
             toast({ title: '보관 실패', description: e?.message || '알 수 없는 오류', variant: 'destructive' });
         }
@@ -183,6 +187,10 @@ export default function AdminDashboard() {
 
     // 점수 초기화 기능
     const handleResetScores = async () => {
+        if (!db) {
+            toast({ title: '오류', description: '데이터베이스 연결이 없습니다.', variant: 'destructive' });
+            return;
+        }
         try {
             if (filterGroup === 'all') {
                 // 전체 점수 초기화
@@ -200,24 +208,27 @@ export default function AdminDashboard() {
                     });
                 });
                 if (Object.keys(updates).length > 0) {
-                    await set(ref(db, 'scores'), {
-                        ...(scores || {}),
-                        ...Object.keys(scores || {}).reduce((acc, pid) => {
-                            acc[pid] = { ...(scores[pid] || {}) };
-                            return acc;
-                        }, {}),
-                        ...Object.keys(updates).reduce((acc, path) => {
-                            const [pid, cid, h] = path.split('/');
-                            if (!acc[pid]) acc[pid] = {};
-                            if (!acc[pid][cid]) acc[pid][cid] = {};
-                            acc[pid][cid][h] = null;
-                            return acc;
-                        }, {})
+                    const currentScores = scores || {};
+                    const updatedScores: any = { ...currentScores };
+                    
+                    // 기존 점수 복사
+                    Object.keys(currentScores).forEach((pid) => {
+                        updatedScores[pid] = { ...(currentScores[pid] || {}) };
                     });
+                    
+                    // 업데이트 적용
+                    Object.keys(updates).forEach((path) => {
+                        const [pid, cid, h] = path.split('/');
+                        if (!updatedScores[pid]) updatedScores[pid] = {};
+                        if (!updatedScores[pid][cid]) updatedScores[pid][cid] = {};
+                        updatedScores[pid][cid][h] = null;
+                    });
+                    
+                    await set(ref(db, 'scores'), updatedScores);
                 }
             }
         } catch (e) {
-            // TODO: 에러 처리
+            toast({ title: '초기화 실패', description: '점수 초기화 중 오류가 발생했습니다.', variant: 'destructive' });
         } finally {
             setShowResetConfirm(false);
         }
@@ -225,88 +236,90 @@ export default function AdminDashboard() {
 
     // 점수 저장 임시 함수(실제 저장/재계산 로직은 추후 구현)
     const handleScoreEditSave = async () => {
-    const { playerId, courseId, holeIndex, score } = scoreEditModal;
-    if (!playerId || !courseId || holeIndex === -1) {
-        setScoreEditModal({ ...scoreEditModal, open: false });
-        return;
-    }
-    try {
-        const scoreValue = score === '' ? null : Number(score);
-        // 0점(기권) 입력 시: 소속 그룹의 모든 코스/홀에 0점 입력
-        if (scoreValue === 0) {
-            // 선수 정보 찾기
-            const player = players[playerId];
-            if (player && player.group && groupsData[player.group]) {
-                const group = groupsData[player.group];
-                // 그룹에 배정된 코스 id 목록
-                const assignedCourseIds = group.courses ? Object.keys(group.courses).filter((cid: any) => group.courses[cid]) : [];
-                for (const cid of assignedCourseIds) {
-                    for (let h = 1; h <= 9; h++) {
-                        const prevScore = scores?.[playerId]?.[cid]?.[h];
-                        if (prevScore === undefined || prevScore === null) {
-                            if (!db) continue;
-                            await set(ref(db, `scores/${playerId}/${cid}/${h}`), 0);
-                            await logScoreChange({
-                                matchId: 'tournaments/current',
-                                playerId,
-                                scoreType: 'holeScore',
-                                holeNumber: h,
-                                oldValue: null,
-                                newValue: 0,
-                                modifiedBy: 'admin',
-                                modifiedByType: 'admin',
-                                comment: `기권 처리(미입력 홀만, courseId=${cid})`
-                            });
+        if (!db) {
+            toast({ title: '오류', description: '데이터베이스 연결이 없습니다.', variant: 'destructive' });
+            return;
+        }
+        const { playerId, courseId, holeIndex, score } = scoreEditModal;
+        if (!playerId || !courseId || holeIndex === -1) {
+            setScoreEditModal({ ...scoreEditModal, open: false });
+            return;
+        }
+        try {
+            const scoreValue = score === '' ? null : Number(score);
+            // 0점(기권) 입력 시: 소속 그룹의 모든 코스/홀에 0점 입력
+            if (scoreValue === 0) {
+                // 선수 정보 찾기
+                const player = players[playerId];
+                if (player && player.group && groupsData[player.group]) {
+                    const group = groupsData[player.group];
+                    // 그룹에 배정된 코스 id 목록
+                    const assignedCourseIds = group.courses ? Object.keys(group.courses).filter((cid: any) => group.courses[cid]) : [];
+                    for (const cid of assignedCourseIds) {
+                        for (let h = 1; h <= 9; h++) {
+                            const prevScore = scores?.[playerId]?.[cid]?.[h];
+                            if (prevScore === undefined || prevScore === null) {
+                                await set(ref(db, `scores/${playerId}/${cid}/${h}`), 0);
+                                await logScoreChange({
+                                    matchId: 'tournaments/current',
+                                    playerId,
+                                    scoreType: 'holeScore',
+                                    holeNumber: h,
+                                    oldValue: 0,
+                                    newValue: 0,
+                                    modifiedBy: 'admin',
+                                    modifiedByType: 'admin',
+                                    comment: `기권 처리(미입력 홀만, courseId=${cid})`
+                                });
+                            }
                         }
                     }
                 }
-            }
-            setScoreEditModal({ ...scoreEditModal, open: false });
-            // 점수 로그 재조회
-            try {
-                const logs = await getPlayerScoreLogs(playerId);
-                setPlayerScoreLogs((prev: any) => ({ ...prev, [playerId]: logs }));
-            } catch {}
-            return;
-        }
-        // 기존 점수 조회(0점이 아닐 때만 기존 방식)
-        const prevScore = scores?.[playerId]?.[courseId]?.[holeIndex + 1] ?? null;
-        if (!db) return;
-        await set(ref(db, `scores/${playerId}/${courseId}/${holeIndex + 1}`), scoreValue);
-        // 점수 변경 로그 기록
-        if (prevScore !== scoreValue) {
-            try {
-                await logScoreChange({
-                    matchId: 'tournaments/current',
-                    playerId,
-                    scoreType: 'holeScore',
-                    holeNumber: holeIndex + 1,
-                    oldValue: prevScore,
-                    newValue: scoreValue,
-                    modifiedBy: 'admin',
-                    modifiedByType: 'admin',
-                    comment: `코스: ${courseId}`
-                });
-                // 점수 로그 저장 후 해당 선수 로그 즉시 갱신
+                setScoreEditModal({ ...scoreEditModal, open: false });
+                // 점수 로그 재조회
                 try {
                     const logs = await getPlayerScoreLogs(playerId);
-                    setPlayerScoreLogs((prev: any) => ({
-                        ...prev,
-                        [playerId]: logs
-                    }));
-                } catch (e) {
-                    console.log("점수 로그 재조회 에러", e);
-                }
-            } catch (e) {
-                console.log("로그 기록 에러", e);
+                    setPlayerScoreLogs((prev: any) => ({ ...prev, [playerId]: logs }));
+                } catch {}
+                return;
             }
+            // 기존 점수 조회(0점이 아닐 때만 기존 방식)
+            const prevScore = scores?.[playerId]?.[courseId]?.[holeIndex + 1] ?? null;
+            await set(ref(db, `scores/${playerId}/${courseId}/${holeIndex + 1}`), scoreValue);
+            // 점수 변경 로그 기록
+            if (prevScore !== scoreValue) {
+                try {
+                    await logScoreChange({
+                        matchId: 'tournaments/current',
+                        playerId,
+                        scoreType: 'holeScore',
+                        holeNumber: holeIndex + 1,
+                        oldValue: prevScore || 0,
+                        newValue: scoreValue || 0,
+                        modifiedBy: 'admin',
+                        modifiedByType: 'admin',
+                        comment: `코스: ${courseId}`
+                    });
+                    // 점수 로그 저장 후 해당 선수 로그 즉시 갱신
+                    try {
+                        const logs = await getPlayerScoreLogs(playerId);
+                        setPlayerScoreLogs((prev: any) => ({
+                            ...prev,
+                            [playerId]: logs
+                        }));
+                    } catch (e) {
+                        console.log("점수 로그 재조회 에러", e);
+                    }
+                } catch (e) {
+                    console.log("로그 기록 에러", e);
+                }
+            }
+            setScoreEditModal({ ...scoreEditModal, open: false });
+        } catch (e) {
+            setScoreEditModal({ ...scoreEditModal, open: false });
+            toast({ title: '점수 저장 실패', description: '점수 저장 중 오류가 발생했습니다.', variant: 'destructive' });
         }
-        setScoreEditModal({ ...scoreEditModal, open: false });
-    } catch (e) {
-        setScoreEditModal({ ...scoreEditModal, open: false });
-        // TODO: 에러 토스트 등 처리
-    }
-};
+    };
     // 항상 현재 도메인 기준으로 절대주소 생성
     const externalScoreboardUrl = typeof window !== 'undefined'
         ? `${window.location.origin}/scoreboard`
@@ -390,6 +403,8 @@ export default function AdminDashboard() {
     };
 
     useEffect(() => {
+        if (!db) return;
+        
         const playersRef = ref(db, 'players');
         const scoresRef = ref(db, 'scores');
         const tournamentRef = ref(db, 'tournaments/current');
@@ -414,7 +429,7 @@ export default function AdminDashboard() {
             unsubIndividualSuddenDeath();
             unsubTeamSuddenDeath();
         }
-    }, []);
+    }, [db]);
     
     const processedDataByGroup = useMemo(() => {
         const allCoursesList = Object.values(courses).filter(Boolean);
@@ -936,7 +951,7 @@ export default function AdminDashboard() {
 
     // 자동 기권 처리 함수 (조별, 3홀 이상 미입력)
     async function autoForfeitPlayersByMissingScores({ players, scores, groupsData, toast }: any) {
-        if (!players || !scores || !groupsData) return;
+        if (!players || !scores || !groupsData || !db) return;
         const alreadyForfeited: Set<string> = new Set();
         for (const groupName in groupsData) {
             const group = groupsData[groupName];

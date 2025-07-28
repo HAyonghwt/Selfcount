@@ -117,7 +117,7 @@ export default function SuddenDeathPage() {
         const unsubScores = onValue(scoresRef, snap => setScores(snap.val() || {}));
         const unsubTournament = onValue(tournamentRef, snap => {
             const data = snap.val() || {};
-            setCourses(Object.values(data.courses || {}).filter((c:any) => c.isActive));
+            setCourses(Object.values(data.courses || {}));
             setGroupsData(data.groups || {});
         });
 
