@@ -202,7 +202,7 @@ export default function PlayerManagementPage() {
                                 newPlayers.push({
                                     type: 'individual',
                                     group: groupName,
-                                    jo: Number(jo),
+                                    jo: jo.toString(),
                                     name: name,
                                     affiliation: affiliation,
                                 });
@@ -216,7 +216,7 @@ export default function PlayerManagementPage() {
                                 newPlayers.push({
                                     type: 'team',
                                     group: groupName,
-                                    jo: Number(row['조']),
+                                    jo: row['조'].toString(),
                                     p1_name: p1_name,
                                     p1_affiliation: row['선수1 소속']?.toString().trim() || '무소속',
                                     p2_name: p2_name,
@@ -283,6 +283,22 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                     const newPlayerKey = push(ref(db!, 'players')).key;
                     if(newPlayerKey) {
                         updates[`/players/${newPlayerKey}`] = player;
+                    }
+                });
+
+                // 새로운 그룹들 자동 생성
+                const newGroups = [...new Set(newPlayers.map(p => p.group))];
+                newGroups.forEach(groupName => {
+                    if (!groupsData[groupName]) {
+                        const defaultCourses = courses.reduce((acc, course) => {
+                            acc[course.id] = true;
+                            return acc;
+                        }, {});
+                        updates[`/tournaments/current/groups/${groupName}`] = {
+                            name: groupName,
+                            type: type,
+                            courses: defaultCourses
+                        };
                     }
                 });
 
@@ -416,13 +432,30 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
             updates[`/players/${newPlayerKey}`] = {
                 type: 'individual',
                 group: individualGroup,
-                jo: Number(individualJo),
+                jo: individualJo,
                 name: player.name,
                 affiliation: player.affiliation || '무소속',
             };
         });
 
-        update(ref(db!, 'players'), updates)
+        // 그룹이 없으면 자동으로 생성
+        if (!groupsData[individualGroup]) {
+            console.log('Creating new group:', individualGroup);
+            const defaultCourses = courses.reduce((acc, course) => {
+                acc[course.id] = true;
+                return acc;
+            }, {});
+            updates[`/tournaments/current/groups/${individualGroup}`] = {
+                name: individualGroup,
+                type: 'individual',
+                courses: defaultCourses
+            };
+            console.log('Group creation added to updates:', updates);
+        } else {
+            console.log('Group already exists:', individualGroup);
+        }
+
+        update(ref(db!), updates)
             .then(() => {
                 toast({ title: '성공', description: '개인전 선수들이 저장되었습니다.' });
                 setIndividualFormData(initialIndividualState);
@@ -455,7 +488,7 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
             updates[`/players/${newTeamKey}`] = {
                 type: 'team',
                 group: teamGroup,
-                jo: Number(teamJo),
+                jo: teamJo,
                 p1_name: team.p1_name,
                 p1_affiliation: team.p1_affiliation || '무소속',
                 p2_name: team.p2_name,
@@ -463,7 +496,20 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
             };
         });
 
-        update(ref(db!, 'players'), updates)
+        // 그룹이 없으면 자동으로 생성
+        if (!groupsData[teamGroup]) {
+            const defaultCourses = courses.reduce((acc, course) => {
+                acc[course.id] = true;
+                return acc;
+            }, {});
+            updates[`/tournaments/current/groups/${teamGroup}`] = {
+                name: teamGroup,
+                type: 'team',
+                courses: defaultCourses
+            };
+        }
+
+        update(ref(db!), updates)
             .then(() => {
                 toast({ title: '성공', description: '2인 1팀 선수들이 저장되었습니다.' });
                 setTeamFormData(initialTeamState);
@@ -475,16 +521,61 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
         remove(ref(db!, `players/${id}`));
     };
     
-    // 선수만 초기화
-    const handleResetPlayers = () => {
-        remove(ref(db!, 'players'))
-            .then(() => toast({ title: '초기화 완료', description: '모든 선수 명단이 삭제되었습니다.'}))
+    // 개인전 선수만 초기화
+    const handleResetIndividualPlayers = () => {
+        const individualPlayers = allPlayers.filter(p => p.type === 'individual');
+        const updates: { [key: string]: null } = {};
+        individualPlayers.forEach(player => {
+            updates[`/players/${player.id}`] = null;
+        });
+        
+        update(ref(db!), updates)
+            .then(() => toast({ title: '초기화 완료', description: '개인전 선수 명단이 삭제되었습니다.'}))
             .catch(err => toast({ title: '초기화 실패', description: err.message }));
     };
-    // 그룹만 초기화
-    const handleResetGroups = () => {
-        remove(ref(db!, 'tournaments/current/groups'))
-            .then(() => toast({ title: '초기화 완료', description: '모든 그룹이 삭제되었습니다.'}))
+
+    // 2인1팀 선수만 초기화
+    const handleResetTeamPlayers = () => {
+        const teamPlayers = allPlayers.filter(p => p.type === 'team');
+        const updates: { [key: string]: null } = {};
+        teamPlayers.forEach(player => {
+            updates[`/players/${player.id}`] = null;
+        });
+        
+        update(ref(db!), updates)
+            .then(() => toast({ title: '초기화 완료', description: '2인1팀 선수 명단이 삭제되었습니다.'}))
+            .catch(err => toast({ title: '초기화 실패', description: err.message }));
+    };
+
+    // 개인전 그룹만 초기화
+    const handleResetIndividualGroups = () => {
+        const individualGroups = Object.entries(groupsData)
+            .filter(([_, group]: [string, any]) => group.type === 'individual')
+            .map(([name, _]) => name);
+        
+        const updates: { [key: string]: null } = {};
+        individualGroups.forEach(groupName => {
+            updates[`/tournaments/current/groups/${groupName}`] = null;
+        });
+        
+        update(ref(db!), updates)
+            .then(() => toast({ title: '초기화 완료', description: '개인전 그룹이 삭제되었습니다.'}))
+            .catch(err => toast({ title: '초기화 실패', description: err.message }));
+    };
+
+    // 2인1팀 그룹만 초기화
+    const handleResetTeamGroups = () => {
+        const teamGroups = Object.entries(groupsData)
+            .filter(([_, group]: [string, any]) => group.type === 'team')
+            .map(([name, _]) => name);
+        
+        const updates: { [key: string]: null } = {};
+        teamGroups.forEach(groupName => {
+            updates[`/tournaments/current/groups/${groupName}`] = null;
+        });
+        
+        update(ref(db!), updates)
+            .then(() => toast({ title: '초기화 완료', description: '2인1팀 그룹이 삭제되었습니다.'}))
             .catch(err => toast({ title: '초기화 실패', description: err.message }));
     };
     
@@ -540,9 +631,7 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
 
         const { id, ...dataToUpdate } = editingPlayerData;
 
-        if (dataToUpdate.jo && typeof dataToUpdate.jo === 'string') {
-            dataToUpdate.jo = Number(dataToUpdate.jo);
-        }
+        // 조 번호는 문자열로 유지
 
         update(ref(db!, `players/${editingPlayerId}`), dataToUpdate)
             .then(() => {
@@ -681,7 +770,7 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                                     </div>
                                     <div className="space-y-2">
                                         <Label htmlFor="jo-individual">조 번호</Label>
-                                        <Input id="jo-individual" type="number" placeholder="예: 1" value={individualJo} onChange={e => setIndividualJo(e.target.value)} />
+                                        <Input id="jo-individual" type="text" placeholder="예: 1, A-1-1" value={individualJo} onChange={e => setIndividualJo(e.target.value)} />
                                     </div>
                                 </div>
                                 <div className="space-y-4 pt-4">
@@ -745,7 +834,7 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                                                                 <SelectContent>{groupNameList.map((g: string) => <SelectItem key={g} value={g}>{g}</SelectItem>)}</SelectContent>
                                                             </Select>
                                                         </TableCell>
-                                                        <TableCell className="px-4 py-2"><Input value={editingPlayerData.jo} type="number" onChange={(e) => handleEditingFormChange('jo', e.target.value)} className="h-9 w-20" /></TableCell>
+                                                        <TableCell className="px-4 py-2"><Input value={editingPlayerData.jo} type="text" onChange={(e) => handleEditingFormChange('jo', e.target.value)} className="h-9 w-20" /></TableCell>
                                                         <TableCell className="px-4 py-2"><Input value={editingPlayerData.name} onChange={(e) => handleEditingFormChange('name', e.target.value)} className="h-9" /></TableCell>
                                                         <TableCell className="px-4 py-2"><Input value={editingPlayerData.affiliation} onChange={(e) => handleEditingFormChange('affiliation', e.target.value)} className="h-9" /></TableCell>
                                                         <TableCell className="text-right space-x-1 px-4 py-2">
@@ -778,6 +867,34 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                                         )}
                                     </TableBody>
                                 </Table>
+                            </CardContent>
+                        </Card>
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>개인전 초기화</CardTitle>
+                                <CardDescription>개인전 관련 데이터만 초기화합니다. 이 작업은 되돌릴 수 없습니다.</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="flex flex-row gap-4">
+                                    <AlertDialog>
+                                        <AlertDialogTrigger asChild>
+                                            <Button variant="destructive" className="w-full"><RotateCcw className="mr-2 h-4 w-4" /> 개인전 그룹 초기화</Button>
+                                        </AlertDialogTrigger>
+                                        <AlertDialogContent>
+                                            <AlertDialogHeader><AlertDialogTitle>정말 개인전 그룹을 모두 삭제하시겠습니까?</AlertDialogTitle><AlertDialogDescription>개인전 그룹만 삭제됩니다. 이 작업은 되돌릴 수 없습니다.</AlertDialogDescription></AlertDialogHeader>
+                                            <AlertDialogFooter><AlertDialogCancel>취소</AlertDialogCancel><AlertDialogAction onClick={handleResetIndividualGroups}>개인전 그룹 초기화</AlertDialogAction></AlertDialogFooter>
+                                        </AlertDialogContent>
+                                    </AlertDialog>
+                                    <AlertDialog>
+                                        <AlertDialogTrigger asChild>
+                                            <Button variant="destructive" className="w-full"><RotateCcw className="mr-2 h-4 w-4" /> 개인전 선수 초기화</Button>
+                                        </AlertDialogTrigger>
+                                        <AlertDialogContent>
+                                            <AlertDialogHeader><AlertDialogTitle>정말 개인전 선수 명단을 모두 삭제하시겠습니까?</AlertDialogTitle><AlertDialogDescription>개인전 선수만 삭제됩니다. 이 작업은 되돌릴 수 없습니다.</AlertDialogDescription></AlertDialogHeader>
+                                            <AlertDialogFooter><AlertDialogCancel>취소</AlertDialogCancel><AlertDialogAction onClick={handleResetIndividualPlayers}>개인전 선수 초기화</AlertDialogAction></AlertDialogFooter>
+                                        </AlertDialogContent>
+                                    </AlertDialog>
+                                </div>
                             </CardContent>
                         </Card>
                     </CardContent>
@@ -867,7 +984,7 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                                     </div>
                                     <div className="space-y-2">
                                         <Label htmlFor="jo-team">조 번호</Label>
-                                        <Input id="jo-team" type="number" placeholder="예: 1" value={teamJo} onChange={e => setTeamJo(e.target.value)} />
+                                        <Input id="jo-team" type="text" placeholder="예: 1, A-1-1" value={teamJo} onChange={e => setTeamJo(e.target.value)} />
                                     </div>
                                 </div>
                                 {teamFormData.map((team, i) => (
@@ -928,7 +1045,7 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                                                                 <SelectContent>{groupNameList.map((g: string) => <SelectItem key={g} value={g}>{g}</SelectItem>)}</SelectContent>
                                                             </Select>
                                                         </TableCell>
-                                                        <TableCell className="px-4 py-2 align-top"><Input value={editingPlayerData.jo} type="number" onChange={(e) => handleEditingFormChange('jo', e.target.value)} className="h-9 w-20" /></TableCell>
+                                                        <TableCell className="px-4 py-2 align-top"><Input value={editingPlayerData.jo} type="text" onChange={(e) => handleEditingFormChange('jo', e.target.value)} className="h-9 w-20" /></TableCell>
                                                         <TableCell className="px-4 py-2 align-top"><Input value={editingPlayerData.p1_name} onChange={(e) => handleEditingFormChange('p1_name', e.target.value)} className="h-9" /></TableCell>
                                                         <TableCell className="px-4 py-2 align-top"><Input value={editingPlayerData.p1_affiliation} onChange={(e) => handleEditingFormChange('p1_affiliation', e.target.value)} className="h-9" /></TableCell>
                                                         <TableCell className="px-4 py-2 align-top"><Input value={editingPlayerData.p2_name} onChange={(e) => handleEditingFormChange('p2_name', e.target.value)} className="h-9" /></TableCell>
@@ -957,6 +1074,34 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                                         )}
                                     </TableBody>
                                 </Table>
+                            </CardContent>
+                        </Card>
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>2인1팀 초기화</CardTitle>
+                                <CardDescription>2인1팀 관련 데이터만 초기화합니다. 이 작업은 되돌릴 수 없습니다.</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="flex flex-row gap-4">
+                                    <AlertDialog>
+                                        <AlertDialogTrigger asChild>
+                                            <Button variant="destructive" className="w-full"><RotateCcw className="mr-2 h-4 w-4" /> 2인1팀 그룹 초기화</Button>
+                                        </AlertDialogTrigger>
+                                        <AlertDialogContent>
+                                            <AlertDialogHeader><AlertDialogTitle>정말 2인1팀 그룹을 모두 삭제하시겠습니까?</AlertDialogTitle><AlertDialogDescription>2인1팀 그룹만 삭제됩니다. 이 작업은 되돌릴 수 없습니다.</AlertDialogDescription></AlertDialogHeader>
+                                            <AlertDialogFooter><AlertDialogCancel>취소</AlertDialogCancel><AlertDialogAction onClick={handleResetTeamGroups}>2인1팀 그룹 초기화</AlertDialogAction></AlertDialogFooter>
+                                        </AlertDialogContent>
+                                    </AlertDialog>
+                                    <AlertDialog>
+                                        <AlertDialogTrigger asChild>
+                                            <Button variant="destructive" className="w-full"><RotateCcw className="mr-2 h-4 w-4" /> 2인1팀 선수 초기화</Button>
+                                        </AlertDialogTrigger>
+                                        <AlertDialogContent>
+                                            <AlertDialogHeader><AlertDialogTitle>정말 2인1팀 선수 명단을 모두 삭제하시겠습니까?</AlertDialogTitle><AlertDialogDescription>2인1팀 선수만 삭제됩니다. 이 작업은 되돌릴 수 없습니다.</AlertDialogDescription></AlertDialogHeader>
+                                            <AlertDialogFooter><AlertDialogCancel>취소</AlertDialogCancel><AlertDialogAction onClick={handleResetTeamPlayers}>2인1팀 선수 초기화</AlertDialogAction></AlertDialogFooter>
+                                        </AlertDialogContent>
+                                    </AlertDialog>
+                                </div>
                             </CardContent>
                         </Card>
                     </CardContent>
@@ -995,34 +1140,7 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
             </DialogContent>
         </Dialog>
 
-        <Card>
-            <CardHeader>
-                <CardTitle>초기화</CardTitle>
-                <CardDescription>그룹 또는 선수 명단을 각각 개별적으로 초기화할 수 있습니다. 이 작업은 되돌릴 수 없습니다.</CardDescription>
-            </CardHeader>
-            <CardContent>
-                <div className="flex flex-row gap-4">
-                    <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                            <Button variant="destructive" className="w-full"><RotateCcw className="mr-2 h-4 w-4" /> 그룹 초기화</Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                            <AlertDialogHeader><AlertDialogTitle>정말 그룹을 모두 삭제하시겠습니까?</AlertDialogTitle><AlertDialogDescription>모든 그룹이 삭제됩니다. 이 작업은 되돌릴 수 없습니다.</AlertDialogDescription></AlertDialogHeader>
-                            <AlertDialogFooter><AlertDialogCancel>취소</AlertDialogCancel><AlertDialogAction onClick={handleResetGroups}>그룹 초기화</AlertDialogAction></AlertDialogFooter>
-                        </AlertDialogContent>
-                    </AlertDialog>
-                    <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                            <Button variant="destructive" className="w-full"><RotateCcw className="mr-2 h-4 w-4" /> 선수 명단 초기화</Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                            <AlertDialogHeader><AlertDialogTitle>정말 선수 명단을 모두 삭제하시겠습니까?</AlertDialogTitle><AlertDialogDescription>모든 등록된 선수 및 팀 정보가 삭제됩니다. 이 작업은 되돌릴 수 없습니다.</AlertDialogDescription></AlertDialogHeader>
-                            <AlertDialogFooter><AlertDialogCancel>취소</AlertDialogCancel><AlertDialogAction onClick={handleResetPlayers}>선수 명단 초기화</AlertDialogAction></AlertDialogFooter>
-                        </AlertDialogContent>
-                    </AlertDialog>
-                </div>
-            </CardContent>
-        </Card>
+
     </div>
   )
 }

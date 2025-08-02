@@ -4,17 +4,23 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { db } from '@/lib/firebase';
 import { ref, onValue } from 'firebase/database';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff, Copy, Check } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
 
 const MAX_HOLES = 9;
 
 export default function RefereeManagementPage() {
+    const { toast } = useToast();
     const [loading, setLoading] = useState(true);
     const [userDomain, setUserDomain] = useState('');
     const [refereePassword, setRefereePassword] = useState('');
+    const [mainUrl, setMainUrl] = useState('');
+    const [copied, setCopied] = useState(false);
 
     useEffect(() => {
         if (!db) return;
@@ -24,6 +30,7 @@ export default function RefereeManagementPage() {
             const data = snapshot.val() || {};
             setUserDomain(data.userDomain || 'parkgolf.com');
             setRefereePassword(data.refereePassword || '');
+            setMainUrl(data.mainUrl || window.location.origin);
             setLoading(false);
         });
 
@@ -31,6 +38,26 @@ export default function RefereeManagementPage() {
             unsubConfig();
         };
     }, []);
+
+    const handleCopyUrl = async () => {
+        try {
+            await navigator.clipboard.writeText(mainUrl);
+            setCopied(true);
+            toast({
+                title: '복사 완료',
+                description: '메인 URL이 클립보드에 복사되었습니다.',
+            });
+            setTimeout(() => setCopied(false), 2000);
+        } catch (err) {
+            toast({
+                title: '복사 실패',
+                description: 'URL 복사에 실패했습니다.',
+                variant: 'destructive',
+            });
+        }
+    };
+
+
 
     const renderSkeleton = () => (
         <Table>
@@ -132,6 +159,39 @@ export default function RefereeManagementPage() {
                         대회 심판들의 아이디와 비밀번호를 확인합니다.
                     </CardDescription>
                 </CardHeader>
+                <CardContent>
+                    <div className="space-y-4">
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium">아래 주소를 심판들에게 전달하고 담당 홀의 아이디와 비밀번호를 이용해서 로그인 하게 합니다</label>
+                            <div className="flex gap-2">
+                                <Input 
+                                    value={mainUrl} 
+                                    onChange={(e) => setMainUrl(e.target.value)}
+                                    placeholder="https://your-domain.com"
+                                    className="flex-1"
+                                />
+                                <Button 
+                                    onClick={handleCopyUrl}
+                                    variant="outline"
+                                    className="min-w-[100px]"
+                                >
+                                    {copied ? (
+                                        <>
+                                            <Check className="mr-2 h-4 w-4" />
+                                            복사됨
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Copy className="mr-2 h-4 w-4" />
+                                            복사하기
+                                        </>
+                                    )}
+                                </Button>
+
+                            </div>
+                        </div>
+                    </div>
+                </CardContent>
             </Card>
 
             <Card>

@@ -647,11 +647,11 @@ export default function RefereePage() {
                                     <div className="flex-1 min-w-0">
                                         {player.type === 'team' ? (
                                             <div>
-                                                <p className="font-semibold text-xl truncate">{player.p1_name}</p>
-                                                <p className="font-semibold text-xl truncate">{player.p2_name}</p>
+                                                <p className="font-semibold text-xl break-words leading-tight">{player.p1_name}</p>
+                                                <p className="font-semibold text-xl break-words leading-tight">{player.p2_name}</p>
                                             </div>
                                         ) : (
-                                            <p className="font-semibold text-xl truncate">{player.name}</p>
+                                            <p className="font-semibold text-xl break-words leading-tight">{player.name}</p>
                                         )}
                                     </div>
                                     <div className="flex-shrink-0 flex items-center gap-1.5">
@@ -757,7 +757,7 @@ export default function RefereePage() {
             <AlertDialog open={!!playerToSave} onOpenChange={(open) => !open && setPlayerToSave(null)}>
                 <AlertDialogContent>
                     <AlertDialogHeader>
-                        <AlertDialogTitle className="text-xl font-bold text-center" style={{ fontSize: '1.7rem', lineHeight: '2.0rem' }}>
+                        <AlertDialogTitle className="text-xl font-bold text-center break-words leading-tight" style={{ fontSize: '1.7rem', lineHeight: '2.0rem' }}>
                             {playerToSave ? getPlayerName(playerToSave) : ''}
                         </AlertDialogTitle>
                     </AlertDialogHeader>
@@ -834,7 +834,7 @@ export default function RefereePage() {
             </AlertDialogHeader>
             <div className="py-2">
                 {unsavedPlayers.map(p => (
-                    <div key={p.id} className="font-bold text-red-600 text-lg mb-1">
+                    <div key={p.id} className="font-bold text-red-600 text-lg mb-1 break-words leading-tight">
                       {getPlayerName(p)}<span className="ml-1 text-gray-700">의 점수를 저장하고 이동하세요</span>
                     </div>
                 ))}

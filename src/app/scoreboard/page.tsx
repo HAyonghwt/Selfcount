@@ -156,9 +156,15 @@ function getPlayerTotalAndPlusMinusAllCourses(tournament: any, player: any, allA
 
 export default function ScoreboardPage() {
   const [giftEventStatus, setGiftEventStatus] = useState<string>('');
+  const [giftEventData, setGiftEventData] = useState<any>({});
+  
   useEffect(() => {
-    const statusRef = ref(db, 'giftEvent/status');
-    const unsub = onValue(statusRef, snap => setGiftEventStatus(snap.val() || ''));
+    const giftEventRef = ref(db, 'giftEvent');
+    const unsub = onValue(giftEventRef, snap => {
+      const data = snap.val() || {};
+      setGiftEventStatus(data.status || '');
+      setGiftEventData(data);
+    });
     return () => unsub();
   }, []);
 
@@ -703,11 +709,11 @@ function ExternalScoreboard() {
                                 <table className="w-full text-center border-collapse border-l border-r border-gray-800">
                                     <thead className="text-gray-400 text-sm">
                                         <tr className="border-b-2 border-gray-600">
-                                            <th rowSpan={2} className="py-1 px-1 w-12 text-center align-middle font-bold border-r border-gray-800">조</th>
-                                            <th rowSpan={2} className="py-1 px-1 text-center align-middle font-bold border-r border-gray-800 w-44 md:w-44 sm:w-auto whitespace-nowrap">선수명(팀명)</th>
-                                            <th rowSpan={2} className="py-1 px-1 text-center align-middle font-bold border-r border-gray-800 w-24 md:w-24 sm:w-auto whitespace-nowrap">소속</th>
-                                            <th rowSpan={2} className="py-1 px-1 text-center align-middle font-bold border-r border-gray-800 w-24 md:w-24 sm:w-auto whitespace-nowrap">코스</th>
-                                            <th colSpan={9} className="py-1 px-1 text-center align-middle font-bold border-r border-gray-800">HOLE</th>
+                                            <th rowSpan={2} className="py-1 px-1 text-center align-middle font-bold border-r border-gray-800 w-12">조</th>
+                                            <th rowSpan={2} className="py-1 px-1 text-center align-middle font-bold border-r border-gray-800 w-28 md:w-32 lg:w-36">선수명(팀명)</th>
+                                            <th rowSpan={2} className="py-1 px-1 text-center align-middle font-bold border-r border-gray-800 w-20 md:w-24 lg:w-28">소속</th>
+                                            <th rowSpan={2} className="py-1 px-1 text-center align-middle font-bold border-r border-gray-800 w-16 md:w-20 lg:w-24">코스</th>
+                                            <th colSpan={9} className="py-1 px-1 text-center align-middle font-bold border-r border-gray-800 w-auto">HOLE</th>
                                             <th rowSpan={2} className="py-1 px-1 min-w-[4rem] text-center align-middle font-bold border-r border-gray-800">합계</th>
                                             <th rowSpan={2} className="py-1 px-1 min-w-[4rem] text-center align-middle font-bold text-yellow-400 border-r border-gray-800">총타수</th>
                                             <th rowSpan={2} className="py-1 px-1 min-w-[4rem] text-center align-middle font-bold">순위</th>
@@ -723,12 +729,12 @@ function ExternalScoreboard() {
                                                     <tr key={`${player.id}-${course.id}`} className="border-b border-gray-800 last:border-0">
                                                         {courseIndex === 0 && (
                                                             <>
-                                                                <td rowSpan={player.assignedCourses.length || 1} className="py-0.5 px-1 align-middle font-bold border-r border-gray-800">{player.jo}</td>
-                                                                <td rowSpan={player.assignedCourses.length || 1} className="py-0.5 px-1 text-center align-middle font-semibold border-r border-gray-800 w-44 md:w-44 sm:w-auto whitespace-nowrap">{player.name}</td>
-                                                                <td rowSpan={player.assignedCourses.length || 1} className="py-0.5 px-1 text-center align-middle text-gray-400 border-r border-gray-800 w-24 md:w-24 sm:w-auto whitespace-nowrap">{player.club}</td>
+                                                                <td rowSpan={player.assignedCourses.length || 1} className="py-0.5 px-1 align-middle font-bold border-r border-gray-800 w-12 truncate">{player.jo}</td>
+                                                                <td rowSpan={player.assignedCourses.length || 1} className="py-0.5 px-1 text-center align-middle font-semibold border-r border-gray-800 w-28 md:w-32 lg:w-36 truncate">{player.name}</td>
+                                                                <td rowSpan={player.assignedCourses.length || 1} className="py-0.5 px-1 text-center align-middle text-gray-400 border-r border-gray-800 w-20 md:w-24 lg:w-28 truncate">{player.club}</td>
                                                             </>
                                                         )}
-                                                        <td className="py-0.5 px-1 align-middle text-center border-r border-gray-800 w-24 md:w-24 sm:w-auto whitespace-nowrap">{player.coursesData[course.id]?.courseName}</td>
+                                                        <td className="py-0.5 px-1 align-middle text-center border-r border-gray-800 w-16 md:w-20 lg:w-24 truncate">{player.coursesData[course.id]?.courseName}</td>
                                                         {player.coursesData[course.id]?.holeScores.map((score: any, i: number) => {
   // 해당 셀(플레이어/코스/홀)에 대한 최근 로그 찾기
   const logs = playerScoreLogs[player.id] || [];
@@ -855,9 +861,9 @@ function ExternalScoreboard() {
                                                     </tr>
                                                 )) : (
                                                     <tr className="border-b border-gray-800 last:border-0">
-                                                        <td className="py-0.5 px-1 align-middle font-bold border-r border-gray-800">{player.jo}</td>
-                                                        <td className="py-0.5 px-1 text-center align-middle font-semibold border-r border-gray-800 w-44 md:w-44 sm:w-auto whitespace-nowrap">{player.name}</td>
-                                                        <td className="py-0.5 px-1 text-center align-middle text-gray-400 border-r border-gray-800 w-24 md:w-24 sm:w-auto whitespace-nowrap">{player.club}</td>
+                                                        <td className="py-0.5 px-1 align-middle font-bold border-r border-gray-800 w-12 truncate">{player.jo}</td>
+                                                        <td className="py-0.5 px-1 text-center align-middle font-semibold border-r border-gray-800 w-28 md:w-32 lg:w-36 truncate">{player.name}</td>
+                                                        <td className="py-0.5 px-1 text-center align-middle text-gray-400 border-r border-gray-800 w-20 md:w-24 lg:w-28 truncate">{player.club}</td>
                                                         <td colSpan={11} className="py-0.5 px-1 align-middle text-center text-gray-500 border-r border-gray-800">표시하도록 설정된 코스가 없습니다.</td>
                                                         <td className={cn("py-0.5 px-1 align-middle font-bold text-yellow-400 border-r border-gray-800", player.hasForfeited ? "text-xs" : "text-xl")}>{player.hasForfeited ? '기권' : (player.hasAnyScore ? player.totalScore : '-')}</td>
                                                         <td className={cn("py-0.5 px-1 align-middle font-bold", player.hasForfeited ? "text-xs" : "text-xl")}>{player.rank !== null ? `${player.rank}위` : (player.hasForfeited ? '기권' : '')}</td>
