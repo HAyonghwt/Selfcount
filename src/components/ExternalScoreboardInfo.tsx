@@ -16,10 +16,35 @@ const ExternalScoreboardInfo: React.FC<ExternalScoreboardInfoProps> = ({ url }) 
 
   const handleCopy = async () => {
     try {
-      await navigator.clipboard.writeText(url);
-      alert("주소가 복사되었습니다!");
+      // 모바일에서도 작동하는 복사 방법
+      if (navigator.clipboard && window.isSecureContext) {
+        // HTTPS 환경에서는 clipboard API 사용
+        await navigator.clipboard.writeText(url);
+        alert("주소가 복사되었습니다!");
+      } else {
+        // HTTP 환경이나 모바일에서는 fallback 방법 사용
+        const textArea = document.createElement("textarea");
+        textArea.value = url;
+        textArea.style.position = "fixed";
+        textArea.style.left = "-999999px";
+        textArea.style.top = "-999999px";
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        
+        try {
+          document.execCommand('copy');
+          alert("주소가 복사되었습니다!");
+        } catch (err) {
+          // execCommand도 실패하면 수동 복사 안내
+          alert("복사에 실패했습니다. 주소를 수동으로 복사해 주세요.");
+        }
+        
+        document.body.removeChild(textArea);
+      }
     } catch (err) {
-      alert("복사에 실패했습니다. 수동으로 복사해 주세요.");
+      // 모든 방법이 실패했을 때
+      alert("복사에 실패했습니다. 주소를 수동으로 복사해 주세요.");
     }
   };
 

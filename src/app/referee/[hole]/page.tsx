@@ -30,6 +30,7 @@ interface Course { id: number; name:string; isActive: boolean; }
 interface ScoreData {
     score: number;
     status: 'editing' | 'locked';
+    forfeitType?: 'absent' | 'disqualified' | 'forfeit' | null; // 추가: 기권 타입
 }
 
 export default function RefereePage() {
@@ -375,9 +376,13 @@ export default function RefereePage() {
             } else {
                 const interimScore = savedInterimScores[player.id];
                 if (interimScore && interimScore.status === 'editing') {
-                    newScoresState[player.id] = { score: Number(interimScore.score), status: 'editing'};
+                    newScoresState[player.id] = { 
+                        score: Number(interimScore.score), 
+                        status: 'editing',
+                        forfeitType: interimScore.forfeitType || null
+                    };
                 } else {
-                    newScoresState[player.id] = { score: 1, status: 'editing' };
+                    newScoresState[player.id] = { score: 1, status: 'editing', forfeitType: null };
                 }
             }
         });
@@ -402,9 +407,37 @@ export default function RefereePage() {
 
     const updateScore = (id: string, delta: number) => {
         if (scores[id]?.status === 'editing') {
+            const currentScore = scores[id].score;
+            const newScore = Math.max(0, currentScore + delta);
+            
+            // 0점이 되었을 때 기권 타입 순환 처리
+            let newForfeitType = scores[id].forfeitType;
+            if (newScore === 0 && currentScore > 0) {
+                // 처음 0점이 되면 '불참'
+                newForfeitType = 'absent';
+            } else if (newScore === 0 && currentScore === 0) {
+                // 0점 상태에서 -버튼 누르면 순환
+                if (scores[id].forfeitType === 'absent') {
+                    newForfeitType = 'disqualified';
+                } else if (scores[id].forfeitType === 'disqualified') {
+                    newForfeitType = 'forfeit';
+                } else if (scores[id].forfeitType === 'forfeit') {
+                    newForfeitType = 'absent'; // 다시 처음으로 순환
+                } else {
+                    newForfeitType = 'absent'; // 기본값
+                }
+            } else if (newScore > 0) {
+                // 점수가 0보다 크면 기권 타입 초기화
+                newForfeitType = null;
+            }
+            
             setScores(prev => ({
                 ...prev,
-                [id]: { ...prev[id], score: Math.max(0, prev[id].score + delta) }
+                [id]: { 
+                    ...prev[id], 
+                    score: newScore,
+                    forfeitType: newForfeitType
+                }
             }));
         }
     };
@@ -460,7 +493,7 @@ export default function RefereePage() {
                                 newValue: 0,
                                 modifiedBy: 'referee',
                                 modifiedByType: 'judge',
-                                comment: `심판 직접 기권 (코스: ${courseName}, 홀: ${h})`
+                                comment: `심판 직접 ${scoreData.forfeitType === 'absent' ? '불참' : scoreData.forfeitType === 'disqualified' ? '실격' : '기권'} (코스: ${courseName}, 홀: ${h})`
                             });
                         } else if (existing === undefined || existing === null || existing === '' || isNaN(Number(existing))) {
                             // 나머지 미입력 홀
@@ -474,7 +507,7 @@ export default function RefereePage() {
                                 newValue: 0,
                                 modifiedBy: 'referee',
                                 modifiedByType: 'judge',
-                                comment: `심판페이지에서 기권 처리 (코스: ${courseName}, 홀: ${h})`
+                                comment: `심판페이지에서 ${scoreData.forfeitType === 'absent' ? '불참' : scoreData.forfeitType === 'disqualified' ? '실격' : '기권'} 처리 (코스: ${courseName}, 홀: ${h})`
                             });
                         }
                     }
@@ -639,6 +672,8 @@ export default function RefereePage() {
                     }
 
                     const isLocked = scoreData.status === 'locked' || isForfeited;
+                    const isZeroScore = scoreData.score === 0;
+                    const forfeitText = isZeroScore ? getForfeitDisplayText(scoreData.forfeitType || null) : '';
 
                     return (
                         <Card key={player.id} className="overflow-hidden">
@@ -658,8 +693,8 @@ export default function RefereePage() {
                                         <Button variant="outline" size="icon" className="h-10 w-10 rounded-md" onClick={() => updateScore(player.id, -1)} disabled={isLocked}>
                                             <Minus className="h-5 w-5" />
                                         </Button>
-                                        <span className={(isForfeited || scoreData.score === 0) ? "text-xs font-bold w-12 text-center text-red-600" : "text-3xl font-bold tabular-nums w-12 text-center"}>
-                                            {(isForfeited || scoreData.score === 0) ? '기권' : scoreData.score}
+                                        <span className={isZeroScore ? "text-xs font-bold w-12 text-center text-red-600" : "text-3xl font-bold tabular-nums w-12 text-center"}>
+                                            {isZeroScore ? forfeitText : scoreData.score}
                                         </span>
                                         <Button variant="outline" size="icon" className="h-10 w-10 rounded-md" onClick={() => updateScore(player.id, 1)} disabled={isLocked}>
                                             <Plus className="h-5 w-5" />
@@ -765,7 +800,7 @@ export default function RefereePage() {
                         {playerToSave && scores[playerToSave.id] && (
                              <div className="flex items-baseline my-6">
                                 <span className="font-extrabold text-destructive leading-none" style={{ fontSize: '7rem', lineHeight: '1' }}>
-                                  {scores[playerToSave.id].score === 0 ? "기권" : scores[playerToSave.id].score}
+                                  {scores[playerToSave.id].score === 0 ? getForfeitDisplayText(scores[playerToSave.id].forfeitType || null) : scores[playerToSave.id].score}
                                 </span>
                                 <span className="font-bold ml-4 text-4xl">{scores[playerToSave.id].score === 0 ? "" : "점"}</span>
                             </div>
@@ -869,3 +904,12 @@ export default function RefereePage() {
         </>
     );
 }
+
+    const getForfeitDisplayText = (forfeitType: string | null | undefined) => {
+        switch (forfeitType) {
+            case 'absent': return '불참';
+            case 'disqualified': return '실격';
+            case 'forfeit': return '기권';
+            default: return '기권';
+        }
+    };

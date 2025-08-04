@@ -182,6 +182,23 @@ export default function ScoreboardPage() {
   return <ExternalScoreboard />;
 }
 
+// 기권 타입을 로그에서 추출하는 함수
+const getForfeitTypeFromLogs = (logs: ScoreLog[]): 'absent' | 'disqualified' | 'forfeit' | null => {
+    // 가장 최근의 기권 처리 로그를 찾음
+    const forfeitLogs = logs
+        .filter(l => l.newValue === 0 && l.modifiedByType === 'judge' && l.comment)
+        .sort((a, b) => b.modifiedAt - a.modifiedAt); // 최신순 정렬
+    
+    if (forfeitLogs.length === 0) return null;
+    
+    const latestLog = forfeitLogs[0];
+    if (latestLog.comment?.includes('불참')) return 'absent';
+    if (latestLog.comment?.includes('실격')) return 'disqualified';
+    if (latestLog.comment?.includes('기권')) return 'forfeit';
+    
+    return null;
+};
+
 // 기존 점수표 함수는 이름만 변경해서 아래에 유지
 function ExternalScoreboard() {
     const [loading, setLoading] = useState(true);
@@ -783,7 +800,7 @@ function ExternalScoreboard() {
               {score === null ?
                 '-' :
                 score === 0 ?
-                  <span className="text-xs">기권</span> :
+                  <span className="text-xs">0</span> :
                   <>
                     {String(score)}
                     {pm !== null && (
@@ -827,14 +844,30 @@ function ExternalScoreboard() {
       </span>
     );
   } else if (player.hasForfeited) {
-    courseSumElem = '기권';
+    // 기권 타입을 로그에서 추출
+    const logs = playerScoreLogs[player.id] || [];
+    const forfeitType = getForfeitTypeFromLogs(logs);
+    if (forfeitType === 'absent') {
+      courseSumElem = '불참';
+    } else if (forfeitType === 'disqualified') {
+      courseSumElem = '실격';
+    } else {
+      courseSumElem = '기권';
+    }
   }
   return <td className={cn("py-0.5 px-1 align-middle font-bold text-gray-300 border-r border-gray-800", player.hasForfeited ? 'text-xs' : 'text-xl')}>{courseSumElem}</td>;
 })()}
                                                         {courseIndex === 0 && (
                                                             <>
                                                                 <td rowSpan={player.assignedCourses.length || 1} className="py-0.5 px-1 align-middle font-bold text-yellow-300 text-2xl border-r border-gray-800">
-  {player.hasForfeited ? '기권' : (player.hasAnyScore ? (
+  {player.hasForfeited ? (() => {
+    // 기권 타입을 로그에서 추출
+    const logs = playerScoreLogs[player.id] || [];
+    const forfeitType = getForfeitTypeFromLogs(logs);
+    if (forfeitType === 'absent') return '불참';
+    if (forfeitType === 'disqualified') return '실격';
+    return '기권';
+  })() : (player.hasAnyScore ? (
     <span>
       {isValidNumber(player.totalScore) ? player.totalScore : '-'}
       {(() => {
@@ -855,7 +888,14 @@ function ExternalScoreboard() {
     </span>
   ) : '-')}
 </td>
-                                                                <td rowSpan={player.assignedCourses.length || 1} className={cn("py-0.5 px-1 align-middle font-bold", player.hasForfeited ? "text-xs" : "text-xl")}>{player.rank !== null ? `${player.rank}위` : (player.hasForfeited ? '기권' : '')}</td>
+                                                                <td rowSpan={player.assignedCourses.length || 1} className={cn("py-0.5 px-1 align-middle font-bold", player.hasForfeited ? "text-xs" : "text-xl")}>{player.rank !== null ? `${player.rank}위` : (player.hasForfeited ? (() => {
+    // 기권 타입을 로그에서 추출
+    const logs = playerScoreLogs[player.id] || [];
+    const forfeitType = getForfeitTypeFromLogs(logs);
+    if (forfeitType === 'absent') return '불참';
+    if (forfeitType === 'disqualified') return '실격';
+    return '기권';
+  })() : '')}</td>
                                                             </>
                                                         )}
                                                     </tr>
@@ -865,8 +905,22 @@ function ExternalScoreboard() {
                                                         <td className="py-0.5 px-1 text-center align-middle font-semibold border-r border-gray-800 w-28 md:w-32 lg:w-36 truncate">{player.name}</td>
                                                         <td className="py-0.5 px-1 text-center align-middle text-gray-400 border-r border-gray-800 w-20 md:w-24 lg:w-28 truncate">{player.club}</td>
                                                         <td colSpan={11} className="py-0.5 px-1 align-middle text-center text-gray-500 border-r border-gray-800">표시하도록 설정된 코스가 없습니다.</td>
-                                                        <td className={cn("py-0.5 px-1 align-middle font-bold text-yellow-400 border-r border-gray-800", player.hasForfeited ? "text-xs" : "text-xl")}>{player.hasForfeited ? '기권' : (player.hasAnyScore ? player.totalScore : '-')}</td>
-                                                        <td className={cn("py-0.5 px-1 align-middle font-bold", player.hasForfeited ? "text-xs" : "text-xl")}>{player.rank !== null ? `${player.rank}위` : (player.hasForfeited ? '기권' : '')}</td>
+                                                        <td className={cn("py-0.5 px-1 align-middle font-bold text-yellow-400 border-r border-gray-800", player.hasForfeited ? "text-xs" : "text-xl")}>{player.hasForfeited ? (() => {
+    // 기권 타입을 로그에서 추출
+    const logs = playerScoreLogs[player.id] || [];
+    const forfeitType = getForfeitTypeFromLogs(logs);
+    if (forfeitType === 'absent') return '불참';
+    if (forfeitType === 'disqualified') return '실격';
+    return '기권';
+  })() : (player.hasAnyScore ? player.totalScore : '-')}</td>
+                                                        <td className={cn("py-0.5 px-1 align-middle font-bold", player.hasForfeited ? "text-xs" : "text-xl")}>{player.rank !== null ? `${player.rank}위` : (player.hasForfeited ? (() => {
+    // 기권 타입을 로그에서 추출
+    const logs = playerScoreLogs[player.id] || [];
+    const forfeitType = getForfeitTypeFromLogs(logs);
+    if (forfeitType === 'absent') return '불참';
+    if (forfeitType === 'disqualified') return '실격';
+    return '기권';
+  })() : '')}</td>
                                                     </tr>
                                                 )}
                                             </React.Fragment>

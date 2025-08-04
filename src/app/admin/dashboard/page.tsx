@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { Download, Filter } from 'lucide-react';
+import { Download, Filter, Printer } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import * as XLSX from 'xlsx-js-style';
 import { db } from '@/lib/firebase';
@@ -140,6 +140,18 @@ export default function AdminDashboard() {
     // 점수 초기화 모달 상태
     const [showResetConfirm, setShowResetConfirm] = useState(false);
 
+    // 인쇄 모달 상태
+    const [printModal, setPrintModal] = useState({
+        open: false,
+        orientation: 'portrait' as 'portrait' | 'landscape',
+        paperSize: 'A4' as 'A4' | 'A3',
+        selectedGroups: [] as string[],
+        showAllGroups: true
+    });
+
+    // 대회명 상태
+    const [tournamentName, setTournamentName] = useState('골프 대회');
+
     // 기권 처리 모달 상태
     // const [forfeitModal, setForfeitModal] = useState<{ open: boolean, player: any | null }>({ open: false, player: null });
 
@@ -183,6 +195,313 @@ export default function AdminDashboard() {
         } catch (e: any) {
             toast({ title: '보관 실패', description: e?.message || '알 수 없는 오류', variant: 'destructive' });
         }
+    };
+
+    // 인쇄 기능
+    const handlePrint = () => {
+        // 현재 선택된 그룹에 따라 인쇄할 그룹 설정
+        const groupsToPrint = filterGroup === 'all' ? allGroupsList : [filterGroup];
+        setPrintModal({
+            open: true,
+            orientation: 'portrait',
+            paperSize: 'A4',
+            selectedGroups: groupsToPrint,
+            showAllGroups: filterGroup === 'all'
+        });
+    };
+
+    // 인쇄 HTML 생성 함수
+    const generatePrintHTML = () => {
+        const groupsToPrint = printModal.showAllGroups ? allGroupsList : printModal.selectedGroups;
+        let printContent = '';
+
+        // CSS 스타일
+        const styles = `
+            <style>
+                @media print {
+                    @page {
+                        size: ${printModal.paperSize} ${printModal.orientation};
+                        margin: 1cm;
+                    }
+                }
+                body {
+                    font-family: 'Arial', sans-serif;
+                    margin: 0;
+                    padding: 20px;
+                }
+                .print-header {
+                    background: linear-gradient(135deg, #1e3a8a, #3b82f6, #60a5fa);
+                    color: white;
+                    padding: 20px;
+                    text-align: center;
+                    margin-bottom: 30px;
+                    border-radius: 8px;
+                }
+                .print-header h1 {
+                    margin: 0;
+                    font-size: 28px;
+                    font-weight: bold;
+                }
+                .print-header p {
+                    margin: 5px 0 0 0;
+                    font-size: 16px;
+                    opacity: 0.9;
+                }
+                .group-section {
+                    page-break-inside: avoid;
+                    margin-bottom: 40px;
+                }
+                .group-title {
+                    background: #f8fafc;
+                    color: #1e293b;
+                    padding: 15px;
+                    font-size: 20px;
+                    font-weight: bold;
+                    border-left: 4px solid #3b82f6;
+                    margin-bottom: 20px;
+                }
+                .score-table {
+                    width: 100%;
+                    border-collapse: collapse;
+                    margin-bottom: 20px;
+                    font-size: 12px;
+                    table-layout: fixed;
+                }
+                .score-table th {
+                    background: #e2e8f0;
+                    color: #1e293b;
+                    padding: 8px 4px;
+                    border: 1px solid #cbd5e1;
+                    text-align: center;
+                    font-weight: bold;
+                    font-size: 11px;
+                    white-space: nowrap;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                }
+                .score-table td {
+                    padding: 6px 4px;
+                    border: 1px solid #cbd5e1;
+                    text-align: center;
+                    vertical-align: middle;
+                    white-space: nowrap;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                }
+                .rank-cell {
+                    font-weight: bold;
+                    font-size: 14px;
+                    color: #1e40af;
+                }
+                .player-name {
+                    font-weight: bold;
+                    color: #1e293b;
+                }
+                .affiliation {
+                    color: #64748b;
+                    font-size: 11px;
+                }
+                .course-name {
+                    font-weight: bold;
+                    color: #059669;
+                }
+                .hole-score {
+                    font-family: 'Courier New', monospace;
+                    font-weight: bold;
+                }
+                .course-total {
+                    font-weight: bold;
+                    color: #dc2626;
+                }
+                .total-score {
+                    font-weight: bold;
+                    font-size: 16px;
+                    color: #1e40af;
+                }
+                .forfeit {
+                    color: #dc2626;
+                    font-weight: bold;
+                }
+                .page-break {
+                    page-break-before: always;
+                }
+                .print-footer {
+                    margin-top: 30px;
+                    text-align: center;
+                    color: #64748b;
+                    font-size: 12px;
+                    border-top: 1px solid #e2e8f0;
+                    padding-top: 10px;
+                }
+                @media print {
+                    .no-print { display: none; }
+                }
+            </style>
+        `;
+
+        // 헤더
+        const header = `
+            <div class="print-header">
+                <h1>🏌️‍♂️ ${tournamentName} 점수표</h1>
+                <p>인쇄일시: ${new Date().toLocaleString('ko-KR')}</p>
+            </div>
+        `;
+
+        // 각 그룹별 점수표 생성
+        groupsToPrint.forEach((groupName, groupIndex) => {
+            const groupPlayers = finalDataByGroup[groupName];
+            if (!groupPlayers || groupPlayers.length === 0) return;
+
+            // 그룹 섹션 시작 (첫 번째 그룹이 아니면 페이지 나누기)
+            if (groupIndex > 0) {
+                printContent += '<div class="page-break"></div>';
+            }
+
+            printContent += `
+                <div class="group-section">
+                    <div class="group-title">📊 ${groupName} 그룹</div>
+                    <table class="score-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 8%">순위</th>
+                                <th style="width: 7%">조</th>
+                                <th style="width: 15%">선수명(팀명)</th>
+                                <th style="width: 10%">소속</th>
+                                <th style="width: 7%">코스</th>
+                                <th style="width: 5%">1</th>
+                                <th style="width: 5%">2</th>
+                                <th style="width: 5%">3</th>
+                                <th style="width: 5%">4</th>
+                                <th style="width: 5%">5</th>
+                                <th style="width: 5%">6</th>
+                                <th style="width: 5%">7</th>
+                                <th style="width: 5%">8</th>
+                                <th style="width: 5%">9</th>
+                                <th style="width: 6%">합계</th>
+                                <th style="width: 7%">총타수</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
+
+            groupPlayers.forEach((player) => {
+                if (player.assignedCourses.length > 0) {
+                    player.assignedCourses.forEach((course: any, courseIndex: number) => {
+                        const courseData = player.coursesData[course.id];
+                        const holeScores = courseData?.holeScores || Array(9).fill(null);
+                        
+                        printContent += `
+                            <tr>
+                                ${courseIndex === 0 ? `
+                                    <td rowspan="${player.assignedCourses.length}" class="rank-cell">
+                                        ${player.rank !== null ? `${player.rank}위` : (player.hasForfeited ? '기권' : '')}
+                                    </td>
+                                    <td rowspan="${player.assignedCourses.length}">${player.jo}</td>
+                                    <td rowspan="${player.assignedCourses.length}" class="player-name">${player.name}</td>
+                                    <td rowspan="${player.assignedCourses.length}" class="affiliation">${player.affiliation}</td>
+                                ` : ''}
+                                <td class="course-name">${courseData?.courseName || course.name}</td>
+                        `;
+
+                        // 홀별 점수
+                        holeScores.forEach((score: number | null) => {
+                            const scoreText = score !== null ? score.toString() : '-';
+                            printContent += `<td class="hole-score">${scoreText}</td>`;
+                        });
+
+                        // 코스 합계
+                        const courseTotal = courseData?.courseTotal || 0;
+                        printContent += `<td class="course-total">${courseTotal}</td>`;
+
+                        // 총타수 (첫 번째 코스에서만 표시)
+                        if (courseIndex === 0) {
+                            const totalText = player.hasForfeited ? '기권' : (player.hasAnyScore ? player.totalScore : '-');
+                            printContent += `<td rowspan="${player.assignedCourses.length}" class="total-score">${totalText}</td>`;
+                        }
+
+                        printContent += '</tr>';
+                    });
+                } else {
+                    printContent += `
+                        <tr>
+                            <td class="rank-cell">${player.rank !== null ? `${player.rank}위` : (player.hasForfeited ? '기권' : '')}</td>
+                            <td>${player.jo}</td>
+                            <td class="player-name">${player.name}</td>
+                            <td class="affiliation">${player.affiliation}</td>
+                            <td colspan="11" style="text-align: center; color: #64748b;">배정된 코스 없음</td>
+                            <td class="total-score">${player.hasForfeited ? '기권' : (player.hasAnyScore ? player.totalScore : '-')}</td>
+                        </tr>
+                    `;
+                }
+            });
+
+            printContent += `
+                        </tbody>
+                    </table>
+                </div>
+            `;
+        });
+
+        // 푸터
+        const footer = `
+            <div class="print-footer">
+                <p>🏆 ParkScore 시스템으로 생성된 공식 점수표입니다.</p>
+            </div>
+        `;
+
+        // 전체 HTML 구성
+        return `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <title>골프 대회 점수표</title>
+                ${styles}
+            </head>
+            <body>
+                ${header}
+                ${printContent}
+                ${footer}
+            </body>
+            </html>
+        `;
+    };
+
+    // 인쇄 실행
+    const executePrint = () => {
+        const printWindow = window.open('', '_blank');
+        if (!printWindow) {
+            toast({ title: '인쇄 실패', description: '팝업이 차단되었습니다. 팝업 차단을 해제해주세요.', variant: 'destructive' });
+            return;
+        }
+
+        const fullHtml = generatePrintHTML();
+        printWindow.document.write(fullHtml);
+        printWindow.document.close();
+        printWindow.focus();
+
+        // 인쇄 다이얼로그 열기
+        setTimeout(() => {
+            printWindow.print();
+            printWindow.close();
+        }, 500);
+
+        setPrintModal({ ...printModal, open: false });
+        toast({ title: '인쇄 준비 완료', description: '인쇄 다이얼로그가 열립니다.' });
+    };
+
+    // 미리보기 실행
+    const showPreview = () => {
+        const previewWindow = window.open('', '_blank', 'width=1200,height=800,scrollbars=yes');
+        if (!previewWindow) {
+            toast({ title: '미리보기 실패', description: '팝업이 차단되었습니다. 팝업 차단을 해제해주세요.', variant: 'destructive' });
+            return;
+        }
+
+        const fullHtml = generatePrintHTML();
+        previewWindow.document.write(fullHtml);
+        previewWindow.document.close();
+        previewWindow.focus();
     };
 
     // 점수 초기화 기능
@@ -408,6 +727,7 @@ export default function AdminDashboard() {
         const playersRef = ref(db, 'players');
         const scoresRef = ref(db, 'scores');
         const tournamentRef = ref(db, 'tournaments/current');
+        const tournamentNameRef = ref(db, 'tournaments/current/name');
         const individualSuddenDeathRef = ref(db, 'tournaments/current/suddenDeath/individual');
         const teamSuddenDeathRef = ref(db, 'tournaments/current/suddenDeath/team');
 
@@ -419,6 +739,10 @@ export default function AdminDashboard() {
             setCourses(data.courses || {});
             setGroupsData(data.groups || {});
         });
+        const unsubTournamentName = onValue(tournamentNameRef, snap => {
+            const name = snap.val();
+            setTournamentName(name || '골프 대회');
+        });
         const unsubIndividualSuddenDeath = onValue(individualSuddenDeathRef, snap => setIndividualSuddenDeathData(snap.val()));
         const unsubTeamSuddenDeath = onValue(teamSuddenDeathRef, snap => setTeamSuddenDeathData(snap.val()));
         
@@ -426,6 +750,7 @@ export default function AdminDashboard() {
             unsubPlayers();
             unsubScores();
             unsubTournament();
+            unsubTournamentName();
             unsubIndividualSuddenDeath();
             unsubTeamSuddenDeath();
         }
@@ -1040,8 +1365,12 @@ export default function AdminDashboard() {
   <Download className="mr-2 h-4 w-4" />
   엑셀로 다운로드
 </Button>
-<Button className="ml-2 bg-blue-600 hover:bg-blue-700 text-white min-w-[120px] px-4 py-2 font-bold" onClick={handleArchiveScores}>
+    <Button className="ml-2 bg-blue-600 hover:bg-blue-700 text-white min-w-[120px] px-4 py-2 font-bold" onClick={handleArchiveScores}>
   기록 보관하기
+</Button>
+<Button className="ml-2 bg-gray-600 hover:bg-gray-700 text-white min-w-[120px] px-4 py-2 font-bold" onClick={handlePrint}>
+  <Printer className="mr-2 h-4 w-4" />
+  인쇄하기
 </Button>
 <Button className="ml-2 bg-red-600 hover:bg-red-700 text-white min-w-[120px] px-4 py-2 font-bold" onClick={() => setShowResetConfirm(true)}>
   점수 초기화
@@ -1155,7 +1484,21 @@ export default function AdminDashboard() {
                                                     >
                                                         {courseIndex === 0 && (
                                                             <>
-                                                                <TableCell rowSpan={player.assignedCourses.length || 1} className="text-center align-middle font-bold text-lg px-2 py-1 border-r">{player.rank !== null ? `${player.rank}위` : (player.hasForfeited ? '기권' : '')}</TableCell>
+                                                                <TableCell rowSpan={player.assignedCourses.length || 1} className="text-center align-middle font-bold text-lg px-2 py-1 border-r">{player.rank !== null ? `${player.rank}위` : (player.hasForfeited ? (() => {
+    // 기권 타입을 로그에서 추출
+    const logs = playerScoreLogs[player.id] || [];
+    const forfeitLogs = logs
+        .filter(l => l.newValue === 0 && l.modifiedByType === 'judge' && l.comment)
+        .sort((a, b) => b.modifiedAt - a.modifiedAt); // 최신순 정렬
+    
+    if (forfeitLogs.length > 0) {
+      const latestLog = forfeitLogs[0];
+      if (latestLog.comment?.includes('불참')) return '불참';
+      if (latestLog.comment?.includes('실격')) return '실격';
+      return '기권';
+    }
+    return '기권';
+  })() : '')}</TableCell>
                                                                 <TableCell rowSpan={player.assignedCourses.length || 1} className="text-center align-middle font-medium px-2 py-1 border-r">{player.jo}</TableCell>
                                                                 <TableCell rowSpan={player.assignedCourses.length || 1} className="align-middle font-semibold px-2 py-1 border-r text-center whitespace-nowrap" style={{minWidth:'90px',maxWidth:'260px',flexGrow:1}}>{player.name}</TableCell>
                                                                 <TableCell rowSpan={player.assignedCourses.length || 1} className="align-middle text-muted-foreground px-2 py-1 border-r text-center whitespace-nowrap" style={{minWidth:'80px',maxWidth:'200px',flexGrow:1}}>{player.affiliation}</TableCell>
@@ -1373,7 +1716,24 @@ export default function AdminDashboard() {
         </span>
       );
     } else if (player.hasForfeited) {
-      courseSumElem = '기권';
+      // 기권 타입을 로그에서 추출
+      const logs = playerScoreLogs[player.id] || [];
+      const forfeitLogs = logs
+          .filter(l => l.newValue === 0 && l.modifiedByType === 'judge' && l.comment)
+          .sort((a, b) => b.modifiedAt - a.modifiedAt); // 최신순 정렬
+      
+      if (forfeitLogs.length > 0) {
+        const latestLog = forfeitLogs[0];
+        if (latestLog.comment?.includes('불참')) {
+          courseSumElem = '불참';
+        } else if (latestLog.comment?.includes('실격')) {
+          courseSumElem = '실격';
+        } else {
+          courseSumElem = '기권';
+        }
+      } else {
+        courseSumElem = '기권';
+      }
     }
     return courseSumElem;
   })()}
@@ -1381,74 +1741,131 @@ export default function AdminDashboard() {
 
                                                         {courseIndex === 0 && (
                                                             <TableCell rowSpan={player.assignedCourses.length || 1} className="text-center align-middle font-bold text-primary text-lg px-2 py-1">
-                                                              {player.hasForfeited ? (
-                                                                <TooltipProvider delayDuration={0}>
-                                                                  <Tooltip>
-                                                                    <TooltipTrigger asChild>
-                                                                      <span className="text-red-600 font-bold cursor-pointer">기권</span>
-                                                                    </TooltipTrigger>
-                                                                    <TooltipContent side="top" className="whitespace-pre-line">
-                                                                      {(() => {
-                                                                        const logs = playerScoreLogs[player.id] || [];
-                                                                        // '심판 직접 기권' 로그가 있으면 그 로그만 표시, 없으면 기존 방식
-                                                                        const directForfeitLog = logs.find(l => l.newValue === 0 && l.modifiedByType === 'judge' && l.comment && l.comment.includes('심판 직접 기권'));
-                                                                        let forfeitLog = directForfeitLog;
-                                                                        if (!forfeitLog) {
-                                                                          // 없으면 기존 방식(심판페이지에서 기권 처리 중 가장 오래된 것)
-                                                                          const forfeitLogs = logs
-                                                                            .filter(l => l.newValue === 0 && l.modifiedByType === 'judge' && l.comment && l.comment.includes('심판페이지에서 기권 처리'))
-                                                                            .sort((a, b) => a.modifiedAt - b.modifiedAt);
-                                                                          forfeitLog = forfeitLogs[0];
-                                                                        }
-                                                                        if (forfeitLog) {
-                                                                          // comment 예시: "심판 직접 기권 (코스: 1구장 A코스, 홀: 8)"
-                                                                          let displayComment = '';
-                                                                          const match = forfeitLog.comment && forfeitLog.comment.match(/코스: ([^,]+), 홀: (\d+)/);
-                                                                          if (match) {
-                                                                            const courseName = match[1];
-                                                                            const holeNum = match[2];
-                                                                            displayComment = `${courseName}, ${holeNum}번홀 심판이 기권처리`;
-                                                                          } else {
-                                                                            displayComment = forfeitLog.comment || '';
-                                                                          }
-                                                                          return (
-                                                                            <div>
-                                                                              <div><b>기권 처리자:</b> 심판</div>
-                                                                              <div>{forfeitLog.modifiedAt ? new Date(forfeitLog.modifiedAt).toLocaleString('ko-KR') : ''}</div>
-                                                                              <div>{displayComment}</div>
-                                                                            </div>
-                                                                          );
-                                                                        } else {
-                                                                          return <div>심판페이지에서 기권 처리 내역이 없습니다.</div>;
-                                                                        }
-                                                                      })()}
-                                                                    </TooltipContent>
-                                                                  </Tooltip>
-                                                                </TooltipProvider>
-                                                              ) : (
-                                                                player.hasAnyScore ? (
-                                                                  <span>
-                                                                    {isValidNumber(player.totalScore) ? player.totalScore : '-'}
-                                                                    {isValidNumber(player.plusMinus) && (
-                                                                      <span className={
-                                                                        'ml-1 align-middle text-xs ' + (player.plusMinus < 0 ? 'text-blue-400' : player.plusMinus > 0 ? 'text-red-400' : 'text-gray-400')
-                                                                      } style={{ fontSize: '0.7em', fontWeight: 600 }}>
-                                                                        {player.plusMinus === 0 ? 'E' : (player.plusMinus > 0 ? `+${player.plusMinus}` : player.plusMinus)}
-                                                                      </span>
-                                                                    )}
-                                                                  </span>
-                                                                ) : '-')}
+                                                                                                                             {player.hasForfeited ? (() => {
+    // 기권 타입을 로그에서 추출
+    const logs = playerScoreLogs[player.id] || [];
+    const forfeitLogs = logs
+        .filter(l => l.newValue === 0 && l.modifiedByType === 'judge' && l.comment)
+        .sort((a, b) => b.modifiedAt - a.modifiedAt); // 최신순 정렬
+    
+    let forfeitType = '기권';
+    if (forfeitLogs.length > 0) {
+      const latestLog = forfeitLogs[0];
+      if (latestLog.comment?.includes('불참')) forfeitType = '불참';
+      else if (latestLog.comment?.includes('실격')) forfeitType = '실격';
+      else forfeitType = '기권';
+    }
+
+    return (
+      <TooltipProvider delayDuration={0}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="text-red-600 font-bold cursor-pointer">{forfeitType}</span>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="whitespace-pre-line">
+            {(() => {
+              const logs = playerScoreLogs[player.id] || [];
+              // '심판 직접 기권/불참/실격' 로그가 있으면 그 로그만 표시, 없으면 기존 방식
+              const directForfeitLog = logs.find(l => l.newValue === 0 && l.modifiedByType === 'judge' && l.comment && (l.comment.includes('심판 직접 기권') || l.comment.includes('심판 직접 불참') || l.comment.includes('심판 직접 실격')));
+              let forfeitLog = directForfeitLog;
+              if (!forfeitLog) {
+                // 없으면 기존 방식(심판페이지에서 기권/불참/실격 처리 중 가장 오래된 것)
+                const forfeitLogs = logs
+                  .filter(l => l.newValue === 0 && l.modifiedByType === 'judge' && l.comment && (l.comment.includes('심판페이지에서 기권 처리') || l.comment.includes('심판페이지에서 불참 처리') || l.comment.includes('심판페이지에서 실격 처리')))
+                  .sort((a, b) => a.modifiedAt - b.modifiedAt);
+                forfeitLog = forfeitLogs[0];
+              }
+              if (forfeitLog) {
+                // comment 예시: "심판 직접 기권 (코스: 1구장 A코스, 홀: 8)"
+                let displayComment = '';
+                const match = forfeitLog.comment && forfeitLog.comment.match(/코스: ([^,]+), 홀: (\d+)/);
+                if (match) {
+                  const courseName = match[1];
+                  const holeNum = match[2];
+                  displayComment = `${courseName}, ${holeNum}번홀 심판이 ${forfeitType}처리`;
+                } else {
+                  displayComment = forfeitLog.comment || '';
+                }
+                return (
+                  <div>
+                    <div><b>{forfeitType} 처리자:</b> 심판</div>
+                    <div>{forfeitLog.modifiedAt ? new Date(forfeitLog.modifiedAt).toLocaleString('ko-KR') : ''}</div>
+                    <div>{displayComment}</div>
+                  </div>
+                );
+              } else {
+                return <div>심판페이지에서 {forfeitType} 처리 내역이 없습니다.</div>;
+              }
+            })()}
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  })() : player.hasAnyScore ? (
+    <span>
+      {isValidNumber(player.totalScore) ? player.totalScore : '-'}
+      {isValidNumber(player.plusMinus) && (
+        <span
+          className={
+            'ml-1 align-middle text-xs ' +
+            (player.plusMinus < 0
+              ? 'text-blue-400'
+              : player.plusMinus > 0
+              ? 'text-red-400'
+              : 'text-gray-400')
+          }
+          style={{ fontSize: '0.7em', fontWeight: 600 }}
+        >
+          {player.plusMinus === 0
+            ? 'E'
+            : player.plusMinus > 0
+            ? `+${player.plusMinus}`
+            : player.plusMinus}
+        </span>
+      )}
+    </span>
+  ) : (
+    '-'
+  )}
                                                             </TableCell>
                                                         )}
                                                     </TableRow>
                                                 )) : (
                                                     <TableRow key={`${player.id}-no-course`} className="text-base text-muted-foreground">
-                                                         <TableCell className="text-center align-middle font-bold text-lg px-2 py-1 border-r">{player.rank !== null ? `${player.rank}위` : (player.hasForfeited ? '기권' : '-')}</TableCell>
+                                                         <TableCell className="text-center align-middle font-bold text-lg px-2 py-1 border-r">{player.rank !== null ? `${player.rank}위` : (player.hasForfeited ? (() => {
+    // 기권 타입을 로그에서 추출
+    const logs = playerScoreLogs[player.id] || [];
+    const forfeitLogs = logs
+        .filter(l => l.newValue === 0 && l.modifiedByType === 'judge' && l.comment)
+        .sort((a, b) => b.modifiedAt - a.modifiedAt); // 최신순 정렬
+    
+    if (forfeitLogs.length > 0) {
+      const latestLog = forfeitLogs[0];
+      if (latestLog.comment?.includes('불참')) return '불참';
+      if (latestLog.comment?.includes('실격')) return '실격';
+      return '기권';
+    }
+    return '기권';
+  })() : '-')}</TableCell>
                                                          <TableCell className="text-center align-middle font-medium px-2 py-1 border-r">{player.jo}</TableCell>
                                                          <TableCell className="align-middle font-semibold px-2 py-1 border-r text-center">{player.name}</TableCell>
                                                          <TableCell className="align-middle px-2 py-1 border-r text-center">{player.affiliation}</TableCell>
                                                          <TableCell colSpan={11} className="text-center px-2 py-1 border-r">이 그룹에 배정된 코스가 없습니다.</TableCell>
-                                                         <TableCell className="text-center align-middle font-bold text-primary text-lg px-2 py-1">{player.hasForfeited ? '기권' : (player.hasAnyScore ? player.totalScore : '-')}</TableCell>
+                                                         <TableCell className="text-center align-middle font-bold text-primary text-lg px-2 py-1">{player.hasForfeited ? (() => {
+    // 기권 타입을 로그에서 추출
+    const logs = playerScoreLogs[player.id] || [];
+    const forfeitLogs = logs
+        .filter(l => l.newValue === 0 && l.modifiedByType === 'judge' && l.comment)
+        .sort((a, b) => b.modifiedAt - a.modifiedAt); // 최신순 정렬
+    
+    if (forfeitLogs.length > 0) {
+      const latestLog = forfeitLogs[0];
+      if (latestLog.comment?.includes('불참')) return '불참';
+      if (latestLog.comment?.includes('실격')) return '실격';
+      return '기권';
+    }
+    return '기권';
+  })() : (player.hasAnyScore ? player.totalScore : '-')}</TableCell>
                                                     </TableRow>
                                                 )}
                                             </React.Fragment>
@@ -1461,6 +1878,150 @@ export default function AdminDashboard() {
                 )
             })}
         </div>
+        {/* 인쇄 모달 */}
+        <Dialog open={printModal.open} onOpenChange={open => setPrintModal({ ...printModal, open })}>
+            <DialogContent className="max-w-md">
+                <DialogHeader>
+                    <DialogTitle>📄 점수표 인쇄 설정</DialogTitle>
+                    <DialogDescription>
+                        인쇄할 점수표의 설정을 선택해주세요.
+                    </DialogDescription>
+                </DialogHeader>
+                
+                <div className="space-y-4">
+                    {/* 인쇄 방향 선택 */}
+                    <div>
+                        <label className="text-sm font-medium mb-2 block">인쇄 방향</label>
+                        <div className="flex gap-2">
+                            <Button
+                                variant={printModal.orientation === 'portrait' ? 'default' : 'outline'}
+                                onClick={() => setPrintModal({ ...printModal, orientation: 'portrait' })}
+                                className="flex-1"
+                            >
+                                세로 인쇄
+                            </Button>
+                            <Button
+                                variant={printModal.orientation === 'landscape' ? 'default' : 'outline'}
+                                onClick={() => setPrintModal({ ...printModal, orientation: 'landscape' })}
+                                className="flex-1"
+                            >
+                                가로 인쇄
+                            </Button>
+                        </div>
+                    </div>
+
+                    {/* 용지 크기 선택 */}
+                    <div>
+                        <label className="text-sm font-medium mb-2 block">용지 크기</label>
+                        <div className="flex gap-2">
+                            <Button
+                                variant={printModal.paperSize === 'A4' ? 'default' : 'outline'}
+                                onClick={() => setPrintModal({ ...printModal, paperSize: 'A4' })}
+                                className="flex-1"
+                            >
+                                A4
+                            </Button>
+                            <Button
+                                variant={printModal.paperSize === 'A3' ? 'default' : 'outline'}
+                                onClick={() => setPrintModal({ ...printModal, paperSize: 'A3' })}
+                                className="flex-1"
+                            >
+                                A3
+                            </Button>
+                        </div>
+                    </div>
+
+                    {/* 인쇄할 그룹 선택 */}
+                    <div>
+                        <label className="text-sm font-medium mb-2 block">인쇄할 그룹</label>
+                        <div className="space-y-2 max-h-40 overflow-y-auto border rounded p-2">
+                            <div className="flex items-center">
+                                <input
+                                    type="checkbox"
+                                    checked={printModal.showAllGroups}
+                                    onChange={(e) => {
+                                        if (e.target.checked) {
+                                            setPrintModal({
+                                                ...printModal,
+                                                showAllGroups: true,
+                                                selectedGroups: allGroupsList
+                                            });
+                                        } else {
+                                            setPrintModal({
+                                                ...printModal,
+                                                showAllGroups: false,
+                                                selectedGroups: []
+                                            });
+                                        }
+                                    }}
+                                    className="mr-2"
+                                />
+                                <span className="text-sm font-bold">모든 그룹</span>
+                                <span className="text-xs text-muted-foreground ml-2">({allGroupsList.length}개 그룹)</span>
+                            </div>
+                            {!printModal.showAllGroups && (
+                                <div className="ml-4 space-y-1">
+                                    {allGroupsList.map((groupName) => (
+                                        <div key={groupName} className="flex items-center">
+                                            <input
+                                                type="checkbox"
+                                                checked={printModal.selectedGroups.includes(groupName)}
+                                                onChange={(e) => {
+                                                    if (e.target.checked) {
+                                                        setPrintModal({
+                                                            ...printModal,
+                                                            selectedGroups: [...printModal.selectedGroups, groupName]
+                                                        });
+                                                    } else {
+                                                        setPrintModal({
+                                                            ...printModal,
+                                                            selectedGroups: printModal.selectedGroups.filter(g => g !== groupName)
+                                                        });
+                                                    }
+                                                }}
+                                                className="mr-2"
+                                            />
+                                            <span className="text-sm">{groupName}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                            {printModal.showAllGroups 
+                                ? `모든 그룹(${allGroupsList.length}개)이 선택되었습니다. 각 그룹은 별도 페이지로 인쇄됩니다.`
+                                : printModal.selectedGroups.length > 0
+                                ? `${printModal.selectedGroups.length}개 그룹이 선택되었습니다. 각 그룹은 별도 페이지로 인쇄됩니다.`
+                                : '인쇄할 그룹을 선택해주세요.'
+                            }
+                        </p>
+                    </div>
+                </div>
+
+                <DialogFooter>
+                    <Button variant="outline" onClick={() => setPrintModal({ ...printModal, open: false })}>
+                        취소
+                    </Button>
+                    <Button 
+                        variant="outline" 
+                        onClick={showPreview} 
+                        className="bg-green-600 hover:bg-green-700 text-white"
+                        disabled={!printModal.showAllGroups && printModal.selectedGroups.length === 0}
+                    >
+                        👁️ 미리보기
+                    </Button>
+                    <Button 
+                        onClick={executePrint} 
+                        className="bg-blue-600 hover:bg-blue-700"
+                        disabled={!printModal.showAllGroups && printModal.selectedGroups.length === 0}
+                    >
+                        <Printer className="mr-2 h-4 w-4" />
+                        인쇄하기
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+
         {/* 점수 누락 현황 모달 */}
         <Dialog open={scoreCheckModal.open} onOpenChange={open => setScoreCheckModal({ ...scoreCheckModal, open })}>
             <DialogContent>
