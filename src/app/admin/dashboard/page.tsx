@@ -288,6 +288,48 @@ export default function AdminDashboard() {
                     overflow: hidden;
                     text-overflow: ellipsis;
                 }
+                /* 반응형 컬럼 스타일 */
+                .responsive-column {
+                    min-width: 0;
+                    max-width: none;
+                    width: auto;
+                    white-space: nowrap;
+                    overflow: visible;
+                    text-overflow: clip;
+                    padding: 6px 8px;
+                }
+                /* 고정 너비 컬럼 스타일 */
+                .fixed-column {
+                    width: 5%;
+                    min-width: 30px;
+                    max-width: 40px;
+                    padding: 6px 4px;
+                }
+                /* 테이블 레이아웃 조정 */
+                .score-table {
+                    table-layout: auto;
+                    width: 100%;
+                }
+                /* 순위 컬럼 최소 너비 */
+                .rank-cell.responsive-column {
+                    min-width: 50px;
+                }
+                /* 조 컬럼 최소 너비 */
+                .responsive-column:nth-child(2) {
+                    min-width: 30px;
+                }
+                /* 선수명 컬럼 최소 너비 */
+                .player-name.responsive-column {
+                    min-width: 120px;
+                }
+                /* 소속 컬럼 최소 너비 */
+                .affiliation.responsive-column {
+                    min-width: 80px;
+                }
+                /* 코스 컬럼 최소 너비 */
+                .course-name.responsive-column {
+                    min-width: 100px;
+                }
                 .rank-cell {
                     font-weight: bold;
                     font-size: 14px;
@@ -342,7 +384,7 @@ export default function AdminDashboard() {
         // 헤더
         const header = `
             <div class="print-header">
-                <h1>🏌️‍♂️ ${tournamentName} 점수표</h1>
+                <h1>🏌️‍♂️ ${tournamentName}</h1>
                 <p>인쇄일시: ${new Date().toLocaleString('ko-KR')}</p>
             </div>
         `;
@@ -363,22 +405,22 @@ export default function AdminDashboard() {
                     <table class="score-table">
                         <thead>
                             <tr>
-                                <th style="width: 8%">순위</th>
-                                <th style="width: 7%">조</th>
-                                <th style="width: 15%">선수명(팀명)</th>
-                                <th style="width: 10%">소속</th>
-                                <th style="width: 7%">코스</th>
-                                <th style="width: 5%">1</th>
-                                <th style="width: 5%">2</th>
-                                <th style="width: 5%">3</th>
-                                <th style="width: 5%">4</th>
-                                <th style="width: 5%">5</th>
-                                <th style="width: 5%">6</th>
-                                <th style="width: 5%">7</th>
-                                <th style="width: 5%">8</th>
-                                <th style="width: 5%">9</th>
-                                <th style="width: 6%">합계</th>
-                                <th style="width: 7%">총타수</th>
+                                <th class="responsive-column">순위</th>
+                                <th class="responsive-column">조</th>
+                                <th class="responsive-column">선수명(팀명)</th>
+                                <th class="responsive-column">소속</th>
+                                <th class="responsive-column">코스</th>
+                                <th class="fixed-column">1</th>
+                                <th class="fixed-column">2</th>
+                                <th class="fixed-column">3</th>
+                                <th class="fixed-column">4</th>
+                                <th class="fixed-column">5</th>
+                                <th class="fixed-column">6</th>
+                                <th class="fixed-column">7</th>
+                                <th class="fixed-column">8</th>
+                                <th class="fixed-column">9</th>
+                                <th class="fixed-column">합계</th>
+                                <th class="fixed-column">총타수</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -393,30 +435,30 @@ export default function AdminDashboard() {
                         printContent += `
                             <tr>
                                 ${courseIndex === 0 ? `
-                                    <td rowspan="${player.assignedCourses.length}" class="rank-cell">
+                                    <td rowspan="${player.assignedCourses.length}" class="rank-cell responsive-column">
                                         ${player.rank !== null ? `${player.rank}위` : (player.hasForfeited ? '기권' : '')}
                                     </td>
-                                    <td rowspan="${player.assignedCourses.length}">${player.jo}</td>
-                                    <td rowspan="${player.assignedCourses.length}" class="player-name">${player.name}</td>
-                                    <td rowspan="${player.assignedCourses.length}" class="affiliation">${player.affiliation}</td>
+                                    <td rowspan="${player.assignedCourses.length}" class="responsive-column">${player.jo}</td>
+                                    <td rowspan="${player.assignedCourses.length}" class="player-name responsive-column">${player.name}</td>
+                                    <td rowspan="${player.assignedCourses.length}" class="affiliation responsive-column">${player.affiliation}</td>
                                 ` : ''}
-                                <td class="course-name">${courseData?.courseName || course.name}</td>
+                                <td class="course-name responsive-column">${courseData?.courseName || course.name}</td>
                         `;
 
                         // 홀별 점수
                         holeScores.forEach((score: number | null) => {
                             const scoreText = score !== null ? score.toString() : '-';
-                            printContent += `<td class="hole-score">${scoreText}</td>`;
+                            printContent += `<td class="hole-score fixed-column">${scoreText}</td>`;
                         });
 
                         // 코스 합계
                         const courseTotal = courseData?.courseTotal || 0;
-                        printContent += `<td class="course-total">${courseTotal}</td>`;
+                        printContent += `<td class="course-total fixed-column">${courseTotal}</td>`;
 
                         // 총타수 (첫 번째 코스에서만 표시)
                         if (courseIndex === 0) {
                             const totalText = player.hasForfeited ? '기권' : (player.hasAnyScore ? player.totalScore : '-');
-                            printContent += `<td rowspan="${player.assignedCourses.length}" class="total-score">${totalText}</td>`;
+                            printContent += `<td rowspan="${player.assignedCourses.length}" class="total-score fixed-column">${totalText}</td>`;
                         }
 
                         printContent += '</tr>';
@@ -424,12 +466,12 @@ export default function AdminDashboard() {
                 } else {
                     printContent += `
                         <tr>
-                            <td class="rank-cell">${player.rank !== null ? `${player.rank}위` : (player.hasForfeited ? '기권' : '')}</td>
-                            <td>${player.jo}</td>
-                            <td class="player-name">${player.name}</td>
-                            <td class="affiliation">${player.affiliation}</td>
-                            <td colspan="11" style="text-align: center; color: #64748b;">배정된 코스 없음</td>
-                            <td class="total-score">${player.hasForfeited ? '기권' : (player.hasAnyScore ? player.totalScore : '-')}</td>
+                            <td class="rank-cell responsive-column">${player.rank !== null ? `${player.rank}위` : (player.hasForfeited ? '기권' : '')}</td>
+                            <td class="responsive-column">${player.jo}</td>
+                            <td class="player-name responsive-column">${player.name}</td>
+                            <td class="affiliation responsive-column">${player.affiliation}</td>
+                            <td colspan="11" style="text-align: center; color: #64748b;" class="responsive-column">배정된 코스 없음</td>
+                            <td class="total-score fixed-column">${player.hasForfeited ? '기권' : (player.hasAnyScore ? player.totalScore : '-')}</td>
                         </tr>
                     `;
                 }
@@ -445,7 +487,7 @@ export default function AdminDashboard() {
         // 푸터
         const footer = `
             <div class="print-footer">
-                <p>🏆 ParkScore 시스템으로 생성된 공식 점수표입니다.</p>
+                <p>🏆 ${tournamentName} - ParkScore 시스템으로 생성된 공식 점수표입니다.</p>
             </div>
         `;
 
@@ -455,7 +497,7 @@ export default function AdminDashboard() {
             <html>
             <head>
                 <meta charset="UTF-8">
-                <title>골프 대회 점수표</title>
+                <title>${tournamentName}</title>
                 ${styles}
             </head>
             <body>
@@ -1210,7 +1252,7 @@ export default function AdminDashboard() {
             return;
         }
 
-        XLSX.writeFile(wb, `ParkScore_전체결과_${new Date().toISOString().slice(0,10)}.xlsx`);
+        XLSX.writeFile(wb, `${tournamentName}_전체결과_${new Date().toISOString().slice(0,10)}.xlsx`);
     };
 
     const [searchPlayer, setSearchPlayer] = useState('');

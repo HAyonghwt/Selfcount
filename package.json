@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:win": "set NODE_OPTIONS=--max-old-space-size=4096 && next dev",
     "dev:clean": "rimraf .next && npm run dev",
     "dev:fresh": "rimraf .next node_modules/.cache && npm run dev",
     "clean": "rimraf .next node_modules/.cache",

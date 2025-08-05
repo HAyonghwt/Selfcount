@@ -367,26 +367,42 @@ export default function RefereePage() {
         const storageKey = getLocalStorageScoresKey();
         const savedInterimScores = storageKey ? JSON.parse(localStorage.getItem(storageKey) || '{}') : {};
 
-        const newScoresState: { [key: string]: ScoreData } = {};
-        currentPlayers.forEach((player) => {
-            const existingScoreFromDb = allScores[player.id]?.[selectedCourse as string]?.[hole as string];
+        const initializeScores = async () => {
+            const newScoresState: { [key: string]: ScoreData } = {};
             
-            if (existingScoreFromDb !== undefined) {
-                newScoresState[player.id] = { score: Number(existingScoreFromDb), status: 'locked' };
-            } else {
-                const interimScore = savedInterimScores[player.id];
-                if (interimScore && interimScore.status === 'editing') {
+            for (const player of currentPlayers) {
+                const existingScoreFromDb = allScores[player.id]?.[selectedCourse as string]?.[hole as string];
+                
+                if (existingScoreFromDb !== undefined) {
+                    // 저장된 점수가 0점인 경우 forfeitType을 로그에서 추출
+                    let forfeitType: 'absent' | 'disqualified' | 'forfeit' | null = null;
+                    if (Number(existingScoreFromDb) === 0) {
+                        forfeitType = await getForfeitTypeFromLogs(player.id, selectedCourse as string, hole as string);
+                    }
+                    
                     newScoresState[player.id] = { 
-                        score: Number(interimScore.score), 
-                        status: 'editing',
-                        forfeitType: interimScore.forfeitType || null
+                        score: Number(existingScoreFromDb), 
+                        status: 'locked',
+                        forfeitType: forfeitType
                     };
                 } else {
-                    newScoresState[player.id] = { score: 1, status: 'editing', forfeitType: null };
+                    const interimScore = savedInterimScores[player.id];
+                    if (interimScore && interimScore.status === 'editing') {
+                        newScoresState[player.id] = { 
+                            score: Number(interimScore.score), 
+                            status: 'editing',
+                            forfeitType: interimScore.forfeitType || null
+                        };
+                    } else {
+                        newScoresState[player.id] = { score: 1, status: 'editing', forfeitType: null };
+                    }
                 }
             }
-        });
-        setScores(newScoresState);
+            
+            setScores(newScoresState);
+        };
+        
+        initializeScores();
         
     }, [view, selectedJo, selectedCourse, hole, allScores, currentPlayers]);
 
@@ -556,6 +572,41 @@ export default function RefereePage() {
 
     const getPlayerName = (player: Player) => player.type === 'team' ? `${player.p1_name}/${player.p2_name}` : player.name;
     const selectedCourseName = useMemo(() => courses.find(c => c.id.toString() === selectedCourse)?.name || '', [courses, selectedCourse]);
+    
+    // 기권 타입에 따른 표시 텍스트 반환 함수
+    const getForfeitDisplayText = (forfeitType: string | null | undefined) => {
+        switch (forfeitType) {
+            case 'absent': return '불참';
+            case 'disqualified': return '실격';
+            case 'forfeit': return '기권';
+            default: return '기권';
+        }
+    };
+    
+    // 로그에서 기권 타입을 추출하는 함수
+    const getForfeitTypeFromLogs = async (playerId: string, courseId: string, holeNumber: string) => {
+        try {
+            const { getPlayerScoreLogs } = await import('@/lib/scoreLogs');
+            const logs = await getPlayerScoreLogs(playerId);
+            
+            // 해당 홀의 기권 처리 로그 찾기
+            const forfeitLogs = logs
+                .filter(l => l.newValue === 0 && l.modifiedByType === 'judge' && l.comment)
+                .filter(l => l.comment?.includes(`코스: ${courseId}`) || l.comment?.includes(`홀: ${holeNumber}`))
+                .sort((a, b) => b.modifiedAt - a.modifiedAt); // 최신순 정렬
+            
+            if (forfeitLogs.length > 0) {
+                const latestLog = forfeitLogs[0];
+                if (latestLog.comment?.includes('불참')) return 'absent';
+                if (latestLog.comment?.includes('실격')) return 'disqualified';
+                if (latestLog.comment?.includes('기권')) return 'forfeit';
+            }
+            return null;
+        } catch (error) {
+            console.error('로그에서 기권 타입 추출 실패:', error);
+            return null;
+        }
+    };
     
     if (loading) {
         return (
@@ -904,12 +955,3 @@ export default function RefereePage() {
         </>
     );
 }
-
-    const getForfeitDisplayText = (forfeitType: string | null | undefined) => {
-        switch (forfeitType) {
-            case 'absent': return '불참';
-            case 'disqualified': return '실격';
-            case 'forfeit': return '기권';
-            default: return '기권';
-        }
-    };
