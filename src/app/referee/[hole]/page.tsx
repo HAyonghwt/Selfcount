@@ -473,8 +473,8 @@ export default function RefereePage() {
         const prevScore = allScores[playerToSave.id]?.[selectedCourse as string]?.[hole as string] ?? null;
         try {
             await set(scoreRef, scoreData.score);
-            // 실제로 수정된 경우에만 로그 기록 (prevScore가 null이 아니고 값이 다른 경우)
-            if (prevScore !== null && prevScore !== scoreData.score) {
+            // 점수 변경 로그 기록
+            if (prevScore !== scoreData.score) {
                 await logScoreChange({
                     matchId: 'tournaments/current',
                     playerId: playerToSave.id,
@@ -484,7 +484,8 @@ export default function RefereePage() {
                     newValue: scoreData.score !== null && scoreData.score !== undefined ? scoreData.score : 0,
                     modifiedBy: 'referee', // 필요시 실제 심판 id로 대체
                     modifiedByType: 'judge',
-                    comment: `코스: ${selectedCourse}`
+                    comment: `코스: ${selectedCourse}`,
+                    courseId: selectedCourse
                 });
             }
             // 0점 입력 시, 소속 그룹의 모든 코스/홀에 0점 처리
@@ -500,38 +501,35 @@ export default function RefereePage() {
                         if (cid === selectedCourse && h === Number(hole)) {
                             // 직접 입력한 코스/홀
                             await set(ref(dbInstance, `/scores/${playerToSave.id}/${cid}/${h}`), 0);
-                            // 실제로 수정된 경우에만 로그 기록 (existing이 null이 아니고 값이 다른 경우)
-                            if (existing !== null && existing !== undefined && existing !== '' && !isNaN(Number(existing))) {
-                                await logScoreChange({
-                                    matchId: 'tournaments/current',
-                                    playerId: playerToSave.id,
-                                    scoreType: 'holeScore',
-                                    holeNumber: h,
-                                    oldValue: Number(existing),
-                                    newValue: 0,
-                                    modifiedBy: 'referee',
-                                    modifiedByType: 'judge',
-                                    comment: `심판 직접 ${scoreData.forfeitType === 'absent' ? '불참' : scoreData.forfeitType === 'disqualified' ? '실격' : '기권'} (코스: ${courseName}, 홀: ${h})`
-                                });
-                            }
-                        } else if (existing !== null && existing !== undefined && existing !== '' && !isNaN(Number(existing))) {
-                            // 나머지 기존 점수가 있는 홀만 로그 기록
+                            await logScoreChange({
+                                matchId: 'tournaments/current',
+                                playerId: playerToSave.id,
+                                scoreType: 'holeScore',
+                                holeNumber: h,
+                                oldValue: existing === undefined || existing === null || existing === '' || isNaN(Number(existing)) ? 0 : Number(existing),
+                                newValue: 0,
+                                modifiedBy: 'referee',
+                                modifiedByType: 'judge',
+                                comment: `심판 직접 ${scoreData.forfeitType === 'absent' ? '불참' : scoreData.forfeitType === 'disqualified' ? '실격' : '기권'} (코스: ${courseName}, 홀: ${h})`,
+                                courseId: cid
+                            });
+                        } else if (existing === undefined || existing === null || existing === '' || isNaN(Number(existing))) {
+                            // 나머지 미입력 홀만 0점 처리 (기존 점수는 보존)
                             await set(ref(dbInstance, `/scores/${playerToSave.id}/${cid}/${h}`), 0);
                             await logScoreChange({
                                 matchId: 'tournaments/current',
                                 playerId: playerToSave.id,
                                 scoreType: 'holeScore',
                                 holeNumber: h,
-                                oldValue: Number(existing),
+                                oldValue: existing === undefined || existing === null || existing === '' || isNaN(Number(existing)) ? 0 : Number(existing),
                                 newValue: 0,
                                 modifiedBy: 'referee',
                                 modifiedByType: 'judge',
-                                comment: `심판페이지에서 ${scoreData.forfeitType === 'absent' ? '불참' : scoreData.forfeitType === 'disqualified' ? '실격' : '기권'} 처리 (코스: ${courseName}, 홀: ${h})`
+                                comment: `심판페이지에서 ${scoreData.forfeitType === 'absent' ? '불참' : scoreData.forfeitType === 'disqualified' ? '실격' : '기권'} 처리 (코스: ${courseName}, 홀: ${h})`,
+                                courseId: cid
                             });
-                        } else {
-                            // 미입력 홀은 점수만 설정하고 로그는 생성하지 않음
-                            await set(ref(dbInstance, `/scores/${playerToSave.id}/${cid}/${h}`), 0);
                         }
+                        // 기존 점수가 있는 홀은 그대로 보존 (0점으로 덮어쓰지 않음)
                     }
                 }
             }

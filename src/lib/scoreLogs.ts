@@ -13,6 +13,7 @@ export interface ScoreLog {
   modifiedByType: 'admin' | 'judge'; // 수정자 유형
   modifiedAt: number;  // 수정 일시 (timestamp)
   comment?: string;   // 추가 설명 (선택사항)
+  courseId?: string;  // 코스 ID (선택사항)
 }
 
 /**
