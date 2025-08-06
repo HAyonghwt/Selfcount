@@ -755,8 +755,19 @@ function ExternalScoreboard() {
                                                         {player.coursesData[course.id]?.holeScores.map((score: any, i: number) => {
   // 해당 셀(플레이어/코스/홀)에 대한 최근 로그 찾기
   const logs = playerScoreLogs[player.id] || [];
-  const cellLog = logs.find(l => String((l as any).courseId) === String(course.id) && Number(l.holeNumber) === i + 1);
-  const isModified = !!cellLog;
+  const cellLog = logs.find(l => {
+    // courseId가 있으면 그것으로 비교
+    if ((l as any).courseId) {
+      return String((l as any).courseId) === String(course.id) && Number(l.holeNumber) === i + 1;
+    }
+    // courseId가 없으면 comment에서 코스 정보 추출
+    if (l.comment && l.comment.includes(`코스: ${course.id}`)) {
+      return Number(l.holeNumber) === i + 1;
+    }
+    return false;
+  });
+  // 실제로 수정된 경우만 빨간색으로 표시 (oldValue가 0이고 newValue가 점수인 경우는 제외)
+  const isModified = !!cellLog && cellLog.oldValue !== 0;
   // 툴팁 내용 구성
   const tooltipContent = cellLog ? (
     <div>

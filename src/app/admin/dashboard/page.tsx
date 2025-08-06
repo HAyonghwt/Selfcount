@@ -617,23 +617,13 @@ export default function AdminDashboard() {
                     // 그룹에 배정된 코스 id 목록
                     const assignedCourseIds = group.courses ? Object.keys(group.courses).filter((cid: any) => group.courses[cid]) : [];
                     for (const cid of assignedCourseIds) {
-                        for (let h = 1; h <= 9; h++) {
-                            const prevScore = scores?.[playerId]?.[cid]?.[h];
-                            if (prevScore === undefined || prevScore === null) {
-                                await set(ref(db, `scores/${playerId}/${cid}/${h}`), 0);
-                                await logScoreChange({
-                                    matchId: 'tournaments/current',
-                                    playerId,
-                                    scoreType: 'holeScore',
-                                    holeNumber: h,
-                                    oldValue: 0,
-                                    newValue: 0,
-                                    modifiedBy: 'admin',
-                                    modifiedByType: 'admin',
-                                    comment: `기권 처리(미입력 홀만, courseId=${cid})`
-                                });
-                            }
+                                            for (let h = 1; h <= 9; h++) {
+                        const prevScore = scores?.[playerId]?.[cid]?.[h];
+                        if (prevScore === undefined || prevScore === null) {
+                            // 미입력 홀은 점수만 설정하고 로그는 생성하지 않음
+                            await set(ref(db, `scores/${playerId}/${cid}/${h}`), 0);
                         }
+                    }
                     }
                 }
                 setScoreEditModal({ ...scoreEditModal, open: false });
@@ -644,11 +634,11 @@ export default function AdminDashboard() {
                 } catch {}
                 return;
             }
-            // 기존 점수 조회(0점이 아닐 때만 기존 방식)
+            // 기존 점수 조회
             const prevScore = scores?.[playerId]?.[courseId]?.[holeIndex + 1] ?? null;
             await set(ref(db, `scores/${playerId}/${courseId}/${holeIndex + 1}`), scoreValue);
-            // 점수 변경 로그 기록
-            if (prevScore !== scoreValue) {
+            // 실제로 수정된 경우에만 로그 기록 (prevScore가 null이 아니고 값이 다른 경우)
+            if (prevScore !== null && prevScore !== scoreValue) {
                 try {
                     await logScoreChange({
                         matchId: 'tournaments/current',
@@ -1563,8 +1553,19 @@ export default function AdminDashboard() {
                                                         {player.coursesData[course.id]?.holeScores.map((score, i) => {
   // 해당 셀(플레이어/코스/홀)에 대한 최근 로그 찾기
   const logs = playerScoreLogs[player.id] || [];
-  const cellLog = logs.find(l => String(l.courseId) === String(course.id) && Number(l.holeNumber) === i + 1);
-  const isModified = !!cellLog;
+  const cellLog = logs.find(l => {
+    // courseId가 있으면 그것으로 비교
+    if ((l as any).courseId) {
+      return String((l as any).courseId) === String(course.id) && Number(l.holeNumber) === i + 1;
+    }
+    // courseId가 없으면 comment에서 코스 정보 추출
+    if (l.comment && l.comment.includes(`코스: ${course.id}`)) {
+      return Number(l.holeNumber) === i + 1;
+    }
+    return false;
+  });
+  // 실제로 수정된 경우만 빨간색으로 표시 (oldValue가 0이고 newValue가 점수인 경우는 제외)
+  const isModified = !!cellLog && cellLog.oldValue !== 0;
   // 툴팁 내용 구성
   const tooltipContent = cellLog ? (
     <div>
