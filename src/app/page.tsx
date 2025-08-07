@@ -89,6 +89,8 @@ export default function LoginPage() {
                 setError('심판 번호를 식별할 수 없습니다.');
                 auth.signOut();
              }
+        } else if (userEmail.startsWith('player') && userEmail.endsWith('@yongin.com')) {
+            router.push('/self-scoring');
         } else if (email === 'hayonghwy@gmail.com') {
             router.push('/super-admin');
         } else {

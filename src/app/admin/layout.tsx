@@ -46,6 +46,7 @@ const secondaryNavItems = [
   { href: "/admin/archive", icon: Trophy, label: "기록 보관함" },
 ];
 const refereeNavItem = { href: "/admin/referees", icon: ShieldCheck, label: "심판 관리" };
+const selfScoringNavItem = { href: "/admin/self-scoring", icon: ShieldCheck, label: "자율 채점" };
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const isMobile = useIsMobile();
@@ -201,6 +202,18 @@ function SidebarContentWithSidebarHooks({ isMobile, pathname, appName, children 
                 <Link href={refereeNavItem.href} className="text-black" onClick={handleMenuClick(refereeNavItem.href)}>
                   <refereeNavItem.icon className="h-5 w-5" />
                   <span>{refereeNavItem.label}</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem key={selfScoringNavItem.href}>
+              <SidebarMenuButton
+                asChild
+                isActive={pathname === selfScoringNavItem.href}
+                tooltip={{ children: selfScoringNavItem.label }}
+              >
+                <Link href={selfScoringNavItem.href} className="text-black" onClick={handleMenuClick(selfScoringNavItem.href)}>
+                  <selfScoringNavItem.icon className="h-5 w-5" />
+                  <span className="font-medium">{selfScoringNavItem.label}</span>
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>

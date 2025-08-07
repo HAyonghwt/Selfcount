@@ -21,6 +21,7 @@ export default function SuperAdminPage() {
         maxCourses: 10,
         maxPlayers: 200,
         refereePassword: '',
+        captainPassword: '',
     });
 
     useEffect(() => {
@@ -34,6 +35,7 @@ export default function SuperAdminPage() {
                     maxCourses: data.maxCourses || 10,
                     maxPlayers: data.maxPlayers || 200,
                     refereePassword: data.refereePassword || '',
+                    captainPassword: data.captainPassword || '',
                 });
             } else {
                  setConfig({
@@ -42,6 +44,7 @@ export default function SuperAdminPage() {
                     maxCourses: 10,
                     maxPlayers: 200,
                     refereePassword: '',
+                    captainPassword: '',
                 });
             }
             setLoading(false);
@@ -66,6 +69,7 @@ export default function SuperAdminPage() {
                 maxCourses: Number(config.maxCourses),
                 maxPlayers: Number(config.maxPlayers),
                 refereePassword: config.refereePassword.trim(),
+                captainPassword: config.captainPassword.trim(),
             });
 
             toast({
@@ -164,6 +168,11 @@ export default function SuperAdminPage() {
                                 <Label htmlFor="refereePassword">심판 공용 비밀번호</Label>
                                 <Input id="refereePassword" value={config.refereePassword} onChange={handleInputChange} placeholder="예: 123456" />
                                 <p className="text-xs text-muted-foreground">모든 심판 계정(referee1, referee2...)의 공용 비밀번호입니다. 설정 후 Firebase 콘솔에서 각 심판 계정의 비밀번호를 직접 변경해주셔야 합니다.</p>
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="captainPassword">자율채점 조장 공용 비밀번호</Label>
+                                <Input id="captainPassword" value={config.captainPassword} onChange={handleInputChange} placeholder="예: 123456" />
+                                <p className="text-xs text-muted-foreground">모든 자율채점 조장 계정(player1, player2...)의 공용 비밀번호입니다. 설정 후 Firebase 콘솔에서 각 조장 계정의 비밀번호를 직접 변경해주셔야 합니다.</p>
                             </div>
                         </CardContent>
                     </Card>

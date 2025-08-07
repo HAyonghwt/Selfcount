@@ -1,0 +1,2777 @@
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title></title>
+<!-- PWA 관련 메타 태그 추가 -->
+<meta name="theme-color" content="#1a73e8">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="4-스코어">
+<link href="manifest.json" rel="manifest" />
+<link href="images/192_4.png" rel="apple-touch-icon" />
+<style type="text/css">* {
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif;
+            background-color: #f8f9fa;
+            color: #333;
+            line-height: 1.5;
+            min-width: auto !important;  /* 최소 너비 제한 제거 */
+            -webkit-text-size-adjust: 100%;  /* iOS 텍스트 크기 조정 활성화 */
+        }
+
+        .container {
+            background: #ffffff;
+            padding: 32px;
+            border-radius: 24px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 8px 32px rgba(0, 0, 0, 0.05);
+            transition: all 0.3s ease;
+            width: 100%;
+            max-width: 100%;
+            margin: 0 auto;
+            overflow-x: auto;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 4px;
+            background: #f8f9fa;
+            padding: 4px;
+            border-radius: 16px;
+            margin-bottom: 24px;
+        }
+
+        .tab {
+            flex: 1;
+            padding: 12px 24px;
+            font-size: 16px;
+            font-weight: 600;
+            color: #495057;
+            background: transparent;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .tab:hover {
+            background: rgba(0, 0, 0, 0.04);
+        }
+
+        .tab.active {
+            background: var(--theme-color, #1a73e8);
+            color: white;
+            box-shadow: 0 1px 3px rgba(26, 115, 232, 0.2);
+        }
+
+        .tab.active:hover {
+            filter: brightness(1.05);
+        }
+
+        /* 포곡 테마 */
+        .pogok .tab.active {
+            background: #1a73e8;
+            color: white;
+            box-shadow: 0 1px 3px rgba(26, 115, 232, 0.2);
+        }
+
+        .pogok th,
+        .pogok .hole-number {
+            background: #1a73e8;
+            color: white;
+        }
+
+        .pogok .save-names-button {
+            background: linear-gradient(135deg, #1a73e8, #1557b0);
+            box-shadow: 0 4px 12px rgba(26, 115, 232, 0.2);
+        }
+
+        .pogok .name-input-group input:focus {
+            border-color: #1a73e8;
+            box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.1);
+        }
+
+        /* 아르피아 테마 */
+        .arpia .tab.active {
+            background: #2e7d32;
+            color: white;
+            box-shadow: 0 1px 3px rgba(46, 125, 50, 0.2);
+        }
+
+        .arpia th,
+        .arpia .hole-number {
+            background: #2e7d32;
+            color: white;
+        }
+
+        .arpia .save-names-button {
+            background: linear-gradient(135deg, #2e7d32, #1b5e20);
+            box-shadow: 0 4px 12px rgba(46, 125, 50, 0.2);
+        }
+
+        .arpia .name-input-group input:focus {
+            border-color: #2e7d32;
+            box-shadow: 0 0 0 3px rgba(46, 125, 50, 0.1);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin-bottom: 24px;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            background: white;
+        }
+
+        th, td {
+            border: 1px solid #f1f3f5;
+            padding: 16px 12px;
+            text-align: center;
+            font-size: 15px;
+            background: white;
+            transition: background-color 0.2s ease;
+        }
+
+        th {
+            font-weight: 600;
+            border: none;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .hole-number {
+            background: var(--theme-color, #1a73e8) !important;
+            color: white;
+            font-weight: 600;
+            border: none;
+        }
+
+        /* 점수 입력 필드 */
+        .score-input {
+            width: 100%;
+            height: 42px;
+            border: 2px solid #e9ecef;
+            border-radius: 12px;
+            text-align: center;
+            font-size: 24px;
+            font-weight: 600;
+            color: #000000;
+            background: white;
+            transition: all 0.2s ease;
+            padding: 4px 0;
+            line-height: 34px;
+            -webkit-appearance: none;
+            appearance: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .score-input:not(.locked):not(.disabled) {
+            background-color: #e8f0fe;  /* 활성화된 입력창 배경색 */
+        }
+
+        .score-input.locked {
+            background: #f8f8f8;
+            border-color: #e9ecef;
+            color: #666;
+            cursor: not-allowed;
+        }
+
+        .score-input.disabled {
+            background: #f8f8f8;
+            border-color: #e9ecef;
+            color: #adb5bd;
+            cursor: not-allowed;
+        }
+
+        .score-input:focus {
+            outline: none;
+            border-color: var(--theme-color, #1a73e8);
+            box-shadow: 0 0 0 3px var(--theme-shadow-color, rgba(26, 115, 232, 0.1));
+        }
+
+        .score-input.active {
+            border-color: var(--theme-color, #1a73e8);
+            background: white;
+            color: #495057;
+        }
+
+        .score-input.disabled {
+            background: #f8f9fa;
+            border-color: #e9ecef;
+            color: #adb5bd;
+            cursor: not-allowed;
+        }
+
+        .score-input.locked {
+            background: #f8f9fa;
+            border-color: #e9ecef;
+            color: #495057;
+            cursor: not-allowed;
+        }
+
+        /* 합계와 서명 레이블 셀 */
+        td[colspan="2"] {
+            font-size: 18px;  /* 기본 크기 20px에서 18px로 감소 */
+            text-align: center;
+            background: #f8f9fa;
+            font-weight: 600;
+        }
+
+        /* 점수 합계 셀 */
+        td.total-score {
+            background: #f8f9fa;
+            font-weight: 700;
+            color: #000000;
+            font-size: 26px;  /* 기본 크기 28px에서 26px로 감소 */
+        }
+
+        .total-row td {
+            background: #f8f9fa;
+            border-top: 2px solid #e9ecef;
+        }
+
+        .total-row .difference {
+            font-size: 20px;  /* 차이값은 적당한 크기로 유지 */
+            margin-left: 8px;
+        }
+
+        .difference {
+            font-size: 15px;
+            color: #868e96;
+            margin-top: 4px;
+            font-weight: 600;
+        }
+
+        .difference.positive {
+            color: #dc3545;
+        }
+
+        .difference.negative {
+            color: #0d6efd;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 0;
+            margin-top: 16px;
+            justify-content: space-between;
+            width: 100%;
+        }
+
+        .action-button {
+            flex: 1 1 33%;
+            max-width: 33%;
+            min-width: 0;
+            padding: 12px 0;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            color: white;
+            font-weight: 600;
+            font-size: 1em;
+            transition: all 0.2s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* 버튼 호버 효과 */
+        .action-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        /* 버튼 활성화(클릭/터치) 효과 */
+        .action-button:active {
+            transform: translateY(1px);
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        /* 터치 디바이스를 위한 리플 효과 */
+        .action-button::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 5px;
+            height: 5px;
+            background: rgba(255, 255, 255, 0.5);
+            opacity: 0;
+            border-radius: 100%;
+            transform: scale(1, 1) translate(-50%);
+            transform-origin: 50% 50%;
+        }
+
+        .action-button:active::after {
+            animation: ripple 0.4s ease-out;
+        }
+
+        @keyframes ripple {
+            0% {
+                transform: scale(0, 0);
+                opacity: 0.5;
+            }
+            20% {
+                transform: scale(25, 25);
+                opacity: 0.3;
+            }
+            100% {
+                opacity: 0;
+                transform: scale(40, 40);
+            }
+        }
+
+        /* 각 버튼별 스타일 */
+        .reset-button {
+            background: linear-gradient(135deg, #dc3545, #c82333);
+        }
+
+        .image-button {
+            background: linear-gradient(135deg, #17a2b8, #138496);
+        }
+
+        .share-button {
+            background: #FEE500;
+            color: #000000;
+        }
+
+        .save-score-button {
+            background: linear-gradient(135deg, #1a73e8, #1557b0);
+            color: #fff;
+        }
+
+        @media screen and (max-width: 1000px) {
+            body {
+                padding: 10px;
+                min-width: initial !important;
+            }
+
+            .container {
+                padding: 15px 10px;
+            }
+
+            table {
+                min-width: auto;
+            }
+
+            th, td {
+                padding: 8px 5px;
+            }
+
+            .score-input {
+                height: 46px;
+                font-size: 26px !important;
+                min-width: 48px;
+                padding: 6px 0;
+                line-height: 36px;
+            }
+
+            td[colspan="2"] {
+                font-size: 16px;  /* 18px에서 16px로 감소 */
+            }
+
+            td.total-score {
+                font-size: 24px;  /* 26px에서 24px로 감소 */
+            }
+
+            .action-button {
+                font-size: 0.95em;  /* 모바일에서는 글자 크기를 약간 줄임 */
+                padding: 10px 0;
+            }
+        }
+
+        @media screen and (max-width: 480px) {
+            .score-input {
+                height: 42px;
+                font-size: 24px !important;
+                min-width: 42px;
+            }
+
+            td[colspan="2"] {
+                font-size: 14px;  /* 16px에서 14px로 감소 */
+            }
+
+            td.total-score {
+                font-size: 22px;  /* 24px에서 22px로 감소 */
+            }
+        }
+
+        @media screen and (max-width: 360px) {
+            .score-input {
+                height: 38px;
+                font-size: 22px !important;
+                min-width: 38px;
+            }
+
+            td[colspan="2"] {
+                font-size: 13px;  /* 15px에서 13px로 감소 */
+            }
+
+            td.total-score {
+                font-size: 20px;  /* 22px에서 20px로 감소 */
+            }
+        }
+
+        /* 작은 모바일 화면 */
+        @media screen and (max-width: 480px) {
+            .score-input {
+                height: 42px;  /* 36px와 50px의 중간 */
+                font-size: 24px !important;  /* 20px와 28px의 중간 */
+                min-width: 42px;
+            }
+
+            .total-row {
+                font-size: 26px !important;  /* 22px와 30px의 중간 */
+            }
+        }
+
+        /* 매우 작은 화면 */
+        @media screen and (max-width: 360px) {
+            .score-input {
+                height: 38px;  /* 34px와 45px의 중간 */
+                font-size: 22px !important;  /* 18px와 26px의 중간 */
+                min-width: 38px;
+            }
+
+            .total-row {
+                font-size: 24px !important;  /* 20px와 28px의 중간 */
+            }
+        }
+
+        /* 높은 DPI 디스플레이 최적화 */
+        @media screen and (-webkit-min-device-pixel-ratio: 2), 
+               screen and (min-resolution: 192dpi) {
+            .score-input, .total-row {
+                -webkit-font-smoothing: antialiased;
+                -moz-osx-font-smoothing: grayscale;
+            }
+        }
+
+        .toast-message {
+            position: fixed;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #212529;
+            color: white;
+            padding: 14px 28px;
+            border-radius: 12px;
+            font-size: 15px;
+            font-weight: 500;
+            z-index: 3000;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .date-display {
+            display: none;
+            color: #495057;
+            font-size: 16px;
+            font-weight: 600;
+            text-align: center;
+            margin: 0 0 16px 0;
+            padding: 12px;
+            background: #f8f9fa;
+            border-radius: 12px;
+        }
+
+        /* 이미지 저장 시에만 날짜 표시 */
+        .show-date .date-display {
+            display: block;
+        }
+
+        /* 이미지 저장 시 날짜 표시를 위한 헤더 영역 */
+        .show-date .header {
+            display: block;
+            margin-bottom: 12px;
+        }
+
+        /* 기존 헤더는 평소에 숨김 */
+        .header {
+            display: none;
+        }
+
+        /* 날짜 입력 필드는 항상 숨김 */
+        .date-input {
+            display: none;
+        }
+
+        .name-modal, .signature-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 9999;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(5px);
+            -webkit-backdrop-filter: blur(5px);
+        }
+
+        .modal-content, .signature-content {
+            background: #ffffff;
+            padding: 32px;
+            border-radius: 24px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 8px 32px rgba(0, 0, 0, 0.05);
+            width: 90%;
+            max-width: 400px;
+            position: relative;
+        }
+
+        .name-modal.show .modal-content,
+        .signature-modal.show .signature-content {
+            transform: translateY(0);
+            opacity: 1;
+        }
+
+        .name-input-group {
+            margin-bottom: 20px;
+        }
+
+        .name-input-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 20px;  /* 15px에서 20px로 증가 */
+            color: #495057;
+            font-weight: 500;
+        }
+
+        .name-input-group input {
+            width: 100%;
+            padding: 14px;
+            font-size: 20px;  /* 15px에서 20px로 증가 */
+            border: 2px solid #dee2e6;
+            border-radius: 12px;
+            background: white;
+            transition: all 0.2s ease;
+        }
+
+        .name-input-group input::placeholder {
+            font-size: 18px;  /* placeholder 텍스트 크기 추가 */
+        }
+
+        .name-input-group input:focus {
+            outline: none;
+            border-color: var(--theme-color, #1a73e8);
+            box-shadow: 0 0 0 3px var(--theme-shadow-color, rgba(26, 115, 232, 0.1));
+        }
+
+        .modal-buttons {
+            display: flex;
+            gap: 12px;
+            margin-top: 32px;
+        }
+
+        .modal-button {
+            flex: 1;
+            padding: 14px;
+            font-size: 15px;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.2s ease;
+            color: white;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .save-names-button {
+            background: linear-gradient(135deg, var(--theme-color, #1a73e8), var(--theme-color-dark, #1557b0));
+        }
+
+        .reset-names-button {
+            background: linear-gradient(135deg, #dc3545, #c82333);
+        }
+
+        .close-names-button {
+            background: linear-gradient(135deg, #6c757d, #5a6268);
+        }
+
+        .modal-button:hover {
+            filter: brightness(1.05);
+        }
+
+        .modal-button:active {
+            transform: translateY(1px);
+        }
+
+        /* 테마별 색상 변수 */
+        .pogok {
+            --theme-color: #1a73e8;
+            --theme-color-dark: #1557b0;
+            --theme-shadow-color: rgba(26, 115, 232, 0.1);
+        }
+
+        .arpia {
+            --theme-color: #2e7d32;
+            --theme-color-dark: #1b5e20;
+            --theme-shadow-color: rgba(46, 125, 50, 0.1);
+        }
+
+        .number-pad {
+            display: none;
+            position: fixed;
+            left: 0;
+            right: 0;
+            background: #212529;
+            padding: 24px;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+            z-index: 9999;
+            transition: all 0.3s ease;
+            box-shadow: 0 -1px 3px rgba(0, 0, 0, 0.1), 0 -8px 32px rgba(0, 0, 0, 0.05);
+        }
+
+        .number-pad.top-fixed {
+            top: 0;
+            bottom: auto !important;
+            border-bottom-left-radius: 24px;
+            border-bottom-right-radius: 24px;
+            position: fixed;  /* 명시적으로 position 지정 */
+            z-index: 9999;   /* 높은 z-index 값 */
+        }
+
+        .number-pad.bottom-fixed {
+            bottom: 0;
+            top: auto !important;
+            border-top-left-radius: 24px;
+            border-top-right-radius: 24px;
+        }
+
+        /* 스크롤 시에도 항상 화면에 보이도록 패딩 추가 */
+        body.number-pad-top {
+            padding-top: 280px;  /* 숫자패드 높이만큼 상단 여백 */
+        }
+
+        body.number-pad-bottom {
+            padding-bottom: 280px;  /* 숫자패드 높이만큼 하단 여백 */
+        }
+
+        .number-button {
+            font-size: 22px;
+            padding: 20px;
+            border: none;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            border-radius: 16px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-weight: 600;
+        }
+
+        .number-button:hover {
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        .number-button:active {
+            transform: translateY(0);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+
+        .control-button {
+            background: rgba(255, 255, 255, 0.05);
+            color: #fff;
+            font-size: 18px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .control-button[data-action="up"],
+        .control-button[data-action="down"] {
+            font-size: 22px;
+        }
+
+        .number-pad .save-button {
+            background: linear-gradient(135deg, #ff8c00, #f17c00);
+            color: #fff;
+        }
+
+        .number-pad .save-button:hover {
+            background: linear-gradient(135deg, #ff9500, #f58300);
+        }
+
+        .number-pad .cancel-button {
+            background: linear-gradient(135deg, #6c757d, #5a6268);
+            color: #fff;
+        }
+
+        .number-pad .cancel-button:hover {
+            background: linear-gradient(135deg, #7d868d, #6b7278);
+        }
+
+        @media screen and (max-width: 1000px) {
+            body {
+                padding: 8px;
+                min-width: auto;  /* 최소 너비 제거 */
+                background: #f8f9fa;
+                overflow-x: hidden;  /* 가로 스크롤 방지 */
+            }
+
+            .container {
+                padding: 12px 8px;
+                border-radius: 12px;
+                width: 100%;  /* 컨테이너 너비 100%로 설정 */
+                min-width: auto;  /* 최소 너비 제거 */
+                overflow-x: auto;  /* 필요한 경우에만 가로 스크롤 허용 */
+            }
+
+            .tabs {
+                padding: 3px;
+                gap: 3px;
+                border-radius: 10px;
+                margin-bottom: 12px;
+                display: flex;  /* Flexbox 레이아웃 명시적 설정 */
+                width: 100%;  /* 전체 너비 사용 */
+            }
+
+            .tab {
+                flex: 1;  /* 탭 버튼이 동일한 너비를 가지도록 설정 */
+                padding: 8px;  /* 패딩 조정 */
+                font-size: 14px;
+                border-radius: 8px;
+                white-space: nowrap;  /* 텍스트 줄바꿈 방지 */
+                min-width: 0;  /* 최소 너비 제거 */
+            }
+
+            table {
+                margin-bottom: 12px;
+                border-radius: 10px;
+            }
+
+            th, td {
+                padding: 6px 4px;
+                font-size: 13px;
+            }
+
+            .score-input {
+                height: 32px;
+                font-size: 14px;
+                border-radius: 6px;
+            }
+
+            .difference {
+                font-size: 11px;
+                margin-top: 1px;
+            }
+
+            .total-row {
+                font-size: 14px;
+            }
+
+            .total-row .difference {
+                font-size: 12px;
+                margin-left: 4px;
+            }
+
+            .action-buttons {
+                gap: 6px;  /* 모바일에서 간격 더 축소 */
+                margin-top: 12px;  /* 모바일에서 상단 여백 더 축소 */
+                padding: 0;
+                display: flex;
+                flex-wrap: wrap;
+            }
+
+            .action-button {
+                flex: 1 1 calc(33.333% - 4px);  /* 3개의 버튼을 한 줄에 배치 */
+                min-width: 0;  /* 최소 너비 제거 */
+                font-size: 13px;
+                padding: 10px 8px;
+                border-radius: 8px;
+                white-space: nowrap;  /* 텍스트 줄바꿈 방지 */
+            }
+
+            /* 숫자 패드 모바일 최적화 */
+            .number-pad {
+                padding: 8px;
+                gap: 4px;
+            }
+
+            .number-button {
+                font-size: 16px;
+                padding: 12px;
+                border-radius: 8px;
+            }
+
+            /* 이름 입력 모달 모바일 최적화 */
+            .modal-content {
+                padding: 16px;
+                width: 94%;
+                border-radius: 12px;
+            }
+
+            .name-input-group {
+                margin-bottom: 10px;
+            }
+
+            .name-input-group label {
+                font-size: 13px;
+                margin-bottom: 4px;
+            }
+
+            .name-input-group input {
+                padding: 8px;
+                font-size: 14px;
+                border-radius: 6px;
+            }
+
+            .modal-buttons {
+                gap: 4px;
+                margin-top: 16px;
+            }
+
+            .modal-button {
+                padding: 8px;
+                font-size: 13px;
+                border-radius: 6px;
+            }
+
+            /* 서명 모달 모바일 최적화 */
+            .signature-content {
+                padding: 16px;
+                width: 94%;
+                border-radius: 12px;
+            }
+
+            .player-name {
+                font-size: 18px;
+                margin-bottom: 4px;
+            }
+
+            .player-score {
+                font-size: 16px;
+            }
+
+            #signatureCanvas {
+                margin-bottom: 12px;
+                height: 160px;
+                border-radius: 8px;
+            }
+
+            .signature-buttons {
+                gap: 4px;
+            }
+
+            .signature-cell {
+                height: 32px;
+                border-radius: 6px;
+            }
+
+            .signature-placeholder {
+                font-size: 12px;
+                line-height: 32px;
+            }
+
+            /* 토스트 메시지 모바일 최적화 */
+            .toast-message {
+                font-size: 13px;
+                padding: 10px 16px;
+                border-radius: 8px;
+                max-width: 94%;
+                bottom: 16px;
+            }
+        }
+
+        /* 매우 작은 화면 최적화 (320px 이하) */
+        @media screen and (max-width: 320px) {
+            body {
+                padding: 6px;
+            }
+
+            .container {
+                padding: 8px 6px;
+                border-radius: 10px;
+            }
+
+            .tab {
+                padding: 6px 8px;
+                font-size: 12px;
+            }
+
+            th, td {
+                padding: 4px 3px;
+                font-size: 12px;
+            }
+
+            .score-input {
+                height: 28px;
+                font-size: 13px;
+            }
+
+            .action-button {
+                font-size: 12px;
+                padding: 8px 6px;
+            }
+
+            .number-button {
+                font-size: 14px;
+                padding: 10px;
+            }
+        }
+
+        /* 가로 모드 최적화 */
+        @media screen and (max-width: 1000px) and (orientation: landscape) {
+            body {
+                padding: 6px;
+            }
+
+            .container {
+                padding: 12px;
+            }
+
+            table {
+                margin-bottom: 12px;
+            }
+
+            .action-buttons {
+                flex-wrap: nowrap;  /* 가로 모드에서는 버튼을 한 줄로 */
+            }
+
+            .action-button {
+                flex: 1;
+                font-size: 13px;
+                padding: 8px;
+            }
+
+            /* 서명 모달 가로 모드 최적화 */
+            .signature-content {
+                padding: 16px;
+                flex-direction: row;
+                align-items: flex-start;
+                gap: 12px;
+            }
+
+            .signature-header {
+                width: 30%;
+                margin-bottom: 0;
+            }
+
+            #signatureCanvas {
+                width: 70%;
+                height: 140px;
+                margin-bottom: 12px;
+            }
+
+            .signature-buttons {
+                position: absolute;
+                bottom: 16px;
+                right: 16px;
+                width: 70%;
+            }
+        }
+
+        /* 작은 화면 최적화 */
+        @media screen and (max-width: 360px) {
+            .tab {
+                padding: 8px 12px;
+                font-size: 13px;
+            }
+
+            th, td {
+                padding: 8px 4px;
+                font-size: 13px;
+            }
+
+            .score-input {
+                height: 28px;
+                font-size: 14px;
+            }
+
+            .action-button {
+                font-size: 13px;
+                padding: 10px 16px;
+            }
+        }
+
+        .signature-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 9999;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(5px);
+            -webkit-backdrop-filter: blur(5px);
+        }
+
+        .signature-content {
+            background: #ffffff;
+            padding: 32px;
+            border-radius: 24px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+            width: 90%;
+            max-width: 600px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            transform: translateY(20px);
+            opacity: 0;
+            transition: all 0.3s ease;
+        }
+
+        .signature-header {
+            width: 100%;
+            text-align: center;
+            margin-bottom: 24px;
+        }
+
+        .player-name {
+            font-size: 28px;
+            margin: 0 0 12px 0;
+            color: #495057;
+            font-weight: 600;
+        }
+
+        .player-score {
+            font-size: 24px;
+            margin: 0;
+            color: var(--theme-color, #1a73e8);
+            font-weight: 500;
+        }
+
+        #signatureCanvas {
+            border: 2px solid #dee2e6;
+            border-radius: 16px;
+            margin-bottom: 24px;
+            background: white;
+            touch-action: none;
+            width: 100%;
+            height: 200px;
+            max-width: 500px;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+        }
+
+        #signatureCanvas:hover {
+            border-color: var(--theme-color, #1a73e8);
+            box-shadow: 0 0 0 4px var(--theme-shadow-color, rgba(26, 115, 232, 0.1));
+            transform: translateY(-1px);
+        }
+
+        .signature-buttons {
+            display: flex;
+            gap: 12px;
+            width: 100%;
+            max-width: 500px;
+            justify-content: center;
+        }
+
+        .signature-cell {
+            cursor: pointer;
+            background: white;
+            border: 1px solid #e9ecef;
+            height: 42px;  /* 점수 입력 필드와 동일한 높이로 조정 */
+            padding: 0;
+            position: relative;
+            transition: all 0.2s ease;
+        }
+
+        /* 서명 플레이스홀더 스타일 */
+        .signature-placeholder {
+            color: #adb5bd;
+            font-size: 14px;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        /* 서명 이미지 스타일 */
+        .signature-cell img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            padding: 2px;
+        }
+
+        /* 서명 셀 호버 효과 */
+        .signature-cell:hover {
+            background-color: #f8f9fa;
+            border-color: #dee2e6;
+        }
+
+        /* 서명 완료된 셀 스타일 */
+        .signature-cell.signed {
+            background-color: #fff;
+            border-color: #e9ecef;
+        }
+
+        .clear-button {
+            background: linear-gradient(135deg, #dc3545, #c82333);
+        }
+
+        .save-signature-button {
+            background: linear-gradient(135deg, var(--theme-color, #1a73e8), var(--theme-color-dark, #1557b0));
+        }
+
+        .close-signature-button {
+            background: linear-gradient(135deg, #6c757d, #5a6268);
+        }
+
+        th, .hole-number {
+            font-size: 14px;  /* 탭 크기와 동일하게 조정 */
+            font-weight: normal;
+        }
+
+        .par {
+            font-size: 14px;  /* 탭 크기와 동일하게 조정 */
+            font-weight: normal;
+            color: #000000;
+        }
+
+        .name-header {
+            font-weight: normal;
+        }
+
+        @media screen and (max-width: 1000px) {
+            body {
+                padding: 6px;  /* 좌우 여백 절반으로 감소 */
+                min-width: auto;
+                background: #f8f9fa;
+            }
+
+            .container {
+                padding: 16px 8px;  /* 좌우 패딩 감소 */
+                border-radius: 16px;
+            }
+
+            th, .hole-number {
+                font-size: 14px;  /* 모바일에서도 동일한 크기 유지 */
+            }
+
+            .par {
+                font-size: 14px;  /* 모바일에서도 동일한 크기 유지 */
+            }
+        }
+
+        /* 공유 버튼 스타일 수정 - 카카오톡 색상 */
+        .share-button {
+            background: #FEE500;
+            color: #000000;
+        }
+
+        /* 합계와 서명 행의 레이블 스타일 */
+        td[colspan="2"] {
+            font-size: 18px;  /* 기본 크기 20px에서 18px로 감소 */
+            text-align: center;
+            background: #f8f9fa;
+            font-weight: 600;
+        }
+
+        /* 실제 점수 합계 스타일 */
+        td.total-score {
+            background: #f8f9fa;
+            font-weight: 700;
+            color: #000000;
+            font-size: 26px;  /* 기본 크기 28px에서 26px로 감소 */
+        }
+
+        /* 모바일 기기 대응 */
+        @media screen and (max-width: 1000px) {
+            td[colspan="2"] {
+                font-size: 16px;  /* 18px에서 16px로 감소 */
+            }
+            td.total-score {
+                font-size: 24px;  /* 26px에서 24px로 감소 */
+            }
+        }
+
+        @media screen and (max-width: 480px) {
+            td[colspan="2"] {
+                font-size: 14px;  /* 16px에서 14px로 감소 */
+            }
+            td.total-score {
+                font-size: 22px;  /* 24px에서 22px로 감소 */
+            }
+        }
+
+        @media screen and (max-width: 360px) {
+            td[colspan="2"] {
+                font-size: 13px;  /* 15px에서 13px로 감소 */
+            }
+            td.total-score {
+                font-size: 20px;  /* 22px에서 20px로 감소 */
+            }
+        }
+
+        /* 기본 테이블 스타일 */
+        .total-row {
+            background: #f8f9fa;
+        }
+
+        /* 합계와 서명 레이블 셀 전용 스타일 */
+        td.total-label {
+            font-size: 16px !important;
+            text-align: center;
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #666;
+        }
+
+        /* 점수 합계 셀 전용 스타일 */
+        td.total-score {
+            background: #f8f9fa;
+            font-weight: 700;
+            color: #000000;
+            font-size: 26px !important;
+            text-align: center;
+        }
+
+        /* 모바일 대응 */
+        @media screen and (max-width: 1000px) {
+            td.total-label {
+                font-size: 15px !important;
+            }
+            td.total-score {
+                font-size: 24px !important;
+            }
+        }
+
+        @media screen and (max-width: 480px) {
+            td.total-label {
+                font-size: 14px !important;
+            }
+            td.total-score {
+                font-size: 22px !important;
+            }
+        }
+
+        @media screen and (max-width: 360px) {
+            td.total-label {
+                font-size: 13px !important;
+            }
+            td.total-score {
+                font-size: 20px !important;
+            }
+        }
+
+        /* 이미지 저장 시에만 날짜 표시 */
+        .show-date .date-header {
+            display: none;
+        }
+
+        /* 이미지 저장 시 날짜 표시를 위한 헤더 영역 */
+        .date-header {
+            display: none;
+        }
+
+        .score-text {
+            display: inline-block;
+            width: 100%;
+            text-align: center;
+            font-size: 24px;
+            font-weight: 600;
+            color: #000000;
+            line-height: 42px;
+        }
+        @media screen and (max-width: 1000px) {
+            .score-text {
+                font-size: 22px;
+                line-height: 36px;
+            }
+        }
+        @media screen and (max-width: 480px) {
+            .score-text {
+                font-size: 20px;
+                line-height: 32px;
+            }
+        }
+
+        @media screen and (max-width: 1000px) {
+            .name-input-group label {
+                font-size: 18px;  /* 모든 라벨 텍스트 크기 통일 */
+                margin-bottom: 4px;
+            }
+
+            .name-input-group input {
+                padding: 12px;
+                font-size: 18px;  /* 입력 텍스트 크기 통일 */
+                border-radius: 8px;
+            }
+
+            .name-input-group input::placeholder {
+                font-size: 18px;  /* placeholder 텍스트 크기도 통일 */
+            }
+
+            .modal-button {
+                font-size: 18px;  /* 모달 버튼 텍스트 크기도 통일 */
+            }
+        }
+
+        .credit {
+            text-align: right;
+            font-size: 12px;
+            color: #999;
+            margin-top: 8px;
+            padding-right: 4px;
+            font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif;
+        }
+
+        @media screen and (max-width: 1000px) {
+            .credit {
+                font-size: 11px;
+                margin-top: 6px;
+            }
+        }
+    </style>
+<div class="container pogok" id="mainContainer">
+<div class="tabs">
+    <button class="tab active" onclick="switchTheme('pogok', true)">포곡</button>
+    <button class="tab" onclick="switchTheme('arpia', true)">아르피아</button>
+</div>
+
+<!-- 날짜~사인까지 영역을 captureArea로 감쌈 -->
+<div id="captureArea">
+<div class="header"><input class="date-input" id="gameDate" type="datetime-local" />
+<div class="date-display" id="dateDisplay">&nbsp;</div>
+</div>
+
+<table id="scoreTable">
+	<tbody>
+		<tr>
+			<th>홀</th>
+			<th>Par</th>
+			<th class="name-header" onclick="showNameModal()">이름1</th>
+			<th class="name-header" onclick="showNameModal()">이름2</th>
+			<th class="name-header" onclick="showNameModal()">이름3</th>
+			<th class="name-header" onclick="showNameModal()">이름4</th>
+		</tr>
+	</tbody>
+</table>
+</div>
+
+<div class="action-buttons">
+    <button class="action-button reset-button" onclick="resetScores()">초기화</button>
+    <button class="action-button share-button" onclick="captureScreen()">점수공유</button>
+    <button class="action-button save-score-button" onclick="captureScoreImage()">이미지저장</button>
+</div>
+
+<div class="credit">Made by 하용휘</div>
+
+<!-- 이름 입력 모달 -->
+<div class="name-modal" id="nameModal">
+    <div class="modal-content">
+        <div class="name-input-group">
+            <label for="name1">이름 1</label>
+            <input id="name1" type="text" placeholder="이름을 입력하세요" />
+        </div>
+        <div class="name-input-group">
+            <label for="name2">이름 2</label>
+            <input id="name2" type="text" placeholder="이름을 입력하세요" />
+        </div>
+        <div class="name-input-group">
+            <label for="name3">이름 3</label>
+            <input id="name3" type="text" placeholder="이름을 입력하세요" />
+        </div>
+        <div class="name-input-group">
+            <label for="name4">이름 4</label>
+            <input id="name4" type="text" placeholder="이름을 입력하세요" />
+        </div>
+        <div class="modal-buttons">
+            <button class="modal-button reset-names-button">초기화</button>
+            <button class="modal-button save-names-button">저장</button>
+            <button class="modal-button close-names-button">닫기</button>
+        </div>
+    </div>
+</div>
+
+<!-- 사인 모달 -->
+<div class="signature-modal" id="signatureModal">
+    <div class="signature-content">
+        <div class="signature-header">
+            <h2 class="player-name">Player Name</h2>
+            <h3 class="player-score">Score: 00</h3>
+        </div>
+        <canvas id="signatureCanvas"></canvas>
+        <div class="signature-buttons">
+            <button class="modal-button clear-button" onclick="clearSignature()">다시하기</button>
+            <button class="modal-button save-signature-button" onclick="saveSignature()">저장</button>
+            <button class="modal-button close-signature-button" onclick="closeSignatureModal()">닫기</button>
+        </div>
+    </div>
+</div>
+
+<!-- 숫자패드 -->
+<div class="number-pad" id="numberPad">
+    <button class="number-button">1</button>
+    <button class="number-button">2</button>
+    <button class="number-button">3</button>
+    <button class="number-button">4</button>
+    <button class="number-button">5</button>
+    <button class="number-button">6</button>
+    <button class="number-button">7</button>
+    <button class="number-button">8</button>
+    <button class="number-button cancel-button">취소</button>
+    <button class="number-button">9</button>
+    <button class="number-button">10</button>
+    <button class="number-button save-button">저장</button>
+</div>
+
+
+<script>
+        // Service Worker 등록
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js')
+                    .then(registration => {
+                        console.log('ServiceWorker 등록 성공:', registration.scope);
+                    })
+                    .catch(error => {
+                        console.log('ServiceWorker 등록 실패:', error);
+                    });
+            });
+        }
+
+        // 코스별 PAR 값 설정
+        const pogokPar = [3,4,4,4,4,3,5,3,3];
+        const arpiaPar = [4,3,3,4,3,5,4,4,3];
+        let parValues = pogokPar;  // 기본값은 포곡
+
+        // 코스별 이름 저장
+        const pogokNames = ['이름1', '이름2', '이름3', '이름4'];
+        const arpiaNames = ['이름1', '이름2', '이름3', '이름4'];
+        let playerNames = pogokNames;  // 기본값은 포곡
+
+        let firstInputHole = null;  // 첫 번째로 입력된 홀 번호
+        let currentActiveHole = null;  // 현재 활성화된 홀 번호
+        let selectedInput = null;  // 선택된 입력 필드
+        let playerStates = [null, null, null, null];  // 각 플레이어의 현재 홀 상태
+
+        function createScoreTable() {
+            const table = document.getElementById('scoreTable');
+            let currentRow;
+            
+            // 1-9홀
+            for (let i = 0; i < 9; i++) {
+                currentRow = table.insertRow();
+                createHoleRow(currentRow, i + 1, parValues[i]);
+            }
+
+            // 합계
+            createTotalRow(table, "합계");
+        }
+
+        function createHoleRow(row, holeNumber, par) {
+            const cells = [
+                `<td class="hole-number">${holeNumber}</td>`,
+                `<td class="par">${par}</td>`
+            ];
+
+            for (let i = 0; i < 4; i++) {
+                cells.push(`
+                    <td>
+                        <input type="text" class="score-input" readonly>
+                        <div class="difference"></div>
+                    </td>
+                `);
+            }
+
+            row.innerHTML = cells.join('');
+        }
+
+        function createTotalRow(table, label) {
+            // 합계 행 생성
+            const totalRow = table.insertRow();
+            totalRow.innerHTML = `
+                <td colspan="2" class="total-label">${label}</td>
+<td class="total-score"></td>
+<td class="total-score"></td>
+<td class="total-score"></td>
+<td class="total-score"></td>
+            `;
+            totalRow.cells[0].style.textAlign = 'center';
+            
+            // 사인 행 추가
+            const signatureRow = table.insertRow();
+            signatureRow.innerHTML = `
+                <td colspan="2" class="total-label">서명</td>
+                <td class="signature-cell" onclick="openSignatureModal(0)"><div class="signature-placeholder">싸인</div></td>
+                <td class="signature-cell" onclick="openSignatureModal(1)"><div class="signature-placeholder">싸인</div></td>
+                <td class="signature-cell" onclick="openSignatureModal(2)"><div class="signature-placeholder">싸인</div></td>
+                <td class="signature-cell" onclick="openSignatureModal(3)"><div class="signature-placeholder">싸인</div></td>
+            `;
+        }
+
+        function getNextHole(currentHole) {
+            return currentHole === 9 ? 1 : currentHole + 1;
+        }
+
+        function setupScoreInputs() {
+            const inputs = document.querySelectorAll('.score-input');
+            inputs.forEach(input => {
+                // 초기에는 모든 홀을 활성화 상태로
+                input.classList.remove('locked', 'disabled');
+                input.style.backgroundColor = '';
+                input.style.color = '';
+                
+                // 점수 입력 필드 클릭 이벤트 추가
+                input.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    
+                    // 더블클릭 이벤트가 아닐 때만 잠긴 홀 메시지 표시
+                    if (!e.detail || e.detail === 1) {  // 일반 클릭일 때만
+                        if (input.classList.contains('locked') || input.classList.contains('disabled')) {
+                            showToastMessage('입력할 수 없는 홀입니다');
+                            return;
+                        }
+                    }
+                    
+                    selectedInput = input;
+                    const holeNumber = parseInt(input.closest('tr').cells[0].textContent);
+            
+                                        const numberPad = document.getElementById('numberPad');
+                    numberPad.classList.remove('top-fixed', 'bottom-fixed');
+                    document.body.classList.remove('number-pad-top', 'number-pad-bottom');
+                    
+                    if (holeNumber >= 8) {
+                        numberPad.classList.add('top-fixed');
+                        document.body.classList.add('number-pad-top');
+                        // 8, 9번 홀에서는 스크롤하지 않음
+                    } else {
+                        numberPad.classList.add('bottom-fixed');
+                        document.body.classList.add('number-pad-bottom');
+                        // 1~7번 홀일 때는 해당 입력창으로 스크롤
+                        setTimeout(() => {
+                            input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        }, 100);
+                    }
+                    
+                    numberPad.style.display = 'grid';
+                    
+                    setTimeout(() => {
+                        input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }, 100);
+                });
+
+                // 더블클릭 이벤트 추가
+                input.addEventListener('dblclick', function(e) {
+                    e.preventDefault();  // 기본 이벤트 방지
+                    e.stopPropagation();  // 이벤트 전파 중지
+                    
+                    if (input.classList.contains('locked')) {
+                        if (confirm('점수를 수정하시겠습니까?')) {
+                            // 잠금 해제
+                            input.classList.remove('locked');
+                            input.classList.remove('disabled');
+                            input.style.backgroundColor = '';
+                            input.style.color = '';
+                            
+                            selectedInput = input;
+                            const holeNumber = parseInt(input.closest('tr').cells[0].textContent);
+                            currentActiveHole = holeNumber;
+                            
+                            // 숫자패드 표시
+                            const numberPad = document.getElementById('numberPad');
+                            numberPad.classList.remove('top-fixed', 'bottom-fixed');
+                            document.body.classList.remove('number-pad-top', 'number-pad-bottom');
+                            
+                            if (holeNumber >= 8) {
+                                numberPad.classList.add('top-fixed');
+                                document.body.classList.add('number-pad-top');
+                                // 8, 9번 홀일 때는 페이지 최상단으로 스크롤
+                                window.scrollTo({
+                                    top: 0,
+                                    behavior: 'smooth'
+                                });
+                            } else {
+                                numberPad.classList.add('bottom-fixed');
+                                document.body.classList.add('number-pad-bottom');
+                                // 1~7번 홀일 때는 해당 입력창으로 스크롤
+                                setTimeout(() => {
+                                    input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                }, 100);
+                            }
+                            numberPad.style.display = 'grid';
+                            
+                            setTimeout(() => {
+                                input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            }, 100);
+                        }
+                    }
+                });
+            });
+            
+            // 상태 초기화
+            firstInputHole = null;
+            currentActiveHole = null;
+            playerStates = [null, null, null, null];
+        }
+
+        function handleInputFocus(e) {
+            e.target.classList.add('active');
+        }
+
+        function handleScoreInput(e) {
+            e.target.classList.remove('active');
+            updateDifference(e.target);
+            updateTotals();
+        }
+
+        function updateHoleStates(inputHole, playerIndex) {
+            console.log('Updating hole states. Input hole:', inputHole, 'Player:', playerIndex);
+            const table = document.getElementById('scoreTable');
+            
+            // 해당 플레이어의 첫 입력인 경우
+            if (playerStates[playerIndex] === null) {
+                playerStates[playerIndex] = inputHole;
+                console.log('First hole for player', playerIndex, 'set to:', inputHole);
+            }
+            
+            // 전체 게임의 첫 입력인 경우
+            if (firstInputHole === null) {
+                firstInputHole = inputHole;
+                console.log('First hole of game set to:', firstInputHole);
+            }
+            
+            // 다음 홀 계산
+            const nextHole = getNextHole(inputHole);
+            console.log('Next hole will be:', nextHole);
+            
+            // 해당 플레이어가 시작 홀로 돌아왔는지 확인
+            if (nextHole === playerStates[playerIndex]) {
+                console.log('Player', playerIndex, 'completed their round');
+                // 해당 플레이어의 남은 홀들 비활성화
+                for (let i = 1; i <= 9; i++) {
+                    const input = table.rows[i].cells[playerIndex + 2].querySelector('.score-input');
+                    if (!input.value) {  // 점수가 없는 홀만
+                        input.classList.remove('active');
+                        input.classList.add('disabled');
+                        input.style.backgroundColor = '#f8f8f8';
+                        input.style.color = '#666';
+                    }
+                }
+                return;
+            }
+            
+            // 해당 플레이어의 홀 상태 업데이트
+            for (let i = 1; i <= 9; i++) {
+                const input = table.rows[i].cells[playerIndex + 2].querySelector('.score-input');
+                const holeNumber = parseInt(table.rows[i].cells[0].textContent);
+                
+                // 모든 클래스 제거
+                input.classList.remove('locked', 'disabled');
+                
+                if (input.value) {
+                    // 점수가 입력된 홀은 잠금
+                    input.classList.add('locked');
+                    input.style.backgroundColor = '#f8f8f8';
+                    input.style.color = '#666';
+                } else if (holeNumber === nextHole) {
+                    // 다음 홀은 활성화
+                    input.style.backgroundColor = '';
+                    input.style.color = '';
+                } else {
+                    // 나머지는 비활성화
+                    input.classList.add('disabled');
+                    input.style.backgroundColor = '#f8f8f8';
+                    input.style.color = '#666';
+                }
+            }
+            
+            saveScores();
+        }
+
+        function setupNumberPad() {
+            const numberPad = document.getElementById('numberPad');
+            const inputs = document.querySelectorAll('.score-input');
+            
+            inputs.forEach(input => {
+                input.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    
+                    if (input.classList.contains('locked') || input.classList.contains('disabled')) {
+                        showToastMessage('입력할 수 없는 홀입니다');
+                        return;
+                    }
+                    
+                    selectedInput = e.target;
+                    const holeNumber = parseInt(input.closest('tr').cells[0].textContent);
+                    const playerIndex = Array.from(input.closest('tr').cells).indexOf(input.closest('td')) - 2;
+                    
+                    numberPad.classList.remove('top-fixed', 'bottom-fixed');
+                    if (holeNumber >= 8) {
+                        numberPad.classList.add('top-fixed');
+                    } else {
+                        numberPad.classList.add('bottom-fixed');
+                    }
+                    
+                    numberPad.style.display = 'grid';
+                    
+                    setTimeout(() => {
+                        input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }, 100);
+                });
+            });
+            
+            document.querySelectorAll('.number-button').forEach(button => {
+                button.addEventListener('click', (e) => {
+                    if (!selectedInput) return;
+                    
+                    const value = e.target.textContent;
+                    const currentHoleNumber = parseInt(selectedInput.closest('tr').cells[0].textContent);
+                    const playerIndex = Array.from(selectedInput.closest('tr').cells).indexOf(selectedInput.closest('td')) - 2;
+                    
+                    if (value === '취소') {
+                        document.getElementById('numberPad').style.display = 'none';
+                        document.body.classList.remove('number-pad-top', 'number-pad-bottom');
+                        selectedInput = null;
+                        return;
+                    } else if (value === '저장') {
+                        if (selectedInput && selectedInput.value) {
+                            document.getElementById('numberPad').style.display = 'none';
+                            document.body.classList.remove('number-pad-top', 'number-pad-bottom');
+                            selectedInput = null;
+                            showToastMessage('저장하였습니다');
+                        }
+                        return;
+                    } else {
+                        selectedInput.value = value;
+                        updateDifference(selectedInput);
+                        updateTotals();
+                        
+                        // 현재 플레이어의 모든 입력칸 가져오기
+                        const table = document.getElementById('scoreTable');
+                        let playerScoreCount = 0;
+                        
+                        // 1-9번 홀까지 순회하며 해당 플레이어의 점수 개수 세기
+                        for (let i = 1; i <= 9; i++) {
+                            const input = table.rows[i].cells[playerIndex + 2].querySelector('.score-input');
+                            if (input && input.value) {
+                                playerScoreCount++;
+                            }
+                        }
+                        
+                        console.log('Player', playerIndex, 'Score Count:', playerScoreCount); // 디버깅용
+                        
+                        // 9번째 입력인 경우 해당 칸 잠금
+                        if (playerScoreCount === 9) {
+                            console.log('Locking cell for player', playerIndex); // 디버깅용
+                            selectedInput.classList.add('locked');
+                            selectedInput.style.backgroundColor = '#f8f8f8';
+                            selectedInput.style.color = '#666';
+                        }
+                        
+                        updateHoleStates(currentHoleNumber, playerIndex);
+                        saveScores();
+                        numberPad.style.display = 'none';
+                        selectedInput = null;
+                    }
+                });
+            });
+        }
+
+        function checkHoleCompletion(input) {
+            const row = input.closest('tr');
+            const holeNumber = parseInt(row.cells[0].textContent);
+            let allFilled = true;
+
+            // 현재 홀의 모든 플레이어 점수 확인
+            for (let i = 2; i <= 5; i++) {
+                const scoreInput = row.cells[i].querySelector('.score-input');
+                if (!scoreInput.value) {
+                    allFilled = false;
+                    break;
+                }
+            }
+
+            if (allFilled) {
+                // 다음 홀로 이동 (9번 홀이 아닌 경우)
+                if (holeNumber < 9) {
+                    currentHole = holeNumber + 1;
+                }
+            }
+
+            updateTotals();
+        }
+
+        function updateDifference(input) {
+            const row = input.closest('tr');
+            const holeNumber = parseInt(row.cells[0].textContent);
+            const par = parseInt(row.cells[1].textContent);
+            const score = parseInt(input.value);
+            const diffDiv = input.nextElementSibling;
+
+            if (!isNaN(score)) {
+                const diff = score - par;
+                const diffText = diff === 0 ? '(E)' : 
+                                diff > 0 ? `(+${diff})` : 
+                                `(${diff})`;
+                diffDiv.textContent = diffText;
+                
+                // 클래스 초기화 후 적절한 클래스 추가
+                diffDiv.className = 'difference';
+                if (diff > 0) {
+                    diffDiv.classList.add('positive');  // 빨간색 - 양수
+                } else if (diff < 0) {
+                    diffDiv.classList.add('negative');  // 파란색 - 음수
+                }
+            } else {
+                diffDiv.textContent = '';
+                diffDiv.className = 'difference';
+            }
+        }
+
+        function checkAndLockPreviousHole(currentHoleNumber) {
+            // 첫 번째 홀이면 잠글 이전 홀이 없음
+            if (currentHoleNumber <= 1) return;
+
+            const table = document.getElementById('scoreTable');
+            
+            // 현재 홀 이전의 홀들 중 점수가 있는 홀의 모든 입력칸을 잠금
+            for (let holeNum = 1; holeNum < currentHoleNumber; holeNum++) {
+                const row = table.rows[holeNum];
+                let hasAnyScore = false;
+                
+                // 해당 홀에 점수가 하나라도 있는지 확인
+                for (let i = 2; i <= 5; i++) {
+                    const input = row.cells[i].querySelector('.score-input');
+                    if (input.value) {
+                        hasAnyScore = true;
+                        break;
+                    }
+                }
+                
+                // 점수가 하나라도 있는 홀은 4칸 모두 잠금
+                if (hasAnyScore) {
+                    for (let i = 2; i <= 5; i++) {
+                        const input = row.cells[i].querySelector('.score-input');
+                        input.classList.add('locked');
+                        input.style.backgroundColor = '#f8f8f8';
+                        input.style.color = '#666';
+                    }
+                }
+            }
+        }
+
+        function checkAndLockHole(holeNumber) {
+            const table = document.getElementById('scoreTable');
+            const row = table.rows[holeNumber];
+            let allFilled = true;
+            
+            // 현재 홀의 모든 플레이어 점수 확인
+            for (let i = 2; i <= 5; i++) {
+                const input = row.cells[i].querySelector('.score-input');
+                if (!input.value) {
+                    allFilled = false;
+                    break;
+                }
+            }
+
+            // 모든 점수가 입력되었다면
+            if (allFilled) {
+                // 현재 홀이 마지막 홀이 아니면 다음 홀로 이동
+                if (holeNumber < 9) {
+                    currentHole = holeNumber + 1;
+                }
+
+                // 이전 홀들 잠금
+                lockPreviousHoles(holeNumber);
+            }
+        }
+
+        function lockPreviousHoles(currentHole) {
+            const table = document.getElementById('scoreTable');
+            
+            // 1번 홀부터 현재 홀까지 모든 입력 필드 잠금
+            for (let i = 1; i <= currentHole; i++) {
+                const row = table.rows[i];
+                for (let j = 2; j <= 5; j++) {
+                    const input = row.cells[j].querySelector('.score-input');
+                    input.classList.add('locked');
+                }
+            }
+        }
+
+        function calculateSubTotal(table, startHole, endHole) {
+            const totals = [0, 0, 0, 0];
+            const diffs = [0, 0, 0, 0];
+            
+            for (let i = startHole; i <= endHole; i++) {
+                const row = table.rows[i];
+                const par = parseInt(row.cells[1].textContent);
+                
+                for (let j = 0; j < 4; j++) {
+                    const cell = row.cells[j + 2];
+                    const input = cell.querySelector('.score-input');
+                    const value = parseInt(input.value);
+                    if (!isNaN(value)) {
+                        totals[j] += value;
+                        diffs[j] += value - par;
+                    }
+                }
+            }
+            return { totals, diffs };
+        }
+
+        function updateTotals() {
+            const table = document.getElementById('scoreTable');
+            const playerCount = 4;
+            const { totals, diffs } = calculateSubTotal(table, 1, 9);
+
+            // Update totals
+            const totalRow = table.rows[table.rows.length - 2]; // 합계 행은 사인 행 바로 위
+            for (let i = 0; i < playerCount; i++) {
+                const cell = totalRow.cells[i + 1]; // 첫 번째 열이 "합계"로 병합되어 있으므로 +1
+                cell.className = 'total-score'; // 클래스 추가
+                cell.textContent = totals[i] || ''; // 합계만 표시하고 par 대비는 표시하지 않음
+            }
+        }
+
+        function updateDateDisplay() {
+            const dateInput = document.getElementById('gameDate');
+            const dateDisplay = document.getElementById('dateDisplay');
+            const container = document.getElementById('mainContainer');
+            const courseName = container.classList.contains('pogok') ? '포곡' : '아르피아';
+            
+            // 현재 한국 시간 가져오기
+            const now = new Date();
+            const koreaTime = new Date(now.toLocaleString("en-US", {timeZone: "Asia/Seoul"}));
+            
+            // 날짜 표시 형식 설정
+            const year = koreaTime.getFullYear();
+            const month = String(koreaTime.getMonth() + 1).padStart(2, '0');
+            const day = String(koreaTime.getDate()).padStart(2, '0');
+            const hours = String(koreaTime.getHours()).padStart(2, '0');
+            const minutes = String(koreaTime.getMinutes()).padStart(2, '0');
+            
+            // dateInput 값 업데이트
+            dateInput.value = koreaTime.toISOString().slice(0, 16);
+            
+            // 화면에 표시할 날짜 형식 설정
+            const formattedDate = `${courseName} | ${year}.${month}.${day} ${hours}:${minutes}`;
+            dateDisplay.textContent = formattedDate;
+        }
+
+        function switchTheme(theme, fromClick = false) {
+            const container = document.getElementById('mainContainer');
+            const tabs = document.querySelectorAll('.tab');
+            
+            // 현재 테마 확인
+            const currentTheme = container.classList.contains('pogok') ? 'pogok' : 'arpia';
+            
+            // 같은 테마를 클릭한 경우 아무 동작하지 않음
+            if (theme === currentTheme && fromClick) {
+                return;
+            }
+            
+            // 탭 클릭으로 인한 전환일 때만 초기화 확인
+            if (fromClick) {
+                const confirmMessage = `${theme === 'pogok' ? '포곡' : '아르피아'} 구장으로 이동하면 모든 데이터가 초기화됩니다.\n이동하시겠습니까?`;
+                if (!confirm(confirmMessage)) {
+                    return;  // 취소하면 함수 종료
+                }
+                
+                // 초기화 실행
+                resetScores(true);  // true를 전달하여 확인 메시지 스킵
+            }
+            
+            // 테마 변경
+            container.className = `container ${theme}`;
+            
+            // 탭 활성화 상태 변경
+            tabs.forEach(tab => {
+                tab.classList.remove('active');
+                if (tab.textContent === (theme === 'pogok' ? '포곡' : '아르피아')) {
+                    tab.classList.add('active');
+                }
+            });
+            
+            // 테마에 따른 이름 설정
+            playerNames = theme === 'pogok' ? pogokNames : arpiaNames;
+            for (let i = 0; i < 4; i++) {
+                document.querySelector(`#scoreTable th:nth-child(${i+3})`).textContent = playerNames[i];
+            }
+            
+            // PAR 값 업데이트
+            parValues = theme === 'pogok' ? pogokPar : arpiaPar;
+            updateParValues();
+            updateDateDisplay();
+            
+            // 초기화 후 데이터 저장
+            if (fromClick) {
+                saveScores(true);
+            }
+        }
+
+        // PAR 값 업데이트 함수
+        function updateParValues() {
+            const table = document.getElementById('scoreTable');
+            for (let i = 1; i <= 9; i++) {
+                const row = table.rows[i];
+                if (row) {
+                    row.cells[1].textContent = parValues[i-1];
+                }
+            }
+            // 모든 점수의 차이값 재계산
+            document.querySelectorAll('.score-input').forEach(input => {
+                if (input.value) {
+                    updateDifference(input);
+                }
+            });
+            updateTotals();
+        }
+
+        function resetScores(skipConfirm = false) {
+            if (!skipConfirm && !confirm('모든 점수와 서명을 초기화하시겠습니까?')) return;
+            
+            const table = document.getElementById('scoreTable');
+            
+            // 모든 점수 입력 필드 초기화
+            for (let i = 1; i <= 9; i++) {
+                const row = table.rows[i];
+                for (let j = 2; j <= 5; j++) {
+                    const input = row.cells[j].querySelector('.score-input');
+                    input.value = '';
+                    input.classList.remove('locked', 'disabled');
+                    input.style.backgroundColor = '';
+                    input.style.color = '';
+                    const diffDiv = input.nextElementSibling;
+                    if (diffDiv) {
+                        diffDiv.textContent = '';
+                        diffDiv.className = 'difference';
+                    }
+                }
+            }
+            
+            // 합계 초기화
+            const totalRow = table.rows[table.rows.length - 2]; // 합계 행은 사인 행 바로 위
+            for (let i = 1; i <= 4; i++) {
+                const totalCell = totalRow.cells[i];
+                if (totalCell) {
+                    totalCell.textContent = '';
+                    totalCell.className = 'total-score';
+                }
+            }
+
+            // 사인 초기화
+            const lastRow = table.rows[table.rows.length - 1];
+            const signatureCells = [1, 2, 3, 4].map(i => lastRow.cells[i]);
+            
+            signatureCells.forEach(cell => {
+                cell.innerHTML = '';
+                const placeholder = document.createElement('div');
+                placeholder.className = 'signature-placeholder';
+                placeholder.textContent = '싸인';
+                cell.appendChild(placeholder);
+                
+                cell.style.backgroundImage = 'none';
+                cell.style.backgroundColor = '#fff';
+                cell.classList.remove('signed');
+            });
+
+            // 상태 초기화
+            firstInputHole = null;
+            currentActiveHole = null;
+            playerStates = [null, null, null, null];
+            setupScoreInputs();
+            
+            // 숫자패드 닫기
+            document.getElementById('numberPad').style.display = 'none';
+            selectedInput = null;
+
+            // 저장된 점수도 초기화
+            saveScores(true);
+            
+            // 모든 점수 합계 재계산
+            updateTotals();
+        }
+
+        function showNameModal() {
+            console.log('showNameModal called'); // 디버깅용
+            const modal = document.getElementById('nameModal');
+            if (!modal) {
+                console.error('Name modal not found'); // 디버깅용
+                return;
+            }
+            modal.style.display = 'flex';
+            
+            const isPogok = document.getElementById('mainContainer').classList.contains('pogok');
+            const currentNames = isPogok ? pogokNames : arpiaNames;
+            
+            // 입력 필드 초기화
+            for (let i = 1; i <= 4; i++) {
+                const input = document.getElementById(`name${i}`);
+                if (input) {
+                    input.value = currentNames[i-1] === `이름${i}` ? '' : currentNames[i-1];
+                }
+            }
+        }
+
+        function resetNames() {
+            const isPogok = document.getElementById('mainContainer').classList.contains('pogok');
+            const defaultNames = ['이름1', '이름2', '이름3', '이름4'];
+            
+            // 입력 필드 초기화
+            for (let i = 1; i <= 4; i++) {
+                document.getElementById(`name${i}`).value = '';
+            }
+            
+            // 헤더 이름 초기화
+            for (let i = 0; i < 4; i++) {
+                document.querySelector(`#scoreTable th:nth-child(${i+3})`).textContent = defaultNames[i];
+            }
+            
+            // 저장된 이름 초기화
+            if (isPogok) {
+                pogokNames.splice(0, 4, ...defaultNames);
+            } else {
+                arpiaNames.splice(0, 4, ...defaultNames);
+            }
+            
+            saveScores();  // 초기화된 이름 저장
+            showToastMessage('이름이 초기화 되었습니다');  // 메시지 변경
+            document.getElementById('nameModal').style.display = 'none';  // 모달 닫기
+        }
+
+        function saveNames() {
+            const isPogok = document.getElementById('mainContainer').classList.contains('pogok');
+            const targetNames = isPogok ? pogokNames : arpiaNames;
+            let changed = false;
+            
+            // 이름 업데이트
+            for (let i = 1; i <= 4; i++) {
+                const input = document.getElementById(`name${i}`);
+                if (input) {
+                    const newName = input.value.trim() || `이름${i}`;
+                    if (targetNames[i-1] !== newName) {
+                        changed = true;
+                        targetNames[i-1] = newName;
+                        
+                        // 테이블 헤더 업데이트
+                        const nameHeader = document.querySelector(`#scoreTable th:nth-child(${i+2})`);
+                        if (nameHeader) {
+                            nameHeader.textContent = newName;
+                        }
+                    }
+                }
+            }
+            
+            // 변경사항이 있을 때만 저장
+            if (changed) {
+                saveScores();
+                showToastMessage('이름이 저장되었습니다');
+            }
+            
+            // 모달 닫기
+            const modal = document.getElementById('nameModal');
+            if (modal) {
+                modal.style.display = 'none';
+            }
+        }
+
+        function saveScores(isReset = false) {
+            const isPogok = document.getElementById('mainContainer').classList.contains('pogok');
+            const data = {
+                date: new Date().toLocaleString("en-US", {timeZone: "Asia/Seoul"}),  // 한국 시간으로 저장
+                scores: Array.from(document.querySelectorAll('.score-input')).map(input => input.value),
+                theme: isPogok ? 'pogok' : 'arpia',
+                pogokNames: pogokNames,
+                arpiaNames: arpiaNames,
+                firstInputHole: firstInputHole,
+                playerStates: playerStates,
+                signatures: Array.from(document.querySelectorAll('.signature-cell')).map(cell => cell.innerHTML),
+                inputStates: Array.from(document.querySelectorAll('.score-input')).map(input => ({
+                    disabled: input.classList.contains('disabled'),
+                    locked: input.classList.contains('locked'),
+                    backgroundColor: input.style.backgroundColor,
+                    color: input.style.color
+                }))
+            };
+            
+            localStorage.setItem('golfScores', JSON.stringify(data));
+
+            // 초기화가 아닐 때만 메시지 표시
+            if (!isReset) {
+                let hasAnyScore = document.querySelectorAll('.score-input').some(input => input.value);
+                if (hasAnyScore) {
+                    showToastMessage('저장하였습니다');
+                }
+            }
+        }
+
+        function loadSavedScores() {
+            const saved = localStorage.getItem('golfScores');
+            if (!saved) return;
+            
+            const data = JSON.parse(saved);
+            
+            // 테마 설정
+            switchTheme(data.theme);
+            
+            // 날짜 설정 - 한국 시간으로 변환
+            const dateInput = document.getElementById('gameDate');
+            if (dateInput && data.date) {
+                const savedDate = new Date(data.date);
+                dateInput.value = savedDate.toISOString().slice(0, 16);
+            } else {
+                const koreaTime = new Date(new Date().toLocaleString("en-US", {timeZone: "Asia/Seoul"}));
+                dateInput.value = koreaTime.toISOString().slice(0, 16);
+            }
+            
+            // 이름 설정
+            if (data.pogokNames) {
+                pogokNames.splice(0, 4, ...data.pogokNames);
+            }
+            if (data.arpiaNames) {
+                arpiaNames.splice(0, 4, ...data.arpiaNames);
+            }
+            
+            // 현재 테마에 맞는 이름 표시
+            const currentNames = data.theme === 'pogok' ? pogokNames : arpiaNames;
+            for (let i = 0; i < 4; i++) {
+                document.querySelector(`#scoreTable th:nth-child(${i+3})`).textContent = currentNames[i];
+            }
+            
+            // 상태 복원
+            firstInputHole = data.firstInputHole;
+            playerStates = data.playerStates || [null, null, null, null];
+            
+            // 점수 설정 및 홀 상태 업데이트
+            document.querySelectorAll('.score-input').forEach((input, i) => {
+                input.value = data.scores[i] || '';
+                if (data.inputStates && data.inputStates[i]) {
+                    const state = data.inputStates[i];
+                    if (state.disabled) input.classList.add('disabled');
+                    if (state.locked) input.classList.add('locked');
+                    if (state.backgroundColor) input.style.backgroundColor = state.backgroundColor;
+                    if (state.color) input.style.color = state.color;
+                }
+                if (input.value) {
+                    const holeNumber = parseInt(input.closest('tr').cells[0].textContent);
+                    const playerIndex = Math.floor(i / 9);  // 9홀이므로 9로 나눈 몫이 플레이어 인덱스
+                    updateDifference(input);
+                }
+            });
+            
+            // 서명 복원
+            if (data.signatures) {
+                const signatureCells = document.querySelectorAll('.signature-cell');
+                data.signatures.forEach((signature, i) => {
+                    if (signature && signature !== '<div class="signature-placeholder">싸인</div>') {
+                        signatureCells[i].innerHTML = signature;
+                        signatureCells[i].classList.add('signed');
+                    }
+                });
+            }
+            
+            updateTotals();
+        }
+
+        async function saveAsImage() {
+            showToastMessage('이미지 저장 기능이 비활성화되었습니다');
+            return;
+        }
+
+        function showToastMessage(message) {
+            // 기존 토스트 메시지가 있다면 제거
+            const existingToast = document.querySelector('.toast-message');
+            if (existingToast) {
+                existingToast.remove();
+            }
+
+            // 새 토스트 메시지 생성
+            const toast = document.createElement('div');
+            toast.className = 'toast-message';
+            toast.textContent = message;
+            document.body.appendChild(toast);
+
+            // 토스트 메시지 표시
+            toast.style.display = 'block';
+
+            // 1.5초 후 토스트 메시지 제거
+            setTimeout(() => {
+                toast.remove();
+            }, 1500);
+        }
+
+        // HTML에 토스트 메시지 컨테이너 추가
+        document.body.insertAdjacentHTML('beforeend', '<div class="toast-message" style="display: none;"></div>');
+
+        // Initialize when the page loads
+        window.onload = function() {
+            createScoreTable();
+            setupScoreInputs();
+            setupNumberPad();
+            
+            // 이름 헤더 클릭 이벤트 설정
+            const nameHeaders = document.querySelectorAll('.name-header');
+            nameHeaders.forEach(header => {
+                header.onclick = showNameModal;
+            });
+            
+            // 이름 모달 버튼 이벤트 리스너 설정
+            const modal = document.getElementById('nameModal');
+            if (modal) {
+                const saveBtn = modal.querySelector('.save-names-button');
+                const resetBtn = modal.querySelector('.reset-names-button');
+                const closeBtn = modal.querySelector('.close-names-button');
+                
+                if (saveBtn) saveBtn.onclick = function() {
+                    saveNames();
+                    return false;
+                };
+                if (resetBtn) resetBtn.onclick = function() {
+                    resetNames();
+                    return false;
+                };
+                if (closeBtn) closeBtn.onclick = function() {
+                    closeNameModal();
+                    return false;
+                };
+                
+                // 모달 외부 클릭 시 닫기
+                modal.onclick = function(e) {
+                    if (e.target === modal) {
+                        closeNameModal();
+                    }
+                };
+            }
+            
+            // 현재 한국 시간으로 초기화
+            const koreaTime = new Date(new Date().toLocaleString("en-US", {timeZone: "Asia/Seoul"}));
+            const dateInput = document.getElementById('gameDate');
+            if (dateInput) {
+                dateInput.value = koreaTime.toISOString().slice(0, 16);
+                dateInput.addEventListener('change', updateDateDisplay);
+            }
+            
+            // 서명 셀 클릭 이벤트 설정
+            document.querySelectorAll('.signature-cell').forEach((cell, index) => {
+                cell.onclick = () => openSignatureModal(index);
+            });
+
+            // 저장된 데이터가 있으면 로드, 없으면 포곡 테마로 시작
+            const savedData = localStorage.getItem('golfScores');
+            if (savedData) {
+                loadSavedScores();
+            } else {
+                switchTheme('pogok', false);  // 초기 로드이므로 fromClick = false
+            }
+            
+            updateDateDisplay();
+        };
+
+        // 서명 관련 변수들
+        let canvas, ctx;
+        let isDrawing = false;
+        let lastX = 0;
+        let lastY = 0;
+        let currentPlayerIndex = -1;
+
+        function openSignatureModal(playerIndex) {
+            currentPlayerIndex = playerIndex;
+            const modal = document.getElementById('signatureModal');
+            modal.style.display = 'flex';
+            modal.classList.add('show');  // show 클래스 추가
+            
+            const nameHeader = modal.querySelector('.player-name');
+            const scoreHeader = modal.querySelector('.player-score');
+            
+            // 플레이어 이름과 점수 설정
+            const table = document.getElementById('scoreTable');
+            const playerName = table.rows[0].cells[playerIndex + 2].textContent;
+            
+            // 합계 점수를 가져오기
+            const totalRow = table.rows[table.rows.length - 2];
+            let totalScore = '0';
+            if (totalRow) {
+                const scoreCell = totalRow.cells[playerIndex + 1];
+                if (scoreCell) {
+                    const scoreText = scoreCell.textContent.trim();
+                    totalScore = scoreText.split(' ')[0] || '0';
+                }
+            }
+            
+            nameHeader.textContent = playerName;
+            scoreHeader.textContent = `Score: ${totalScore}`;
+            
+            // 캔버스 설정
+            canvas = document.getElementById('signatureCanvas');
+            ctx = canvas.getContext('2d');
+            
+            // 캔버스 크기 설정 (CSS 크기와 일치시키기)
+            const rect = canvas.getBoundingClientRect();
+            canvas.width = rect.width;
+            canvas.height = rect.height;
+            
+            // 캔버스 초기화
+            ctx.fillStyle = 'white';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.strokeStyle = 'black';
+            ctx.lineWidth = 2;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            
+            // 이벤트 리스너 설정
+            canvas.addEventListener('mousedown', startDrawing);
+            canvas.addEventListener('mousemove', draw);
+            canvas.addEventListener('mouseup', stopDrawing);
+            canvas.addEventListener('mouseout', stopDrawing);
+            
+            // 터치 이벤트
+            canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
+            canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
+            canvas.addEventListener('touchend', handleTouchEnd, { passive: false });
+        }
+
+        function handleTouchStart(e) {
+            e.preventDefault();
+            const touch = e.touches[0];
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            
+            lastX = (touch.clientX - rect.left) * scaleX;
+            lastY = (touch.clientY - rect.top) * scaleY;
+            isDrawing = true;
+        }
+
+        function handleTouchMove(e) {
+            e.preventDefault();
+            if (!isDrawing) return;
+            
+            const touch = e.touches[0];
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            
+            const x = (touch.clientX - rect.left) * scaleX;
+            const y = (touch.clientY - rect.top) * scaleY;
+            
+            ctx.beginPath();
+            ctx.moveTo(lastX, lastY);
+            ctx.lineTo(x, y);
+            ctx.stroke();
+            
+            lastX = x;
+            lastY = y;
+        }
+
+        function startDrawing(e) {
+            isDrawing = true;
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            
+            lastX = (e.clientX - rect.left) * scaleX;
+            lastY = (e.clientY - rect.top) * scaleY;
+        }
+
+        function draw(e) {
+            if (!isDrawing) return;
+            
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            
+            const x = (e.clientX - rect.left) * scaleX;
+            const y = (e.clientY - rect.top) * scaleY;
+            
+            ctx.beginPath();
+            ctx.moveTo(lastX, lastY);
+            ctx.lineTo(x, y);
+            ctx.stroke();
+            
+            lastX = x;
+            lastY = y;
+        }
+
+        function stopDrawing() {
+            isDrawing = false;
+        }
+
+        function clearSignature() {
+            ctx.fillStyle = 'white';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.strokeStyle = 'black';
+        }
+
+        function saveSignature() {
+            if (currentPlayerIndex === -1) return;
+            
+            const signatureImage = canvas.toDataURL('image/png');
+            const table = document.getElementById('scoreTable');
+            // 서명란도 인덱스 1부터 시작
+            const signatureCell = table.rows[table.rows.length - 1].cells[currentPlayerIndex + 1];
+            
+            // 이미지로 서명 표시
+            signatureCell.innerHTML = `<img src="${signatureImage}" alt="서명" />`;
+            signatureCell.classList.add('signed');  // 서명 완료 표시 추가
+            
+            closeSignatureModal();
+        }
+
+        function closeSignatureModal() {
+            document.getElementById('signatureModal').style.display = 'none';
+            currentPlayerIndex = -1;
+        }
+
+        function closeNameModal() {
+            const modal = document.getElementById('nameModal');
+            modal.style.display = 'none';
+        }
+
+        // 이미지 저장 관련 함수는 여기서 새로 시작할 예정입니다.
+
+        function updateTotalScores() {
+            const table = document.querySelector('table');
+            const totalRow = table.rows[table.rows.length - 2]; // 합계 행은 사인 행 바로 위
+            const totals = [0, 0, 0, 0];
+
+            // 각 플레이어의 점수 합계 계산
+            for (let i = 2; i < table.rows.length - 2; i++) {
+                const row = table.rows[i];
+                for (let j = 0; j < 4; j++) {
+                    const input = row.cells[j + 2].querySelector('input');
+                    if (input && input.value) {
+                        totals[j] += parseInt(input.value);
+                    }
+                }
+            }
+
+            // 합계 표시
+            for (let i = 0; i < 4; i++) {
+                const cell = totalRow.cells[i + 1];
+                cell.textContent = totals[i] || '';
+            }
+
+            saveScores();  // 점수 저장
+        }
+
+        async function captureScreen() {
+            try {
+                // 캡처 전 준비
+                const container = document.getElementById('mainContainer');
+                container.classList.add('show-date');
+                updateDateDisplay();
+
+                // 스크롤 위치 저장
+                const scrollPos = window.scrollY;
+
+                // 모든 input 필드의 현재 상태를 저장하고 텍스트로 변환
+                const inputs = document.querySelectorAll('.score-input');
+                const inputStates = [];
+                
+                inputs.forEach(input => {
+                    const cell = input.parentElement;
+                    inputStates.push({
+                        value: input.value,
+                        html: cell.innerHTML
+                    });
+                    
+                    if (input.value) {
+                        // input을 span으로 교체
+                        const span = document.createElement('span');
+                        span.className = 'score-text';
+                        span.textContent = input.value;
+                        // difference div 유지
+                        const diffDiv = cell.querySelector('.difference');
+                        cell.innerHTML = '';
+                        cell.appendChild(span);
+                        if (diffDiv) cell.appendChild(diffDiv);
+                    }
+                });
+
+                try {
+                    const captureArea = document.getElementById('captureArea');
+                    const canvas = await html2canvas(captureArea, {
+                        scale: 2,
+                        useCORS: true,
+                        scrollY: -window.scrollY,
+                        backgroundColor: null,
+                        logging: false
+                    });
+
+                    // 캡처된 이미지를 Blob으로 변환
+                    canvas.toBlob(async (blob) => {
+                        try {
+                            const date = new Date(new Date().toLocaleString("en-US", {timeZone: "Asia/Seoul"})); // 한국 시간으로 변환
+                            const fileName = `골프스코어_${date.getFullYear()}${(date.getMonth()+1).toString().padStart(2,'0')}${date.getDate().toString().padStart(2,'0')}_${date.getHours().toString().padStart(2,'0')}${date.getMinutes().toString().padStart(2,'0')}.png`;
+
+                            // 모바일 기기에서는 공유 API 사용
+                            if (navigator.share && navigator.canShare) {
+                                const file = new File([blob], fileName, { type: 'image/png' });
+                                if (navigator.canShare({ files: [file] })) {
+                                    await navigator.share({
+                                        files: [file],
+                                        title: '골프 스코어',
+                                        text: '골프 스코어 기록'
+                                    });
+                                    showToastMessage('이미지가 공유되었습니다');
+                                    
+                                    // 약간의 지연 후 새로고침 실행
+                                    setTimeout(() => {
+                                        window.location.href = window.location.href;
+                                    }, 500);
+                                } else {
+                                    // 공유가 불가능한 경우 다운로드
+                                    const link = document.createElement('a');
+                                    link.href = URL.createObjectURL(blob);
+                                    link.download = fileName;
+                                    link.click();
+                                    showToastMessage('이미지가 저장되었습니다');
+                                }
+                            } else {
+                                                            // 데스크톱의 경우 다운로드
+                            const link = document.createElement('a');
+                            link.href = URL.createObjectURL(blob);
+                            link.download = fileName;
+                            link.click();
+                            showToastMessage('이미지가 저장되었습니다');
+                            
+                            // 약간의 지연 후 새로고침 실행
+                            setTimeout(() => {
+                                window.location.href = window.location.href;
+                            }, 500);
+                            }
+                        } catch (error) {
+                            console.error('이미지 저장/공유 중 오류:', error);
+                            showToastMessage('점수를 공유합니다');
+                        }
+                    }, 'image/png');
+
+                } catch (error) {
+                    console.error('캡처 중 오류:', error);
+                    showToastMessage('이미지 캡처에 실패했습니다');
+                }
+
+                // 원래 상태로 복구
+                inputs.forEach((input, index) => {
+                    const cell = input.parentElement;
+                    cell.innerHTML = inputStates[index].html;
+                });
+
+                container.classList.remove('show-date');
+                window.scrollTo(0, scrollPos);
+                
+                // 약간의 지연 후 강제 새로고침
+                setTimeout(() => {
+                    window.location.href = window.location.href;
+                }, 1000);
+
+            } catch (error) {
+                console.error('캡처 처리 중 오류:', error);
+                showToastMessage('점수를 공유합니다');
+            }
+        }
+
+        // html2canvas 라이브러리 동적 로드
+        function loadHtml2Canvas() {
+            return new Promise((resolve, reject) => {
+                if (window.html2canvas) {
+                    resolve();
+                    return;
+                }
+
+                const script = document.createElement('script');
+                script.src = 'https://html2canvas.hertzen.com/dist/html2canvas.min.js';
+                script.onload = resolve;
+                script.onerror = reject;
+                document.head.appendChild(script);
+            });
+        }
+
+        // 페이지 로드 시 html2canvas 라이브러리 로드
+        window.addEventListener('load', loadHtml2Canvas);
+
+        async function captureScoreImage() {
+            try {
+                const container = document.getElementById('mainContainer');
+                container.classList.add('show-date');
+                updateDateDisplay();
+                const scrollPos = window.scrollY;
+                const inputs = document.querySelectorAll('.score-input');
+                const inputStates = [];
+                inputs.forEach(input => {
+                    const cell = input.parentElement;
+                    inputStates.push({
+                        value: input.value,
+                        html: cell.innerHTML
+                    });
+                    if (input.value) {
+                        const span = document.createElement('span');
+                        span.className = 'score-text';
+                        span.textContent = input.value;
+                        const diffDiv = cell.querySelector('.difference');
+                        cell.innerHTML = '';
+                        cell.appendChild(span);
+                        if (diffDiv) cell.appendChild(diffDiv);
+                    }
+                });
+                try {
+                    const captureArea = document.getElementById('captureArea');
+                    const canvas = await html2canvas(captureArea, {
+                        scale: 2,
+                        useCORS: true,
+                        scrollY: -window.scrollY,
+                        backgroundColor: null,
+                        logging: false
+                    });
+                    canvas.toBlob(async (blob) => {
+                        try {
+                            const date = new Date(new Date().toLocaleString("en-US", {timeZone: "Asia/Seoul"}));
+                            const fileName = `골프스코어_${date.getFullYear()}${(date.getMonth()+1).toString().padStart(2,'0')}${date.getDate().toString().padStart(2,'0')}_${date.getHours().toString().padStart(2,'0')}${date.getMinutes().toString().padStart(2,'0')}.png`;
+                            // 모바일: 공유 API 무시, 갤러리 저장만
+                            if (/Mobi|Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
+                                // 모바일: 강제 다운로드(갤러리 저장)
+                                const link = document.createElement('a');
+                                link.href = URL.createObjectURL(blob);
+                                link.download = fileName;
+                                document.body.appendChild(link);
+                                link.click();
+                                document.body.removeChild(link);
+                                showToastMessage('이미지가 저장되었습니다');
+                                setTimeout(() => {
+                                    window.location.href = window.location.href;
+                                }, 500);
+                            } else {
+                                // 데스크탑: 기존과 동일하게 다운로드
+                                const link = document.createElement('a');
+                                link.href = URL.createObjectURL(blob);
+                                link.download = fileName;
+                                document.body.appendChild(link);
+                                link.click();
+                                document.body.removeChild(link);
+                                showToastMessage('이미지가 저장되었습니다');
+                                setTimeout(() => {
+                                    window.location.href = window.location.href;
+                                }, 500);
+                            }
+                        } catch (error) {
+                            console.error('이미지 저장 오류:', error);
+                            showToastMessage('이미지 저장에 실패했습니다');
+                        }
+                    }, 'image/png');
+                } catch (error) {
+                    console.error('캡처 중 오류:', error);
+                    showToastMessage('이미지 캡처에 실패했습니다');
+                }
+                inputs.forEach((input, index) => {
+                    const cell = input.parentElement;
+                    cell.innerHTML = inputStates[index].html;
+                });
+                container.classList.remove('show-date');
+                window.scrollTo(0, scrollPos);
+            } catch (error) {
+                console.error('캡처 처리 중 오류:', error);
+                showToastMessage('이미지 저장에 실패했습니다');
+            }
+        }
+    </script>

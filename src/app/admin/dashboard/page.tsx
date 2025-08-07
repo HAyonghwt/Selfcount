@@ -556,6 +556,8 @@ export default function AdminDashboard() {
             if (filterGroup === 'all') {
                 // 전체 점수 초기화
                 await set(ref(db, 'scores'), null);
+                // sessionStorage도 함께 초기화 (self-scoring 페이지용)
+                sessionStorage.removeItem('selfScoringTempData');
             } else {
                 // 특정 그룹만 초기화
                 const groupPlayers = finalDataByGroup[filterGroup] || [];
@@ -586,8 +588,40 @@ export default function AdminDashboard() {
                     });
                     
                     await set(ref(db, 'scores'), updatedScores);
+                    
+                    // 해당 그룹의 sessionStorage 데이터도 초기화
+                    const savedData = sessionStorage.getItem('selfScoringTempData');
+                    if (savedData) {
+                        try {
+                            const data = JSON.parse(savedData);
+                            // 해당 그룹의 선수들만 점수 초기화
+                            const groupPlayerIds = groupPlayers.map((p: any) => p.id);
+                            if (data.scores) {
+                                Object.keys(data.scores).forEach(playerId => {
+                                    if (groupPlayerIds.includes(playerId)) {
+                                        delete data.scores[playerId];
+                                    }
+                                });
+                                // 업데이트된 데이터 저장
+                                if (Object.keys(data.scores).length === 0) {
+                                    sessionStorage.removeItem('selfScoringTempData');
+                                } else {
+                                    sessionStorage.setItem('selfScoringTempData', JSON.stringify(data));
+                                }
+                            }
+                        } catch (error) {
+                            console.error('sessionStorage 초기화 실패:', error);
+                        }
+                    }
                 }
             }
+            
+            toast({ 
+                title: '초기화 완료', 
+                description: filterGroup === 'all' 
+                    ? '모든 점수가 초기화되었습니다.' 
+                    : `${filterGroup} 그룹의 점수가 초기화되었습니다.` 
+            });
         } catch (e) {
             toast({ title: '초기화 실패', description: '점수 초기화 중 오류가 발생했습니다.', variant: 'destructive' });
         } finally {
