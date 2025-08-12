@@ -116,12 +116,10 @@ export default function SelfScoringGameSetupPage() {
     const availableJos = useMemo(() => {
         if (!selectedGroup) return [];
         
-        // 아이디에서 번호 추출 (player1@yongin.com -> 1)
-        const playerNumber = parseInt(captainEmail.match(/player(\d+)@/)?.[1] || '1');
-        
-        // 각 아이디당 10개 조씩 할당
-        const startGroup = (playerNumber - 1) * 10 + 1;
-        const endGroup = playerNumber * 10;
+        // 조장 데이터에서 조 번호 추출
+        const captainJo = captainData?.jo || 1;
+        const startGroup = Math.floor((captainJo - 1) / 10) * 10 + 1;
+        const endGroup = Math.min(startGroup + 9, 100);
         
         // 1부터 100까지의 조 번호 생성 (실제로는 더 많을 수 있음)
         const allJos = Array.from({ length: 100 }, (_, i) => (i + 1).toString());

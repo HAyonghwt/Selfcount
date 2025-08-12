@@ -29,3 +29,124 @@ remote.origin.url=https://github.com/HAyonghwt/Selfcount.git
 remote.origin.fetch=+refs/heads/*:refs/remotes/origin/*
 user.email=dp30@naver.com
 user.name=HAyonghwt
+warning: in the working copy of 'src/app/admin/referees/page.tsx', LF will be replaced by CRLF the next time Git touches it
+[1mdiff --git a/src/app/admin/referees/page.tsx b/src/app/admin/referees/page.tsx[m
+[1mindex 2cd7823..e0432d5 100644[m
+[1m--- a/src/app/admin/referees/page.tsx[m
+[1m+++ b/src/app/admin/referees/page.tsx[m
+[36m@@ -8,6 +8,7 @@[m [mimport { Button } from '@/components/ui/button';[m
+ import { Input } from '@/components/ui/input';[m
+ import { db } from '@/lib/firebase';[m
+ import { ref, onValue } from 'firebase/database';[m
+[32m+[m[32mimport { getRefereeAccounts } from '@/lib/auth';[m
+ import { Skeleton } from '@/components/ui/skeleton';[m
+ import { Eye, EyeOff, Copy, Check } from 'lucide-react';[m
+ import { useToast } from '@/hooks/use-toast';[m
+[36m@@ -21,6 +22,8 @@[m [mexport default function RefereeManagementPage() {[m
+     const [refereePassword, setRefereePassword] = useState('');[m
+     const [mainUrl, setMainUrl] = useState('');[m
+     const [copied, setCopied] = useState(false);[m
+[32m+[m[32m    const [refereeAccounts, setRefereeAccounts] = useState<any[]>([]);[m
+[32m+[m[32m    const [showPasswords, setShowPasswords] = useState<{ [key: string]: boolean }>({});[m
+ [m
+     useEffect(() => {[m
+         if (!db) return;[m
+[36m@@ -39,6 +42,19 @@[m [mexport default function RefereeManagementPage() {[m
+         };[m
+     }, []);[m
+ [m
+[32m+[m[32m    // 심판 계정 목록 불러오기[m
+[32m+[m[32m    useEffect(() => {[m
+[32m+[m[32m        const loadRefereeAccounts = async () => {[m
+[32m+[m[32m            try {[m
+[32m+[m[32m                const accounts = await getRefereeAccounts();[m
+[32m+[m[32m                setRefereeAccounts(accounts);[m
+[32m+[m[32m            } catch (error) {[m
+[32m+[m[32m                console.error('심판 계정 목록 불러오기 실패:', error);[m
+[32m+[m[32m            }[m
+[32m+[m[32m        };[m
+[32m+[m[32m        loadRefereeAccounts();[m
+[32m+[m[32m    }, []);[m
+[32m+[m
+     const handleCopyUrl = async () => {[m
+         try {[m
+             await navigator.clipboard.writeText(mainUrl);[m
+[36m@@ -210,29 +226,55 @@[m [mexport default function RefereeManagementPage() {[m
+                                     </TableRow>[m
+                                 </TableHeader>[m
+                                 <TableBody>[m
+[31m-                                    {Array.from({ length: MAX_HOLES }, (_, i) => i + 1).map(hole => ([m
+[31m-                                        <TableRow key={hole}>[m
+[31m-                                            <TableCell className="font-medium">{hole}번홀</TableCell>[m
+[31m-                                            <TableCell>[m
+[31m-                                                <code className="bg-muted px-2 py-1 rounded-md text-base">referee{hole}@{userDomain}</code>[m
+[31m-                                            </TableCell>[m
+[31m-                                            <TableCell>[m
+[31m-                                                <div className="flex items-center gap-2">[m
+[31m-                                                    <span className="font-mono text-base">[m
+[31m-                                                        {showPassword ? refereePassword : (refereePassword ? refereePassword.replace(/./g, '•') : '----')}[m
+[31m-                                                    </span>[m
+[31m-                                                    <button[m
+[31m-                                                        type="button"[m
+[31m-                                                        className="text-muted-foreground hover:text-foreground"[m
+[31m-                                                        onClick={() => setShowPassword(prev => !prev)}[m
+[31m-                                                        aria-label={showPassword ? "비밀번호 숨기기" : "비밀번호 보기"}[m
+[31m-                                                    >[m
+[31m-                                                        {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}[m
+[31m-                                                    </button>[m
+[31m-                                                </div>[m
+[31m-                                            </TableCell>[m
+[31m-                                        </TableRow>[m
+[31m-                                    ))}[m
+[32m+[m[32m                                    {refereeAccounts.length > 0 ? ([m
+[32m+[m[32m                                        refereeAccounts.map(account => ([m
+[32m+[m[32m                                            <TableRow key={account.id}>[m
+[32m+[m[32m                                                <TableCell className="font-medium">{account.hole}번홀</TableCell>[m
+[32m+[m[32m                                                <TableCell>[m
+[32m+[m[32m                                                    <code className="bg-muted px-2 py-1 rounded-md text-base">{account.id}</code>[m
+[32m+[m[32m                                                </TableCell>[m
+[32m+[m[32m                                                <TableCell>[m
+[32m+[m[32m                                                    <div className="flex items-center gap-2">[m
+[32m+[m[32m                                                        <span className="font-mono text-base">[m
+[32m+[m[32m                                                            {showPasswords[account.id] ? account.password : account.password.replace(/./g, '•')}[m
+[32m+[m[32m                                                        </span>[m
+[32m+[m[32m                                                        <button[m
+[32m+[m[32m                                                            type="button"[m
+[32m+[m[32m                                                            className="text-muted-foreground hover:text-foreground"[m
+[32m+[m[32m                                                            onClick={() => setShowPasswords(prev => ({[m
+[32m+[m[32m                                                                ...prev,[m
+[32m+[m[32m                                                                [account.id]: !prev[account.id][m
+[32m+[m[32m                                                            }))}[m
+[32m+[m[32m                                                            aria-label={showPasswords[account.id] ? "비밀번호 숨기기" : "비밀번호 보기"}[m
+[32m+[m[32m                                                        >[m
+[32m+[m[32m                                                            {showPasswords[account.id] ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}[m
+[32m+[m[32m                                                        </button>[m
+[32m+[m[32m                                                    </div>[m
+[32m+[m[32m                                                </TableCell>[m
+[32m+[m[32m                                            </TableRow>[m
+[32m+[m[32m                                        ))[m
+[32m+[m[32m                                    ) : ([m
+[32m+[m[32m                                        Array.from({ length: MAX_HOLES }, (_, i) => i + 1).map(hole => ([m
+[32m+[m[32m                                            <TableRow key={hole}>[m
+[32m+[m[32m                                                <TableCell className="font-medium">{hole}번홀</TableCell>[m
+[32m+[m[32m                                                <TableCell>[m
+[32m+[m[32m                                                    <code className="bg-muted px-2 py-1 rounded-md text-base">{hole}번홀심판</code>[m
+[32m+[m[32m                                                </TableCell>[m
+[32m+[m[32m                                                <TableCell>[m
+[32m+[m[32m                                                    <div className="flex items-center gap-2">[m
+[32m+[m[32m                                                        <span className="font-mono text-base">••••••</span>[m
+[32m+[m[32m                                                        <button[m
+[32m+[m[32m                                                            type="button"[m
+[32m+[m[32m                                                            className="text-muted-foreground hover:text-foreground"[m
+[32m+[m[32m                                                            disabled[m
+[32m+[m[32m                                                        >[m
+[32m+[m[32m                                                            <Eye className="h-5 w-5" />[m
+[32m+[m[32m                                                        </button>[m
+[32m+[m[32m                                                    </div>[m
+[32m+[m[32m                                                </TableCell>[m
+[32m+[m[32m                                            </TableRow>[m
+[32m+[m[32m                                        ))[m
+[32m+[m[32m                                    )}[m
+                                 </TableBody>[m
+                             </Table>[m
+                         )}[m
