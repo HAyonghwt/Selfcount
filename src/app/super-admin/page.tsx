@@ -10,6 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { db, auth } from "@/lib/firebase";
 import { ref, set, get, onValue } from "firebase/database";
 import { createUserWithEmailAndPassword, updatePassword } from "firebase/auth";
+import { createBulkCaptainAccounts, getCaptainAccounts, deactivateCaptainAccount } from "@/lib/auth";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export default function SuperAdminPage() {
@@ -23,6 +24,8 @@ export default function SuperAdminPage() {
         refereePassword: '',
         captainPassword: '',
     });
+    const [captainAccounts, setCaptainAccounts] = useState<any[]>([]);
+    const [creatingCaptains, setCreatingCaptains] = useState(false);
 
     useEffect(() => {
         const configRef = ref(db, 'config');
@@ -84,6 +87,63 @@ export default function SuperAdminPage() {
             });
         } finally {
             setLoading(false);
+        }
+    };
+
+    // 조장 계정 목록 불러오기
+    const loadCaptainAccounts = async () => {
+        try {
+            const accounts = await getCaptainAccounts();
+            setCaptainAccounts(accounts);
+        } catch (error) {
+            console.error('조장 계정 목록 불러오기 실패:', error);
+        }
+    };
+
+    // 100명 조장 계정 일괄 생성
+    const handleCreateBulkCaptains = async () => {
+        if (!confirm('정말로 100명의 조장 계정을 생성하시겠습니까?\n\n- 조장1부터 조장100까지 생성됩니다\n- 기본 비밀번호: 123456\n- 10명씩 그룹으로 분할됩니다')) {
+            return;
+        }
+
+        setCreatingCaptains(true);
+        try {
+            await createBulkCaptainAccounts();
+            toast({
+                title: "성공",
+                description: "100명의 조장 계정이 성공적으로 생성되었습니다.",
+            });
+            await loadCaptainAccounts(); // 목록 새로고침
+        } catch (error: any) {
+            toast({
+                title: "조장 계정 생성 실패",
+                description: error.message,
+                variant: "destructive",
+            });
+        } finally {
+            setCreatingCaptains(false);
+        }
+    };
+
+    // 조장 계정 비활성화
+    const handleDeactivateCaptain = async (koreanId: string) => {
+        if (!confirm(`정말로 ${koreanId} 계정을 비활성화하시겠습니까?`)) {
+            return;
+        }
+
+        try {
+            await deactivateCaptainAccount(koreanId);
+            toast({
+                title: "성공",
+                description: `${koreanId} 계정이 비활성화되었습니다.`,
+            });
+            await loadCaptainAccounts(); // 목록 새로고침
+        } catch (error: any) {
+            toast({
+                title: "계정 비활성화 실패",
+                description: error.message,
+                variant: "destructive",
+            });
         }
     };
 
@@ -209,6 +269,61 @@ export default function SuperAdminPage() {
                                     <Users className="mr-2 h-4 w-4" /> Firebase 콘솔로 이동
                                 </a>
                             </Button>
+                        </CardContent>
+                    </Card>
+
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>조장 계정 관리</CardTitle>
+                            <CardDescription>한글 아이디를 사용하는 조장 계정을 관리합니다.</CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            <div className="flex gap-2">
+                                <Button 
+                                    onClick={handleCreateBulkCaptains} 
+                                    disabled={creatingCaptains}
+                                    className="bg-blue-600 hover:bg-blue-700"
+                                >
+                                    {creatingCaptains ? '생성 중...' : '100명 조장 계정 생성'}
+                                </Button>
+                                <Button 
+                                    onClick={loadCaptainAccounts} 
+                                    variant="outline"
+                                >
+                                    목록 새로고침
+                                </Button>
+                            </div>
+                            
+                            {captainAccounts.length > 0 && (
+                                <div className="mt-4">
+                                    <h4 className="font-semibold mb-2">생성된 조장 계정 ({captainAccounts.length}개)</h4>
+                                    <div className="max-h-60 overflow-y-auto border rounded p-2 bg-muted/30">
+                                        <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-sm">
+                                            {captainAccounts.map((account) => (
+                                                <div key={account.id} className="flex items-center justify-between p-2 bg-white rounded border">
+                                                    <div>
+                                                        <div className="font-medium">{account.id}</div>
+                                                        <div className="text-xs text-muted-foreground">
+                                                            {account.group} • 조{account.jo}
+                                                        </div>
+                                                    </div>
+                                                    <Button
+                                                        size="sm"
+                                                        variant="destructive"
+                                                        onClick={() => handleDeactivateCaptain(account.id)}
+                                                        className="text-xs"
+                                                    >
+                                                        비활성화
+                                                    </Button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <p className="text-xs text-muted-foreground mt-2">
+                                        기본 비밀번호: 123456 | 형식: 조장1, 조장2, ..., 조장100
+                                    </p>
+                                </div>
+                            )}
                         </CardContent>
                     </Card>
                 </div>

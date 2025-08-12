@@ -1,6 +1,7 @@
 import { initializeApp, getApp, getApps, type FirebaseOptions } from "firebase/app";
 import { getDatabase } from "firebase/database";
 import { getAuth } from "firebase/auth";
+import { getFirestore } from "firebase/firestore";
 
 // IMPORTANT: This file reads sensitive API keys from environment variables.
 // For production, it is STRONGLY recommended to use your hosting provider's environment variable settings.
@@ -25,6 +26,7 @@ const app = firebaseConfig.apiKey
 // Initialize Firebase services only if the app is properly initialized
 const db = app ? getDatabase(app) : null;
 const auth = app ? getAuth(app) : null;
+const firestore = app ? getFirestore(app) : null;
 
 // Export the Firebase services and the getDatabase function
-export { db, app, auth, getDatabase };
+export { db, app, auth, firestore, getDatabase };

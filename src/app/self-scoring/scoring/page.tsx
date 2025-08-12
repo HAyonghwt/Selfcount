@@ -23,7 +23,7 @@ export default function SelfScoringPage() {
   const { toast } = useToast();
 
   // 세션 값
-  const [captainEmail, setCaptainEmail] = useState<string>("");
+  const [captainData, setCaptainData] = useState<any>(null);
   const [selectedGroup, setSelectedGroup] = useState<string>("");
   const [selectedJo, setSelectedJo] = useState<string>("");
 
@@ -178,7 +178,17 @@ export default function SelfScoringPage() {
     const groupToUse = isReadOnlyMode ? (queryGroup || "") : (savedGroup || "");
     const joToUse = isReadOnlyMode ? (queryJo || "") : (savedJo || "");
     
-    setCaptainEmail(loggedInCaptain || "관전자");
+    if (loggedInCaptain && loggedInCaptain !== "관전자") {
+      try {
+        const captain = JSON.parse(loggedInCaptain);
+        setCaptainData(captain);
+      } catch (error) {
+        console.error('조장 데이터 파싱 오류:', error);
+        setCaptainData({ id: "알 수 없음" });
+      }
+    } else {
+      setCaptainData({ id: "관전자" });
+    }
     setSelectedGroup(groupToUse);
     setSelectedJo(joToUse);
     setGameMode(savedMode || "");
@@ -579,7 +589,7 @@ export default function SelfScoringPage() {
         holeNumber: holeNum,
         oldValue: typeof prev === "number" ? prev : 0,
                    newValue: score,
-                   modifiedBy: `${selectedGroup || ''} 조장`,
+                   modifiedBy: captainData?.id || `${selectedGroup || ''} 조장`,
         modifiedByType: "captain",
         comment: `자율 채점 - 코스: ${activeCourse.id}, 그룹: ${selectedGroup || ''}, 조: ${selectedJo || ''}`,
         courseId: String(activeCourse.id),

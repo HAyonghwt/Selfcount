@@ -6,9 +6,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { db, auth } from '@/lib/firebase';
+import { db } from '@/lib/firebase';
 import { ref, onValue, get } from 'firebase/database';
-import { signInWithEmailAndPassword } from 'firebase/auth';
+import { loginWithKoreanId } from '@/lib/auth';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -18,7 +18,7 @@ export default function SelfScoringLoginPage() {
     const router = useRouter();
     const [loading, setLoading] = useState(true);
     const [loginLoading, setLoginLoading] = useState(false);
-    const [email, setEmail] = useState('');
+    const [koreanId, setKoreanId] = useState('');
     const [password, setPassword] = useState('');
     const [gameMode, setGameMode] = useState('');
     const [selectedGroup, setSelectedGroup] = useState('');
@@ -52,21 +52,21 @@ export default function SelfScoringLoginPage() {
     }, []);
 
     const handleLogin = async () => {
-        if (!email || !password) {
+        if (!koreanId || !password) {
             toast({
                 title: '로그인 실패',
-                description: '이메일과 비밀번호를 입력해주세요.',
+                description: '아이디와 비밀번호를 입력해주세요.',
                 variant: 'destructive',
             });
             return;
         }
 
-        // 이메일 형식 검증 (player1@yongin.com 형식)
-        const emailPattern = /^player\d+@yongin\.com$/;
-        if (!emailPattern.test(email)) {
+        // 한글 아이디 형식 검증 (조장1, 조장2, ... 형식)
+        const koreanIdPattern = /^조장\d+$/;
+        if (!koreanIdPattern.test(koreanId)) {
             toast({
                 title: '로그인 실패',
-                description: '올바른 이메일 형식이 아닙니다. (예: player1@yongin.com)',
+                description: '올바른 아이디 형식이 아닙니다. (예: 조장1, 조장2, ...)',
                 variant: 'destructive',
             });
             return;
@@ -74,39 +74,23 @@ export default function SelfScoringLoginPage() {
 
         setLoginLoading(true);
         try {
-            // Firebase Authentication을 사용한 로그인
-            const userCredential = await signInWithEmailAndPassword(auth, email, password);
-            const user = userCredential.user;
+            // Firestore 기반 한글 아이디 로그인
+            const captainData = await loginWithKoreanId(koreanId, password);
             
-            if (user) {
-                // 로그인 성공 시 세션에 저장
-                sessionStorage.setItem('selfScoringCaptain', email);
-                
-                toast({
-                    title: '로그인 성공',
-                    description: '자율채점 페이지로 이동합니다.',
-                });
+            // 로그인 성공 시 세션에 저장
+            sessionStorage.setItem('selfScoringCaptain', JSON.stringify(captainData));
+            
+            toast({
+                title: '로그인 성공',
+                description: '자율채점 페이지로 이동합니다.',
+            });
 
-                // 경기방식과 그룹/코스 선택 페이지로 이동
-                router.push('/self-scoring/game');
-            }
-        } catch (authError: any) {
+            // 경기방식과 그룹/코스 선택 페이지로 이동
+            router.push('/self-scoring/game');
+        } catch (error: any) {
             let errorMessage = '로그인 중 오류가 발생했습니다.';
-            switch (authError.code) {
-                case 'auth/user-not-found':
-                case 'auth/wrong-password':
-                case 'auth/invalid-credential':
-                    errorMessage = '잘못된 이메일 또는 비밀번호입니다.';
-                    break;
-                case 'auth/user-disabled':
-                    errorMessage = '이 사용자 계정은 비활성화되었습니다.';
-                    break;
-                case 'auth/invalid-email':
-                    errorMessage = '유효하지 않은 이메일 주소 형식입니다.';
-                    break;
-                case 'auth/too-many-requests':
-                    errorMessage = '로그인 시도가 너무 많습니다. 잠시 후 다시 시도해주세요.';
-                    break;
+            if (error.message) {
+                errorMessage = error.message;
             }
             toast({
                 title: '로그인 실패',
@@ -153,17 +137,17 @@ export default function SelfScoringLoginPage() {
                 </CardHeader>
                 <CardContent className="space-y-4">
                     <div className="space-y-2">
-                        <Label htmlFor="email">이메일</Label>
+                        <Label htmlFor="koreanId">아이디</Label>
                         <Input
-                            id="email"
-                            type="email"
-                            placeholder={`player1@${userDomain}`}
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
+                            id="koreanId"
+                            type="text"
+                            placeholder="조장1"
+                            value={koreanId}
+                            onChange={(e) => setKoreanId(e.target.value)}
                             onKeyPress={(e) => e.key === 'Enter' && handleLogin()}
                         />
                         <p className="text-xs text-muted-foreground">
-                            형식: player1@{userDomain}, player2@{userDomain}, ...
+                            형식: 조장1, 조장2, 조장3, ... (조장1~조장100)
                         </p>
                     </div>
                     <div className="space-y-2">

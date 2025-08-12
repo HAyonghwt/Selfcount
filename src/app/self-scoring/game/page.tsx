@@ -23,7 +23,7 @@ export default function SelfScoringGameSetupPage() {
     const [courses, setCourses] = useState<any[]>([]);
     const [allPlayers, setAllPlayers] = useState<any[]>([]);
     const [activeCourseTab, setActiveCourseTab] = useState<string>('');
-    const [captainEmail, setCaptainEmail] = useState('');
+    const [captainData, setCaptainData] = useState<any>(null);
     // 뒤로가기 확인
     const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
     const exitGuardRef = React.useRef(false);
@@ -35,7 +35,15 @@ export default function SelfScoringGameSetupPage() {
             router.push('/self-scoring');
             return;
         }
-        setCaptainEmail(loggedInCaptain);
+        
+        try {
+            const captain = JSON.parse(loggedInCaptain);
+            setCaptainData(captain);
+        } catch (error) {
+            console.error('조장 데이터 파싱 오류:', error);
+            router.push('/self-scoring');
+            return;
+        }
 
         // Firebase 데이터 로드 (심판 페이지와 동일한 방식)
         setLoading(true);
@@ -89,10 +97,10 @@ export default function SelfScoringGameSetupPage() {
 
         const allGroups = filteredByMode.sort();
 
-        // 아이디에서 번호 추출 (player1@yongin.com -> 1)
-        const playerNumber = parseInt(captainEmail.match(/player(\d+)@/)?.[1] || '1');
-        const startGroup = (playerNumber - 1) * 10 + 1;
-        const endGroup = playerNumber * 10;
+        // 조장 데이터에서 조 번호 추출
+        const captainJo = captainData?.jo || 1;
+        const startGroup = Math.floor((captainJo - 1) / 10) * 10 + 1;
+        const endGroup = Math.min(startGroup + 9, 100);
 
         // 조 이름에서 숫자 추출(다양한 형식 지원) + 범위 필터
         return allGroups.filter(group => {
@@ -102,7 +110,7 @@ export default function SelfScoringGameSetupPage() {
             }
             return true;
         });
-    }, [groupsData, captainEmail, gameMode]);
+    }, [groupsData, captainData, gameMode]);
 
     // 선택된 그룹에 해당하는 조 목록 계산
     const availableJos = useMemo(() => {
@@ -122,7 +130,7 @@ export default function SelfScoringGameSetupPage() {
             const joNumber = parseInt(jo);
             return joNumber >= startGroup && joNumber <= endGroup;
         });
-    }, [selectedGroup, captainEmail]);
+    }, [selectedGroup, captainData]);
 
     // 선택된 그룹의 배정 코스 목록 계산 (활성 코스만)
     const assignedCourseList = useMemo(() => {
@@ -252,7 +260,7 @@ export default function SelfScoringGameSetupPage() {
                     <CardHeader>
                         <CardTitle className="text-2xl font-bold">자율채점 설정</CardTitle>
                         <CardDescription>
-                            조장: {captainEmail} | 경기방식과 그룹/조를 선택하여 점수 입력을 시작하세요.
+                            조장: {captainData?.id || '알 수 없음'} | 경기방식과 그룹/조를 선택하여 점수 입력을 시작하세요.
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4 sm:space-y-6">
