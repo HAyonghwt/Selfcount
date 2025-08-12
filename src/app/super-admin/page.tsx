@@ -10,7 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { db, auth } from "@/lib/firebase";
 import { ref, set, get, onValue } from "firebase/database";
 import { createUserWithEmailAndPassword, updatePassword } from "firebase/auth";
-import { createBulkCaptainAccounts, getCaptainAccounts, deactivateCaptainAccount } from "@/lib/auth";
+import { createBulkCaptainAccounts, getCaptainAccounts, deactivateCaptainAccount, updateCaptainPassword } from "@/lib/auth";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export default function SuperAdminPage() {
@@ -26,6 +26,8 @@ export default function SuperAdminPage() {
     });
     const [captainAccounts, setCaptainAccounts] = useState<any[]>([]);
     const [creatingCaptains, setCreatingCaptains] = useState(false);
+    const [editingPassword, setEditingPassword] = useState<string | null>(null);
+    const [newPassword, setNewPassword] = useState('');
 
     useEffect(() => {
         const configRef = ref(db, 'config');
@@ -141,6 +143,44 @@ export default function SuperAdminPage() {
         } catch (error: any) {
             toast({
                 title: "계정 비활성화 실패",
+                description: error.message,
+                variant: "destructive",
+            });
+        }
+    };
+
+    // 조장 계정 비밀번호 변경
+    const handleUpdatePassword = async (koreanId: string) => {
+        if (!newPassword.trim()) {
+            toast({
+                title: "비밀번호 변경 실패",
+                description: "새 비밀번호를 입력해주세요.",
+                variant: "destructive",
+            });
+            return;
+        }
+
+        if (newPassword.length < 4) {
+            toast({
+                title: "비밀번호 변경 실패",
+                description: "비밀번호는 최소 4자 이상이어야 합니다.",
+                variant: "destructive",
+            });
+            return;
+        }
+
+        try {
+            await updateCaptainPassword(koreanId, newPassword);
+            toast({
+                title: "성공",
+                description: `${koreanId} 계정의 비밀번호가 변경되었습니다.`,
+            });
+            setEditingPassword(null);
+            setNewPassword('');
+            await loadCaptainAccounts(); // 목록 새로고침
+        } catch (error: any) {
+            toast({
+                title: "비밀번호 변경 실패",
                 description: error.message,
                 variant: "destructive",
             });
@@ -298,29 +338,70 @@ export default function SuperAdminPage() {
                                 <div className="mt-4">
                                     <h4 className="font-semibold mb-2">생성된 조장 계정 ({captainAccounts.length}개)</h4>
                                     <div className="max-h-60 overflow-y-auto border rounded p-2 bg-muted/30">
-                                        <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-sm">
+                                        <div className="grid grid-cols-1 gap-2 text-sm">
                                             {captainAccounts.map((account) => (
-                                                <div key={account.id} className="flex items-center justify-between p-2 bg-white rounded border">
-                                                    <div>
+                                                <div key={account.id} className="flex items-center justify-between p-3 bg-white rounded border">
+                                                    <div className="flex-1">
                                                         <div className="font-medium">{account.id}</div>
                                                         <div className="text-xs text-muted-foreground">
                                                             {account.group} • 조{account.jo}
                                                         </div>
                                                     </div>
-                                                    <Button
-                                                        size="sm"
-                                                        variant="destructive"
-                                                        onClick={() => handleDeactivateCaptain(account.id)}
-                                                        className="text-xs"
-                                                    >
-                                                        비활성화
-                                                    </Button>
+                                                    <div className="flex gap-2">
+                                                        {editingPassword === account.id ? (
+                                                            <div className="flex gap-2 items-center">
+                                                                <Input
+                                                                    type="password"
+                                                                    placeholder="새 비밀번호"
+                                                                    value={newPassword}
+                                                                    onChange={(e) => setNewPassword(e.target.value)}
+                                                                    className="w-24 text-xs"
+                                                                    onKeyPress={(e) => e.key === 'Enter' && handleUpdatePassword(account.id)}
+                                                                />
+                                                                <Button
+                                                                    size="sm"
+                                                                    onClick={() => handleUpdatePassword(account.id)}
+                                                                    className="text-xs bg-green-600 hover:bg-green-700"
+                                                                >
+                                                                    저장
+                                                                </Button>
+                                                                <Button
+                                                                    size="sm"
+                                                                    variant="outline"
+                                                                    onClick={() => {
+                                                                        setEditingPassword(null);
+                                                                        setNewPassword('');
+                                                                    }}
+                                                                    className="text-xs"
+                                                                >
+                                                                    취소
+                                                                </Button>
+                                                            </div>
+                                                        ) : (
+                                                            <Button
+                                                                size="sm"
+                                                                variant="outline"
+                                                                onClick={() => setEditingPassword(account.id)}
+                                                                className="text-xs"
+                                                            >
+                                                                비밀번호 변경
+                                                            </Button>
+                                                        )}
+                                                        <Button
+                                                            size="sm"
+                                                            variant="destructive"
+                                                            onClick={() => handleDeactivateCaptain(account.id)}
+                                                            className="text-xs"
+                                                        >
+                                                            비활성화
+                                                        </Button>
+                                                    </div>
                                                 </div>
                                             ))}
                                         </div>
                                     </div>
                                     <p className="text-xs text-muted-foreground mt-2">
-                                        기본 비밀번호: 123456 | 형식: 조장1, 조장2, ..., 조장100
+                                        초기 비밀번호: 123456 | 각 조장별로 개별 비밀번호 설정 가능
                                     </p>
                                 </div>
                             )}

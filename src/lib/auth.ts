@@ -68,6 +68,28 @@ export const createCaptainAccount = async (koreanId: string, password: string, g
 };
 
 /**
+ * 조장 계정 비밀번호 변경 (슈퍼관리자용)
+ */
+export const updateCaptainPassword = async (koreanId: string, newPassword: string): Promise<void> => {
+  try {
+    const captainsRef = collection(firestore, 'captains');
+    const q = query(captainsRef, where('id', '==', koreanId));
+    const querySnapshot = await getDocs(q);
+    
+    if (querySnapshot.empty) {
+      throw new Error('존재하지 않는 조장 계정입니다.');
+    }
+    
+    const docRef = doc(firestore, 'captains', querySnapshot.docs[0].id);
+    await updateDoc(docRef, {
+      password: newPassword
+    });
+  } catch (error) {
+    throw error;
+  }
+};
+
+/**
  * 조장 계정 목록 조회 (슈퍼관리자용)
  */
 export const getCaptainAccounts = async (): Promise<CaptainAccount[]> => {
