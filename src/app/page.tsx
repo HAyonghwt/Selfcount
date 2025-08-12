@@ -86,6 +86,7 @@ export default function LoginPage() {
             title: "로그인 실패",
             description: error.message,
           });
+          setLoading(false);
           return;
         }
       }
@@ -103,8 +104,21 @@ export default function LoginPage() {
             title: "로그인 실패",
             description: error.message,
           });
+          setLoading(false);
           return;
         }
+      }
+
+      // 이메일 형식 검증
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        setError('유효하지 않은 이메일 주소 형식입니다.');
+        toast({
+          title: "로그인 실패",
+          description: '유효하지 않은 이메일 주소 형식입니다.',
+        });
+        setLoading(false);
+        return;
       }
 
       // 기존 이메일 로그인
