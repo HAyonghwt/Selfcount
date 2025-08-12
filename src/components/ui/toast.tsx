@@ -16,7 +16,8 @@ const ToastViewport = React.forwardRef<
   <ToastPrimitives.Viewport
     ref={ref}
     className={cn(
-      "fixed top-0 z-[100] flex max-h-screen w-full flex-col p-4 sm:right-0 md:max-w-[420px]",
+      // 탭을 가리지 않도록 상단에서 약간 아래(탭 높이의 약 1.5배) 위치
+      "fixed top-24 left-1/2 -translate-x-1/2 z-[100] flex max-h-screen w-full max-w-[520px] flex-col p-2",
       className
     )}
     {...props}

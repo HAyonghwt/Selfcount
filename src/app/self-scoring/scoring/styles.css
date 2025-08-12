@@ -1,0 +1,876 @@
+/* 합계 셀 크게 표시 (기본) */
+.score-table td.total-score {
+    font-size: 24px;
+    font-weight: 900;
+    line-height: 1;
+    padding: 6px 6px; /* 상하 여백 추가 축소 */
+    white-space: nowrap;
+}
+
+/* 합계 라벨도 여백 축소 */
+.score-table td.total-label {
+    padding: 6px 6px;
+    font-size: 20px; /* 데스크톱 */
+    font-weight: 800; /* 굵게 */
+}
+/* 기본 스타일 */
+* {
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.scoring-page {
+    margin: 0;
+    padding: 8px; /* 바깥 여백 최대한 축소 */
+    font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif;
+    background-color: #f8f9fa;
+    color: #333;
+    line-height: 1.5;
+    min-width: auto !important;
+    -webkit-text-size-adjust: 100%;
+    overflow-x: hidden;
+}
+
+.container {
+    background: #ffffff;
+    padding: 16px; /* 컨테이너 내부 여백 축소 */
+    border-radius: 24px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 8px 32px rgba(0, 0, 0, 0.05);
+    transition: all 0.3s ease;
+    width: 100%;
+    max-width: 100%;
+    margin: 0 auto;
+    overflow-x: auto;
+}
+
+/* 테마 색상: container에 부여되는 클래스 */
+.container.theme-red {
+    --theme-color: #dc3545;
+    --theme-color-dark: #c82333;
+    --theme-shadow-color: rgba(220, 53, 69, 0.15);
+}
+.container.theme-blue {
+    --theme-color: #0d6efd;
+    --theme-color-dark: #0b5ed7;
+    --theme-shadow-color: rgba(13, 110, 253, 0.15);
+}
+.container.theme-yellow {
+    /* 사용자 제공 컬러 값 사용 */
+    --theme-color: #FEE500;
+    --theme-color-dark: #e6cc00;
+    --theme-shadow-color: rgba(254, 229, 0, 0.15);
+}
+.container.theme-white {
+    --theme-color: #ffffff;
+    --theme-color-dark: #f1f3f5;
+    --theme-shadow-color: rgba(0,0,0,0.06);
+}
+
+/* 테마 적용: 헤더/홀수 행 배경 */
+.container .score-table th {
+    background: var(--theme-color);
+    color: #ffffff;
+}
+
+.container.theme-white .score-table th {
+    color: #000000;
+}
+
+/* 노랑 테마: 헤더 글자 검정색 */
+.container.theme-yellow .score-table th {
+    color: #000000;
+}
+
+.container .score-table td.hole-number {
+    background: var(--theme-color);
+    color: #ffffff;
+    font-weight: 700;
+}
+.container.theme-white .score-table td.hole-number,
+.container.theme-yellow .score-table td.hole-number {
+    color: #000000;
+}
+
+/* 모든 셀 배경을 연한 테마색으로 (엇갈림 제거). 홀 번호 셀은 제외 */
+.container.theme-red .score-table tbody td:not(.hole-number) { background: rgba(220,53,69,0.06); }
+.container.theme-blue .score-table tbody td:not(.hole-number) { background: rgba(13,110,253,0.06); }
+.container.theme-yellow .score-table tbody td:not(.hole-number) { background: rgba(254,229,0,0.10); }
+.container.theme-white .score-table tbody td:not(.hole-number) { background: #ffffff; }
+
+/* 홀(첫 컬럼) 경계선 제거 */
+.score-table td.hole-number { border: none !important; }
+
+/* 탭 활성 색상 */
+.container.theme-red .tab.active { background: #dc3545; }
+.container.theme-blue .tab.active { background: #0d6efd; }
+.container.theme-yellow .tab.active { background: #FEE500; color: #000; }
+.container.theme-white .tab.active { background: #ffffff; color: #000; border: 1px solid #dee2e6; }
+
+
+/* 점수 입력 필드 */
+.score-input {
+    width: 100%;
+    height: 38px;
+    border: 2px solid #e9ecef;
+    border-radius: 12px;
+    text-align: center;
+    font-size: 26px;
+    font-weight: 800;
+    color: #000000;
+    background: white;
+    transition: all 0.2s ease;
+    padding: 0;
+    line-height: 1;
+    -webkit-appearance: none;
+    appearance: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    white-space: nowrap;
+}
+
+.score-input:not(.locked):not(.disabled) {
+    background-color: #e8f0fe;
+}
+
+.score-input.locked {
+    background: #f8f8f8;
+    border-color: #e9ecef;
+    color: #666;
+    cursor: not-allowed;
+}
+
+.score-input.disabled {
+    background: #f8f8f8;
+    border-color: #e9ecef;
+    color: #adb5bd;
+    cursor: not-allowed;
+}
+
+.score-input.readonly {
+    cursor: default;
+    background: #f8f9fa;
+    color: #495057;
+    border: 1px solid #e9ecef;
+}
+
+/* 저장 직후 연한 초록색으로 페이드 인/아웃 */
+@keyframes savedFlashFade {
+    0%   { background-color: #e6ffed; }
+    60%  { background-color: #f1fff5; }
+    100% { background-color: transparent; }
+}
+.score-input.saved-flash {
+    animation: savedFlashFade 0.8s ease-out;
+}
+
+/* 활성 셀 강조 테두리 */
+.score-input.active {
+    background: rgba(255, 255, 255, 0.8); /* 배경 80% 불투명(20% 투명) */
+    border-color: var(--theme-color, #1a73e8);
+    border-width: 1px; /* 강조 강도 완화 */
+    box-shadow: 0 0 0 1px var(--theme-shadow-color, rgba(26, 115, 232, 0.08)); /* 더 옅고 얇게 */
+}
+
+/* 노랑/하양 테마에서 대비 강화 */
+.container.theme-yellow .score-input.active,
+.container.theme-white .score-input.active {
+    border-color: #cfd4da; /* 더 옅은 회색으로 완화 */
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.04); /* 더 얇고 옅게 */
+    background: rgba(255, 255, 255, 0.8);
+}
+
+.score-input:focus {
+    outline: none;
+    border-color: var(--theme-color, #1a73e8);
+    box-shadow: 0 0 0 3px var(--theme-shadow-color, rgba(26, 115, 232, 0.1));
+}
+
+/* 차이값 표시 */
+.difference {
+    font-size: 15px;
+    color: #868e96;
+    margin-top: 4px;
+    font-weight: 600;
+}
+
+/* 셀 수정 로그 툴팁 - 간단한 말풍선 스타일 */
+.cell-tooltip {
+    position: absolute;
+    bottom: 110%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0,0,0,0.85);
+    color: #fff;
+    padding: 8px 10px;
+    border-radius: 8px;
+    font-size: 12px;
+    line-height: 1.3;
+    white-space: nowrap;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    z-index: 10000;
+}
+.cell-tooltip::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border-width: 6px;
+    border-style: solid;
+    border-color: rgba(0,0,0,0.85) transparent transparent transparent;
+}
+
+/* 편집 모드 강조 */
+.score-input.editing {
+    border-color: #ff9800;
+    border-width: 2px;
+    box-shadow: 0 0 0 2px rgba(255, 152, 0, 0.18);
+}
+
+/* 수정된 점수(확정) 빨간색 표시 */
+.score-input.locked.modified,
+.score-input.modified {
+    color: #dc3545;
+    background: #fff5f5;
+}
+
+.difference.positive {
+    color: #dc3545;
+}
+
+.difference.negative {
+    color: #0d6efd;
+}
+
+/* 숫자패드 */
+.number-pad {
+    display: grid;
+    position: fixed;
+    left: 0;
+    right: 0;
+    background: #212529;
+    padding: 24px;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    z-index: 9999;
+    transition: all 0.3s ease;
+    box-shadow: 0 -1px 3px rgba(0, 0, 0, 0.1), 0 -8px 32px rgba(0, 0, 0, 0.05);
+}
+
+.number-pad.top-fixed {
+    top: 0;
+    bottom: auto !important;
+    border-bottom-left-radius: 24px;
+    border-bottom-right-radius: 24px;
+}
+
+.number-pad.bottom-fixed {
+    bottom: 0;
+    top: auto !important;
+    border-top-left-radius: 24px;
+    border-top-right-radius: 24px;
+}
+
+.number-button {
+    font-size: 22px;
+    padding: 20px;
+    border: none;
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+    border-radius: 16px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-weight: 600;
+}
+
+.number-button:hover {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.number-button:active {
+    transform: translateY(0);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.control-button {
+    background: rgba(255, 255, 255, 0.05);
+    color: #fff;
+    font-size: 18px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.cancel-button {
+    background: linear-gradient(135deg, #6c757d, #5a6268);
+    color: #fff;
+}
+
+.cancel-button:hover {
+    background: linear-gradient(135deg, #7d868d, #6b7278);
+}
+
+.save-button {
+    background: linear-gradient(135deg, #ff8c00, #f17c00);
+    color: #fff;
+}
+
+.save-button:hover {
+    background: linear-gradient(135deg, #ff9500, #f58300);
+}
+
+/* 서명 모달 */
+.signature-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(5px);
+    -webkit-backdrop-filter: blur(5px);
+}
+
+.signature-content {
+    background: #ffffff;
+    padding: 32px;
+    border-radius: 24px;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+    width: 90%;
+    max-width: 600px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.signature-header {
+    width: 100%;
+    text-align: center;
+    margin-bottom: 24px;
+}
+
+.player-name {
+    font-size: 28px;
+    margin: 0 0 12px 0;
+    color: #495057;
+    font-weight: 600;
+}
+
+.player-score {
+    font-size: 24px;
+    margin: 0;
+    color: var(--theme-color, #1a73e8);
+    font-weight: 500;
+}
+
+.signature-canvas {
+    border: 2px solid #dee2e6;
+    border-radius: 16px;
+    margin-bottom: 24px;
+    background: white;
+    touch-action: none;
+    width: 100%;
+    height: 200px;
+    max-width: 500px;
+    transition: all 0.2s ease;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+}
+
+.signature-canvas:hover {
+    border-color: var(--theme-color, #1a73e8);
+    box-shadow: 0 0 0 4px var(--theme-shadow-color, rgba(26, 115, 232, 0.1));
+    transform: translateY(-1px);
+}
+
+.signature-buttons {
+    display: flex;
+    gap: 12px;
+    width: 100%;
+    max-width: 500px;
+    justify-content: center;
+}
+
+.modal-button {
+    flex: 1;
+    padding: 14px;
+    font-size: 15px;
+    border: none;
+    border-radius: 12px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: all 0.2s ease;
+    color: white;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.clear-button {
+    background: linear-gradient(135deg, #dc3545, #c82333);
+}
+
+.save-signature-button {
+    background: linear-gradient(135deg, var(--theme-color, #1a73e8), var(--theme-color-dark, #1557b0));
+}
+
+.close-signature-button {
+    background: linear-gradient(135deg, #6c757d, #5a6268);
+}
+
+.modal-button:hover {
+    filter: brightness(1.05);
+}
+
+.modal-button:active {
+    transform: translateY(1px);
+}
+
+/* 테이블 스타일 */
+.score-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    margin-bottom: 24px;
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    background: white;
+}
+
+.score-table th, 
+.score-table td {
+    border: 1px solid #f1f3f5;
+    padding: 12px 8px; /* 기본 여백 축소 */
+    text-align: center;
+    font-size: 15px;
+    background: white;
+    transition: background-color 0.2s ease;
+}
+
+/* PAR(파) 열 폭 축소 */
+.score-table th.par-header,
+.score-table td.par {
+    width: 32px;   /* 홀 번호 폭과 비슷하게 축소 */
+    min-width: 32px;
+    max-width: 32px;
+    padding-left: 2px;
+    padding-right: 2px;
+}
+
+/* 파 숫자 크기 상향(굵게는 아님) */
+.score-table td.par {
+    font-size: 18px;
+    font-weight: 400;
+}
+
+.score-table th {
+    font-weight: 600;
+    border: none;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* 이름 헤더(플레이어명) 가독성 강화 */
+.score-table th.name-header {
+    font-size: 18px;
+    font-weight: 800;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+/* 긴 이름 대응: 길이에 따라 단계적으로 축소 */
+.score-table th.name-header.name-xs { font-size: 16px; }
+.score-table th.name-header.name-xxs { font-size: 14px; }
+
+/* 표 서명 셀 크기 및 이미지 맞춤 (모든 선수 동일 높이/여백) */
+.score-table td.signature-cell {
+    position: relative;
+    height: 56px; /* 통일 높이 */
+    padding: 0;   /* 여백 제거 */
+}
+.score-table td.signature-cell .signature-placeholder {
+    font-size: 14px;
+    color: #adb5bd;
+}
+
+.signature-cell.readonly .signature-placeholder {
+    cursor: default;
+    background: #f0f0f0;
+    color: #666;
+    border-color: #ddd;
+}
+.signature-image {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    padding: 0; /* 일부 셀만 달라지는 padding 제거 */
+}
+
+/* 탭 스타일 */
+.tabs {
+    display: flex;
+    gap: 4px;
+    background: #f8f9fa;
+    padding: 4px;
+    border-radius: 16px;
+    margin-bottom: 24px;
+}
+
+/* 표 상단 메타 정보 (경기방식/그룹/조) */
+.score-meta {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    color: #6c757d;
+    font-size: 12px;
+    margin: 0 4px 6px 4px; /* 탭과 표 사이 여백 최소화 */
+}
+.score-meta span { white-space: nowrap; }
+.score-meta b { color: #343a40; font-weight: 700; }
+
+.tab {
+    flex: 1;
+    padding: 12px 24px;
+    font-size: 18px; /* 가독성 향상 */
+    font-weight: 600;
+    color: #495057;
+    background: transparent;
+    border: none;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.tab:hover {
+    background: rgba(0, 0, 0, 0.04);
+}
+
+.tab.active {
+    color: white;
+    box-shadow: 0 1px 3px rgba(26, 115, 232, 0.2);
+}
+
+.tab.active:hover {
+    filter: brightness(1.05);
+}
+
+/* 액션 버튼 */
+.action-buttons {
+    display: flex;
+    gap: 8px;
+    margin-top: 16px;
+    justify-content: space-between;
+    width: 100%;
+}
+
+.action-button {
+    flex: 1 1 33%;
+    max-width: 33%;
+    min-width: 0;
+    padding: 12px 8px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    color: white;
+    font-weight: 600;
+    font-size: 18px; /* 데스크톱 크게 */
+    transition: all 0.2s ease;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    position: relative;
+    overflow: hidden;
+}
+
+.action-button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.action-button:active {
+    transform: translateY(1px);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+}
+
+.action-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+.action-button:disabled:hover {
+    transform: none;
+    box-shadow: none;
+}
+
+/* 색상별 스타일 */
+.reset-button {
+    background: linear-gradient(135deg, #dc3545, #c82333);
+}
+
+.kakao-button {
+    background: linear-gradient(135deg, #FEE500, #e6cc00);
+    color: #000; /* 카카오 노랑에는 검정 글자 */
+}
+
+.qr-button {
+    background: linear-gradient(135deg, #0d6efd, #0b5ed7);
+}
+
+/* 모바일 최적화 */
+@media screen and (max-width: 1000px) {
+    .scoring-page {
+        padding: 2px; /* 화면과 카드 사이 여백 극소화 */
+        min-width: auto;
+        background: #f8f9fa;
+        overflow-x: hidden;
+    }
+
+    .container {
+        padding: 4px 2px; /* 모바일 컨테이너 여백 더 축소 */
+        border-radius: 10px;
+        width: 100%;
+        min-width: auto;
+        overflow-x: auto;
+    }
+
+    .tabs {
+        padding: 3px;
+        gap: 3px;
+        border-radius: 10px;
+        margin-bottom: 12px;
+        display: flex;
+        width: 100%;
+    }
+
+    .score-meta {
+        font-size: 11px; /* 모바일 작은 안내문 */
+        gap: 8px;
+        margin-bottom: 6px;
+    }
+
+    .tab {
+        flex: 1;
+        padding: 8px;
+        font-size: 16px; /* 모바일에서도 크게 */
+        border-radius: 8px;
+        white-space: nowrap;
+        min-width: 0;
+    }
+
+    .score-table {
+        margin-bottom: 10px;
+        border-radius: 10px;
+    }
+
+    .score-table th, 
+    .score-table td {
+        padding: 3px 4px; /* 모바일에서 상하 여백 최소화 */
+        font-size: 13px;
+    }
+    /* 합계/서명 라벨 크기 (≤1000px) */
+    .score-table td.total-label {
+        font-size: 18px;
+        font-weight: 800;
+    }
+
+    /* 모바일에서 파 숫자 더 크게 */
+    .score-table td.par { font-size: 20px; font-weight: 400; }
+
+    .score-table th.name-header {
+        font-size: 16px; /* 모바일 기본 */
+    }
+    .score-table th.name-header.name-xs { font-size: 14px; }
+    .score-table th.name-header.name-xxs { font-size: 13px; }
+
+    .score-input {
+        height: 44px; /* 세로 공간 절약 */
+        font-size: 28px; /* 더 큰 숫자 */
+        font-weight: 900;
+        border-radius: 6px;
+        padding: 0;
+        line-height: 1;
+        white-space: nowrap;
+    }
+
+    .difference {
+        font-size: 11px;
+        margin-top: 1px;
+    }
+
+    /* 합계 값은 더 굵고 크게 */
+    .total-score {
+        font-size: 32px; /* 합계 더 크게 */
+        font-weight: 900;
+        white-space: nowrap;
+        line-height: 1;
+        padding: 4px 4px;
+    }
+
+    .action-buttons {
+        gap: 6px;
+        margin-top: 12px;
+        padding: 0;
+        display: flex;
+        flex-wrap: wrap;
+    }
+
+    .action-button {
+        flex: 1 1 calc(33.333% - 4px);
+        min-width: 0;
+        font-size: 16px; /* 모바일에서도 크게 */
+        padding: 10px 8px;
+        border-radius: 8px;
+        white-space: nowrap;
+    }
+
+    .number-pad {
+        padding: 8px;
+        gap: 4px;
+    }
+
+    .number-button {
+        font-size: 16px;
+        padding: 12px;
+        border-radius: 8px;
+    }
+
+    .signature-content {
+        padding: 16px;
+        width: 94%;
+        border-radius: 12px;
+    }
+
+    .signature-canvas {
+        height: 160px;
+        border-radius: 8px;
+    }
+    /* 모바일: 서명 모달의 이름/점수 크게 */
+    .player-name {
+        font-size: 42px; /* 약 1.5배 크게 */
+        font-weight: 800;
+        line-height: 1.15;
+    }
+    .player-score {
+        font-size: 56px; /* 이름보다 더 크게 */
+        font-weight: 900;
+        line-height: 1.1;
+    }
+}
+
+/* 매우 작은 화면 최적화 */
+@media screen and (max-width: 360px) {
+    .scoring-page {
+        padding: 2px; /* 초소형에서도 여백 최소화 */
+    }
+
+    .container {
+        padding: 4px 2px; /* 초소형 컨테이너 패딩 축소 */
+        border-radius: 8px;
+    }
+
+    .score-meta {
+        font-size: 10px; /* 초소형 디바이스 */
+        gap: 6px;
+        margin-bottom: 4px;
+    }
+
+    .tab {
+        padding: 6px 8px;
+        font-size: 14px; /* 초소형에서도 최소 14px 유지 */
+    }
+
+    .score-table th, 
+    .score-table td {
+        padding: 4px 3px;
+        font-size: 12px;
+    }
+    /* 합계/서명 라벨 크기 (≤360px) */
+    .score-table td.total-label {
+        font-size: 15px;
+        font-weight: 800;
+    }
+
+    /* 초소형에서도 파 숫자 가독성 유지 */
+    .score-table td.par { font-size: 18px; font-weight: 400; }
+
+    .score-table th.name-header { font-size: 15px; }
+    .score-table th.name-header.name-xs { font-size: 14px; }
+    .score-table th.name-header.name-xxs { font-size: 12px; }
+
+    .score-input {
+        height: 42px;
+        font-size: 24px; /* 초소형에서도 크게 */
+        font-weight: 900;
+        padding: 0;
+        line-height: 1;
+    }
+    .total-score {
+        font-size: 28px;
+        font-weight: 900;
+        line-height: 1;
+        padding: 4px 4px;
+    }
+
+    .score-table th.name-header {
+        font-size: 15px; /* 초소형에서는 조금만 키움 */
+    }
+
+    .action-button {
+        font-size: 15px; /* 초소형에서도 읽기 쉬움 */
+        padding: 8px 6px;
+    }
+
+    .number-button {
+        font-size: 14px;
+        padding: 10px;
+    }
+
+    .signature-content {
+        padding: 12px;
+    }
+
+    .player-name {
+        font-size: 30px; /* 초소형에서도 크게 */
+        font-weight: 800;
+        line-height: 1.15;
+    }
+
+    .player-score {
+        font-size: 40px; /* 이름보다 더 크게 */
+        font-weight: 900;
+        line-height: 1.1;
+    }
+
+    .signature-canvas {
+        height: 120px;
+    }
+
+    .modal-button {
+        padding: 10px;
+        font-size: 12px;
+    }
+}
+
+/* 가로 모드 최적화 */
+@media screen and (max-width: 1000px) and (orientation: landscape) {
+    .signature-content {
+        padding: 16px;
+        flex-direction: row;
+        align-items: flex-start;
+        gap: 12px;
+    }
+
+    .signature-canvas {
+        width: 70%;
+        height: 140px;
+        margin-bottom: 12px;
+    }
+}
