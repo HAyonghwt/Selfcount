@@ -10,7 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { db, auth } from "@/lib/firebase";
 import { ref, set, get, onValue } from "firebase/database";
 import { createUserWithEmailAndPassword, updatePassword } from "firebase/auth";
-import { createBulkCaptainAccounts, getCaptainAccounts, deactivateCaptainAccount, updateCaptainPassword, createBulkRefereeAccounts, getRefereeAccounts, deactivateRefereeAccount, updateRefereePassword } from "@/lib/auth";
+import { createBulkCaptainAccounts, getCaptainAccounts, deactivateCaptainAccount, activateCaptainAccount, updateCaptainPassword, createBulkRefereeAccounts, getRefereeAccounts, updateRefereePassword } from "@/lib/auth";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export default function SuperAdminPage() {
@@ -131,22 +131,27 @@ export default function SuperAdminPage() {
         }
     };
 
-    // 조장 계정 비활성화
-    const handleDeactivateCaptain = async (koreanId: string) => {
-        if (!confirm(`정말로 ${koreanId} 계정을 비활성화하시겠습니까?`)) {
+    // 조장 계정 비활성화/활성화
+    const handleToggleCaptainStatus = async (koreanId: string, isActive: boolean) => {
+        const action = isActive ? '비활성화' : '활성화';
+        if (!confirm(`정말로 ${koreanId} 계정을 ${action}하시겠습니까?`)) {
             return;
         }
 
         try {
-            await deactivateCaptainAccount(koreanId);
+            if (isActive) {
+                await deactivateCaptainAccount(koreanId);
+            } else {
+                await activateCaptainAccount(koreanId);
+            }
             toast({
                 title: "성공",
-                description: `${koreanId} 계정이 비활성화되었습니다.`,
+                description: `${koreanId} 계정이 ${action}되었습니다.`,
             });
             await loadCaptainAccounts(); // 목록 새로고침
         } catch (error: any) {
             toast({
-                title: "계정 비활성화 실패",
+                title: `계정 ${action} 실패`,
                 description: error.message,
                 variant: "destructive",
             });
@@ -226,27 +231,7 @@ export default function SuperAdminPage() {
         }
     };
 
-    // 심판 계정 비활성화
-    const handleDeactivateReferee = async (koreanId: string) => {
-        if (!confirm(`정말로 ${koreanId} 계정을 비활성화하시겠습니까?`)) {
-            return;
-        }
 
-        try {
-            await deactivateRefereeAccount(koreanId);
-            toast({
-                title: "성공",
-                description: `${koreanId} 계정이 비활성화되었습니다.`,
-            });
-            await loadRefereeAccounts(); // 목록 새로고침
-        } catch (error: any) {
-            toast({
-                title: "계정 비활성화 실패",
-                description: error.message,
-                variant: "destructive",
-            });
-        }
-    };
 
     // 심판 계정 비밀번호 변경
     const handleUpdateRefereePassword = async (koreanId: string) => {
@@ -439,11 +424,12 @@ export default function SuperAdminPage() {
                                      <div className="max-h-60 overflow-y-auto border rounded p-2 bg-muted/30">
                                          <div className="grid grid-cols-1 gap-2 text-sm">
                                              {captainAccounts.map((account) => (
-                                                 <div key={account.id} className="flex items-center justify-between p-3 bg-white rounded border">
+                                                 <div key={account.id} className={`flex items-center justify-between p-3 rounded border ${account.isActive ? 'bg-white' : 'bg-gray-100'}`}>
                                                      <div className="flex-1">
-                                                         <div className="font-medium">{account.id}</div>
+                                                         <div className={`font-medium ${!account.isActive ? 'text-gray-500' : ''}`}>{account.id}</div>
                                                          <div className="text-xs text-muted-foreground">
                                                              {account.group} • 조{account.jo}
+                                                             {!account.isActive && <span className="ml-2 text-red-500">(비활성화)</span>}
                                                          </div>
                                                      </div>
                                                      <div className="flex gap-2">
@@ -482,17 +468,18 @@ export default function SuperAdminPage() {
                                                                  variant="outline"
                                                                  onClick={() => setEditingPassword(account.id)}
                                                                  className="text-xs"
+                                                                 disabled={!account.isActive}
                                                              >
                                                                  비밀번호 변경
                                                              </Button>
                                                          )}
                                                          <Button
                                                              size="sm"
-                                                             variant="destructive"
-                                                             onClick={() => handleDeactivateCaptain(account.id)}
-                                                             className="text-xs"
+                                                             variant={account.isActive ? "destructive" : "default"}
+                                                             onClick={() => handleToggleCaptainStatus(account.id, account.isActive)}
+                                                             className={`text-xs ${account.isActive ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'}`}
                                                          >
-                                                             비활성화
+                                                             {account.isActive ? '비활성화' : '활성화'}
                                                          </Button>
                                                      </div>
                                                  </div>
@@ -582,14 +569,6 @@ export default function SuperAdminPage() {
                                                                  비밀번호 변경
                                                              </Button>
                                                          )}
-                                                         <Button
-                                                             size="sm"
-                                                             variant="destructive"
-                                                             onClick={() => handleDeactivateReferee(account.id)}
-                                                             className="text-xs"
-                                                         >
-                                                             비활성화
-                                                         </Button>
                                                      </div>
                                                  </div>
                                              ))}

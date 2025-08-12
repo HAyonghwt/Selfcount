@@ -105,8 +105,7 @@ export const updateCaptainPassword = async (koreanId: string, newPassword: strin
 export const getCaptainAccounts = async (): Promise<CaptainAccount[]> => {
   try {
     const captainsRef = collection(firestore, 'captains');
-    const q = query(captainsRef, where('isActive', '==', true));
-    const querySnapshot = await getDocs(q);
+    const querySnapshot = await getDocs(captainsRef);
     
     const captains: CaptainAccount[] = [];
     querySnapshot.forEach((doc) => {
@@ -124,9 +123,39 @@ export const getCaptainAccounts = async (): Promise<CaptainAccount[]> => {
  */
 export const deactivateCaptainAccount = async (koreanId: string): Promise<void> => {
   try {
-    const captainRef = doc(firestore, 'captains', koreanId);
-    await updateDoc(captainRef, {
+    const captainsRef = collection(firestore, 'captains');
+    const q = query(captainsRef, where('id', '==', koreanId));
+    const querySnapshot = await getDocs(q);
+    
+    if (querySnapshot.empty) {
+      throw new Error('존재하지 않는 조장 계정입니다.');
+    }
+    
+    const docRef = doc(firestore, 'captains', querySnapshot.docs[0].id);
+    await updateDoc(docRef, {
       isActive: false
+    });
+  } catch (error) {
+    throw error;
+  }
+};
+
+/**
+ * 조장 계정 활성화 (슈퍼관리자용)
+ */
+export const activateCaptainAccount = async (koreanId: string): Promise<void> => {
+  try {
+    const captainsRef = collection(firestore, 'captains');
+    const q = query(captainsRef, where('id', '==', koreanId));
+    const querySnapshot = await getDocs(q);
+    
+    if (querySnapshot.empty) {
+      throw new Error('존재하지 않는 조장 계정입니다.');
+    }
+    
+    const docRef = doc(firestore, 'captains', querySnapshot.docs[0].id);
+    await updateDoc(docRef, {
+      isActive: true
     });
   } catch (error) {
     throw error;
