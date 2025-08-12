@@ -213,7 +213,7 @@ function SidebarContentWithSidebarHooks({ isMobile, pathname, appName, children 
               >
                 <Link href={selfScoringNavItem.href} className="text-black" onClick={handleMenuClick(selfScoringNavItem.href)}>
                   <selfScoringNavItem.icon className="h-5 w-5" />
-                  <span className="font-medium">{selfScoringNavItem.label}</span>
+                  <span>{selfScoringNavItem.label}</span>
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
