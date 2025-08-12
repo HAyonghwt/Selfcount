@@ -184,20 +184,26 @@ export default function SelfScoringPage() {
     setGameMode(savedMode || "");
     setIsReadOnlyMode(isReadOnlyMode);
 
-    // 코스/플레이어 이름 로드(sessionStorage)
+    // 코스/플레이어 이름 로드
     try {
-      const namesData = sessionStorage.getItem("selfScoringNames");
-      if (namesData) setPlayerNames(JSON.parse(namesData));
+      if (isReadOnlyMode) {
+        // 관전 모드에서는 sessionStorage에서 로드하지 않고 DB에서 실시간 로드
+        // (다음 useEffect에서 처리)
+      } else {
+        // 일반 모드에서는 sessionStorage에서 로드
+        const namesData = sessionStorage.getItem("selfScoringNames");
+        if (namesData) setPlayerNames(JSON.parse(namesData));
 
-      const coursesData = sessionStorage.getItem("selfScoringCourses");
-    if (coursesData) {
-        const tabs = (JSON.parse(coursesData) as any[]).map((c) => ({
-          id: String(c.id),
-          name: String(c.name),
-          pars: Array.isArray(c.pars) ? (c.pars as number[]) : [3, 4, 4, 4, 4, 3, 5, 3, 3],
-        })) as CourseTab[];
-        setCourseTabs(tabs);
-        setActiveCourseId(String(sessionStorage.getItem("selfScoringActiveCourseId") || (tabs[0]?.id || "")));
+        const coursesData = sessionStorage.getItem("selfScoringCourses");
+        if (coursesData) {
+          const tabs = (JSON.parse(coursesData) as any[]).map((c) => ({
+            id: String(c.id),
+            name: String(c.name),
+            pars: Array.isArray(c.pars) ? (c.pars as number[]) : [3, 4, 4, 4, 4, 3, 5, 3, 3],
+          })) as CourseTab[];
+          setCourseTabs(tabs);
+          setActiveCourseId(String(sessionStorage.getItem("selfScoringActiveCourseId") || (tabs[0]?.id || "")));
+        }
       }
     } catch {}
   }, []);
@@ -213,6 +219,18 @@ export default function SelfScoringPage() {
         .map(([id, v]) => ({ id, ...v }))
         .filter((p) => p.group === selectedGroup && String(p.jo) === String(selectedJo));
       setPlayersInGroupJo(list as any);
+      
+      // 관전 모드에서는 플레이어 이름을 실시간으로 설정
+      if (isReadOnlyMode && list.length > 0) {
+        const names = list.map(p => {
+          if (p.type === 'team') {
+            return `${p.p1_name}/${p.p2_name}`;
+          } else {
+            return p.name || '';
+          }
+        });
+        setPlayerNames(names);
+      }
     });
 
     const unsubScores = onValue(ref(dbInstance, "scores"), (snap) => {
@@ -289,6 +307,11 @@ export default function SelfScoringPage() {
             sessionStorage.setItem('selfScoringActiveCourseId', String(nextTabs[0].id));
           }
         }
+      }
+      
+      // 관전 모드에서는 게임 모드도 실시간으로 설정
+      if (isReadOnlyMode && data.gameMode) {
+        setGameMode(data.gameMode);
       }
     });
 
@@ -560,7 +583,6 @@ export default function SelfScoringPage() {
         modifiedByType: "captain",
         comment: `자율 채점 - 코스: ${activeCourse.id}, 그룹: ${selectedGroup || ''}, 조: ${selectedJo || ''}`,
         courseId: String(activeCourse.id),
-        captainEmail: captainEmail,
       });
       // 외부 전광판에 갱신 신호 전달 (선택 사항)
       try {
@@ -725,17 +747,44 @@ export default function SelfScoringPage() {
     if (!activeCourseId || !selectedGroup || !selectedJo) return;
     try {
       let arr: any = null;
+      
+      // 1. 팀 모드인 경우 팀 전용 키에서 먼저 찾기
       if (gameMode === 'team') {
         const savedTeam = localStorage.getItem(teamSignatureKey);
-        if (savedTeam) arr = JSON.parse(savedTeam);
+        if (savedTeam) {
+          arr = JSON.parse(savedTeam);
+        }
+        // localStorage에 없으면 sessionStorage에서 찾기
+        if (!arr) {
+          const savedTeamSession = sessionStorage.getItem(teamSignatureKey);
+          if (savedTeamSession) {
+            arr = JSON.parse(savedTeamSession);
+          }
+        }
       }
+      
+      // 2. 팀 키에서 찾지 못했거나 개인전인 경우 공용 키에서 찾기
       if (!arr) {
         const saved = localStorage.getItem(signatureKey);
-        if (saved) arr = JSON.parse(saved);
+        if (saved) {
+          arr = JSON.parse(saved);
+        }
+        // localStorage에 없으면 sessionStorage에서 찾기
+        if (!arr) {
+          const savedSession = sessionStorage.getItem(signatureKey);
+          if (savedSession) {
+            arr = JSON.parse(savedSession);
+          }
+        }
       }
-      if (Array.isArray(arr) && arr.length === 4) setSignatures(arr);
-      else setSignatures(['', '', '', '']);
-    } catch {
+      
+      if (Array.isArray(arr) && arr.length === 4) {
+        setSignatures(arr);
+      } else {
+        setSignatures(['', '', '', '']);
+      }
+    } catch (error) {
+      console.error('서명 복원 실패:', error);
       setSignatures(['', '', '', '']);
     }
   }, [signatureKey, teamSignatureKey, gameMode, activeCourseId, selectedGroup, selectedJo]);
@@ -748,6 +797,62 @@ export default function SelfScoringPage() {
       setPostSignLock(v === '1');
     } catch {}
   }, [postSignLockKey]);
+
+  // 페이지 로드 시 서명 데이터 강제 복원 (추가 안전장치)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!activeCourseId || !selectedGroup || !selectedJo) return;
+    
+    const restoreSignatures = () => {
+      try {
+        let arr: any = null;
+        
+        // localStorage에서 먼저 찾기
+        if (gameMode === 'team') {
+          const savedTeam = localStorage.getItem(teamSignatureKey);
+          if (savedTeam) {
+            arr = JSON.parse(savedTeam);
+          }
+        }
+        if (!arr) {
+          const saved = localStorage.getItem(signatureKey);
+          if (saved) {
+            arr = JSON.parse(saved);
+          }
+        }
+        
+        // sessionStorage에서 찾기
+        if (!arr) {
+          if (gameMode === 'team') {
+            const savedTeamSession = sessionStorage.getItem(teamSignatureKey);
+            if (savedTeamSession) {
+              arr = JSON.parse(savedTeamSession);
+            }
+          }
+          if (!arr) {
+            const savedSession = sessionStorage.getItem(signatureKey);
+            if (savedSession) {
+              arr = JSON.parse(savedSession);
+            }
+          }
+        }
+        
+        if (Array.isArray(arr) && arr.length === 4) {
+          setSignatures(arr);
+        }
+      } catch (error) {
+        console.error('서명 강제 복원 실패:', error);
+      }
+    };
+    
+    // 페이지 로드 시 즉시 복원
+    restoreSignatures();
+    
+    // 추가로 1초 후에도 한 번 더 복원 시도
+    const timer = setTimeout(restoreSignatures, 1000);
+    
+    return () => clearTimeout(timer);
+  }, [activeCourseId, selectedGroup, selectedJo, gameMode, signatureKey, teamSignatureKey]);
 
   // 로컬 초기화 마스크 복원(활성 코스)
   useEffect(() => {
@@ -773,7 +878,14 @@ export default function SelfScoringPage() {
       if (gameMode === 'team') {
         localStorage.setItem(teamSignatureKey, JSON.stringify(next));
       }
-    } catch {}
+      // 추가로 sessionStorage에도 백업 저장
+      sessionStorage.setItem(signatureKey, JSON.stringify(next));
+      if (gameMode === 'team') {
+        sessionStorage.setItem(teamSignatureKey, JSON.stringify(next));
+      }
+    } catch (error) {
+      console.error('서명 저장 실패:', error);
+    }
   };
 
   // 모든 서명 완료 여부에 따라 잠금 토글
@@ -938,6 +1050,7 @@ export default function SelfScoringPage() {
       setSignatures((prev) => {
         const next = [...prev];
         next[signaturePlayerIdx] = croppedDataUrl;
+        // 즉시 저장
         persistSignatures(next);
         return next;
       });
@@ -947,10 +1060,14 @@ export default function SelfScoringPage() {
       setSignatures((prev) => {
         const next = [...prev];
         next[signaturePlayerIdx] = dataUrl;
+        // 즉시 저장
         persistSignatures(next);
         return next;
       });
     }
+    
+    // 저장 완료 토스트 메시지
+    toast({ title: '서명 저장됨', description: '서명이 저장되었습니다.' });
     
     closeSignatureModal();
   };
@@ -1078,6 +1195,20 @@ export default function SelfScoringPage() {
 
         <div className="action-buttons">
           <button className="action-button reset-button" onClick={async () => {
+            // 서명 완료 후에는 초기화 차단
+            console.log('초기화 시도 - postSignLock:', postSignLock, 'dbHasAnyScore:', dbHasAnyScore, 'allSigned:', allSigned);
+            
+            // 서명이 하나라도 있으면 초기화 차단 (DB 점수 여부와 관계없이)
+            const hasAnySignature = signatures.some(sig => sig && sig.length > 0);
+            if (hasAnySignature) {
+              toast({ 
+                title: '초기화 차단', 
+                description: '서명이 있는 상태에서는 관리자 초기화 전까지 점수 초기화가 제한됩니다.', 
+                variant: 'destructive' 
+              });
+              return;
+            }
+            
             if (!confirm(`${activeCourse?.name || '현재 코스'}의 점수가 초기화 됩니다. 초기화 하시겠습니까?`)) return;
             
             // 현재 코스의 점수만 초기화
@@ -1113,6 +1244,10 @@ export default function SelfScoringPage() {
               const teamSignatureKey = `selfScoringSignTeam_${activeCourseId}_${selectedGroup || 'g'}_${selectedJo || 'j'}`;
               localStorage.removeItem(signatureKey);
               localStorage.removeItem(teamSignatureKey);
+              
+              // sessionStorage에서도 제거
+              sessionStorage.removeItem(signatureKey);
+              sessionStorage.removeItem(teamSignatureKey);
             } catch {}
             
             // 수정 로그도 완전히 제거 (Firebase에서) - 현재 그룹/조의 현재 코스만
@@ -1168,7 +1303,7 @@ export default function SelfScoringPage() {
             } catch {}
             
             toast({ title: '초기화 완료', description: `${activeCourse?.name || '현재 코스'}가 초기화되었습니다.` });
-          }} disabled={isReadOnlyMode}>초기화</button>
+          }} disabled={isReadOnlyMode || signatures.some(sig => sig && sig.length > 0)}>초기화</button>
           <button className="action-button kakao-button" onClick={() => toast({ title: '공유', description: '공유 기능은 추후 제공됩니다.' })}>공유</button>
           <button className="action-button qr-button" onClick={() => {
             try {
@@ -1199,15 +1334,18 @@ export default function SelfScoringPage() {
               urlDiv.style.wordBreak = 'break-all';
               urlDiv.style.marginTop = '8px';
               const qr = document.createElement('div');
+              qr.style.display = 'flex';
+              qr.style.justifyContent = 'center';
+              qr.style.alignItems = 'center';
               // 동적으로 qrcode.react를 import하여 렌더링
               // 간단히 이미지 API 사용 (data URL) 대신 라이브러리 구성: DOM에 리액트 마운트
                             // 간단한 QR 코드 생성 (외부 API 사용)
-              const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(url)}`;
+              const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(url)}`;
               const img = document.createElement('img');
               img.src = qrApiUrl;
               img.alt = 'QR';
-              img.style.width = '240px';
-              img.style.height = '240px';
+              img.style.width = '180px';
+              img.style.height = '180px';
               img.onerror = () => {
                 qr.textContent = 'QR 생성 실패';
               };
@@ -1218,16 +1356,36 @@ export default function SelfScoringPage() {
               copy.style.padding = '8px 12px';
               copy.style.borderRadius = '8px';
               copy.style.border = '1px solid #e9ecef';
+              copy.style.marginRight = '8px';
               copy.addEventListener('click', async () => {
                 try {
                   await navigator.clipboard.writeText(url);
                   copy.textContent = '복사됨';
                 } catch {}
               });
+              
+              const close = document.createElement('button');
+              close.textContent = '닫기';
+              close.style.marginTop = '8px';
+              close.style.padding = '8px 12px';
+              close.style.borderRadius = '8px';
+              close.style.border = '1px solid #e9ecef';
+              close.style.backgroundColor = '#f8f9fa';
+              close.addEventListener('click', () => {
+                document.body.removeChild(modal);
+              });
+              
+              const buttonContainer = document.createElement('div');
+              buttonContainer.style.display = 'flex';
+              buttonContainer.style.justifyContent = 'center';
+              buttonContainer.style.gap = '8px';
+              buttonContainer.appendChild(copy);
+              buttonContainer.appendChild(close);
+              
               box.appendChild(title);
               box.appendChild(qr);
               box.appendChild(urlDiv);
-              box.appendChild(copy);
+              box.appendChild(buttonContainer);
               modal.appendChild(box);
               document.body.appendChild(modal);
             } catch {}

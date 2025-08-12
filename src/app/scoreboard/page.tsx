@@ -771,7 +771,7 @@ function ExternalScoreboard() {
   // 툴팁 내용 구성
   const tooltipContent = cellLog ? (
     <div>
-      <div><b>수정자:</b> {cellLog.modifiedByType === 'admin' ? '관리자' : '심판'}</div>
+      <div><b>수정자:</b> {cellLog.modifiedByType === 'admin' ? '관리자' : cellLog.modifiedByType === 'captain' ? '조장' : '심판'}</div>
       <div><b>일시:</b> {cellLog.modifiedAt ? new Date(cellLog.modifiedAt).toLocaleString('ko-KR') : ''}</div>
       <div><b>변경:</b> {cellLog.oldValue} → {cellLog.newValue}</div>
       {cellLog.comment && <div><b>비고:</b> {cellLog.comment}</div>}
