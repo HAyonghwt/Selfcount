@@ -6,6 +6,7 @@ import { ref, set, get, onValue } from "firebase/database";
 import { useToast } from "@/hooks/use-toast";
 import { logScoreChange, getPlayerScoreLogs, ScoreLog } from "@/lib/scoreLogs";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import html2canvas from "html2canvas";
 import "./styles.css";
 
 type CourseTab = { id: string; name: string; pars: number[] };
@@ -1026,6 +1027,185 @@ export default function SelfScoringPage() {
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   };
 
+  // 점수 공유 기능
+  const handleShareScores = async () => {
+    if (!navigator.share) {
+      toast({ 
+        title: '공유 불가', 
+        description: '이 브라우저에서는 공유 기능을 지원하지 않습니다.', 
+        variant: 'destructive' 
+      });
+      return;
+    }
+
+    try {
+      // 로딩 토스트 표시
+      toast({ title: '공유 준비 중...', description: '점수표를 캡처하고 있습니다.' });
+
+      const shareImages: File[] = [];
+      const currentDate = new Date().toLocaleDateString('ko-KR');
+
+      // 각 코스별로 화면 캡처
+      for (const course of courseTabs) {
+        // 해당 코스로 전환
+        setActiveCourseId(String(course.id));
+        
+        // 코스 전환이 반영될 때까지 잠시 대기
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        // 캡처할 요소 찾기 (전체 메인 컨테이너)
+        const captureElement = document.getElementById('mainContainer');
+        if (!captureElement) continue;
+
+        // 현재 화면을 그대로 캡처하기 위한 컨테이너
+        const captureContainer = document.createElement('div');
+        captureContainer.style.position = 'absolute';
+        captureContainer.style.left = '-9999px';
+        captureContainer.style.top = '0';
+        captureContainer.style.width = '400px';
+        captureContainer.style.background = '#ffffff';
+        captureContainer.style.padding = '30px';
+        captureContainer.style.fontFamily = 'Arial, sans-serif';
+        captureContainer.style.borderRadius = '12px';
+        captureContainer.style.boxShadow = '0 4px 16px rgba(0,0,0,0.2)';
+
+        // 제목 추가
+        const titleDiv = document.createElement('div');
+        titleDiv.textContent = `${selectedGroup} ${course.name}`;
+        titleDiv.style.fontSize = '22px';
+        titleDiv.style.fontWeight = 'bold';
+        titleDiv.style.textAlign = 'center';
+        titleDiv.style.marginBottom = '8px';
+        titleDiv.style.color = '#333333';
+        titleDiv.style.paddingTop = '0px'; // 제목 글자 크기만큼 잘라
+        titleDiv.style.marginTop = '-10px'; // 전체 이미지를 위로 이동
+
+        // 날짜 추가
+        const dateDiv = document.createElement('div');
+        dateDiv.textContent = currentDate;
+        dateDiv.style.fontSize = '13px';
+        dateDiv.style.textAlign = 'center';
+        dateDiv.style.marginBottom = '15px';
+        dateDiv.style.color = '#666666';
+
+        // 점수표 복제 (원본 그대로)
+        const scoreTableClone = captureElement.cloneNode(true) as HTMLElement;
+        scoreTableClone.style.margin = '0';
+        scoreTableClone.style.border = 'none';
+        scoreTableClone.style.boxShadow = 'none';
+        scoreTableClone.style.width = '100%';
+        scoreTableClone.style.marginLeft = '20px'; // 왼쪽으로 조금 더 이동 (정중앙 맞추기)
+        
+        // 점수 숫자 크기와 위치 조정
+        const scoreInputs = scoreTableClone.querySelectorAll('.score-input');
+        scoreInputs.forEach(input => {
+          const div = input as HTMLElement;
+          div.style.fontSize = '20px';
+          div.style.fontWeight = 'bold';
+          div.style.display = 'flex';
+          div.style.alignItems = 'flex-start'; // 위쪽 정렬
+          div.style.justifyContent = 'center';
+          div.style.height = '40px';
+          div.style.lineHeight = '1';
+          div.style.paddingTop = '0px'; // 더 위쪽으로 이동
+          div.style.paddingBottom = '0';
+        });
+        
+        // 헤더 이름들도 위로 이동
+        const headers = scoreTableClone.querySelectorAll('th');
+        headers.forEach(header => {
+          const th = header as HTMLElement;
+          th.style.paddingTop = '5px';
+          th.style.paddingBottom = '15px';
+        });
+        
+        // 일반 셀들도 위로 이동
+        const cells = scoreTableClone.querySelectorAll('td');
+        cells.forEach(cell => {
+          const td = cell as HTMLElement;
+          td.style.paddingTop = '5px';
+          td.style.paddingBottom = '15px';
+        });
+
+        // 캡처 컨테이너에 요소들 추가
+        captureContainer.appendChild(titleDiv);
+        captureContainer.appendChild(dateDiv);
+        captureContainer.appendChild(scoreTableClone);
+
+        // DOM에 임시 추가
+        document.body.appendChild(captureContainer);
+
+        try {
+          // html2canvas로 캡처
+          const canvas = await html2canvas(captureContainer, {
+            width: 400,
+            height: captureContainer.scrollHeight - 20, // 위아래 1/10씩 잘라
+            scale: 2, // 고해상도
+            backgroundColor: '#ffffff',
+            useCORS: true,
+            allowTaint: true,
+            logging: false,
+            scrollX: 0,
+            scrollY: 0
+          });
+
+          // 캔버스를 Blob으로 변환
+          canvas.toBlob((blob) => {
+            if (blob) {
+              const file = new File([blob], `${selectedGroup}_${course.name}_${currentDate}.png`, {
+                type: 'image/png'
+              });
+              shareImages.push(file);
+            }
+          }, 'image/png');
+
+        } finally {
+          // 임시 요소 제거
+          document.body.removeChild(captureContainer);
+        }
+      }
+
+      // 모든 이미지가 준비될 때까지 대기
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      if (shareImages.length === 0) {
+        toast({ 
+          title: '캡처 실패', 
+          description: '점수표 캡처에 실패했습니다.', 
+          variant: 'destructive' 
+        });
+        return;
+      }
+
+      // Web Share API로 공유
+      if (shareImages.length === 1) {
+        // 단일 이미지 공유
+        await navigator.share({
+          title: `${selectedGroup} 점수표`,
+          text: `${selectedGroup} ${courseTabs[0].name} 점수표 - ${currentDate}`,
+          files: shareImages
+        });
+      } else {
+        // 여러 이미지 공유 (지원하는 경우)
+        await navigator.share({
+          title: `${selectedGroup} 점수표`,
+          text: `${selectedGroup} 전체 코스 점수표 - ${currentDate}`,
+          files: shareImages
+        });
+      }
+
+      toast({ title: '공유 완료', description: '점수표가 공유되었습니다.' });
+
+    } catch (error) {
+      console.error('공유 오류:', error);
+      toast({ 
+        title: '공유 실패', 
+        description: '공유 중 오류가 발생했습니다.', 
+        variant: 'destructive' 
+      });
+    }
+  };
+
   const handleSignatureSave = () => {
     if (signaturePlayerIdx === null) return;
     const canvas = signatureCanvasRef.current;
@@ -1102,7 +1282,7 @@ export default function SelfScoringPage() {
           <span>경기방식: <b>{gameMode === 'team' ? '2인1팀' : gameMode === 'individual' ? '개인전' : '-'}</b></span>
           <span>그룹: <b>{selectedGroup || '-'}</b></span>
           <span>조: <b>{selectedJo || '-'}</b></span>
-          {isReadOnlyMode && <span style={{ color: '#666', fontStyle: 'italic' }}>관전 모드</span>}
+          {isReadOnlyMode && <span style={{ color: '#666', fontStyle: 'italic' }}>보기전용모드</span>}
         </div>
 
         <div id="captureArea">
@@ -1314,7 +1494,7 @@ export default function SelfScoringPage() {
             
             toast({ title: '초기화 완료', description: `${activeCourse?.name || '현재 코스'}가 초기화되었습니다.` });
           }} disabled={isReadOnlyMode || signatures.some(sig => sig && sig.length > 0)}>초기화</button>
-          <button className="action-button kakao-button" onClick={() => toast({ title: '공유', description: '공유 기능은 추후 제공됩니다.' })}>공유</button>
+          <button className="action-button kakao-button" onClick={handleShareScores}>공유</button>
           <button className="action-button qr-button" onClick={() => {
             try {
               const params = new URLSearchParams({ group: selectedGroup || '', jo: String(selectedJo || ''), mode: 'readonly' });
