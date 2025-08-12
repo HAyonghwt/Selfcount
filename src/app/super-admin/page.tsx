@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Save, LogOut, Users } from "lucide-react";
 import Link from 'next/link';
 import { useToast } from "@/hooks/use-toast";
@@ -32,6 +33,10 @@ export default function SuperAdminPage() {
     const [creatingReferees, setCreatingReferees] = useState(false);
     const [editingRefereePassword, setEditingRefereePassword] = useState<string | null>(null);
     const [newRefereePassword, setNewRefereePassword] = useState('');
+    const [replaceCaptains, setReplaceCaptains] = useState(false);
+    const [replaceReferees, setReplaceReferees] = useState(false);
+    const [addMoreCaptains, setAddMoreCaptains] = useState(false);
+    const [addMoreReferees, setAddMoreReferees] = useState(false);
 
     useEffect(() => {
         const configRef = ref(db, 'config');
@@ -108,16 +113,27 @@ export default function SuperAdminPage() {
 
     // 100명 조장 계정 일괄 생성
     const handleCreateBulkCaptains = async () => {
-        if (!confirm('정말로 100명의 조장 계정을 생성하시겠습니까?\n\n- 조장1부터 조장100까지 생성됩니다\n- 기본 비밀번호: 123456\n- 10명씩 그룹으로 분할됩니다')) {
+        let action = '생성';
+        let description = '조장1부터 조장100까지 생성됩니다';
+        
+        if (replaceCaptains) {
+            action = '기존 계정을 삭제하고 새로 생성';
+            description = '조장1부터 조장100까지 재생성됩니다';
+        } else if (addMoreCaptains) {
+            action = '추가로 생성';
+            description = '기존 계정 이후부터 100개 추가 생성됩니다';
+        }
+        
+        if (!confirm(`정말로 100명의 조장 계정을 ${action}하시겠습니까?\n\n- ${description}\n- 기본 비밀번호: 123456\n- 10명씩 그룹으로 분할됩니다${replaceCaptains ? '\n- 기존 계정은 모두 삭제됩니다' : ''}`)) {
             return;
         }
 
         setCreatingCaptains(true);
         try {
-            await createBulkCaptainAccounts();
+            await createBulkCaptainAccounts(replaceCaptains, addMoreCaptains);
             toast({
                 title: "성공",
-                description: "100명의 조장 계정이 성공적으로 생성되었습니다.",
+                description: `100명의 조장 계정이 성공적으로 ${replaceCaptains ? '재생성' : addMoreCaptains ? '추가 생성' : '생성'}되었습니다.`,
             });
             await loadCaptainAccounts(); // 목록 새로고침
         } catch (error: any) {
@@ -208,16 +224,27 @@ export default function SuperAdminPage() {
 
     // 9명 심판 계정 일괄 생성
     const handleCreateBulkReferees = async () => {
-        if (!confirm('정말로 9명의 심판 계정을 생성하시겠습니까?\n\n- 1번홀심판부터 9번홀심판까지 생성됩니다\n- 기본 비밀번호: 123456')) {
+        let action = '생성';
+        let description = '1번홀심판부터 9번홀심판까지 생성됩니다';
+        
+        if (replaceReferees) {
+            action = '기존 계정을 삭제하고 새로 생성';
+            description = '1번홀심판부터 9번홀심판까지 재생성됩니다';
+        } else if (addMoreReferees) {
+            action = '추가로 생성';
+            description = '기존 계정 이후부터 9개 추가 생성됩니다';
+        }
+        
+        if (!confirm(`정말로 9명의 심판 계정을 ${action}하시겠습니까?\n\n- ${description}\n- 기본 비밀번호: 123456${replaceReferees ? '\n- 기존 계정은 모두 삭제됩니다' : ''}`)) {
             return;
         }
 
         setCreatingReferees(true);
         try {
-            await createBulkRefereeAccounts();
+            await createBulkRefereeAccounts(replaceReferees, addMoreReferees);
             toast({
                 title: "성공",
-                description: "9명의 심판 계정이 성공적으로 생성되었습니다.",
+                description: `9명의 심판 계정이 성공적으로 ${replaceReferees ? '재생성' : addMoreReferees ? '추가 생성' : '생성'}되었습니다.`,
             });
             await loadRefereeAccounts(); // 목록 새로고침
         } catch (error: any) {
@@ -402,21 +429,51 @@ export default function SuperAdminPage() {
                              <CardDescription>한글 아이디를 사용하는 조장 계정을 관리합니다.</CardDescription>
                          </CardHeader>
                          <CardContent className="space-y-4">
-                             <div className="flex gap-2">
-                                 <Button 
-                                     onClick={handleCreateBulkCaptains} 
-                                     disabled={creatingCaptains}
-                                     className="bg-blue-600 hover:bg-blue-700"
-                                 >
-                                     {creatingCaptains ? '생성 중...' : '100명 조장 계정 생성'}
-                                 </Button>
-                                 <Button 
-                                     onClick={loadCaptainAccounts} 
-                                     variant="outline"
-                                 >
-                                     목록 새로고침
-                                 </Button>
-                             </div>
+                                                         <div className="space-y-4">
+                                <div className="space-y-2">
+                                    <div className="flex items-center space-x-2">
+                                        <Checkbox 
+                                            id="replaceCaptains" 
+                                            checked={replaceCaptains}
+                                            onCheckedChange={(checked) => {
+                                                setReplaceCaptains(checked as boolean);
+                                                if (checked) setAddMoreCaptains(false);
+                                            }}
+                                        />
+                                        <Label htmlFor="replaceCaptains" className="text-sm">
+                                            기존 계정 삭제 후 새로 생성
+                                        </Label>
+                                    </div>
+                                    <div className="flex items-center space-x-2">
+                                        <Checkbox 
+                                            id="addMoreCaptains" 
+                                            checked={addMoreCaptains}
+                                            onCheckedChange={(checked) => {
+                                                setAddMoreCaptains(checked as boolean);
+                                                if (checked) setReplaceCaptains(false);
+                                            }}
+                                        />
+                                        <Label htmlFor="addMoreCaptains" className="text-sm">
+                                            추가로 생성 (기존 계정 이후부터)
+                                        </Label>
+                                    </div>
+                                </div>
+                                <div className="flex gap-2">
+                                    <Button 
+                                        onClick={handleCreateBulkCaptains} 
+                                        disabled={creatingCaptains}
+                                        className="bg-blue-600 hover:bg-blue-700"
+                                    >
+                                        {creatingCaptains ? '생성 중...' : '100명 조장 계정 생성'}
+                                    </Button>
+                                    <Button 
+                                        onClick={loadCaptainAccounts} 
+                                        variant="outline"
+                                    >
+                                        목록 새로고침
+                                    </Button>
+                                </div>
+                            </div>
                              
                              {captainAccounts.length > 0 && (
                                  <div className="mt-4">
@@ -500,21 +557,51 @@ export default function SuperAdminPage() {
                              <CardDescription>한글 아이디를 사용하는 심판 계정을 관리합니다.</CardDescription>
                          </CardHeader>
                          <CardContent className="space-y-4">
-                             <div className="flex gap-2">
-                                 <Button 
-                                     onClick={handleCreateBulkReferees} 
-                                     disabled={creatingReferees}
-                                     className="bg-green-600 hover:bg-green-700"
-                                 >
-                                     {creatingReferees ? '생성 중...' : '9명 심판 계정 생성'}
-                                 </Button>
-                                 <Button 
-                                     onClick={loadRefereeAccounts} 
-                                     variant="outline"
-                                 >
-                                     목록 새로고침
-                                 </Button>
-                             </div>
+                                                         <div className="space-y-4">
+                                <div className="space-y-2">
+                                    <div className="flex items-center space-x-2">
+                                        <Checkbox 
+                                            id="replaceReferees" 
+                                            checked={replaceReferees}
+                                            onCheckedChange={(checked) => {
+                                                setReplaceReferees(checked as boolean);
+                                                if (checked) setAddMoreReferees(false);
+                                            }}
+                                        />
+                                        <Label htmlFor="replaceReferees" className="text-sm">
+                                            기존 계정 삭제 후 새로 생성
+                                        </Label>
+                                    </div>
+                                    <div className="flex items-center space-x-2">
+                                        <Checkbox 
+                                            id="addMoreReferees" 
+                                            checked={addMoreReferees}
+                                            onCheckedChange={(checked) => {
+                                                setAddMoreReferees(checked as boolean);
+                                                if (checked) setReplaceReferees(false);
+                                            }}
+                                        />
+                                        <Label htmlFor="addMoreReferees" className="text-sm">
+                                            추가로 생성 (기존 계정 이후부터)
+                                        </Label>
+                                    </div>
+                                </div>
+                                <div className="flex gap-2">
+                                    <Button 
+                                        onClick={handleCreateBulkReferees} 
+                                        disabled={creatingReferees}
+                                        className="bg-green-600 hover:bg-green-700"
+                                    >
+                                        {creatingReferees ? '생성 중...' : '9명 심판 계정 생성'}
+                                    </Button>
+                                    <Button 
+                                        onClick={loadRefereeAccounts} 
+                                        variant="outline"
+                                    >
+                                        목록 새로고침
+                                    </Button>
+                                </div>
+                            </div>
                              
                              {refereeAccounts.length > 0 && (
                                  <div className="mt-4">

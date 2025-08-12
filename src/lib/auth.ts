@@ -1,5 +1,5 @@
 import { firestore } from './firebase';
-import { doc, getDoc, updateDoc, collection, addDoc, query, getDocs, where } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, collection, addDoc, query, getDocs, where, deleteDoc } from 'firebase/firestore';
 
 export interface CaptainAccount {
   id: string;
@@ -27,14 +27,15 @@ export interface RefereeAccount {
  */
 export const loginWithKoreanId = async (koreanId: string, password: string): Promise<CaptainAccount> => {
   try {
-    const captainRef = doc(firestore, 'captains', koreanId);
-    const captainDoc = await getDoc(captainRef);
+    const captainsRef = collection(firestore, 'captains');
+    const q = query(captainsRef, where('id', '==', koreanId));
+    const querySnapshot = await getDocs(q);
     
-    if (!captainDoc.exists()) {
+    if (querySnapshot.empty) {
       throw new Error('존재하지 않는 계정입니다.');
     }
     
-    const captainData = captainDoc.data() as CaptainAccount;
+    const captainData = querySnapshot.docs[0].data() as CaptainAccount;
     
     if (!captainData.isActive) {
       throw new Error('비활성화된 계정입니다.');
@@ -45,7 +46,8 @@ export const loginWithKoreanId = async (koreanId: string, password: string): Pro
     }
     
     // 마지막 로그인 시간 업데이트
-    await updateDoc(captainRef, {
+    const docRef = doc(firestore, 'captains', querySnapshot.docs[0].id);
+    await updateDoc(docRef, {
       lastLogin: new Date()
     });
     
@@ -109,7 +111,12 @@ export const getCaptainAccounts = async (): Promise<CaptainAccount[]> => {
     
     const captains: CaptainAccount[] = [];
     querySnapshot.forEach((doc) => {
-      captains.push({ ...doc.data() as CaptainAccount, id: doc.id });
+      const data = doc.data() as CaptainAccount;
+      // 실제 id 필드를 사용
+      captains.push({ 
+        ...data, 
+        id: data.id || doc.id // id 필드가 없으면 문서 ID 사용
+      });
     });
     
     return captains.sort((a, b) => a.jo - b.jo);
@@ -179,11 +186,35 @@ export const changeCaptainPassword = async (koreanId: string, newPassword: strin
 /**
  * 100명 조장 계정 일괄 생성 (초기 설정용)
  */
-export const createBulkCaptainAccounts = async (): Promise<void> => {
+export const createBulkCaptainAccounts = async (replaceExisting: boolean = false, addMore: boolean = false): Promise<void> => {
   try {
     const captainsRef = collection(firestore, 'captains');
     
-    for (let i = 1; i <= 100; i++) {
+    // 기존 계정 삭제 옵션이 체크된 경우
+    if (replaceExisting) {
+      const existingDocs = await getDocs(captainsRef);
+      const deletePromises = existingDocs.docs.map(doc => deleteDoc(doc.ref));
+      await Promise.all(deletePromises);
+    }
+    
+    // 추가 생성이 아닌 경우, 기존 계정이 있는지 확인
+    if (!replaceExisting && !addMore) {
+      const existingDocs = await getDocs(captainsRef);
+      if (!existingDocs.empty) {
+        throw new Error('이미 조장 계정이 존재합니다. "기존 계정 삭제 후 새로 생성" 또는 "추가로 생성" 옵션을 선택해주세요.');
+      }
+    }
+    
+    // 시작 번호 결정
+    let startNumber = 1;
+    if (addMore && !replaceExisting) {
+      const existingDocs = await getDocs(captainsRef);
+      const existingIds = existingDocs.docs.map(doc => doc.data().id);
+      const maxNumber = Math.max(...existingIds.map(id => parseInt(id.replace('조장', ''))), 0);
+      startNumber = maxNumber + 1;
+    }
+    
+    for (let i = startNumber; i <= startNumber + 99; i++) {
       const groupNumber = Math.ceil(i / 10); // 10명씩 그룹 분할
       const captainData = {
         id: `조장${i}`,
@@ -208,14 +239,15 @@ export const createBulkCaptainAccounts = async (): Promise<void> => {
  */
 export const loginRefereeWithKoreanId = async (koreanId: string, password: string): Promise<RefereeAccount> => {
   try {
-    const refereeRef = doc(firestore, 'referees', koreanId);
-    const refereeDoc = await getDoc(refereeRef);
+    const refereesRef = collection(firestore, 'referees');
+    const q = query(refereesRef, where('id', '==', koreanId));
+    const querySnapshot = await getDocs(q);
     
-    if (!refereeDoc.exists()) {
+    if (querySnapshot.empty) {
       throw new Error('존재하지 않는 심판 계정입니다.');
     }
     
-    const refereeData = refereeDoc.data() as RefereeAccount;
+    const refereeData = querySnapshot.docs[0].data() as RefereeAccount;
     
     if (!refereeData.isActive) {
       throw new Error('비활성화된 심판 계정입니다.');
@@ -226,7 +258,8 @@ export const loginRefereeWithKoreanId = async (koreanId: string, password: strin
     }
     
     // 마지막 로그인 시간 업데이트
-    await updateDoc(refereeRef, {
+    const docRef = doc(firestore, 'referees', querySnapshot.docs[0].id);
+    await updateDoc(docRef, {
       lastLogin: new Date()
     });
     
@@ -263,12 +296,17 @@ export const createRefereeAccount = async (koreanId: string, password: string, h
 export const getRefereeAccounts = async (): Promise<RefereeAccount[]> => {
   try {
     const refereesRef = collection(firestore, 'referees');
-    const q = query(refereesRef, where('isActive', '==', true));
-    const querySnapshot = await getDocs(q);
+    // 모든 계정을 가져오도록 필터 제거 (관리자가 모든 계정을 볼 수 있도록)
+    const querySnapshot = await getDocs(refereesRef);
     
     const referees: RefereeAccount[] = [];
     querySnapshot.forEach((doc) => {
-      referees.push({ ...doc.data() as RefereeAccount, id: doc.id });
+      const data = doc.data() as RefereeAccount;
+      // 실제 id 필드를 사용
+      referees.push({ 
+        ...data, 
+        id: data.id || doc.id // id 필드가 없으면 문서 ID 사용
+      });
     });
     
     return referees.sort((a, b) => a.hole - b.hole);
@@ -316,11 +354,35 @@ export const updateRefereePassword = async (koreanId: string, newPassword: strin
 /**
  * 9명 심판 계정 일괄 생성 (초기 설정용)
  */
-export const createBulkRefereeAccounts = async (): Promise<void> => {
+export const createBulkRefereeAccounts = async (replaceExisting: boolean = false, addMore: boolean = false): Promise<void> => {
   try {
     const refereesRef = collection(firestore, 'referees');
     
-    for (let i = 1; i <= 9; i++) {
+    // 기존 계정 삭제 옵션이 체크된 경우
+    if (replaceExisting) {
+      const existingDocs = await getDocs(refereesRef);
+      const deletePromises = existingDocs.docs.map(doc => deleteDoc(doc.ref));
+      await Promise.all(deletePromises);
+    }
+    
+    // 추가 생성이 아닌 경우, 기존 계정이 있는지 확인
+    if (!replaceExisting && !addMore) {
+      const existingDocs = await getDocs(refereesRef);
+      if (!existingDocs.empty) {
+        throw new Error('이미 심판 계정이 존재합니다. "기존 계정 삭제 후 새로 생성" 또는 "추가로 생성" 옵션을 선택해주세요.');
+      }
+    }
+    
+    // 시작 번호 결정
+    let startNumber = 1;
+    if (addMore && !replaceExisting) {
+      const existingDocs = await getDocs(refereesRef);
+      const existingIds = existingDocs.docs.map(doc => doc.data().id);
+      const maxNumber = Math.max(...existingIds.map(id => parseInt(id.replace('번홀심판', ''))), 0);
+      startNumber = maxNumber + 1;
+    }
+    
+    for (let i = startNumber; i <= startNumber + 8; i++) {
       const refereeData = {
         id: `${i}번홀심판`,
         password: `123456`, // 기본 비밀번호

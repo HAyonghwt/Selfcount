@@ -11,6 +11,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Eye, EyeOff, Copy, Check, RefreshCw } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { getSelfScoringLogs, ScoreLog } from '@/lib/scoreLogs';
+import { getCaptainAccounts } from '@/lib/auth';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 
 const MAX_CAPTAINS = 10;
@@ -23,6 +24,8 @@ export default function SelfScoringManagementPage() {
     const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
     const [selfScoringLogs, setSelfScoringLogs] = useState<ScoreLog[]>([]);
     const [logsLoading, setLogsLoading] = useState(false);
+    const [captainAccounts, setCaptainAccounts] = useState<any[]>([]);
+    const [showPasswords, setShowPasswords] = useState<{ [key: string]: boolean }>({});
 
     useEffect(() => {
         if (!db) return;
@@ -52,6 +55,19 @@ export default function SelfScoringManagementPage() {
 
     useEffect(() => {
         loadSelfScoringLogs();
+    }, []);
+
+    // 조장 계정 목록 불러오기
+    useEffect(() => {
+        const loadCaptainAccounts = async () => {
+            try {
+                const accounts = await getCaptainAccounts();
+                setCaptainAccounts(accounts);
+            } catch (error) {
+                console.error('조장 계정 목록 불러오기 실패:', error);
+            }
+        };
+        loadCaptainAccounts();
     }, []);
 
     // 모바일(iOS 사파리 포함)에서도 동작하도록 클립보드 복사 유틸
@@ -92,18 +108,8 @@ export default function SelfScoringManagementPage() {
         }
     };
 
-    const captainAccounts = [
-        { number: 1, email: `player1@${userDomain}`, password: '123456' },
-        { number: 2, email: `player2@${userDomain}`, password: '234567' },
-        { number: 3, email: `player3@${userDomain}`, password: '345678' },
-        { number: 4, email: `player4@${userDomain}`, password: '456789' },
-        { number: 5, email: `player5@${userDomain}`, password: '567890' },
-        { number: 6, email: `player6@${userDomain}`, password: '678901' },
-        { number: 7, email: `player7@${userDomain}`, password: '789012' },
-        { number: 8, email: `player8@${userDomain}`, password: '890123' },
-        { number: 9, email: `player9@${userDomain}`, password: '901234' },
-        { number: 10, email: `player10@${userDomain}`, password: '012345' }
-    ];
+
+
 
     // 로그를 조장별로 그룹화
     const logsByCaptain = selfScoringLogs.reduce((acc, log) => {
@@ -186,38 +192,89 @@ export default function SelfScoringManagementPage() {
                                         <TableHead>조장용 아이디</TableHead>
                                         <TableHead className="w-32">비밀번호</TableHead>
                                         <TableHead className="w-24">복사</TableHead>
+                                        <TableHead className="w-20">상태</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {captainAccounts.map((account) => (
-                                        <TableRow key={account.number}>
-                                            <TableCell className="font-medium">{account.number}번</TableCell>
-                                            <TableCell className="font-mono">{account.email}</TableCell>
-                                            <TableCell>
-                                                <div className="flex items-center space-x-2">
-                                                    <span className="font-mono">
-                                                        {showPassword ? account.password : '••••••'}
-                                                    </span>
+                                    {captainAccounts.length > 0 ? (
+                                        captainAccounts.map((account) => (
+                                            <TableRow key={account.id} className={!account.isActive ? 'bg-gray-50' : ''}>
+                                                <TableCell className="font-medium">{account.jo}번</TableCell>
+                                                <TableCell className="font-mono">
+                                                    {account.id}
+                                                    {!account.isActive && <span className="ml-2 text-sm text-gray-500">(비활성화)</span>}
+                                                </TableCell>
+                                                <TableCell>
+                                                    <div className="flex items-center space-x-2">
+                                                        <span className="font-mono">
+                                                            {showPasswords[account.id] ? account.password : '••••••'}
+                                                        </span>
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            onClick={() => setShowPasswords(prev => ({
+                                                                ...prev,
+                                                                [account.id]: !prev[account.id]
+                                                            }))}
+                                                        >
+                                                            {showPasswords[account.id] ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                                                        </Button>
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell>
                                                     <Button
-                                                        variant="ghost"
+                                                        variant="outline"
                                                         size="sm"
-                                                        onClick={() => setShowPassword(!showPassword)}
+                                                        onClick={() => handleCopyUrl(account.jo)}
                                                     >
-                                                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                                                        {copiedIndex === account.jo ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                                                     </Button>
-                                                </div>
-                                            </TableCell>
-                                            <TableCell>
-                                                <Button
-                                                    variant="outline"
-                                                    size="sm"
-                                                    onClick={() => handleCopyUrl(account.number)}
-                                                >
-                                                    {copiedIndex === account.number ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                                                </Button>
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
+                                                </TableCell>
+                                                <TableCell>
+                                                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                                        account.isActive 
+                                                            ? 'bg-green-100 text-green-800' 
+                                                            : 'bg-red-100 text-red-800'
+                                                    }`}>
+                                                        {account.isActive ? '활성' : '비활성'}
+                                                    </span>
+                                                </TableCell>
+                                            </TableRow>
+                                        ))
+                                    ) : (
+                                        Array.from({ length: 10 }, (_, i) => i + 1).map(number => (
+                                            <TableRow key={number}>
+                                                <TableCell className="font-medium">{number}번</TableCell>
+                                                <TableCell className="font-mono">조장{number}</TableCell>
+                                                <TableCell>
+                                                    <div className="flex items-center space-x-2">
+                                                        <span className="font-mono">••••••</span>
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            disabled
+                                                        >
+                                                            <Eye className="h-4 w-4" />
+                                                        </Button>
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        disabled
+                                                    >
+                                                        <Copy className="h-4 w-4" />
+                                                    </Button>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <span className="px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                                                        미생성
+                                                    </span>
+                                                </TableCell>
+                                            </TableRow>
+                                        ))
+                                    )}
                                 </TableBody>
                             </Table>
                         </CardContent>

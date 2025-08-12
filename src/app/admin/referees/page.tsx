@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { db } from '@/lib/firebase';
 import { ref, onValue } from 'firebase/database';
+import { getRefereeAccounts } from '@/lib/auth';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Eye, EyeOff, Copy, Check } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
@@ -21,6 +22,8 @@ export default function RefereeManagementPage() {
     const [refereePassword, setRefereePassword] = useState('');
     const [mainUrl, setMainUrl] = useState('');
     const [copied, setCopied] = useState(false);
+    const [refereeAccounts, setRefereeAccounts] = useState<any[]>([]);
+    const [showPasswords, setShowPasswords] = useState<{ [key: string]: boolean }>({});
 
     useEffect(() => {
         if (!db) return;
@@ -37,6 +40,19 @@ export default function RefereeManagementPage() {
         return () => {
             unsubConfig();
         };
+    }, []);
+
+    // 심판 계정 목록 불러오기
+    useEffect(() => {
+        const loadRefereeAccounts = async () => {
+            try {
+                const accounts = await getRefereeAccounts();
+                setRefereeAccounts(accounts);
+            } catch (error) {
+                console.error('심판 계정 목록 불러오기 실패:', error);
+            }
+        };
+        loadRefereeAccounts();
     }, []);
 
     const handleCopyUrl = async () => {
@@ -207,32 +223,74 @@ export default function RefereeManagementPage() {
                                         <TableHead className="w-24 font-bold">홀</TableHead>
                                         <TableHead className="font-bold">심판 아이디</TableHead>
                                         <TableHead className="font-bold">비밀번호</TableHead>
+                                        <TableHead className="w-20 font-bold">상태</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {Array.from({ length: MAX_HOLES }, (_, i) => i + 1).map(hole => (
-                                        <TableRow key={hole}>
-                                            <TableCell className="font-medium">{hole}번홀</TableCell>
-                                            <TableCell>
-                                                <code className="bg-muted px-2 py-1 rounded-md text-base">referee{hole}@{userDomain}</code>
-                                            </TableCell>
-                                            <TableCell>
-                                                <div className="flex items-center gap-2">
-                                                    <span className="font-mono text-base">
-                                                        {showPassword ? refereePassword : (refereePassword ? refereePassword.replace(/./g, '•') : '----')}
+                                    {refereeAccounts.length > 0 ? (
+                                        refereeAccounts.map(account => (
+                                            <TableRow key={account.id} className={!account.isActive ? 'bg-gray-50' : ''}>
+                                                <TableCell className="font-medium">{account.hole}번홀</TableCell>
+                                                <TableCell>
+                                                    <code className="bg-muted px-2 py-1 rounded-md text-base">{account.id}</code>
+                                                    {!account.isActive && <span className="ml-2 text-sm text-gray-500">(비활성화)</span>}
+                                                </TableCell>
+                                                <TableCell>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="font-mono text-base">
+                                                            {showPasswords[account.id] ? account.password : account.password.replace(/./g, '•')}
+                                                        </span>
+                                                        <button
+                                                            type="button"
+                                                            className="text-muted-foreground hover:text-foreground"
+                                                            onClick={() => setShowPasswords(prev => ({
+                                                                ...prev,
+                                                                [account.id]: !prev[account.id]
+                                                            }))}
+                                                            aria-label={showPasswords[account.id] ? "비밀번호 숨기기" : "비밀번호 보기"}
+                                                        >
+                                                            {showPasswords[account.id] ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                                                        </button>
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                                        account.isActive 
+                                                            ? 'bg-green-100 text-green-800' 
+                                                            : 'bg-red-100 text-red-800'
+                                                    }`}>
+                                                        {account.isActive ? '활성' : '비활성'}
                                                     </span>
-                                                    <button
-                                                        type="button"
-                                                        className="text-muted-foreground hover:text-foreground"
-                                                        onClick={() => setShowPassword(prev => !prev)}
-                                                        aria-label={showPassword ? "비밀번호 숨기기" : "비밀번호 보기"}
-                                                    >
-                                                        {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                                                    </button>
-                                                </div>
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
+                                                </TableCell>
+                                            </TableRow>
+                                        ))
+                                    ) : (
+                                        Array.from({ length: MAX_HOLES }, (_, i) => i + 1).map(hole => (
+                                            <TableRow key={hole}>
+                                                <TableCell className="font-medium">{hole}번홀</TableCell>
+                                                <TableCell>
+                                                    <code className="bg-muted px-2 py-1 rounded-md text-base">{hole}번홀심판</code>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="font-mono text-base">••••••</span>
+                                                        <button
+                                                            type="button"
+                                                            className="text-muted-foreground hover:text-foreground"
+                                                            disabled
+                                                        >
+                                                            <Eye className="h-5 w-5" />
+                                                        </button>
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <span className="px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                                                        미생성
+                                                    </span>
+                                                </TableCell>
+                                            </TableRow>
+                                        ))
+                                    )}
                                 </TableBody>
                             </Table>
                         )}

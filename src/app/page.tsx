@@ -12,6 +12,7 @@ import { Label } from '@/components/ui/label';
 import { LogIn, Tv } from 'lucide-react';
 import { auth, db, firebaseConfig } from '@/lib/firebase';
 import { signInWithEmailAndPassword } from 'firebase/auth';
+import { loginWithKoreanId, loginRefereeWithKoreanId } from '@/lib/auth';
 import { ref, get } from 'firebase/database';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -72,6 +73,41 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
+      // 한글 아이디로 로그인 시도 (조장)
+      if (email.match(/^조장\d+$/)) {
+        try {
+          const captainData = await loginWithKoreanId(email, password);
+          sessionStorage.setItem('selfScoringCaptain', JSON.stringify(captainData));
+          router.push('/self-scoring/game');
+          return;
+        } catch (error: any) {
+          setError(error.message);
+          toast({
+            title: "로그인 실패",
+            description: error.message,
+          });
+          return;
+        }
+      }
+
+      // 한글 아이디로 로그인 시도 (심판)
+      if (email.match(/^\d+번홀심판$/)) {
+        try {
+          const refereeData = await loginRefereeWithKoreanId(email, password);
+          sessionStorage.setItem('refereeData', JSON.stringify(refereeData));
+          router.push(`/referee/${refereeData.hole}`);
+          return;
+        } catch (error: any) {
+          setError(error.message);
+          toast({
+            title: "로그인 실패",
+            description: error.message,
+          });
+          return;
+        }
+      }
+
+      // 기존 이메일 로그인
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
       
@@ -157,11 +193,11 @@ export default function LoginPage() {
         <CardContent>
           <form onSubmit={handleLogin} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="email" className="text-blue-800">이메일</Label>
+              <Label htmlFor="email" className="text-blue-800">아이디</Label>
               <Input
                 id="email"
-                type="email"
-                placeholder="email@example.com"
+                type="text"
+                placeholder="이메일 또는 한글 아이디 (예: 1번홀심판, 조장1)"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
