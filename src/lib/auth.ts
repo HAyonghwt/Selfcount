@@ -12,6 +12,16 @@ export interface CaptainAccount {
   isActive: boolean;
 }
 
+export interface RefereeAccount {
+  id: string;
+  password: string;
+  hole: number;
+  email: string;
+  createdAt: any;
+  lastLogin: any;
+  isActive: boolean;
+}
+
 /**
  * 한글 아이디로 조장 로그인
  */
@@ -158,6 +168,141 @@ export const createBulkCaptainAccounts = async (): Promise<void> => {
       };
       
       await addDoc(captainsRef, captainData);
+    }
+  } catch (error) {
+    throw error;
+  }
+};
+
+/**
+ * 한글 아이디로 심판 로그인
+ */
+export const loginRefereeWithKoreanId = async (koreanId: string, password: string): Promise<RefereeAccount> => {
+  try {
+    const refereeRef = doc(firestore, 'referees', koreanId);
+    const refereeDoc = await getDoc(refereeRef);
+    
+    if (!refereeDoc.exists()) {
+      throw new Error('존재하지 않는 심판 계정입니다.');
+    }
+    
+    const refereeData = refereeDoc.data() as RefereeAccount;
+    
+    if (!refereeData.isActive) {
+      throw new Error('비활성화된 심판 계정입니다.');
+    }
+    
+    if (refereeData.password !== password) {
+      throw new Error('비밀번호가 올바르지 않습니다.');
+    }
+    
+    // 마지막 로그인 시간 업데이트
+    await updateDoc(refereeRef, {
+      lastLogin: new Date()
+    });
+    
+    return refereeData;
+  } catch (error) {
+    throw error;
+  }
+};
+
+/**
+ * 심판 계정 생성 (슈퍼관리자용)
+ */
+export const createRefereeAccount = async (koreanId: string, password: string, hole: number): Promise<void> => {
+  try {
+    const refereeData = {
+      id: koreanId,
+      password: password,
+      hole: hole,
+      email: `referee${hole}@yongin.com`,
+      createdAt: new Date(),
+      lastLogin: null,
+      isActive: true
+    };
+    
+    await addDoc(collection(firestore, 'referees'), refereeData);
+  } catch (error) {
+    throw error;
+  }
+};
+
+/**
+ * 심판 계정 목록 조회 (슈퍼관리자용)
+ */
+export const getRefereeAccounts = async (): Promise<RefereeAccount[]> => {
+  try {
+    const refereesRef = collection(firestore, 'referees');
+    const q = query(refereesRef, where('isActive', '==', true));
+    const querySnapshot = await getDocs(q);
+    
+    const referees: RefereeAccount[] = [];
+    querySnapshot.forEach((doc) => {
+      referees.push({ ...doc.data() as RefereeAccount, id: doc.id });
+    });
+    
+    return referees.sort((a, b) => a.hole - b.hole);
+  } catch (error) {
+    throw error;
+  }
+};
+
+/**
+ * 심판 계정 비활성화 (슈퍼관리자용)
+ */
+export const deactivateRefereeAccount = async (koreanId: string): Promise<void> => {
+  try {
+    const refereeRef = doc(firestore, 'referees', koreanId);
+    await updateDoc(refereeRef, {
+      isActive: false
+    });
+  } catch (error) {
+    throw error;
+  }
+};
+
+/**
+ * 심판 계정 비밀번호 변경 (슈퍼관리자용)
+ */
+export const updateRefereePassword = async (koreanId: string, newPassword: string): Promise<void> => {
+  try {
+    const refereesRef = collection(firestore, 'referees');
+    const q = query(refereesRef, where('id', '==', koreanId));
+    const querySnapshot = await getDocs(q);
+    
+    if (querySnapshot.empty) {
+      throw new Error('존재하지 않는 심판 계정입니다.');
+    }
+    
+    const docRef = doc(firestore, 'referees', querySnapshot.docs[0].id);
+    await updateDoc(docRef, {
+      password: newPassword
+    });
+  } catch (error) {
+    throw error;
+  }
+};
+
+/**
+ * 9명 심판 계정 일괄 생성 (초기 설정용)
+ */
+export const createBulkRefereeAccounts = async (): Promise<void> => {
+  try {
+    const refereesRef = collection(firestore, 'referees');
+    
+    for (let i = 1; i <= 9; i++) {
+      const refereeData = {
+        id: `${i}번홀심판`,
+        password: `123456`, // 기본 비밀번호
+        hole: i,
+        email: `referee${i}@yongin.com`,
+        createdAt: new Date(),
+        lastLogin: null,
+        isActive: true
+      };
+      
+      await addDoc(refereesRef, refereeData);
     }
   } catch (error) {
     throw error;

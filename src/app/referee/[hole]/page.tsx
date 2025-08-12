@@ -38,6 +38,7 @@ export default function RefereePage() {
     const router = useRouter();
     const hole = String(params.hole ?? '');
     const { toast } = useToast();
+    const [refereeData, setRefereeData] = useState<any>(null);
 
     // Data from Firebase
     const [allPlayers, setAllPlayers] = useState<Player[]>([]);
@@ -88,6 +89,30 @@ export default function RefereePage() {
 
     // 안내 모달 상태 추가
     const [showAllJosCompleteModal, setShowAllJosCompleteModal] = useState(false);
+
+    // 로그인 상태 확인
+    useEffect(() => {
+        const loggedInReferee = sessionStorage.getItem('refereeData');
+        if (!loggedInReferee) {
+            router.push('/referee/login');
+            return;
+        }
+
+        try {
+            const referee = JSON.parse(loggedInReferee);
+            setRefereeData(referee);
+            
+            // 로그인한 심판의 홀과 현재 페이지 홀이 다르면 리다이렉트
+            if (referee.hole !== parseInt(hole)) {
+                router.push(`/referee/${referee.hole}`);
+                return;
+            }
+        } catch (error) {
+            console.error('심판 데이터 파싱 오류:', error);
+            router.push('/referee/login');
+            return;
+        }
+    }, [hole, router]);
 
     // handleNextGroup 함수 수정
     const handleNextGroup = async (forceMoveOverride?: boolean) => {
@@ -788,7 +813,9 @@ export default function RefereePage() {
         <>
             <div className="bg-slate-50 min-h-screen p-2 sm:p-4 flex flex-col font-body">
                  <header className="flex justify-between items-center mb-4">
-                     <h1 className="text-2xl sm:text-3xl font-extrabold text-primary break-keep leading-tight">{hole}번홀 심판</h1>
+                     <h1 className="text-2xl sm:text-3xl font-extrabold text-primary break-keep leading-tight">
+                         {refereeData?.id || `${hole}번홀 심판`}
+                     </h1>
                      <div className="flex gap-2 items-center">
                          {view === 'scoring' && (
                              <Button variant="outline" onClick={handleBackToSelectionClick} className="h-9 text-base sm:text-lg font-bold flex-shrink-0">
@@ -798,11 +825,11 @@ export default function RefereePage() {
                          )}
                          {view === 'selection' && (
                              <Button variant="destructive" onClick={() => {
-                                 // 세션/로컬스토리지 정리 및 루트(로그인)로 이동
+                                 // 세션/로컬스토리지 정리 및 심판 로그인 페이지로 이동
                                  if (typeof window !== 'undefined') {
                                      localStorage.clear();
                                      sessionStorage.clear();
-                                     router.replace('/');
+                                     router.replace('/referee/login');
                                  }
                              }} className="h-9 text-base sm:text-lg font-bold flex-shrink-0 ml-2">로그아웃</Button>
                          )}

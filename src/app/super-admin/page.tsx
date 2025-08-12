@@ -10,7 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { db, auth } from "@/lib/firebase";
 import { ref, set, get, onValue } from "firebase/database";
 import { createUserWithEmailAndPassword, updatePassword } from "firebase/auth";
-import { createBulkCaptainAccounts, getCaptainAccounts, deactivateCaptainAccount, updateCaptainPassword } from "@/lib/auth";
+import { createBulkCaptainAccounts, getCaptainAccounts, deactivateCaptainAccount, updateCaptainPassword, createBulkRefereeAccounts, getRefereeAccounts, deactivateRefereeAccount, updateRefereePassword } from "@/lib/auth";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export default function SuperAdminPage() {
@@ -28,6 +28,10 @@ export default function SuperAdminPage() {
     const [creatingCaptains, setCreatingCaptains] = useState(false);
     const [editingPassword, setEditingPassword] = useState<string | null>(null);
     const [newPassword, setNewPassword] = useState('');
+    const [refereeAccounts, setRefereeAccounts] = useState<any[]>([]);
+    const [creatingReferees, setCreatingReferees] = useState(false);
+    const [editingRefereePassword, setEditingRefereePassword] = useState<string | null>(null);
+    const [newRefereePassword, setNewRefereePassword] = useState('');
 
     useEffect(() => {
         const configRef = ref(db, 'config');
@@ -187,6 +191,101 @@ export default function SuperAdminPage() {
         }
     };
 
+    // 심판 계정 목록 불러오기
+    const loadRefereeAccounts = async () => {
+        try {
+            const accounts = await getRefereeAccounts();
+            setRefereeAccounts(accounts);
+        } catch (error) {
+            console.error('심판 계정 목록 불러오기 실패:', error);
+        }
+    };
+
+    // 9명 심판 계정 일괄 생성
+    const handleCreateBulkReferees = async () => {
+        if (!confirm('정말로 9명의 심판 계정을 생성하시겠습니까?\n\n- 1번홀심판부터 9번홀심판까지 생성됩니다\n- 기본 비밀번호: 123456')) {
+            return;
+        }
+
+        setCreatingReferees(true);
+        try {
+            await createBulkRefereeAccounts();
+            toast({
+                title: "성공",
+                description: "9명의 심판 계정이 성공적으로 생성되었습니다.",
+            });
+            await loadRefereeAccounts(); // 목록 새로고침
+        } catch (error: any) {
+            toast({
+                title: "심판 계정 생성 실패",
+                description: error.message,
+                variant: "destructive",
+            });
+        } finally {
+            setCreatingReferees(false);
+        }
+    };
+
+    // 심판 계정 비활성화
+    const handleDeactivateReferee = async (koreanId: string) => {
+        if (!confirm(`정말로 ${koreanId} 계정을 비활성화하시겠습니까?`)) {
+            return;
+        }
+
+        try {
+            await deactivateRefereeAccount(koreanId);
+            toast({
+                title: "성공",
+                description: `${koreanId} 계정이 비활성화되었습니다.`,
+            });
+            await loadRefereeAccounts(); // 목록 새로고침
+        } catch (error: any) {
+            toast({
+                title: "계정 비활성화 실패",
+                description: error.message,
+                variant: "destructive",
+            });
+        }
+    };
+
+    // 심판 계정 비밀번호 변경
+    const handleUpdateRefereePassword = async (koreanId: string) => {
+        if (!newRefereePassword.trim()) {
+            toast({
+                title: "비밀번호 변경 실패",
+                description: "새 비밀번호를 입력해주세요.",
+                variant: "destructive",
+            });
+            return;
+        }
+
+        if (newRefereePassword.length < 4) {
+            toast({
+                title: "비밀번호 변경 실패",
+                description: "비밀번호는 최소 4자 이상이어야 합니다.",
+                variant: "destructive",
+            });
+            return;
+        }
+
+        try {
+            await updateRefereePassword(koreanId, newRefereePassword);
+            toast({
+                title: "성공",
+                description: `${koreanId} 계정의 비밀번호가 변경되었습니다.`,
+            });
+            setEditingRefereePassword(null);
+            setNewRefereePassword('');
+            await loadRefereeAccounts(); // 목록 새로고침
+        } catch (error: any) {
+            toast({
+                title: "비밀번호 변경 실패",
+                description: error.message,
+                variant: "destructive",
+            });
+        }
+    };
+
     if (loading) {
         return (
             <div className="min-h-screen bg-slate-100 p-4 sm:p-8">
@@ -312,101 +411,197 @@ export default function SuperAdminPage() {
                         </CardContent>
                     </Card>
 
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>조장 계정 관리</CardTitle>
-                            <CardDescription>한글 아이디를 사용하는 조장 계정을 관리합니다.</CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                            <div className="flex gap-2">
-                                <Button 
-                                    onClick={handleCreateBulkCaptains} 
-                                    disabled={creatingCaptains}
-                                    className="bg-blue-600 hover:bg-blue-700"
-                                >
-                                    {creatingCaptains ? '생성 중...' : '100명 조장 계정 생성'}
-                                </Button>
-                                <Button 
-                                    onClick={loadCaptainAccounts} 
-                                    variant="outline"
-                                >
-                                    목록 새로고침
-                                </Button>
-                            </div>
-                            
-                            {captainAccounts.length > 0 && (
-                                <div className="mt-4">
-                                    <h4 className="font-semibold mb-2">생성된 조장 계정 ({captainAccounts.length}개)</h4>
-                                    <div className="max-h-60 overflow-y-auto border rounded p-2 bg-muted/30">
-                                        <div className="grid grid-cols-1 gap-2 text-sm">
-                                            {captainAccounts.map((account) => (
-                                                <div key={account.id} className="flex items-center justify-between p-3 bg-white rounded border">
-                                                    <div className="flex-1">
-                                                        <div className="font-medium">{account.id}</div>
-                                                        <div className="text-xs text-muted-foreground">
-                                                            {account.group} • 조{account.jo}
-                                                        </div>
-                                                    </div>
-                                                    <div className="flex gap-2">
-                                                        {editingPassword === account.id ? (
-                                                            <div className="flex gap-2 items-center">
-                                                                <Input
-                                                                    type="password"
-                                                                    placeholder="새 비밀번호"
-                                                                    value={newPassword}
-                                                                    onChange={(e) => setNewPassword(e.target.value)}
-                                                                    className="w-24 text-xs"
-                                                                    onKeyPress={(e) => e.key === 'Enter' && handleUpdatePassword(account.id)}
-                                                                />
-                                                                <Button
-                                                                    size="sm"
-                                                                    onClick={() => handleUpdatePassword(account.id)}
-                                                                    className="text-xs bg-green-600 hover:bg-green-700"
-                                                                >
-                                                                    저장
-                                                                </Button>
-                                                                <Button
-                                                                    size="sm"
-                                                                    variant="outline"
-                                                                    onClick={() => {
-                                                                        setEditingPassword(null);
-                                                                        setNewPassword('');
-                                                                    }}
-                                                                    className="text-xs"
-                                                                >
-                                                                    취소
-                                                                </Button>
-                                                            </div>
-                                                        ) : (
-                                                            <Button
-                                                                size="sm"
-                                                                variant="outline"
-                                                                onClick={() => setEditingPassword(account.id)}
-                                                                className="text-xs"
-                                                            >
-                                                                비밀번호 변경
-                                                            </Button>
-                                                        )}
-                                                        <Button
-                                                            size="sm"
-                                                            variant="destructive"
-                                                            onClick={() => handleDeactivateCaptain(account.id)}
-                                                            className="text-xs"
-                                                        >
-                                                            비활성화
-                                                        </Button>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                    <p className="text-xs text-muted-foreground mt-2">
-                                        초기 비밀번호: 123456 | 각 조장별로 개별 비밀번호 설정 가능
-                                    </p>
-                                </div>
-                            )}
-                        </CardContent>
-                    </Card>
+                                         <Card>
+                         <CardHeader>
+                             <CardTitle>조장 계정 관리</CardTitle>
+                             <CardDescription>한글 아이디를 사용하는 조장 계정을 관리합니다.</CardDescription>
+                         </CardHeader>
+                         <CardContent className="space-y-4">
+                             <div className="flex gap-2">
+                                 <Button 
+                                     onClick={handleCreateBulkCaptains} 
+                                     disabled={creatingCaptains}
+                                     className="bg-blue-600 hover:bg-blue-700"
+                                 >
+                                     {creatingCaptains ? '생성 중...' : '100명 조장 계정 생성'}
+                                 </Button>
+                                 <Button 
+                                     onClick={loadCaptainAccounts} 
+                                     variant="outline"
+                                 >
+                                     목록 새로고침
+                                 </Button>
+                             </div>
+                             
+                             {captainAccounts.length > 0 && (
+                                 <div className="mt-4">
+                                     <h4 className="font-semibold mb-2">생성된 조장 계정 ({captainAccounts.length}개)</h4>
+                                     <div className="max-h-60 overflow-y-auto border rounded p-2 bg-muted/30">
+                                         <div className="grid grid-cols-1 gap-2 text-sm">
+                                             {captainAccounts.map((account) => (
+                                                 <div key={account.id} className="flex items-center justify-between p-3 bg-white rounded border">
+                                                     <div className="flex-1">
+                                                         <div className="font-medium">{account.id}</div>
+                                                         <div className="text-xs text-muted-foreground">
+                                                             {account.group} • 조{account.jo}
+                                                         </div>
+                                                     </div>
+                                                     <div className="flex gap-2">
+                                                         {editingPassword === account.id ? (
+                                                             <div className="flex gap-2 items-center">
+                                                                 <Input
+                                                                     type="password"
+                                                                     placeholder="새 비밀번호"
+                                                                     value={newPassword}
+                                                                     onChange={(e) => setNewPassword(e.target.value)}
+                                                                     className="w-24 text-xs"
+                                                                     onKeyPress={(e) => e.key === 'Enter' && handleUpdatePassword(account.id)}
+                                                                 />
+                                                                 <Button
+                                                                     size="sm"
+                                                                     onClick={() => handleUpdatePassword(account.id)}
+                                                                     className="text-xs bg-green-600 hover:bg-green-700"
+                                                                 >
+                                                                     저장
+                                                                 </Button>
+                                                                 <Button
+                                                                     size="sm"
+                                                                     variant="outline"
+                                                                     onClick={() => {
+                                                                         setEditingPassword(null);
+                                                                         setNewPassword('');
+                                                                     }}
+                                                                     className="text-xs"
+                                                                 >
+                                                                     취소
+                                                                 </Button>
+                                                             </div>
+                                                         ) : (
+                                                             <Button
+                                                                 size="sm"
+                                                                 variant="outline"
+                                                                 onClick={() => setEditingPassword(account.id)}
+                                                                 className="text-xs"
+                                                             >
+                                                                 비밀번호 변경
+                                                             </Button>
+                                                         )}
+                                                         <Button
+                                                             size="sm"
+                                                             variant="destructive"
+                                                             onClick={() => handleDeactivateCaptain(account.id)}
+                                                             className="text-xs"
+                                                         >
+                                                             비활성화
+                                                         </Button>
+                                                     </div>
+                                                 </div>
+                                             ))}
+                                         </div>
+                                     </div>
+                                     <p className="text-xs text-muted-foreground mt-2">
+                                         초기 비밀번호: 123456 | 각 조장별로 개별 비밀번호 설정 가능
+                                     </p>
+                                 </div>
+                             )}
+                         </CardContent>
+                     </Card>
+
+                     <Card>
+                         <CardHeader>
+                             <CardTitle>심판 계정 관리</CardTitle>
+                             <CardDescription>한글 아이디를 사용하는 심판 계정을 관리합니다.</CardDescription>
+                         </CardHeader>
+                         <CardContent className="space-y-4">
+                             <div className="flex gap-2">
+                                 <Button 
+                                     onClick={handleCreateBulkReferees} 
+                                     disabled={creatingReferees}
+                                     className="bg-green-600 hover:bg-green-700"
+                                 >
+                                     {creatingReferees ? '생성 중...' : '9명 심판 계정 생성'}
+                                 </Button>
+                                 <Button 
+                                     onClick={loadRefereeAccounts} 
+                                     variant="outline"
+                                 >
+                                     목록 새로고침
+                                 </Button>
+                             </div>
+                             
+                             {refereeAccounts.length > 0 && (
+                                 <div className="mt-4">
+                                     <h4 className="font-semibold mb-2">생성된 심판 계정 ({refereeAccounts.length}개)</h4>
+                                     <div className="max-h-60 overflow-y-auto border rounded p-2 bg-muted/30">
+                                         <div className="grid grid-cols-1 gap-2 text-sm">
+                                             {refereeAccounts.map((account) => (
+                                                 <div key={account.id} className="flex items-center justify-between p-3 bg-white rounded border">
+                                                     <div className="flex-1">
+                                                         <div className="font-medium">{account.id}</div>
+                                                         <div className="text-xs text-muted-foreground">
+                                                             {account.hole}번 홀 담당
+                                                         </div>
+                                                     </div>
+                                                     <div className="flex gap-2">
+                                                         {editingRefereePassword === account.id ? (
+                                                             <div className="flex gap-2 items-center">
+                                                                 <Input
+                                                                     type="password"
+                                                                     placeholder="새 비밀번호"
+                                                                     value={newRefereePassword}
+                                                                     onChange={(e) => setNewRefereePassword(e.target.value)}
+                                                                     className="w-24 text-xs"
+                                                                     onKeyPress={(e) => e.key === 'Enter' && handleUpdateRefereePassword(account.id)}
+                                                                 />
+                                                                 <Button
+                                                                     size="sm"
+                                                                     onClick={() => handleUpdateRefereePassword(account.id)}
+                                                                     className="text-xs bg-green-600 hover:bg-green-700"
+                                                                 >
+                                                                     저장
+                                                                 </Button>
+                                                                 <Button
+                                                                     size="sm"
+                                                                     variant="outline"
+                                                                     onClick={() => {
+                                                                         setEditingRefereePassword(null);
+                                                                         setNewRefereePassword('');
+                                                                     }}
+                                                                     className="text-xs"
+                                                                 >
+                                                                     취소
+                                                                 </Button>
+                                                             </div>
+                                                         ) : (
+                                                             <Button
+                                                                 size="sm"
+                                                                 variant="outline"
+                                                                 onClick={() => setEditingRefereePassword(account.id)}
+                                                                 className="text-xs"
+                                                             >
+                                                                 비밀번호 변경
+                                                             </Button>
+                                                         )}
+                                                         <Button
+                                                             size="sm"
+                                                             variant="destructive"
+                                                             onClick={() => handleDeactivateReferee(account.id)}
+                                                             className="text-xs"
+                                                         >
+                                                             비활성화
+                                                         </Button>
+                                                     </div>
+                                                 </div>
+                                             ))}
+                                         </div>
+                                     </div>
+                                     <p className="text-xs text-muted-foreground mt-2">
+                                         초기 비밀번호: 123456 | 각 심판별로 개별 비밀번호 설정 가능
+                                     </p>
+                                 </div>
+                             )}
+                         </CardContent>
+                     </Card>
                 </div>
             </div>
         </div>
