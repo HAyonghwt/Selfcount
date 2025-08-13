@@ -97,11 +97,11 @@ export default function SelfScoringManagementPage() {
     };
 
     const handleCopyUrl = async (index: number) => {
-        const url = `${window.location.origin}/self-scoring`;
+        const url = `${window.location.origin}/`;
         const ok = await copyTextUniversal(url);
         if (ok) {
             setCopiedIndex(index);
-            toast({ title: '주소 복사 완료', description: '자율채점 페이지 주소가 클립보드에 복사되었습니다.' });
+            toast({ title: '주소 복사 완료', description: '메인페이지 주소가 클립보드에 복사되었습니다.' });
             setTimeout(() => setCopiedIndex(null), 2000);
         } else {
             toast({ title: '복사 실패', description: '주소 복사에 실패했습니다. 주소를 길게 눌러 수동 복사해 주세요.', variant: 'destructive' });
@@ -152,13 +152,13 @@ export default function SelfScoringManagementPage() {
                     <CardTitle className="text-2xl font-bold">자율채점 조장 관리</CardTitle>
                     <CardDescription>
                         자율채점 조장들의 아이디와 비밀번호를 확인합니다.
-                        아래 주소를 조장에게 전달하고 아이디와 비밀번호를 이용해서 로그인 하게 합니다
+                        아래 메인페이지 주소를 조장에게 전달하고 조장1, 조장2 등으로 로그인 하게 합니다
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                     <div className="flex items-center space-x-2">
                         <Input
-                            value={`${window.location.origin}/self-scoring`}
+                            value={`${window.location.origin}/`}
                             readOnly
                             className="flex-1"
                         />

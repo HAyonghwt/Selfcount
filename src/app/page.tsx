@@ -201,7 +201,7 @@ export default function LoginPage() {
             {loading && !config ? <Skeleton className="h-9 w-48 mx-auto" /> : (config?.appName || 'ParkScore')}
           </CardTitle>
           <CardDescription className="text-blue-500 pt-2">
-            {loading && !config ? <Skeleton className="h-5 w-40 mx-auto" /> : `관리자/심판으로 로그인 하세요.`}
+            {loading && !config ? <Skeleton className="h-5 w-40 mx-auto" /> : `관리자/심판/조장으로 로그인 하세요.`}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -211,7 +211,7 @@ export default function LoginPage() {
               <Input
                 id="email"
                 type="text"
-                placeholder="이메일 또는 한글 아이디 (예: 1번홀심판, 조장1)"
+                placeholder="이메일 또는 한글 아이디 (예: admin@parkgolf.com, 1번홀심판, 조장1)"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}

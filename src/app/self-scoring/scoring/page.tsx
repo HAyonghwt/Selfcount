@@ -1244,20 +1244,20 @@ export default function SelfScoringPage() {
                 
                 // 점수에 따른 배경색과 텍스트 색상
                 if (diff < 0) {
-                  // 버디 이하 - 블루 계열
-                  ctx.fillStyle = '#dbeafe';
+                  // 버디 이하 - 흰색 배경
+                  ctx.fillStyle = '#ffffff';
                   ctx.fillRect(x + 1, y + 1, playerCellWidth - 2, cellHeight - 2);
-                  ctx.fillStyle = '#1d4ed8'; // 블루로 변경
+                  ctx.fillStyle = '#1d4ed8'; // 블루 텍스트
                 } else if (diff === 0) {
-                  // 파 - 기본
-                  ctx.fillStyle = '#f9fafb';
+                  // 파 - 흰색 배경
+                  ctx.fillStyle = '#ffffff';
                   ctx.fillRect(x + 1, y + 1, playerCellWidth - 2, cellHeight - 2);
-                  ctx.fillStyle = '#111827';
+                  ctx.fillStyle = '#111827'; // 검정 텍스트
                 } else {
-                  // 보기 이상 - 빨강
-                  ctx.fillStyle = '#fee2e2';
+                  // 보기 이상 - 흰색 배경
+                  ctx.fillStyle = '#ffffff';
                   ctx.fillRect(x + 1, y + 1, playerCellWidth - 2, cellHeight - 2);
-                  ctx.fillStyle = '#dc2626';
+                  ctx.fillStyle = '#dc2626'; // 빨강 텍스트
                 }
                 
                 ctx.font = 'bold 38px Arial, sans-serif'; // 점수 글자 크기 증가
@@ -1305,8 +1305,8 @@ export default function SelfScoringPage() {
             });
             
             if (validScores > 0) {
-              // 합계 셀 배경 (연한 그린)
-              ctx.fillStyle = '#9EF277';
+              // 합계 셀 배경 (연한 빨강으로 변경)
+              ctx.fillStyle = '#fee2e2';
               ctx.fillRect(x + 1, totalY + 1, playerCellWidth - 2, totalCellHeight - 2);
               
               // 합계 텍스트 (가장 크게)
@@ -1324,6 +1324,28 @@ export default function SelfScoringPage() {
             ctx.lineWidth = 1;
             ctx.strokeRect(x, totalY, playerCellWidth, totalCellHeight);
           });
+
+          // 점수 색상 설명 추가 (원래 배경에 바로 표시)
+          const legendY = totalY + totalCellHeight + 40; // 합계 아래 40px 여백
+          
+          // 설명 내용 (배경 없이 바로 표시)
+          ctx.font = 'bold 18px Arial, sans-serif';
+          ctx.textAlign = 'left';
+          
+          const legendStartX = startX + 20;
+          const legendTextY = legendY + 20; // 적절한 위치에 배치
+          
+          // 오버파 (빨간색)
+          ctx.fillStyle = '#dc2626';
+          ctx.fillText('오버파(+): 빨간색', legendStartX, legendTextY);
+          
+          // 이븐파 (검정색)
+          ctx.fillStyle = '#111827';
+          ctx.fillText('이븐파(E): 검정색', legendStartX + 180, legendTextY);
+          
+          // 언더파 (파란색)
+          ctx.fillStyle = '#1d4ed8';
+          ctx.fillText('언더파(-): 파란색', legendStartX + 360, legendTextY);
 
           // 캔버스를 Blob으로 변환
           await new Promise<void>((resolve) => {

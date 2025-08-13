@@ -1,6 +1,6 @@
 {
-  "name": "ParkScore | 파크골프 점수 관리",
-  "short_name": "ParkScore",
+  "name": "파크골프대회앱 | 파크골프 대회 관리",
+  "short_name": "파크골프대회앱",
   "theme_color": "#e85461",
   "background_color": "#ffffff",
   "display": "standalone",
