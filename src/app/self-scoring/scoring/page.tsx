@@ -1027,7 +1027,7 @@ export default function SelfScoringPage() {
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   };
 
-  // 점수 공유 기능
+  // 점수 공유 기능 - 개선된 캡처 방식
   const handleShareScores = async () => {
     if (!navigator.share) {
       toast({ 
@@ -1039,117 +1039,294 @@ export default function SelfScoringPage() {
     }
 
     try {
-      // 로딩 토스트 표시
-      toast({ title: '공유 준비 중...', description: '점수표를 캡처하고 있습니다.' });
+      toast({ title: '공유 준비 중...', description: '점수표를 생성하고 있습니다.' });
 
       const shareImages: File[] = [];
       const currentDate = new Date().toLocaleDateString('ko-KR');
+      const originalActiveCourse = activeCourseId;
 
-      // 각 코스별로 화면 캡처
+      // 각 코스별로 캡처
       for (const course of courseTabs) {
-        // 해당 코스로 전환
+        try {
+          // 코스 전환
         setActiveCourseId(String(course.id));
         
-        // 코스 전환이 반영될 때까지 잠시 대기
-        await new Promise(resolve => setTimeout(resolve, 100));
+          // 상태 변경이 완료될 때까지 대기
+          await new Promise(resolve => setTimeout(resolve, 300));
 
-        // 캡처할 요소 찾기 (전체 메인 컨테이너)
-        const captureElement = document.getElementById('mainContainer');
-        if (!captureElement) continue;
+          // 현재 코스의 점수 데이터 가져오기
+          const currentScores = scoresByCourse[course.id] || Array.from({ length: 4 }, () => Array(9).fill(null));
+          const coursePars = course.pars || [3, 4, 4, 4, 4, 3, 5, 3, 3];
+          
+          // 팀 모드 고려한 표시용 점수
+          let displayScores = currentScores;
+          let displayNames = playerNames;
+          
+          if (gameMode === 'team') {
+            displayScores = renderColumns.map(idxs => {
+              const primary = idxs[0];
+              return currentScores[primary] || Array(9).fill(null);
+            });
+            displayNames = renderColumns.map(idxs => 
+              idxs.map(i => playerNames[i] || '').filter(Boolean).join('/')
+            );
+          }
 
-        // 현재 화면을 그대로 캡처하기 위한 컨테이너
-        const captureContainer = document.createElement('div');
-        captureContainer.style.position = 'absolute';
-        captureContainer.style.left = '-9999px';
-        captureContainer.style.top = '0';
-        captureContainer.style.width = '400px';
-        captureContainer.style.background = '#ffffff';
-        captureContainer.style.padding = '30px';
-        captureContainer.style.fontFamily = 'Arial, sans-serif';
-        captureContainer.style.borderRadius = '12px';
-        captureContainer.style.boxShadow = '0 4px 16px rgba(0,0,0,0.2)';
+          // Canvas로 직접 점수표 그리기 (모바일 최적화)
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          if (!ctx) continue;
 
-        // 제목 추가
-        const titleDiv = document.createElement('div');
-        titleDiv.textContent = `${selectedGroup} ${course.name}`;
-        titleDiv.style.fontSize = '22px';
-        titleDiv.style.fontWeight = 'bold';
-        titleDiv.style.textAlign = 'center';
-        titleDiv.style.marginBottom = '8px';
-        titleDiv.style.color = '#333333';
-        titleDiv.style.paddingTop = '0px'; // 제목 글자 크기만큼 잘라
-        titleDiv.style.marginTop = '-10px'; // 전체 이미지를 위로 이동
+          // 모바일 화면을 가득 채우는 세로형 캔버스
+          canvas.width = 600;
+          canvas.height = 1200; // 더 길게 늘림
 
-        // 날짜 추가
-        const dateDiv = document.createElement('div');
-        dateDiv.textContent = currentDate;
-        dateDiv.style.fontSize = '13px';
-        dateDiv.style.textAlign = 'center';
-        dateDiv.style.marginBottom = '15px';
-        dateDiv.style.color = '#666666';
+          // 배경 색상
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        // 점수표 복제 (원본 그대로)
-        const scoreTableClone = captureElement.cloneNode(true) as HTMLElement;
-        scoreTableClone.style.margin = '0';
-        scoreTableClone.style.border = 'none';
-        scoreTableClone.style.boxShadow = 'none';
-        scoreTableClone.style.width = '100%';
-        scoreTableClone.style.marginLeft = '20px'; // 왼쪽으로 조금 더 이동 (정중앙 맞추기)
-        
-        // 점수 숫자 크기와 위치 조정
-        const scoreInputs = scoreTableClone.querySelectorAll('.score-input');
-        scoreInputs.forEach(input => {
-          const div = input as HTMLElement;
-          div.style.fontSize = '20px';
-          div.style.fontWeight = 'bold';
-          div.style.display = 'flex';
-          div.style.alignItems = 'flex-start'; // 위쪽 정렬
-          div.style.justifyContent = 'center';
-          div.style.height = '40px';
-          div.style.lineHeight = '1';
-          div.style.paddingTop = '0px'; // 더 위쪽으로 이동
-          div.style.paddingBottom = '0';
-        });
-        
-        // 헤더 이름들도 위로 이동
-        const headers = scoreTableClone.querySelectorAll('th');
-        headers.forEach(header => {
-          const th = header as HTMLElement;
-          th.style.paddingTop = '5px';
-          th.style.paddingBottom = '15px';
-        });
-        
-        // 일반 셀들도 위로 이동
-        const cells = scoreTableClone.querySelectorAll('td');
-        cells.forEach(cell => {
-          const td = cell as HTMLElement;
-          td.style.paddingTop = '5px';
-          td.style.paddingBottom = '15px';
-        });
+          // 2025년 스타일 그라데이션 배경
+          const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+          gradient.addColorStop(0, '#f8fafc');
+          gradient.addColorStop(1, '#e2e8f0');
+          ctx.fillStyle = gradient;
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        // 캡처 컨테이너에 요소들 추가
-        captureContainer.appendChild(titleDiv);
-        captureContainer.appendChild(dateDiv);
-        captureContainer.appendChild(scoreTableClone);
+          // 상단 헤더 영역 그라데이션 (더 크게)
+          const headerGradient = ctx.createLinearGradient(0, 0, 0, 140);
+          headerGradient.addColorStop(0, '#1e293b');
+          headerGradient.addColorStop(1, '#334155');
+          ctx.fillStyle = headerGradient;
+          ctx.fillRect(0, 0, canvas.width, 140);
 
-        // DOM에 임시 추가
-        document.body.appendChild(captureContainer);
+          // 제목 그리기 (훨씬 크게)
+          ctx.fillStyle = '#ffffff';
+          ctx.font = 'bold 48px Arial, sans-serif';
+          ctx.textAlign = 'center';
+          const title = `${selectedGroup} ${course.name}`;
+          ctx.fillText(title, canvas.width / 2, 65);
 
-        try {
-          // html2canvas로 캡처
-          const canvas = await html2canvas(captureContainer, {
-            width: 400,
-            height: captureContainer.scrollHeight - 20, // 위아래 1/10씩 잘라
-            scale: 2, // 고해상도
-            backgroundColor: '#ffffff',
-            useCORS: true,
-            allowTaint: true,
-            logging: false,
-            scrollX: 0,
-            scrollY: 0
+          // 날짜 그리기 (크게)
+          ctx.fillStyle = '#e2e8f0';
+          ctx.font = '28px Arial, sans-serif';
+          ctx.fillText(currentDate, canvas.width / 2, 110);
+
+          // 테이블 시작 위치 (헤더 아래 여백)
+          const tableStartY = 180;
+          const baseCellWidth = Math.floor((canvas.width - 40) / (displayNames.length + 2));
+          const holeCellWidth = Math.floor(baseCellWidth * 2 / 3); // 홀/파 칸 너비 (2/3로 축소)
+          const playerCellWidth = Math.floor((canvas.width - 40 - holeCellWidth * 2) / displayNames.length); // 나머지 공간을 플레이어 칸이 나눠가짐
+          const cellHeight = 84; // 점수칸 높이 증가
+          const headerHeight = 76; // 헤더 높이 유지
+          
+          // 테이블 그림자 효과
+          ctx.shadowColor = 'rgba(0, 0, 0, 0.15)';
+          ctx.shadowBlur = 10;
+          ctx.shadowOffsetX = 0;
+          ctx.shadowOffsetY = 4;
+          
+          const startX = 20;
+          const tableWidth = holeCellWidth * 2 + playerCellWidth * displayNames.length;
+          
+          // 테이블 전체 배경 (둥근 모서리 효과)
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(startX - 5, tableStartY - 5, tableWidth + 10, headerHeight + (9 * cellHeight) + cellHeight + 10);
+          
+          // 그림자 효과 제거
+          ctx.shadowColor = 'transparent';
+          ctx.shadowBlur = 0;
+          ctx.shadowOffsetX = 0;
+          ctx.shadowOffsetY = 0;
+          
+          // 헤더 배경 - 홀/파는 기존 그라데이션
+          const tableHeaderGradient = ctx.createLinearGradient(0, tableStartY, 0, tableStartY + headerHeight);
+          tableHeaderGradient.addColorStop(0, '#3b82f6');
+          tableHeaderGradient.addColorStop(1, '#1d4ed8');
+          ctx.fillStyle = tableHeaderGradient;
+          ctx.fillRect(startX, tableStartY, holeCellWidth * 2, headerHeight); // 홀/파 부분만
+          
+          // 플레이어별 점수 확인 후 헤더 배경 설정
+          displayScores.forEach((playerScores, playerIdx) => {
+            const x = startX + holeCellWidth * 2 + playerIdx * playerCellWidth;
+            let hasAnyScore = playerScores.some(score => typeof score === 'number');
+            
+            if (hasAnyScore) {
+              // 점수가 있는 플레이어는 블루 배경
+              ctx.fillStyle = '#6387F2';
+            } else {
+              // 점수가 없는 플레이어는 회색 배경
+              ctx.fillStyle = '#F2F2F2';
+            }
+            ctx.fillRect(x, tableStartY, playerCellWidth, headerHeight);
+          });
+          
+          // 헤더 테두리 (통일된 색상)
+          ctx.strokeStyle = '#cbd5e1';
+          ctx.lineWidth = 2;
+          ctx.strokeRect(startX, tableStartY, tableWidth, headerHeight);
+          
+          // 헤더 텍스트 (큰 글씨로)
+          ctx.fillStyle = '#ffffff';
+          ctx.font = 'bold 26px Arial, sans-serif';
+          ctx.textAlign = 'center';
+          
+          // "홀" 헤더
+          ctx.fillText('홀', startX + holeCellWidth / 2, tableStartY + headerHeight / 2 + 10);
+          ctx.strokeStyle = '#cbd5e1';
+          ctx.lineWidth = 1;
+          ctx.strokeRect(startX, tableStartY, holeCellWidth, headerHeight);
+          
+          // "파" 헤더
+          ctx.fillText('파', startX + holeCellWidth + holeCellWidth / 2, tableStartY + headerHeight / 2 + 10);
+          ctx.strokeRect(startX + holeCellWidth, tableStartY, holeCellWidth, headerHeight);
+          
+          // 플레이어 이름 헤더
+          displayNames.forEach((name, i) => {
+            const x = startX + holeCellWidth * 2 + i * playerCellWidth;
+            const displayName = name.length > 10 ? name.substring(0, 8) + '..' : name; // 더 긴 이름 허용
+            
+            // 점수 유무에 따라 텍스트 색상 결정
+            let hasAnyScore = displayScores[i].some(score => typeof score === 'number');
+            
+            if (hasAnyScore) {
+              ctx.fillStyle = '#ffffff'; // 점수가 있으면 흰색 텍스트
+            } else {
+              ctx.fillStyle = '#0D0D0D'; // 점수가 없으면 검정 텍스트
+            }
+            
+            ctx.font = 'bold 24px Arial, sans-serif'; // 이름 크기 조정
+            ctx.fillText(displayName, x + playerCellWidth / 2, tableStartY + headerHeight / 2 + 10);
+            ctx.strokeStyle = '#cbd5e1';
+            ctx.strokeRect(x, tableStartY, playerCellWidth, headerHeight);
+          });
+
+          // 각 홀별 데이터 그리기
+          for (let hole = 0; hole < 9; hole++) {
+            const y = tableStartY + headerHeight + (hole * cellHeight);
+            const isEvenRow = hole % 2 === 0;
+            
+            // 교대로 행 배경색 (zebra striping)
+            if (isEvenRow) {
+              ctx.fillStyle = '#f8fafc';
+              ctx.fillRect(startX, y, tableWidth, cellHeight);
+            }
+            
+            // 홀 번호 배경
+            ctx.fillStyle = '#e2e8f0';
+            ctx.fillRect(startX, y, holeCellWidth, cellHeight);
+            
+            // 홀 번호 텍스트 (크게)
+            ctx.fillStyle = '#1e293b';
+            ctx.font = 'bold 28px Arial, sans-serif';
+            ctx.fillText(String(hole + 1), startX + holeCellWidth / 2, y + cellHeight / 2 + 10);
+            ctx.strokeStyle = '#cbd5e1';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(startX, y, holeCellWidth, cellHeight);
+            
+            // 파 수 배경
+            ctx.fillStyle = '#e2e8f0';
+            ctx.fillRect(startX + holeCellWidth, y, holeCellWidth, cellHeight);
+            
+            // 파 수 텍스트 (크게)
+            ctx.fillStyle = '#1e293b';
+            ctx.font = 'bold 28px Arial, sans-serif';
+            ctx.fillText(String(coursePars[hole]), startX + holeCellWidth + holeCellWidth / 2, y + cellHeight / 2 + 10);
+            ctx.strokeRect(startX + holeCellWidth, y, holeCellWidth, cellHeight);
+            
+            // 각 플레이어 점수
+            displayScores.forEach((playerScores, playerIdx) => {
+              const x = startX + holeCellWidth * 2 + playerIdx * playerCellWidth;
+              const score = playerScores[hole];
+              
+              if (typeof score === 'number') {
+                const par = coursePars[hole];
+                const diff = score - par;
+                
+                // 점수에 따른 배경색과 텍스트 색상
+                if (diff < 0) {
+                  // 버디 이하 - 블루 계열
+                  ctx.fillStyle = '#dbeafe';
+                  ctx.fillRect(x + 1, y + 1, playerCellWidth - 2, cellHeight - 2);
+                  ctx.fillStyle = '#1d4ed8'; // 블루로 변경
+                } else if (diff === 0) {
+                  // 파 - 기본
+                  ctx.fillStyle = '#f9fafb';
+                  ctx.fillRect(x + 1, y + 1, playerCellWidth - 2, cellHeight - 2);
+                  ctx.fillStyle = '#111827';
+                } else {
+                  // 보기 이상 - 빨강
+                  ctx.fillStyle = '#fee2e2';
+                  ctx.fillRect(x + 1, y + 1, playerCellWidth - 2, cellHeight - 2);
+                  ctx.fillStyle = '#dc2626';
+                }
+                
+                ctx.font = 'bold 38px Arial, sans-serif'; // 점수 글자 크기 증가
+                ctx.fillText(String(score), x + playerCellWidth / 2, y + cellHeight / 2 + 14);
+              } else {
+                // 점수가 없는 경우 회색으로 빈 셀 표시
+                ctx.fillStyle = '#f1f5f9';
+                ctx.fillRect(x + 1, y + 1, playerCellWidth - 2, cellHeight - 2);
+              }
+              
+              ctx.strokeStyle = '#cbd5e1';
+              ctx.strokeRect(x, y, playerCellWidth, cellHeight);
+            });
+          }
+
+          // 합계 행 - 깔끔한 단색 적용
+          const totalY = tableStartY + headerHeight + (9 * cellHeight);
+          const totalCellHeight = 86; // 합계 셀 높이 증가
+          
+          // 합계 라벨 배경 (빨강)
+          ctx.fillStyle = '#F23054';
+          ctx.fillRect(startX, totalY, holeCellWidth * 2, totalCellHeight);
+          
+          // 합계 라벨 텍스트 (크게)
+          ctx.fillStyle = '#ffffff'; // 흰색
+          ctx.font = 'bold 32px Arial, sans-serif';
+          ctx.fillText('합계', startX + holeCellWidth, totalY + totalCellHeight / 2 + 12);
+          
+          // 합계 라벨 테두리 (통일된 색상)
+          ctx.strokeStyle = '#cbd5e1';
+          ctx.lineWidth = 1;
+          ctx.strokeRect(startX, totalY, holeCellWidth * 2, totalCellHeight);
+
+          // 각 플레이어 합계
+          displayScores.forEach((playerScores, playerIdx) => {
+            const x = startX + holeCellWidth * 2 + playerIdx * playerCellWidth;
+            let total = 0;
+            let validScores = 0;
+            
+            playerScores.forEach(score => {
+              if (typeof score === 'number') {
+                total += score;
+                validScores++;
+              }
+            });
+            
+            if (validScores > 0) {
+              // 합계 셀 배경 (연한 그린)
+              ctx.fillStyle = '#9EF277';
+              ctx.fillRect(x + 1, totalY + 1, playerCellWidth - 2, totalCellHeight - 2);
+              
+              // 합계 텍스트 (가장 크게)
+              ctx.fillStyle = '#0D0D0D'; // 진한 검정
+              ctx.font = 'bold 42px Arial, sans-serif';
+              ctx.fillText(String(total), x + playerCellWidth / 2, totalY + totalCellHeight / 2 + 16);
+            } else {
+              // 점수가 없는 경우 연한 회색 배경
+              ctx.fillStyle = '#F2F2F2';
+              ctx.fillRect(x + 1, totalY + 1, playerCellWidth - 2, totalCellHeight - 2);
+            }
+            
+            // 합계 셀 테두리 (통일된 색상)
+            ctx.strokeStyle = '#cbd5e1';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(x, totalY, playerCellWidth, totalCellHeight);
           });
 
           // 캔버스를 Blob으로 변환
+          await new Promise<void>((resolve) => {
           canvas.toBlob((blob) => {
             if (blob) {
               const file = new File([blob], `${selectedGroup}_${course.name}_${currentDate}.png`, {
@@ -1157,42 +1334,33 @@ export default function SelfScoringPage() {
               });
               shareImages.push(file);
             }
-          }, 'image/png');
+              resolve();
+            }, 'image/png', 0.9);
+          });
 
-        } finally {
-          // 임시 요소 제거
-          document.body.removeChild(captureContainer);
+        } catch (error) {
+          console.error(`코스 ${course.name} 캡처 실패:`, error);
         }
       }
 
-      // 모든 이미지가 준비될 때까지 대기
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // 원래 활성 코스로 복원
+      setActiveCourseId(originalActiveCourse);
 
       if (shareImages.length === 0) {
         toast({ 
           title: '캡처 실패', 
-          description: '점수표 캡처에 실패했습니다.', 
+          description: '점수표 생성에 실패했습니다.', 
           variant: 'destructive' 
         });
         return;
       }
 
       // Web Share API로 공유
-      if (shareImages.length === 1) {
-        // 단일 이미지 공유
         await navigator.share({
           title: `${selectedGroup} 점수표`,
-          text: `${selectedGroup} ${courseTabs[0].name} 점수표 - ${currentDate}`,
+        text: `${selectedGroup} 점수표 - ${currentDate}`,
           files: shareImages
         });
-      } else {
-        // 여러 이미지 공유 (지원하는 경우)
-        await navigator.share({
-          title: `${selectedGroup} 점수표`,
-          text: `${selectedGroup} 전체 코스 점수표 - ${currentDate}`,
-          files: shareImages
-        });
-      }
 
       toast({ title: '공유 완료', description: '점수표가 공유되었습니다.' });
 
