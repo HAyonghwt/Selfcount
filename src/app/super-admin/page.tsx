@@ -37,6 +37,8 @@ export default function SuperAdminPage() {
     const [replaceReferees, setReplaceReferees] = useState(false);
     const [addMoreCaptains, setAddMoreCaptains] = useState(false);
     const [addMoreReferees, setAddMoreReferees] = useState(false);
+    const [selectedCaptains, setSelectedCaptains] = useState<string[]>([]);
+    const [selectedReferees, setSelectedReferees] = useState<string[]>([]);
 
     useEffect(() => {
         const configRef = ref(db, 'config');
@@ -168,6 +170,113 @@ export default function SuperAdminPage() {
         } catch (error: any) {
             toast({
                 title: `계정 ${action} 실패`,
+                description: error.message,
+                variant: "destructive",
+            });
+        }
+    };
+
+    // 일괄 관리 함수들
+    const handleSelectAllCaptains = (checked: boolean) => {
+        if (checked) {
+            setSelectedCaptains(captainAccounts.map(account => account.id));
+        } else {
+            setSelectedCaptains([]);
+        }
+    };
+
+    const handleSelectCaptain = (koreanId: string, checked: boolean) => {
+        if (checked) {
+            setSelectedCaptains(prev => [...prev, koreanId]);
+        } else {
+            setSelectedCaptains(prev => prev.filter(id => id !== koreanId));
+        }
+    };
+
+    const handleBulkToggleCaptains = async (activate: boolean) => {
+        if (selectedCaptains.length === 0) {
+            toast({
+                title: "선택된 계정 없음",
+                description: "선택된 조장 계정이 없습니다.",
+                variant: "destructive",
+            });
+            return;
+        }
+
+        const action = activate ? '활성화' : '비활성화';
+        if (!confirm(`정말로 선택된 ${selectedCaptains.length}개 조장 계정을 ${action}하시겠습니까?`)) {
+            return;
+        }
+
+        try {
+            const promises = selectedCaptains.map(koreanId => 
+                activate ? activateCaptainAccount(koreanId) : deactivateCaptainAccount(koreanId)
+            );
+            await Promise.all(promises);
+            
+            toast({
+                title: "성공",
+                description: `${selectedCaptains.length}개 조장 계정이 ${action}되었습니다.`,
+            });
+            
+            setSelectedCaptains([]);
+            await loadCaptainAccounts();
+        } catch (error: any) {
+            toast({
+                title: "일괄 처리 실패",
+                description: error.message,
+                variant: "destructive",
+            });
+        }
+    };
+
+    const handleSelectAllReferees = (checked: boolean) => {
+        if (checked) {
+            setSelectedReferees(refereeAccounts.map(account => account.id));
+        } else {
+            setSelectedReferees([]);
+        }
+    };
+
+    const handleSelectReferee = (koreanId: string, checked: boolean) => {
+        if (checked) {
+            setSelectedReferees(prev => [...prev, koreanId]);
+        } else {
+            setSelectedReferees(prev => prev.filter(id => id !== koreanId));
+        }
+    };
+
+    const handleBulkToggleReferees = async (activate: boolean) => {
+        if (selectedReferees.length === 0) {
+            toast({
+                title: "선택된 계정 없음",
+                description: "선택된 심판 계정이 없습니다.",
+                variant: "destructive",
+            });
+            return;
+        }
+
+        const action = activate ? '활성화' : '비활성화';
+        if (!confirm(`정말로 선택된 ${selectedReferees.length}개 심판 계정을 ${action}하시겠습니까?`)) {
+            return;
+        }
+
+        try {
+            const promises = selectedReferees.map(koreanId => 
+                activate ? activateCaptainAccount(koreanId) : deactivateCaptainAccount(koreanId)
+            );
+            await Promise.all(promises);
+            
+            toast({
+                title: "성공",
+                description: `${selectedReferees.length}개 심판 계정이 ${action}되었습니다.`,
+            });
+            
+            setSelectedReferees([]);
+            await loadRefereeAccounts();
+        } catch (error: any) {
+            toast({
+                title: "일괄 처리 실패",
                 description: error.message,
                 variant: "destructive",
             });
@@ -477,28 +586,65 @@ export default function SuperAdminPage() {
                              
                              {captainAccounts.length > 0 && (
                                  <div className="mt-4">
-                                     <h4 className="font-semibold mb-2">생성된 조장 계정 ({captainAccounts.length}개)</h4>
+                                     <div className="flex items-center justify-between mb-2">
+                                         <h4 className="font-semibold">생성된 조장 계정 ({captainAccounts.length}개)</h4>
+                                         <div className="flex gap-2">
+                                             <Button
+                                                 size="sm"
+                                                 variant="outline"
+                                                 onClick={() => handleBulkToggleCaptains(true)}
+                                                 disabled={selectedCaptains.length === 0}
+                                                 className="text-xs bg-green-600 hover:bg-green-700 text-white"
+                                             >
+                                                 선택 활성화 ({selectedCaptains.length})
+                                             </Button>
+                                             <Button
+                                                 size="sm"
+                                                 variant="outline"
+                                                 onClick={() => handleBulkToggleCaptains(false)}
+                                                 disabled={selectedCaptains.length === 0}
+                                                 className="text-xs bg-red-600 hover:bg-red-700 text-white"
+                                             >
+                                                 선택 비활성화 ({selectedCaptains.length})
+                                             </Button>
+                                         </div>
+                                     </div>
                                      <div className="max-h-60 overflow-y-auto border rounded p-2 bg-muted/30">
                                          <div className="grid grid-cols-1 gap-2 text-sm">
+                                             <div className="flex items-center gap-2 p-2 bg-gray-100 rounded border-b">
+                                                 <Checkbox
+                                                     checked={selectedCaptains.length === captainAccounts.length && captainAccounts.length > 0}
+                                                     onCheckedChange={handleSelectAllCaptains}
+                                                 />
+                                                 <span className="text-xs font-medium">전체 선택</span>
+                                             </div>
                                              {captainAccounts.map((account) => (
                                                  <div key={account.id} className={`flex items-center justify-between p-3 rounded border ${account.isActive ? 'bg-white' : 'bg-gray-100'}`}>
-                                                     <div className="flex-1">
-                                                         <div className={`font-medium ${!account.isActive ? 'text-gray-500' : ''}`}>{account.id}</div>
-                                                         <div className="text-xs text-muted-foreground">
-                                                             {account.group} • 조{account.jo}
-                                                             {!account.isActive && <span className="ml-2 text-red-500">(비활성화)</span>}
+                                                     <div className="flex items-center gap-2 flex-1">
+                                                         <Checkbox
+                                                             checked={selectedCaptains.includes(account.id)}
+                                                             onCheckedChange={(checked) => handleSelectCaptain(account.id, checked as boolean)}
+                                                         />
+                                                         <div>
+                                                             <div className={`font-medium ${!account.isActive ? 'text-gray-500' : ''}`}>{account.id}</div>
+                                                             <div className="text-xs text-muted-foreground">
+                                                                 {account.group} • 조{account.jo}
+                                                                 {!account.isActive && <span className="ml-2 text-red-500">(비활성화)</span>}
+                                                             </div>
                                                          </div>
                                                      </div>
                                                      <div className="flex gap-2">
                                                          {editingPassword === account.id ? (
                                                              <div className="flex gap-2 items-center">
                                                                  <Input
-                                                                     type="password"
+                                                                     type="text"
                                                                      placeholder="새 비밀번호"
                                                                      value={newPassword}
                                                                      onChange={(e) => setNewPassword(e.target.value)}
                                                                      className="w-24 text-xs"
                                                                      onKeyPress={(e) => e.key === 'Enter' && handleUpdatePassword(account.id)}
+                                                                     onFocus={(e) => e.target.select()}
+                                                                     autoFocus
                                                                  />
                                                                  <Button
                                                                      size="sm"
@@ -523,7 +669,10 @@ export default function SuperAdminPage() {
                                                              <Button
                                                                  size="sm"
                                                                  variant="outline"
-                                                                 onClick={() => setEditingPassword(account.id)}
+                                                                 onClick={() => {
+                                                                     setEditingPassword(account.id);
+                                                                     setNewPassword(account.password || '123456');
+                                                                 }}
                                                                  className="text-xs"
                                                                  disabled={!account.isActive}
                                                              >
@@ -605,27 +754,64 @@ export default function SuperAdminPage() {
                              
                              {refereeAccounts.length > 0 && (
                                  <div className="mt-4">
-                                     <h4 className="font-semibold mb-2">생성된 심판 계정 ({refereeAccounts.length}개)</h4>
+                                     <div className="flex items-center justify-between mb-2">
+                                         <h4 className="font-semibold">생성된 심판 계정 ({refereeAccounts.length}개)</h4>
+                                         <div className="flex gap-2">
+                                             <Button
+                                                 size="sm"
+                                                 variant="outline"
+                                                 onClick={() => handleBulkToggleReferees(true)}
+                                                 disabled={selectedReferees.length === 0}
+                                                 className="text-xs bg-green-600 hover:bg-green-700 text-white"
+                                             >
+                                                 선택 활성화 ({selectedReferees.length})
+                                             </Button>
+                                             <Button
+                                                 size="sm"
+                                                 variant="outline"
+                                                 onClick={() => handleBulkToggleReferees(false)}
+                                                 disabled={selectedReferees.length === 0}
+                                                 className="text-xs bg-red-600 hover:bg-red-700 text-white"
+                                             >
+                                                 선택 비활성화 ({selectedReferees.length})
+                                             </Button>
+                                         </div>
+                                     </div>
                                      <div className="max-h-60 overflow-y-auto border rounded p-2 bg-muted/30">
                                          <div className="grid grid-cols-1 gap-2 text-sm">
+                                             <div className="flex items-center gap-2 p-2 bg-gray-100 rounded border-b">
+                                                 <Checkbox
+                                                     checked={selectedReferees.length === refereeAccounts.length && refereeAccounts.length > 0}
+                                                     onCheckedChange={handleSelectAllReferees}
+                                                 />
+                                                 <span className="text-xs font-medium">전체 선택</span>
+                                             </div>
                                              {refereeAccounts.map((account) => (
                                                  <div key={account.id} className="flex items-center justify-between p-3 bg-white rounded border">
-                                                     <div className="flex-1">
-                                                         <div className="font-medium">{account.id}</div>
-                                                         <div className="text-xs text-muted-foreground">
-                                                             {account.hole}번 홀 담당
+                                                     <div className="flex items-center gap-2 flex-1">
+                                                         <Checkbox
+                                                             checked={selectedReferees.includes(account.id)}
+                                                             onCheckedChange={(checked) => handleSelectReferee(account.id, checked as boolean)}
+                                                         />
+                                                         <div>
+                                                             <div className="font-medium">{account.id}</div>
+                                                             <div className="text-xs text-muted-foreground">
+                                                                 {account.hole}번 홀 담당
+                                                             </div>
                                                          </div>
                                                      </div>
                                                      <div className="flex gap-2">
                                                          {editingRefereePassword === account.id ? (
                                                              <div className="flex gap-2 items-center">
                                                                  <Input
-                                                                     type="password"
+                                                                     type="text"
                                                                      placeholder="새 비밀번호"
                                                                      value={newRefereePassword}
                                                                      onChange={(e) => setNewRefereePassword(e.target.value)}
                                                                      className="w-24 text-xs"
                                                                      onKeyPress={(e) => e.key === 'Enter' && handleUpdateRefereePassword(account.id)}
+                                                                     onFocus={(e) => e.target.select()}
+                                                                     autoFocus
                                                                  />
                                                                  <Button
                                                                      size="sm"
@@ -650,7 +836,10 @@ export default function SuperAdminPage() {
                                                              <Button
                                                                  size="sm"
                                                                  variant="outline"
-                                                                 onClick={() => setEditingRefereePassword(account.id)}
+                                                                 onClick={() => {
+                                                                     setEditingRefereePassword(account.id);
+                                                                     setNewRefereePassword(account.password || '123456');
+                                                                 }}
                                                                  className="text-xs"
                                                              >
                                                                  비밀번호 변경
