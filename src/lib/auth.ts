@@ -45,11 +45,11 @@ export const loginWithKoreanId = async (koreanId: string, password: string): Pro
       throw new Error('비밀번호가 올바르지 않습니다.');
     }
     
-    // 마지막 로그인 시간 업데이트
-    const docRef = doc(firestore, 'captains', querySnapshot.docs[0].id);
-    await updateDoc(docRef, {
-      lastLogin: new Date()
-    });
+    // 마지막 로그인 시간 업데이트 (보안 규칙 문제로 임시 비활성화)
+    // const docRef = doc(firestore, 'captains', querySnapshot.docs[0].id);
+    // await updateDoc(docRef, {
+    //   lastLogin: new Date()
+    // });
     
     return captainData;
   } catch (error) {
@@ -257,11 +257,11 @@ export const loginRefereeWithKoreanId = async (koreanId: string, password: strin
       throw new Error('비밀번호가 올바르지 않습니다.');
     }
     
-    // 마지막 로그인 시간 업데이트
-    const docRef = doc(firestore, 'referees', querySnapshot.docs[0].id);
-    await updateDoc(docRef, {
-      lastLogin: new Date()
-    });
+    // 마지막 로그인 시간 업데이트 (보안 규칙 문제로 임시 비활성화)
+    // const docRef = doc(firestore, 'referees', querySnapshot.docs[0].id);
+    // await updateDoc(docRef, {
+    //   lastLogin: new Date()
+    // });
     
     return refereeData;
   } catch (error) {

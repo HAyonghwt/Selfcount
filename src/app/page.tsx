@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { LogIn, Tv } from 'lucide-react';
-import { auth, db, firebaseConfig } from '@/lib/firebase';
+import { auth, db, firestore, firebaseConfig } from '@/lib/firebase';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { loginWithKoreanId, loginRefereeWithKoreanId } from '@/lib/auth';
 import { ref, get } from 'firebase/database';
@@ -65,7 +65,7 @@ export default function LoginPage() {
     e.preventDefault();
     setError('');
 
-    if (!auth || !config) {
+    if (!auth || !config || !firestore) {
         setError("설정이 로드되지 않았거나 Firebase 인증이 준비되지 않았습니다. 잠시 후 다시 시도해주세요.");
         return;
     }
@@ -76,6 +76,8 @@ export default function LoginPage() {
       // 한글 아이디로 로그인 시도 (조장)
       if (email.match(/^조장\d+$/)) {
         try {
+          // Firestore 초기화 대기
+          await new Promise(resolve => setTimeout(resolve, 100));
           const captainData = await loginWithKoreanId(email, password);
           sessionStorage.setItem('selfScoringCaptain', JSON.stringify(captainData));
           router.push('/self-scoring/game');
@@ -94,6 +96,8 @@ export default function LoginPage() {
       // 한글 아이디로 로그인 시도 (심판)
       if (email.match(/^\d+번홀심판$/)) {
         try {
+          // Firestore 초기화 대기
+          await new Promise(resolve => setTimeout(resolve, 100));
           const refereeData = await loginRefereeWithKoreanId(email, password);
           sessionStorage.setItem('refereeData', JSON.stringify(refereeData));
           router.push(`/referee/${refereeData.hole}`);
