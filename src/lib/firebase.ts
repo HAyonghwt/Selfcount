@@ -1,6 +1,6 @@
 import { initializeApp, getApp, getApps, type FirebaseOptions } from "firebase/app";
 import { getDatabase } from "firebase/database";
-import { getAuth } from "firebase/auth";
+import { getAuth, signInAnonymously, onAuthStateChanged, type User } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
 // IMPORTANT: This file reads sensitive API keys from environment variables.
@@ -27,6 +27,38 @@ const app = firebaseConfig.apiKey
 const db = app ? getDatabase(app) : null;
 const auth = app ? getAuth(app) : null;
 const firestore = app ? getFirestore(app) : null;
+
+// Firebase 인증 상태 확인 및 익명 인증 수행 함수
+export const ensureAuthenticated = async (): Promise<boolean> => {
+  if (!auth) {
+    console.error('Firebase Auth가 초기화되지 않았습니다.');
+    return false;
+  }
+
+  try {
+    const currentUser = auth.currentUser;
+    
+    if (currentUser) {
+      console.log('이미 인증된 사용자:', currentUser.uid);
+      return true;
+    }
+
+    console.log('익명 인증 시도 중...');
+    const userCredential = await signInAnonymously(auth);
+    console.log('익명 인증 성공:', userCredential.user.uid);
+    return true;
+    
+  } catch (error) {
+    console.error('Firebase 인증 실패:', error);
+    return false;
+  }
+};
+
+// 인증 상태 변경 리스너
+export const onAuthStateChange = (callback: (user: User | null) => void) => {
+  if (!auth) return () => {};
+  return onAuthStateChanged(auth, callback);
+};
 
 // Export the Firebase services and the getDatabase function
 export { db, app, auth, firestore, getDatabase };

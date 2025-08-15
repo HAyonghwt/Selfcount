@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Minus, Plus, Save, Lock, Trophy, ArrowLeft } from 'lucide-react';
-import { db } from '@/lib/firebase';
+import { db, ensureAuthenticated } from '@/lib/firebase';
 import { ref, onValue, set } from 'firebase/database';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription } from "@/components/ui/alert-dialog";
@@ -90,7 +90,7 @@ export default function RefereePage() {
     // 안내 모달 상태 추가
     const [showAllJosCompleteModal, setShowAllJosCompleteModal] = useState(false);
 
-    // 로그인 상태 확인
+    // 로그인 상태 확인 및 Firebase 인증
     useEffect(() => {
         const loggedInReferee = sessionStorage.getItem('refereeData');
         if (!loggedInReferee) {
@@ -107,6 +107,13 @@ export default function RefereePage() {
                 router.push(`/referee/${referee.hole}`);
                 return;
             }
+            
+            // Firebase 인증 수행
+            ensureAuthenticated().then(success => {
+                if (!success) {
+                    console.warn('Firebase 인증 실패 - 점수 저장 시 재시도됩니다.');
+                }
+            });
         } catch (error) {
             console.error('심판 데이터 파싱 오류:', error);
             router.push('/referee/login');
@@ -493,77 +500,144 @@ export default function RefereePage() {
         if (!playerToSave) return;
         const scoreData = scores[playerToSave.id];
         if (!scoreData || scoreData.status !== 'editing') return;
-        const dbInstance = db as import('firebase/database').Database;
-        const scoreRef = ref(dbInstance, `/scores/${playerToSave.id}/${selectedCourse}/${hole}`);
-        const prevScore = allScores[playerToSave.id]?.[selectedCourse as string]?.[hole as string] ?? null;
+        
         try {
-            await set(scoreRef, scoreData.score);
-            // 점수 변경 로그 기록
-            if (prevScore !== scoreData.score) {
-                await logScoreChange({
-                    matchId: 'tournaments/current',
-                    playerId: playerToSave.id,
-                    scoreType: 'holeScore',
-                    holeNumber: Number(hole),
-                    oldValue: prevScore !== null && prevScore !== undefined ? prevScore : 0,
-                    newValue: scoreData.score !== null && scoreData.score !== undefined ? scoreData.score : 0,
-                    modifiedBy: 'referee', // 필요시 실제 심판 id로 대체
-                    modifiedByType: 'judge',
-                    comment: `코스: ${selectedCourse}`,
-                    courseId: selectedCourse
+            // Firebase 인증 확인
+            const isAuthenticated = await ensureAuthenticated();
+            if (!isAuthenticated) {
+                toast({ 
+                    title: "인증 실패", 
+                    description: "Firebase 인증에 실패했습니다. 페이지를 새로고침하고 다시 시도해주세요.",
+                    variant: "destructive" 
                 });
+                return;
             }
-            // 0점 입력 시, 소속 그룹의 모든 코스/홀에 0점 처리
-            if (scoreData.score === 0) {
-                // 그룹 정보에서 배정된 코스 id 목록 추출
-                const group = groupsData[playerToSave.group];
-                const assignedCourseIds = group && group.courses ? Object.keys(group.courses).filter((cid: any) => group.courses[cid]) : [];
-                for (const cid of assignedCourseIds) {
-                    const courseObj = courses.find((c: any) => c.id.toString() === cid.toString());
-                    const courseName = courseObj ? courseObj.name : cid;
-                    for (let h = 1; h <= 9; h++) {
-                        const existing = allScores[playerToSave.id]?.[cid]?.[h.toString()];
-                        if (cid === selectedCourse && h === Number(hole)) {
-                            // 직접 입력한 코스/홀
-                            await set(ref(dbInstance, `/scores/${playerToSave.id}/${cid}/${h}`), 0);
-                            await logScoreChange({
-                                matchId: 'tournaments/current',
-                                playerId: playerToSave.id,
-                                scoreType: 'holeScore',
-                                holeNumber: h,
-                                oldValue: existing === undefined || existing === null || existing === '' || isNaN(Number(existing)) ? 0 : Number(existing),
-                                newValue: 0,
-                                modifiedBy: 'referee',
-                                modifiedByType: 'judge',
-                                comment: `심판 직접 ${scoreData.forfeitType === 'absent' ? '불참' : scoreData.forfeitType === 'disqualified' ? '실격' : '기권'} (코스: ${courseName}, 홀: ${h})`,
-                                courseId: cid
-                            });
-                        } else if (existing === undefined || existing === null || existing === '' || isNaN(Number(existing))) {
-                            // 나머지 미입력 홀만 0점 처리 (기존 점수는 보존)
-                            await set(ref(dbInstance, `/scores/${playerToSave.id}/${cid}/${h}`), 0);
-                            await logScoreChange({
-                                matchId: 'tournaments/current',
-                                playerId: playerToSave.id,
-                                scoreType: 'holeScore',
-                                holeNumber: h,
-                                oldValue: existing === undefined || existing === null || existing === '' || isNaN(Number(existing)) ? 0 : Number(existing),
-                                newValue: 0,
-                                modifiedBy: 'referee',
-                                modifiedByType: 'judge',
-                                comment: `심판페이지에서 ${scoreData.forfeitType === 'absent' ? '불참' : scoreData.forfeitType === 'disqualified' ? '실격' : '기권'} 처리 (코스: ${courseName}, 홀: ${h})`,
-                                courseId: cid
-                            });
-                        }
-                        // 기존 점수가 있는 홀은 그대로 보존 (0점으로 덮어쓰지 않음)
+            
+            // 모바일 환경 감지 및 Firebase 인증 재시도 로직
+            const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+            const maxRetries = isMobile ? 3 : 1;
+            let attempt = 0;
+            
+            while (attempt < maxRetries) {
+                try {
+                    const dbInstance = db as import('firebase/database').Database;
+                    const scoreRef = ref(dbInstance, `/scores/${playerToSave.id}/${selectedCourse}/${hole}`);
+                    const prevScore = allScores[playerToSave.id]?.[selectedCourse as string]?.[hole as string] ?? null;
+                    
+                    // 모바일에서는 잠시 대기 후 재시도
+                    if (isMobile && attempt > 0) {
+                        await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
                     }
+                    
+                    await set(scoreRef, scoreData.score);
+                    
+                    // 점수 변경 로그 기록
+                    if (prevScore !== scoreData.score) {
+                        await logScoreChange({
+                            matchId: 'tournaments/current',
+                            playerId: playerToSave.id,
+                            scoreType: 'holeScore',
+                            holeNumber: Number(hole),
+                            oldValue: prevScore !== null && prevScore !== undefined ? prevScore : 0,
+                            newValue: scoreData.score !== null && scoreData.score !== undefined ? scoreData.score : 0,
+                            modifiedBy: 'referee', // 필요시 실제 심판 id로 대체
+                            modifiedByType: 'judge',
+                            comment: `코스: ${selectedCourse}`,
+                            courseId: selectedCourse
+                        });
+                    }
+                    
+                    // 0점 입력 시, 소속 그룹의 모든 코스/홀에 0점 처리
+                    if (scoreData.score === 0) {
+                        // 그룹 정보에서 배정된 코스 id 목록 추출
+                        const group = groupsData[playerToSave.group];
+                        const assignedCourseIds = group && group.courses ? Object.keys(group.courses).filter((cid: any) => group.courses[cid]) : [];
+                        for (const cid of assignedCourseIds) {
+                            const courseObj = courses.find((c: any) => c.id.toString() === cid.toString());
+                            const courseName = courseObj ? courseObj.name : cid;
+                            for (let h = 1; h <= 9; h++) {
+                                const existing = allScores[playerToSave.id]?.[cid]?.[h.toString()];
+                                if (cid === selectedCourse && h === Number(hole)) {
+                                    // 직접 입력한 코스/홀
+                                    await set(ref(dbInstance, `/scores/${playerToSave.id}/${cid}/${h}`), 0);
+                                    await logScoreChange({
+                                        matchId: 'tournaments/current',
+                                        playerId: playerToSave.id,
+                                        scoreType: 'holeScore',
+                                        holeNumber: h,
+                                        oldValue: existing === undefined || existing === null || existing === '' || isNaN(Number(existing)) ? 0 : Number(existing),
+                                        newValue: 0,
+                                        modifiedBy: 'referee',
+                                        modifiedByType: 'judge',
+                                        comment: `심판 직접 ${scoreData.forfeitType === 'absent' ? '불참' : scoreData.forfeitType === 'disqualified' ? '실격' : '기권'} (코스: ${courseName}, 홀: ${h})`,
+                                        courseId: cid
+                                    });
+                                } else if (existing === undefined || existing === null || existing === '' || isNaN(Number(existing))) {
+                                    // 나머지 미입력 홀만 0점 처리 (기존 점수는 보존)
+                                    await set(ref(dbInstance, `/scores/${playerToSave.id}/${cid}/${h}`), 0);
+                                    await logScoreChange({
+                                        matchId: 'tournaments/current',
+                                        playerId: playerToSave.id,
+                                        scoreType: 'holeScore',
+                                        holeNumber: h,
+                                        oldValue: existing === undefined || existing === null || existing === '' || isNaN(Number(existing)) ? 0 : Number(existing),
+                                        newValue: 0,
+                                        modifiedBy: 'referee',
+                                        modifiedByType: 'judge',
+                                        comment: `심판페이지에서 ${scoreData.forfeitType === 'absent' ? '불참' : scoreData.forfeitType === 'disqualified' ? '실격' : '기권'} 처리 (코스: ${courseName}, 홀: ${h})`,
+                                        courseId: cid
+                                    });
+                                }
+                                // 기존 점수가 있는 홀은 그대로 보존 (0점으로 덮어쓰지 않음)
+                            }
+                        }
+                    }
+                    
+                    // 성공하면 루프 종료
+                    break;
+                    
+                } catch (e: any) {
+                    attempt++;
+                    
+                    // Permission denied 오류이고 재시도 가능한 경우 (다양한 오류 형태 대응)
+                    const isPermissionError = e?.code === 'PERMISSION_DENIED' || 
+                                             e?.message?.includes('permission_denied') ||
+                                             e?.message?.includes('Permission denied');
+                    
+                    if (isPermissionError && attempt < maxRetries && isMobile) {
+                        console.log(`모바일 환경 Firebase 재시도 ${attempt}/${maxRetries}:`, e?.message || e?.code);
+                        continue;
+                    }
+                    
+                    // 최종 실패 또는 다른 오류
+                    const errorMsg = e?.code === 'PERMISSION_DENIED' 
+                      ? '점수 저장 권한이 없습니다. 페이지를 새로고침하고 다시 로그인해주세요.'
+                      : (e?.message || "점수 저장에 실패했습니다.");
+                    
+                    toast({ 
+                      title: "저장 실패", 
+                      description: errorMsg,
+                      variant: "destructive" 
+                    });
+                    return;
                 }
             }
-        } catch (err: any) {
-            console.error("Failed to save score:", err);
-            toast({
-                title: "저장 실패",
-                description: `점수를 저장하는 중 오류가 발생했습니다: ${err.message}`,
-                variant: "destructive",
+            
+            // 성공 토스트 메시지
+            toast({ title: '저장 완료', description: '점수가 저장되었습니다.' });
+            
+            // 성공 후 상태 업데이트
+            setScores(prev => ({
+                ...prev,
+                [playerToSave.id]: { ...prev[playerToSave.id], status: 'locked' }
+            }));
+            
+        } catch (error) {
+            console.error('점수 저장 중 오류:', error);
+            toast({ 
+                title: '저장 실패', 
+                description: '점수 저장 중 오류가 발생했습니다.',
+                variant: 'destructive' 
             });
         } finally {
             setPlayerToSave(null);

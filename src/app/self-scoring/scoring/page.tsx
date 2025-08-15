@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { db } from "@/lib/firebase";
+import { db, ensureAuthenticated } from "@/lib/firebase";
 import { ref, set, get, onValue } from "firebase/database";
 import { useToast } from "@/hooks/use-toast";
 import { logScoreChange, getPlayerScoreLogs, ScoreLog } from "@/lib/scoreLogs";
@@ -217,6 +217,15 @@ export default function SelfScoringPage() {
         }
       }
     } catch {}
+    
+    // Firebase 인증 수행 (관전 모드가 아닌 경우에만)
+    if (!isReadOnlyMode) {
+      ensureAuthenticated().then(success => {
+        if (!success) {
+          console.warn('Firebase 인증 실패 - 점수 저장 시 재시도됩니다.');
+        }
+      });
+    }
   }, []);
 
   // 플레이어/점수 DB 로딩 (읽기)
@@ -565,6 +574,18 @@ export default function SelfScoringPage() {
       toast({ title: '저장 차단', description: '서명 완료 후에는 관리자 초기화 전까지 점수 수정이 제한됩니다.', variant: 'destructive' });
       return;
     }
+    
+    // Firebase 인증 확인
+    const isAuthenticated = await ensureAuthenticated();
+    if (!isAuthenticated) {
+      toast({ 
+        title: "인증 실패", 
+        description: "Firebase 인증에 실패했습니다. 페이지를 새로고침하고 다시 시도해주세요.",
+        variant: "destructive" 
+      });
+      return;
+    }
+    
     // 팀 모드면 팀 열의 primary index 기준으로 저장/로그 처리
     let displayName = playerNames[playerIndex];
     const targetRawIndex = (gameMode === 'team') ? (renderColumns[playerIndex]?.[0] ?? playerIndex) : playerIndex;
@@ -579,7 +600,7 @@ export default function SelfScoringPage() {
     
     // 모바일 환경 감지 및 Firebase 인증 재시도 로직
     const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-    const maxRetries = isMobile ? 3 : 1;
+    const maxRetries = isMobile ? 5 : 1; // 모바일에서 더 많은 재시도
     let attempt = 0;
     
     // 디버깅 정보
@@ -593,9 +614,9 @@ export default function SelfScoringPage() {
         // 팀 모드에서는 원본 매트릭스에서 대표 인덱스의 기존 값을 사용해야 올바른 oldValue가 기록됨
         const prev = (rawTableScores?.[targetRawIndex]?.[holeIndex] ?? 0) as number;
         
-        // 모바일에서는 잠시 대기 후 재시도
+        // 모바일에서는 잠시 대기 후 재시도 (대기 시간 증가)
         if (isMobile && attempt > 0) {
-          await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+          await new Promise(resolve => setTimeout(resolve, 1500 * attempt));
         }
         
         await set(scoreRef, score);
@@ -621,7 +642,9 @@ export default function SelfScoringPage() {
         // Permission denied 오류이고 재시도 가능한 경우 (다양한 오류 형태 대응)
         const isPermissionError = e?.code === 'PERMISSION_DENIED' || 
                                  e?.message?.includes('permission_denied') ||
-                                 e?.message?.includes('Permission denied');
+                                 e?.message?.includes('Permission denied') ||
+                                 e?.message?.includes('auth') ||
+                                 e?.message?.includes('authentication');
         
         if (isPermissionError && attempt < maxRetries && isMobile) {
           console.log(`모바일 환경 Firebase 재시도 ${attempt}/${maxRetries}:`, e?.message || e?.code);
