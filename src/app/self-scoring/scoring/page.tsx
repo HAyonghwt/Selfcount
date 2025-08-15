@@ -590,7 +590,7 @@ export default function SelfScoringPage() {
         holeNumber: holeNum,
         oldValue: typeof prev === "number" ? prev : 0,
                    newValue: score,
-                   modifiedBy: captainData?.id || `${selectedGroup || ''} 조장`,
+                   modifiedBy: captainData?.id || `조장${captainData?.jo || ''}`,
         modifiedByType: "captain",
         comment: `자율 채점 - 코스: ${activeCourse.id}, 그룹: ${selectedGroup || ''}, 조: ${selectedJo || ''}`,
         courseId: String(activeCourse.id),
