@@ -1,12 +1,13 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { db, ensureAuthenticated } from "@/lib/firebase";
+import { db } from "@/lib/firebase";
 import { ref, set, get, onValue } from "firebase/database";
 import { useToast } from "@/hooks/use-toast";
 import { logScoreChange, getPlayerScoreLogs, ScoreLog } from "@/lib/scoreLogs";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import html2canvas from "html2canvas";
+
 import "./styles.css";
 
 type CourseTab = { id: string; name: string; pars: number[] };
@@ -217,15 +218,6 @@ export default function SelfScoringPage() {
         }
       }
     } catch {}
-    
-    // Firebase 인증 수행 (관전 모드가 아닌 경우에만)
-    if (!isReadOnlyMode) {
-      ensureAuthenticated().then(success => {
-        if (!success) {
-          console.warn('Firebase 인증 실패 - 점수 저장 시 재시도됩니다.');
-        }
-      });
-    }
   }, []);
 
   // 플레이어/점수 DB 로딩 (읽기)
@@ -574,18 +566,6 @@ export default function SelfScoringPage() {
       toast({ title: '저장 차단', description: '서명 완료 후에는 관리자 초기화 전까지 점수 수정이 제한됩니다.', variant: 'destructive' });
       return;
     }
-    
-    // Firebase 인증 확인
-    const isAuthenticated = await ensureAuthenticated();
-    if (!isAuthenticated) {
-      toast({ 
-        title: "인증 실패", 
-        description: "Firebase 인증에 실패했습니다. 페이지를 새로고침하고 다시 시도해주세요.",
-        variant: "destructive" 
-      });
-      return;
-    }
-    
     // 팀 모드면 팀 열의 primary index 기준으로 저장/로그 처리
     let displayName = playerNames[playerIndex];
     const targetRawIndex = (gameMode === 'team') ? (renderColumns[playerIndex]?.[0] ?? playerIndex) : playerIndex;
@@ -597,82 +577,37 @@ export default function SelfScoringPage() {
       toast({ title: "선수 식별 실패", description: `${displayName || ''} 선수를 찾을 수 없습니다.`, variant: "destructive" });
     return;
   }
-    
-    // 모바일 환경 감지 및 Firebase 인증 재시도 로직
-    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-    const maxRetries = isMobile ? 5 : 1; // 모바일에서 더 많은 재시도
-    let attempt = 0;
-    
-    // 디버깅 정보
-    console.log('Firebase 저장 시도 - 모바일:', isMobile, 'User Agent:', navigator.userAgent);
-    
-    while (attempt < maxRetries) {
-      try {
-        const dbInstance = db as any;
-        const holeNum = holeIndex + 1;
-        const scoreRef = ref(dbInstance, `/scores/${playerId}/${activeCourse.id}/${holeNum}`);
-        // 팀 모드에서는 원본 매트릭스에서 대표 인덱스의 기존 값을 사용해야 올바른 oldValue가 기록됨
-        const prev = (rawTableScores?.[targetRawIndex]?.[holeIndex] ?? 0) as number;
-        
-        // 모바일에서는 잠시 대기 후 재시도 (대기 시간 증가)
-        if (isMobile && attempt > 0) {
-          await new Promise(resolve => setTimeout(resolve, 1500 * attempt));
-        }
-        
-        await set(scoreRef, score);
-        await logScoreChange({
-          matchId: "tournaments/current",
-          playerId,
-          scoreType: "holeScore",
-          holeNumber: holeNum,
-          oldValue: typeof prev === "number" ? prev : 0,
-          newValue: score,
-          modifiedBy: captainData?.id || `조장${captainData?.jo || ''}`,
-          modifiedByType: "captain",
-          comment: `자율 채점 - 코스: ${activeCourse.id}, 그룹: ${selectedGroup || ''}, 조: ${selectedJo || ''}`,
-          courseId: String(activeCourse.id),
-        });
-        
-        // 성공하면 루프 종료
-        break;
-        
-      } catch (e: any) {
-        attempt++;
-        
-        // Permission denied 오류이고 재시도 가능한 경우 (다양한 오류 형태 대응)
-        const isPermissionError = e?.code === 'PERMISSION_DENIED' || 
-                                 e?.message?.includes('permission_denied') ||
-                                 e?.message?.includes('Permission denied') ||
-                                 e?.message?.includes('auth') ||
-                                 e?.message?.includes('authentication');
-        
-        if (isPermissionError && attempt < maxRetries && isMobile) {
-          console.log(`모바일 환경 Firebase 재시도 ${attempt}/${maxRetries}:`, e?.message || e?.code);
-          continue;
-        }
-        
-        // 최종 실패 또는 다른 오류
-        const errorMsg = e?.code === 'PERMISSION_DENIED' 
-          ? '점수 저장 권한이 없습니다. 페이지를 새로고침하고 다시 로그인해주세요.'
-          : (e?.message || "점수 저장에 실패했습니다.");
-        
-        toast({ 
-          title: "저장 실패", 
-          description: errorMsg,
-          variant: "destructive" 
-        });
-        return;
-      }
-    }
-    
-    // 외부 전광판에 갱신 신호 전달 (선택 사항)
     try {
-      if (typeof window !== 'undefined') {
-        const holeNum = holeIndex + 1;
-        const evt = new CustomEvent('scoreUpdated', { detail: { playerId, courseId: String(activeCourse.id), hole: holeNum, by: 'captain' } });
-        window.dispatchEvent(evt);
-      }
-    } catch {}
+      const dbInstance = db as any;
+      const holeNum = holeIndex + 1;
+      const scoreRef = ref(dbInstance, `/scores/${playerId}/${activeCourse.id}/${holeNum}`);
+      // 팀 모드에서는 원본 매트릭스에서 대표 인덱스의 기존 값을 사용해야 올바른 oldValue가 기록됨
+      const prev = (rawTableScores?.[targetRawIndex]?.[holeIndex] ?? 0) as number;
+      
+      await set(scoreRef, score);
+      await logScoreChange({
+        matchId: "tournaments/current",
+        playerId,
+        scoreType: "holeScore",
+        holeNumber: holeNum,
+        oldValue: typeof prev === "number" ? prev : 0,
+        newValue: score,
+        modifiedBy: captainData?.id || `조장${captainData?.jo || ''}`,
+        modifiedByType: "captain",
+        comment: `자율 채점 - 코스: ${activeCourse.id}, 그룹: ${selectedGroup || ''}, 조: ${selectedJo || ''}`,
+        courseId: String(activeCourse.id),
+      });
+      
+      // 외부 전광판에 갱신 신호 전달 (선택 사항)
+      try {
+        if (typeof window !== 'undefined') {
+          const evt = new CustomEvent('scoreUpdated', { detail: { playerId, courseId: String(activeCourse.id), hole: holeNum, by: 'captain' } });
+          window.dispatchEvent(evt);
+        }
+      } catch {}
+    } catch (e: any) {
+      toast({ title: "저장 실패", description: e?.message || "점수 저장에 실패했습니다.", variant: "destructive" });
+    }
   };
 
   const handleSavePad = async () => {
@@ -1752,7 +1687,7 @@ export default function SelfScoringPage() {
             
             toast({ title: '초기화 완료', description: `${activeCourse?.name || '현재 코스'}가 초기화되었습니다.` });
           }} disabled={isReadOnlyMode || signatures.some(sig => sig && sig.length > 0)}>초기화</button>
-          <button className="action-button kakao-button" onClick={() => toast({ title: '공유', description: '공유 기능은 추후 제공됩니다.' })}>공유</button>
+          <button className="action-button kakao-button" onClick={handleShareScores}>공유</button>
           <button className="action-button qr-button" onClick={() => {
             try {
               const params = new URLSearchParams({ group: selectedGroup || '', jo: String(selectedJo || ''), mode: 'readonly' });
