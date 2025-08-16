@@ -1758,7 +1758,7 @@ export default function SelfScoringPage() {
             
             toast({ title: '초기화 완료', description: `${activeCourse?.name || '현재 코스'}가 초기화되었습니다.` });
           }} disabled={isReadOnlyMode || signatures.some(sig => sig && sig.length > 0)}>초기화</button>
-          <button className="action-button kakao-button" onClick={() => toast({ title: '공유', description: '공유 기능은 추후 제공됩니다.' })}>공유</button>
+          <button className="action-button kakao-button" onClick={handleShareScores}>공유</button>
           <button className="action-button qr-button" onClick={() => {
             try {
               const params = new URLSearchParams({ group: selectedGroup || '', jo: String(selectedJo || ''), mode: 'readonly' });
