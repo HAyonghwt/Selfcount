@@ -430,32 +430,6 @@ export default function SelfScoringPage() {
       } catch (error) {
         console.error('사인 데이터 초기화 실패:', error);
       }
-      
-      // 로컬 초안도 초기화 (관리자 초기화 시)
-      setDraftScores(Array.from({ length: 4 }, () => Array(9).fill(null)));
-      
-      // 수정 기록도 초기화
-      setModifiedMap(prev => {
-        const next = { ...prev };
-        delete next[activeCourseId];
-        return next;
-      });
-      
-      // 저장 플래시 맵도 초기화
-      setSavedFlashMap(prev => {
-        const next = { ...prev };
-        delete next[activeCourseId];
-        return next;
-      });
-      
-      // 로컬 초기화 마스크 해제
-      setLocalCleared(prev => ({ ...prev, [activeCourseId]: false }));
-      try {
-        const localClearedKey = `selfScoringLocalCleared_${activeCourseId}_${selectedGroup || 'g'}_${selectedJo || 'j'}`;
-        localStorage.removeItem(localClearedKey);
-      } catch (error) {
-        console.error('로컬 초기화 마스크 해제 실패:', error);
-      }
     }
   }, [scoresByCourse, activeCourseId, selectedGroup, selectedJo]);
 
@@ -474,7 +448,10 @@ export default function SelfScoringPage() {
     setPadPosition(holeIndex >= 7 ? 'top' : 'bottom');
     setPadPlayerIdx(playerIndex);
     setPadHoleIdx(holeIndex);
-    setPadTemp(tableScores[playerIndex]?.[holeIndex] ?? null);
+    // 현재 셀의 값 또는 초안 값을 우선으로 설정
+    const currentVal = tableScores[playerIndex]?.[holeIndex];
+    const draftVal = draftScores[playerIndex]?.[holeIndex];
+    setPadTemp(typeof currentVal === 'number' ? currentVal : (typeof draftVal === 'number' ? draftVal : null));
     setPadOpen(true);
     // 처음 입력(미저장)인 경우에는 수정 안내를 띄우지 않음
     const alreadyCommitted = typeof tableScores[playerIndex]?.[holeIndex] === 'number';
@@ -496,7 +473,10 @@ export default function SelfScoringPage() {
     setPadPosition(holeIndex >= 7 ? 'top' : 'bottom');
     setPadPlayerIdx(playerIndex);
     setPadHoleIdx(holeIndex);
-    setPadTemp(tableScores[playerIndex]?.[holeIndex] ?? null);
+    // 현재 셀의 값 또는 초안 값을 우선으로 설정
+    const currentVal = tableScores[playerIndex]?.[holeIndex];
+    const draftVal = draftScores[playerIndex]?.[holeIndex];
+    setPadTemp(typeof currentVal === 'number' ? currentVal : (typeof draftVal === 'number' ? draftVal : null));
     // 첫 수정 진입 시 시작/현재홀이 없으면 기준홀 설정 (활성 셀 계산을 위해)
     setGroupStartHole((prev) => (prev === null ? holeIndex : prev));
     setGroupCurrentHole((prev) => (prev === null ? holeIndex : prev));
@@ -1778,7 +1758,7 @@ export default function SelfScoringPage() {
             
             toast({ title: '초기화 완료', description: `${activeCourse?.name || '현재 코스'}가 초기화되었습니다.` });
           }} disabled={isReadOnlyMode || signatures.some(sig => sig && sig.length > 0)}>초기화</button>
-          <button className="action-button kakao-button" onClick={handleShareScores}>공유</button>
+          <button className="action-button kakao-button" onClick={() => toast({ title: '공유', description: '공유 기능은 추후 제공됩니다.' })}>공유</button>
           <button className="action-button qr-button" onClick={() => {
             try {
               const params = new URLSearchParams({ group: selectedGroup || '', jo: String(selectedJo || ''), mode: 'readonly' });
