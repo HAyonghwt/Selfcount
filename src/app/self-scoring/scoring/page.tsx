@@ -74,6 +74,8 @@ export default function SelfScoringPage() {
 
   // 점수 상태: courseId -> [4명][9홀]
   const [scoresByCourse, setScoresByCourse] = useState<Record<string, (number | null)[][]>>({});
+  const [debouncedScores, setDebouncedScores] = useState<Record<string, (number | null)[][]>>({});
+  const [cachedScores, setCachedScores] = useState<Record<string, any>>({});
 
   // 시작홀/현재홀 (자동 진행 없음, 9홀 제한 및 초기 활성에 사용) - 코스별로 관리
   const [groupStartHole, setGroupStartHole] = useState<number | null>(null);
@@ -230,7 +232,7 @@ export default function SelfScoringPage() {
     }
   }, []);
 
-  // 플레이어/점수 DB 로딩 (읽기)
+  // 플레이어/점수 DB 로딩 (읽기) - 최적화된 버전
   useEffect(() => {
     if (!db || !selectedGroup || !selectedJo) return;
     const dbInstance = db as any;
@@ -259,13 +261,27 @@ export default function SelfScoringPage() {
       const data = snap.val() || {};
       const courseIds = courseTabs.map((c) => c.id);
       let hasAnyForActive = false;
+      
+      // 캐싱 전략: 변경된 데이터만 처리
+      const dataString = JSON.stringify(data);
+      if (cachedScores.dataString === dataString) {
+        return; // 데이터가 변경되지 않았으면 처리하지 않음
+      }
+      setCachedScores(prev => ({ ...prev, dataString }));
+      
       setScoresByCourse((prev) => {
         const next: Record<string, (number | null)[][]> = { ...prev };
+        
         for (const cid of courseIds) {
           const seed: (number | null)[][] = Array.from({ length: 4 }, () => Array(9).fill(null));
-          playerNames.forEach((pn, pi) => {
-            const pid = nameToPlayerId[pn];
+          
+          // 현재 그룹/조의 플레이어들만 처리 (데이터 사용량 최적화)
+          const currentPlayers = playersInGroupJo;
+          currentPlayers.forEach((player, pi) => {
+            const pid = player.id;
             if (!pid) return;
+            
+            // 필요한 데이터만 선택적으로 읽기
             const perHole = data?.[pid]?.[cid] || {};
             for (let h = 1; h <= 9; h++) {
               const v = perHole[h];
@@ -275,6 +291,7 @@ export default function SelfScoringPage() {
               }
             }
           });
+          
           // 로컬 초기화 마스크가 켜진 코스는 기존 화면 값을 유지(연습 모드), 아니면 DB 반영
           next[cid] = localCleared[cid] ? (prev[cid] ?? seed) : seed;
         }
@@ -287,8 +304,8 @@ export default function SelfScoringPage() {
       unsubPlayers();
       unsubScores();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [db, selectedGroup, selectedJo, courseTabs, playerNames, nameToPlayerId, localCleared]);
+    // 최적화된 의존성 배열 - 핵심 의존성만 포함
+  }, [db, selectedGroup, selectedJo, courseTabs, playersInGroupJo, localCleared]);
 
   // 대회 설정(tournaments/current)과 그룹-코스 연동을 읽어 탭/파/이름 동기화
   useEffect(() => {
@@ -340,10 +357,19 @@ export default function SelfScoringPage() {
     return () => unsubTournament();
   }, [db, selectedGroup, activeCourseId]);
 
+  // 디바운싱된 점수 업데이트 (과도한 리렌더링 방지)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedScores(scoresByCourse);
+    }, 500); // 0.5초 대기
+
+    return () => clearTimeout(timer);
+  }, [scoresByCourse]);
+
   // 현재 코스/파 데이터
   const activeCourse = useMemo(() => courseTabs.find((c) => String(c.id) === String(activeCourseId)) || null, [courseTabs, activeCourseId]);
   const activePars = activeCourse?.pars || [3, 4, 4, 4, 4, 3, 5, 3, 3];
-  const rawTableScores = scoresByCourse[activeCourseId] || Array.from({ length: 4 }, () => Array(9).fill(null));
+  const rawTableScores = debouncedScores[activeCourseId] || Array.from({ length: 4 }, () => Array(9).fill(null));
   // 표시용 점수 매트릭스: 팀 모드일 때는 같은 팀 구성원 중 첫 인덱스의 값을 사용(입력과 저장은 첫 인덱스에만 기록)
   const tableScores = useMemo(() => {
     if (gameMode !== 'team') return rawTableScores;
@@ -860,8 +886,9 @@ export default function SelfScoringPage() {
     const cur = courseCurrentHole;
     const row = tableScores[playerIndex] || [];
     
-    // 9홀 제한: 시작홀 기준 9개 저장 완료 시 더 이상 활성화 안 함
+    // 9홀 제한: 각 선수별로 9홀 완료 체크
     if (courseStartHole !== null) {
+      // 현재 선수가 9홀을 완료했는지 체크
       const committedCount = row.filter((v) => typeof v === 'number').length;
       if (committedCount >= 9) return 'disabled';
     }
