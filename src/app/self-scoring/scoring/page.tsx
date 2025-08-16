@@ -75,9 +75,11 @@ export default function SelfScoringPage() {
   // 점수 상태: courseId -> [4명][9홀]
   const [scoresByCourse, setScoresByCourse] = useState<Record<string, (number | null)[][]>>({});
 
-  // 시작홀/현재홀 (자동 진행 없음, 9홀 제한 및 초기 활성에 사용)
+  // 시작홀/현재홀 (자동 진행 없음, 9홀 제한 및 초기 활성에 사용) - 코스별로 관리
   const [groupStartHole, setGroupStartHole] = useState<number | null>(null);
   const [groupCurrentHole, setGroupCurrentHole] = useState<number | null>(null);
+  const [courseStartHoles, setCourseStartHoles] = useState<Record<string, number | null>>({});
+  const [courseCurrentHoles, setCourseCurrentHoles] = useState<Record<string, number | null>>({});
 
   // 키패드 상태
   const [padOpen, setPadOpen] = useState(false);
@@ -353,6 +355,53 @@ export default function SelfScoringPage() {
     return view;
   }, [gameMode, rawTableScores, renderColumns]);
 
+  // 코스별 시작홀/현재홀 상태 복원 (코스 변경 시)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const key = `selfScoringDraft_${activeCourseId}_${selectedGroup || 'g'}_${selectedJo || 'j'}`;
+      const saved = localStorage.getItem(key);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        // 현재 코스의 시작홀과 현재홀을 코스별 상태에 저장
+        setCourseStartHoles(prev => ({
+          ...prev,
+          [activeCourseId]: parsed?.start ?? null
+        }));
+        setCourseCurrentHoles(prev => ({
+          ...prev,
+          [activeCourseId]: parsed?.current ?? null
+        }));
+        // 기존 호환성을 위해 전역 상태도 업데이트
+        if (parsed?.start != null) setGroupStartHole(parsed.start);
+        if (parsed?.current != null) setGroupCurrentHole(parsed.current);
+      } else {
+        // 저장된 데이터가 없으면 코스별 상태에서 null로 설정
+        setCourseStartHoles(prev => ({
+          ...prev,
+          [activeCourseId]: null
+        }));
+        setCourseCurrentHoles(prev => ({
+          ...prev,
+          [activeCourseId]: null
+        }));
+        setGroupStartHole(null);
+        setGroupCurrentHole(null);
+      }
+    } catch {
+      setCourseStartHoles(prev => ({
+        ...prev,
+        [activeCourseId]: null
+      }));
+      setCourseCurrentHoles(prev => ({
+        ...prev,
+        [activeCourseId]: null
+      }));
+      setGroupStartHole(null);
+      setGroupCurrentHole(null);
+    }
+  }, [activeCourseId, selectedGroup, selectedJo]);
+
   // 로컬 초안/시작/현재홀 복원 (코스/그룹/조 변경 시)
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -365,17 +414,11 @@ export default function SelfScoringPage() {
           ? parsed.draft
           : Array.from({ length: 4 }, () => Array(9).fill(null));
         setDraftScores(ds);
-        if (parsed?.start != null) setGroupStartHole(parsed.start);
-        if (parsed?.current != null) setGroupCurrentHole(parsed.current);
-             } else {
+      } else {
         setDraftScores(Array.from({ length: 4 }, () => Array(9).fill(null)));
-        setGroupStartHole(null);
-        setGroupCurrentHole(null);
       }
     } catch {
       setDraftScores(Array.from({ length: 4 }, () => Array(9).fill(null)));
-      setGroupStartHole(null);
-      setGroupCurrentHole(null);
     }
   }, [activeCourseId, selectedGroup, selectedJo]);
 
@@ -392,9 +435,17 @@ export default function SelfScoringPage() {
     );
     
     if (allScoresNull) {
-      // 홀 활성화 상태 초기화
+      // 홀 활성화 상태 초기화 (코스별로 관리)
       setGroupStartHole(null);
       setGroupCurrentHole(null);
+      setCourseStartHoles(prev => ({
+        ...prev,
+        [activeCourseId]: null
+      }));
+      setCourseCurrentHoles(prev => ({
+        ...prev,
+        [activeCourseId]: null
+      }));
       
       // localStorage의 start, current도 초기화
       try {
@@ -694,21 +745,34 @@ export default function SelfScoringPage() {
         next[targetPlayer][targetHole] = targetVal;
         return next;
       });
-      try {
-        if (typeof window !== 'undefined') {
-          const key = `selfScoringDraft_${activeCourseId}_${selectedGroup || 'g'}_${selectedJo || 'j'}`;
-          const saved = localStorage.getItem(key);
-          const parsed = saved ? JSON.parse(saved) : { draft: Array.from({ length: 4 }, () => Array(9).fill(null)) };
-          parsed.draft[targetPlayer][targetHole] = Number(targetVal);
-          parsed.start = (parsed.start ?? groupStartHole);
-          parsed.current = (parsed.current ?? groupCurrentHole);
-          localStorage.setItem(key, JSON.stringify(parsed));
-        }
-      } catch {}
+              try {
+          if (typeof window !== 'undefined') {
+            const key = `selfScoringDraft_${activeCourseId}_${selectedGroup || 'g'}_${selectedJo || 'j'}`;
+            const saved = localStorage.getItem(key);
+            const parsed = saved ? JSON.parse(saved) : { draft: Array.from({ length: 4 }, () => Array(9).fill(null)) };
+            parsed.draft[targetPlayer][targetHole] = Number(targetVal);
+            parsed.start = (parsed.start ?? courseStartHoles[activeCourseId] ?? groupStartHole);
+            parsed.current = (parsed.current ?? courseCurrentHoles[activeCourseId] ?? groupCurrentHole);
+            localStorage.setItem(key, JSON.stringify(parsed));
+          }
+        } catch {}
     }
-    // 첫 저장이면 시작/현재홀 지정
-    setGroupStartHole((prev) => (prev === null ? targetHole : prev));
-    setGroupCurrentHole((prev) => (prev === null ? targetHole : prev));
+    // 첫 저장이면 시작/현재홀 지정 (코스별로 관리)
+    const newStartHole = groupStartHole === null ? targetHole : groupStartHole;
+    const newCurrentHole = groupCurrentHole === null ? targetHole : groupCurrentHole;
+    
+    setGroupStartHole(newStartHole);
+    setGroupCurrentHole(newCurrentHole);
+    
+    // 코스별 상태도 업데이트
+    setCourseStartHoles(prev => ({
+      ...prev,
+      [activeCourseId]: newStartHole
+    }));
+    setCourseCurrentHoles(prev => ({
+      ...prev,
+      [activeCourseId]: newCurrentHole
+    }));
 
     // 초안이 들어있는 모든 선수의 해당 홀 점수를 저장
     for (let pi = 0; pi < 4; pi++) {
@@ -749,8 +813,8 @@ export default function SelfScoringPage() {
         const saved = localStorage.getItem(key);
         const parsed = saved ? JSON.parse(saved) : { draft: Array.from({ length: 4 }, () => Array(9).fill(null)) };
         for (let pi = 0; pi < 4; pi++) parsed.draft[pi][targetHole] = null;
-        parsed.start = (groupStartHole ?? targetHole);
-        parsed.current = (groupCurrentHole ?? targetHole);
+        parsed.start = (courseStartHoles[activeCourseId] ?? groupStartHole ?? targetHole);
+        parsed.current = (courseCurrentHoles[activeCourseId] ?? groupCurrentHole ?? targetHole);
         localStorage.setItem(key, JSON.stringify(parsed));
       }
     } catch {}
@@ -786,24 +850,31 @@ export default function SelfScoringPage() {
   function getCellState(playerIndex: number, holeIndex: number): 'locked' | 'active' | 'disabled' {
     const committed = tableScores[playerIndex]?.[holeIndex];
     if (typeof committed === 'number') return 'locked';
+    
+    // 현재 코스의 시작홀과 현재홀 가져오기
+    const courseStartHole = courseStartHoles[activeCourseId] ?? groupStartHole;
+    const courseCurrentHole = courseCurrentHoles[activeCourseId] ?? groupCurrentHole;
+    
     // 시작 전에는 전체 활성화
-    if (groupCurrentHole === null) return 'active';
-    const cur = groupCurrentHole;
+    if (courseCurrentHole === null) return 'active';
+    const cur = courseCurrentHole;
     const row = tableScores[playerIndex] || [];
+    
     // 9홀 제한: 시작홀 기준 9개 저장 완료 시 더 이상 활성화 안 함
-    if (groupStartHole !== null) {
+    if (courseStartHole !== null) {
       const committedCount = row.filter((v) => typeof v === 'number').length;
       if (committedCount >= 9) return 'disabled';
     }
+    
     // 현재홀부터 시계방향으로 비어있는 가장 앞 홀을 찾는다
     let candidate: number | null = null;
     for (let step = 0; step < 9; step++) {
       const idx = (cur + step) % 9;
       if (row[idx] == null) {
         candidate = idx;
-      break;
+        break;
+      }
     }
-  }
     if (candidate === null) return 'disabled';
     return holeIndex === candidate ? 'active' : 'disabled';
   }
@@ -1678,6 +1749,16 @@ export default function SelfScoringPage() {
             setDraftScores(Array.from({ length: 4 }, () => Array(9).fill(null)));
             setGroupStartHole(null);
             setGroupCurrentHole(null);
+            
+            // 코스별 상태도 초기화
+            setCourseStartHoles(prev => ({
+              ...prev,
+              [activeCourseId]: null
+            }));
+            setCourseCurrentHoles(prev => ({
+              ...prev,
+              [activeCourseId]: null
+            }));
             // 사인은 현재 코스의 사인만 초기화 (signatureKey가 코스별로 관리됨)
             setSignatures(['', '', '', '']);
             
