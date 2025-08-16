@@ -1,11 +1,12 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { db } from "@/lib/firebase";
+import { db, ensureAuthenticated } from "@/lib/firebase";
 import { ref, set, get, onValue } from "firebase/database";
 import { useToast } from "@/hooks/use-toast";
 import { logScoreChange, getPlayerScoreLogs, ScoreLog } from "@/lib/scoreLogs";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import html2canvas from "html2canvas";
 import "./styles.css";
 
 type CourseTab = { id: string; name: string; pars: number[] };
@@ -216,6 +217,15 @@ export default function SelfScoringPage() {
         }
       }
     } catch {}
+    
+    // Firebase 인증 수행 (관전 모드가 아닌 경우에만)
+    if (!isReadOnlyMode) {
+      ensureAuthenticated().then(success => {
+        if (!success) {
+          console.warn('Firebase 인증 실패 - 점수 저장 시 재시도됩니다.');
+        }
+      });
+    }
   }, []);
 
   // 플레이어/점수 DB 로딩 (읽기)
@@ -564,6 +574,18 @@ export default function SelfScoringPage() {
       toast({ title: '저장 차단', description: '서명 완료 후에는 관리자 초기화 전까지 점수 수정이 제한됩니다.', variant: 'destructive' });
       return;
     }
+    
+    // Firebase 인증 확인
+    const isAuthenticated = await ensureAuthenticated();
+    if (!isAuthenticated) {
+      toast({ 
+        title: "인증 실패", 
+        description: "Firebase 인증에 실패했습니다. 페이지를 새로고침하고 다시 시도해주세요.",
+        variant: "destructive" 
+      });
+      return;
+    }
+    
     // 팀 모드면 팀 열의 primary index 기준으로 저장/로그 처리
     let displayName = playerNames[playerIndex];
     const targetRawIndex = (gameMode === 'team') ? (renderColumns[playerIndex]?.[0] ?? playerIndex) : playerIndex;
@@ -575,35 +597,82 @@ export default function SelfScoringPage() {
       toast({ title: "선수 식별 실패", description: `${displayName || ''} 선수를 찾을 수 없습니다.`, variant: "destructive" });
     return;
   }
-    try {
-      const dbInstance = db as any;
-      const holeNum = holeIndex + 1;
-      const scoreRef = ref(dbInstance, `/scores/${playerId}/${activeCourse.id}/${holeNum}`);
-      // 팀 모드에서는 원본 매트릭스에서 대표 인덱스의 기존 값을 사용해야 올바른 oldValue가 기록됨
-      const prev = (rawTableScores?.[targetRawIndex]?.[holeIndex] ?? 0) as number;
-                 await set(scoreRef, score);
-                 await logScoreChange({
-        matchId: "tournaments/current",
-        playerId,
-        scoreType: "holeScore",
-        holeNumber: holeNum,
-        oldValue: typeof prev === "number" ? prev : 0,
-                   newValue: score,
-                   modifiedBy: captainData?.id || `${selectedGroup || ''} 조장`,
-        modifiedByType: "captain",
-        comment: `자율 채점 - 코스: ${activeCourse.id}, 그룹: ${selectedGroup || ''}, 조: ${selectedJo || ''}`,
-        courseId: String(activeCourse.id),
-      });
-      // 외부 전광판에 갱신 신호 전달 (선택 사항)
+    
+    // 모바일 환경 감지 및 Firebase 인증 재시도 로직
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    const maxRetries = isMobile ? 5 : 1; // 모바일에서 더 많은 재시도
+    let attempt = 0;
+    
+    // 디버깅 정보
+    console.log('Firebase 저장 시도 - 모바일:', isMobile, 'User Agent:', navigator.userAgent);
+    
+    while (attempt < maxRetries) {
       try {
-        if (typeof window !== 'undefined') {
-          const evt = new CustomEvent('scoreUpdated', { detail: { playerId, courseId: String(activeCourse.id), hole: holeNum, by: 'captain' } });
-          window.dispatchEvent(evt);
+        const dbInstance = db as any;
+        const holeNum = holeIndex + 1;
+        const scoreRef = ref(dbInstance, `/scores/${playerId}/${activeCourse.id}/${holeNum}`);
+        // 팀 모드에서는 원본 매트릭스에서 대표 인덱스의 기존 값을 사용해야 올바른 oldValue가 기록됨
+        const prev = (rawTableScores?.[targetRawIndex]?.[holeIndex] ?? 0) as number;
+        
+        // 모바일에서는 잠시 대기 후 재시도 (대기 시간 증가)
+        if (isMobile && attempt > 0) {
+          await new Promise(resolve => setTimeout(resolve, 1500 * attempt));
         }
-      } catch {}
-    } catch (e: any) {
-      toast({ title: "저장 실패", description: e?.message || "점수 저장에 실패했습니다.", variant: "destructive" });
+        
+        await set(scoreRef, score);
+        await logScoreChange({
+          matchId: "tournaments/current",
+          playerId,
+          scoreType: "holeScore",
+          holeNumber: holeNum,
+          oldValue: typeof prev === "number" ? prev : 0,
+          newValue: score,
+          modifiedBy: captainData?.id || `조장${captainData?.jo || ''}`,
+          modifiedByType: "captain",
+          comment: `자율 채점 - 코스: ${activeCourse.id}, 그룹: ${selectedGroup || ''}, 조: ${selectedJo || ''}`,
+          courseId: String(activeCourse.id),
+        });
+        
+        // 성공하면 루프 종료
+        break;
+        
+      } catch (e: any) {
+        attempt++;
+        
+        // Permission denied 오류이고 재시도 가능한 경우 (다양한 오류 형태 대응)
+        const isPermissionError = e?.code === 'PERMISSION_DENIED' || 
+                                 e?.message?.includes('permission_denied') ||
+                                 e?.message?.includes('Permission denied') ||
+                                 e?.message?.includes('auth') ||
+                                 e?.message?.includes('authentication');
+        
+        if (isPermissionError && attempt < maxRetries && isMobile) {
+          console.log(`모바일 환경 Firebase 재시도 ${attempt}/${maxRetries}:`, e?.message || e?.code);
+          continue;
+        }
+        
+        // 최종 실패 또는 다른 오류
+        const errorMsg = e?.code === 'PERMISSION_DENIED' 
+          ? '점수 저장 권한이 없습니다. 페이지를 새로고침하고 다시 로그인해주세요.'
+          : (e?.message || "점수 저장에 실패했습니다.");
+        
+        toast({ 
+          title: "저장 실패", 
+          description: errorMsg,
+          variant: "destructive" 
+        });
+        return;
+      }
     }
+    
+    // 외부 전광판에 갱신 신호 전달 (선택 사항)
+    try {
+      if (typeof window !== 'undefined') {
+        const holeNum = holeIndex + 1;
+        const evt = new CustomEvent('scoreUpdated', { detail: { playerId, courseId: String(activeCourse.id), hole: holeNum, by: 'captain' } });
+        window.dispatchEvent(evt);
+      }
+    } catch {}
   };
 
   const handleSavePad = async () => {
@@ -1024,6 +1093,375 @@ export default function SelfScoringPage() {
     if (!ctx) return;
     ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
+  };
+
+  // 점수 공유 기능 - 개선된 캡처 방식
+  const handleShareScores = async () => {
+    if (!navigator.share) {
+      toast({ 
+        title: '공유 불가', 
+        description: '이 브라우저에서는 공유 기능을 지원하지 않습니다.', 
+        variant: 'destructive' 
+      });
+      return;
+    }
+
+    try {
+      toast({ title: '공유 준비 중...', description: '점수표를 생성하고 있습니다.' });
+
+      const shareImages: File[] = [];
+      const currentDate = new Date().toLocaleDateString('ko-KR');
+      const originalActiveCourse = activeCourseId;
+
+      // 각 코스별로 캡처
+      for (const course of courseTabs) {
+        try {
+          // 코스 전환
+        setActiveCourseId(String(course.id));
+        
+          // 상태 변경이 완료될 때까지 대기
+          await new Promise(resolve => setTimeout(resolve, 300));
+
+          // 현재 코스의 점수 데이터 가져오기
+          const currentScores = scoresByCourse[course.id] || Array.from({ length: 4 }, () => Array(9).fill(null));
+          const coursePars = course.pars || [3, 4, 4, 4, 4, 3, 5, 3, 3];
+          
+          // 팀 모드 고려한 표시용 점수
+          let displayScores = currentScores;
+          let displayNames = playerNames;
+          
+          if (gameMode === 'team') {
+            displayScores = renderColumns.map(idxs => {
+              const primary = idxs[0];
+              return currentScores[primary] || Array(9).fill(null);
+            });
+            displayNames = renderColumns.map(idxs => 
+              idxs.map(i => playerNames[i] || '').filter(Boolean).join('/')
+            );
+          }
+
+          // Canvas로 직접 점수표 그리기 (모바일 최적화)
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          if (!ctx) continue;
+
+          // 모바일 화면을 가득 채우는 세로형 캔버스
+          canvas.width = 600;
+          canvas.height = 1200; // 더 길게 늘림
+
+          // 배경 색상
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+          // 2025년 스타일 그라데이션 배경
+          const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+          gradient.addColorStop(0, '#f8fafc');
+          gradient.addColorStop(1, '#e2e8f0');
+          ctx.fillStyle = gradient;
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+          // 상단 헤더 영역 그라데이션 (더 크게)
+          const headerGradient = ctx.createLinearGradient(0, 0, 0, 140);
+          headerGradient.addColorStop(0, '#1e293b');
+          headerGradient.addColorStop(1, '#334155');
+          ctx.fillStyle = headerGradient;
+          ctx.fillRect(0, 0, canvas.width, 140);
+
+          // 제목 그리기 (훨씬 크게)
+          ctx.fillStyle = '#ffffff';
+          ctx.font = 'bold 48px Arial, sans-serif';
+          ctx.textAlign = 'center';
+          const title = `${selectedGroup} ${course.name}`;
+          ctx.fillText(title, canvas.width / 2, 65);
+
+          // 날짜 그리기 (크게)
+          ctx.fillStyle = '#e2e8f0';
+          ctx.font = '28px Arial, sans-serif';
+          ctx.fillText(currentDate, canvas.width / 2, 110);
+
+          // 테이블 시작 위치 (헤더 아래 여백)
+          const tableStartY = 180;
+          const baseCellWidth = Math.floor((canvas.width - 40) / (displayNames.length + 2));
+          const holeCellWidth = Math.floor(baseCellWidth * 2 / 3); // 홀/파 칸 너비 (2/3로 축소)
+          const playerCellWidth = Math.floor((canvas.width - 40 - holeCellWidth * 2) / displayNames.length); // 나머지 공간을 플레이어 칸이 나눠가짐
+          const cellHeight = 84; // 점수칸 높이 증가
+          const headerHeight = 76; // 헤더 높이 유지
+          
+          // 테이블 그림자 효과
+          ctx.shadowColor = 'rgba(0, 0, 0, 0.15)';
+          ctx.shadowBlur = 10;
+          ctx.shadowOffsetX = 0;
+          ctx.shadowOffsetY = 4;
+          
+          const startX = 20;
+          const tableWidth = holeCellWidth * 2 + playerCellWidth * displayNames.length;
+          
+          // 테이블 전체 배경 (둥근 모서리 효과)
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(startX - 5, tableStartY - 5, tableWidth + 10, headerHeight + (9 * cellHeight) + cellHeight + 10);
+          
+          // 그림자 효과 제거
+          ctx.shadowColor = 'transparent';
+          ctx.shadowBlur = 0;
+          ctx.shadowOffsetX = 0;
+          ctx.shadowOffsetY = 0;
+          
+          // 헤더 배경 - 홀/파는 기존 그라데이션
+          const tableHeaderGradient = ctx.createLinearGradient(0, tableStartY, 0, tableStartY + headerHeight);
+          tableHeaderGradient.addColorStop(0, '#3b82f6');
+          tableHeaderGradient.addColorStop(1, '#1d4ed8');
+          ctx.fillStyle = tableHeaderGradient;
+          ctx.fillRect(startX, tableStartY, holeCellWidth * 2, headerHeight); // 홀/파 부분만
+          
+          // 플레이어별 점수 확인 후 헤더 배경 설정
+          displayScores.forEach((playerScores, playerIdx) => {
+            const x = startX + holeCellWidth * 2 + playerIdx * playerCellWidth;
+            let hasAnyScore = playerScores.some(score => typeof score === 'number');
+            
+            if (hasAnyScore) {
+              // 점수가 있는 플레이어는 블루 배경
+              ctx.fillStyle = '#6387F2';
+            } else {
+              // 점수가 없는 플레이어는 회색 배경
+              ctx.fillStyle = '#F2F2F2';
+            }
+            ctx.fillRect(x, tableStartY, playerCellWidth, headerHeight);
+          });
+          
+          // 헤더 테두리 (통일된 색상)
+          ctx.strokeStyle = '#cbd5e1';
+          ctx.lineWidth = 2;
+          ctx.strokeRect(startX, tableStartY, tableWidth, headerHeight);
+          
+          // 헤더 텍스트 (큰 글씨로)
+          ctx.fillStyle = '#ffffff';
+          ctx.font = 'bold 26px Arial, sans-serif';
+          ctx.textAlign = 'center';
+          
+          // "홀" 헤더
+          ctx.fillText('홀', startX + holeCellWidth / 2, tableStartY + headerHeight / 2 + 10);
+          ctx.strokeStyle = '#cbd5e1';
+          ctx.lineWidth = 1;
+          ctx.strokeRect(startX, tableStartY, holeCellWidth, headerHeight);
+          
+          // "파" 헤더
+          ctx.fillText('파', startX + holeCellWidth + holeCellWidth / 2, tableStartY + headerHeight / 2 + 10);
+          ctx.strokeRect(startX + holeCellWidth, tableStartY, holeCellWidth, headerHeight);
+          
+          // 플레이어 이름 헤더
+          displayNames.forEach((name, i) => {
+            const x = startX + holeCellWidth * 2 + i * playerCellWidth;
+            const displayName = name.length > 10 ? name.substring(0, 8) + '..' : name; // 더 긴 이름 허용
+            
+            // 점수 유무에 따라 텍스트 색상 결정
+            let hasAnyScore = displayScores[i].some(score => typeof score === 'number');
+            
+            if (hasAnyScore) {
+              ctx.fillStyle = '#ffffff'; // 점수가 있으면 흰색 텍스트
+            } else {
+              ctx.fillStyle = '#0D0D0D'; // 점수가 없으면 검정 텍스트
+            }
+            
+            ctx.font = 'bold 24px Arial, sans-serif'; // 이름 크기 조정
+            ctx.fillText(displayName, x + playerCellWidth / 2, tableStartY + headerHeight / 2 + 10);
+            ctx.strokeStyle = '#cbd5e1';
+            ctx.strokeRect(x, tableStartY, playerCellWidth, headerHeight);
+          });
+
+          // 각 홀별 데이터 그리기
+          for (let hole = 0; hole < 9; hole++) {
+            const y = tableStartY + headerHeight + (hole * cellHeight);
+            const isEvenRow = hole % 2 === 0;
+            
+            // 교대로 행 배경색 (zebra striping)
+            if (isEvenRow) {
+              ctx.fillStyle = '#f8fafc';
+              ctx.fillRect(startX, y, tableWidth, cellHeight);
+            }
+            
+            // 홀 번호 배경
+            ctx.fillStyle = '#e2e8f0';
+            ctx.fillRect(startX, y, holeCellWidth, cellHeight);
+            
+            // 홀 번호 텍스트 (크게)
+            ctx.fillStyle = '#1e293b';
+            ctx.font = 'bold 28px Arial, sans-serif';
+            ctx.fillText(String(hole + 1), startX + holeCellWidth / 2, y + cellHeight / 2 + 10);
+            ctx.strokeStyle = '#cbd5e1';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(startX, y, holeCellWidth, cellHeight);
+            
+            // 파 수 배경
+            ctx.fillStyle = '#e2e8f0';
+            ctx.fillRect(startX + holeCellWidth, y, holeCellWidth, cellHeight);
+            
+            // 파 수 텍스트 (크게)
+            ctx.fillStyle = '#1e293b';
+            ctx.font = 'bold 28px Arial, sans-serif';
+            ctx.fillText(String(coursePars[hole]), startX + holeCellWidth + holeCellWidth / 2, y + cellHeight / 2 + 10);
+            ctx.strokeRect(startX + holeCellWidth, y, holeCellWidth, cellHeight);
+            
+            // 각 플레이어 점수
+            displayScores.forEach((playerScores, playerIdx) => {
+              const x = startX + holeCellWidth * 2 + playerIdx * playerCellWidth;
+              const score = playerScores[hole];
+              
+              if (typeof score === 'number') {
+                const par = coursePars[hole];
+                const diff = score - par;
+                
+                // 점수에 따른 배경색과 텍스트 색상
+                if (diff < 0) {
+                  // 버디 이하 - 흰색 배경
+                  ctx.fillStyle = '#ffffff';
+                  ctx.fillRect(x + 1, y + 1, playerCellWidth - 2, cellHeight - 2);
+                  ctx.fillStyle = '#1d4ed8'; // 블루 텍스트
+                } else if (diff === 0) {
+                  // 파 - 흰색 배경
+                  ctx.fillStyle = '#ffffff';
+                  ctx.fillRect(x + 1, y + 1, playerCellWidth - 2, cellHeight - 2);
+                  ctx.fillStyle = '#111827'; // 검정 텍스트
+                } else {
+                  // 보기 이상 - 흰색 배경
+                  ctx.fillStyle = '#ffffff';
+                  ctx.fillRect(x + 1, y + 1, playerCellWidth - 2, cellHeight - 2);
+                  ctx.fillStyle = '#dc2626'; // 빨강 텍스트
+                }
+                
+                ctx.font = 'bold 38px Arial, sans-serif'; // 점수 글자 크기 증가
+                ctx.fillText(String(score), x + playerCellWidth / 2, y + cellHeight / 2 + 14);
+              } else {
+                // 점수가 없는 경우 회색으로 빈 셀 표시
+                ctx.fillStyle = '#f1f5f9';
+                ctx.fillRect(x + 1, y + 1, playerCellWidth - 2, cellHeight - 2);
+              }
+              
+              ctx.strokeStyle = '#cbd5e1';
+              ctx.strokeRect(x, y, playerCellWidth, cellHeight);
+            });
+          }
+
+          // 합계 행 - 깔끔한 단색 적용
+          const totalY = tableStartY + headerHeight + (9 * cellHeight);
+          const totalCellHeight = 86; // 합계 셀 높이 증가
+          
+          // 합계 라벨 배경 (빨강)
+          ctx.fillStyle = '#F23054';
+          ctx.fillRect(startX, totalY, holeCellWidth * 2, totalCellHeight);
+          
+          // 합계 라벨 텍스트 (크게)
+          ctx.fillStyle = '#ffffff'; // 흰색
+          ctx.font = 'bold 32px Arial, sans-serif';
+          ctx.fillText('합계', startX + holeCellWidth, totalY + totalCellHeight / 2 + 12);
+          
+          // 합계 라벨 테두리 (통일된 색상)
+          ctx.strokeStyle = '#cbd5e1';
+          ctx.lineWidth = 1;
+          ctx.strokeRect(startX, totalY, holeCellWidth * 2, totalCellHeight);
+
+          // 각 플레이어 합계
+          displayScores.forEach((playerScores, playerIdx) => {
+            const x = startX + holeCellWidth * 2 + playerIdx * playerCellWidth;
+            let total = 0;
+            let validScores = 0;
+            
+            playerScores.forEach(score => {
+              if (typeof score === 'number') {
+                total += score;
+                validScores++;
+              }
+            });
+            
+            if (validScores > 0) {
+              // 합계 셀 배경 (연한 빨강으로 변경)
+              ctx.fillStyle = '#fee2e2';
+              ctx.fillRect(x + 1, totalY + 1, playerCellWidth - 2, totalCellHeight - 2);
+              
+              // 합계 텍스트 (가장 크게)
+              ctx.fillStyle = '#0D0D0D'; // 진한 검정
+              ctx.font = 'bold 42px Arial, sans-serif';
+              ctx.fillText(String(total), x + playerCellWidth / 2, totalY + totalCellHeight / 2 + 16);
+            } else {
+              // 점수가 없는 경우 연한 회색 배경
+              ctx.fillStyle = '#F2F2F2';
+              ctx.fillRect(x + 1, totalY + 1, playerCellWidth - 2, totalCellHeight - 2);
+            }
+            
+            // 합계 셀 테두리 (통일된 색상)
+            ctx.strokeStyle = '#cbd5e1';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(x, totalY, playerCellWidth, totalCellHeight);
+          });
+
+          // 점수 색상 설명 추가 (원래 배경에 바로 표시)
+          const legendY = totalY + totalCellHeight + 40; // 합계 아래 40px 여백
+          
+          // 설명 내용 (배경 없이 바로 표시)
+          ctx.font = 'bold 18px Arial, sans-serif';
+          ctx.textAlign = 'left';
+          
+          const legendStartX = startX + 20;
+          const legendTextY = legendY + 20; // 적절한 위치에 배치
+          
+          // 오버파 (빨간색)
+          ctx.fillStyle = '#dc2626';
+          ctx.fillText('오버파(+): 빨간색', legendStartX, legendTextY);
+          
+          // 이븐파 (검정색)
+          ctx.fillStyle = '#111827';
+          ctx.fillText('이븐파(E): 검정색', legendStartX + 180, legendTextY);
+          
+          // 언더파 (파란색)
+          ctx.fillStyle = '#1d4ed8';
+          ctx.fillText('언더파(-): 파란색', legendStartX + 360, legendTextY);
+
+          // 캔버스를 Blob으로 변환
+          await new Promise<void>((resolve) => {
+          canvas.toBlob((blob) => {
+            if (blob) {
+              const file = new File([blob], `${selectedGroup}_${course.name}_${currentDate}.png`, {
+                type: 'image/png'
+              });
+              shareImages.push(file);
+            }
+              resolve();
+            }, 'image/png', 0.9);
+          });
+
+        } catch (error) {
+          console.error(`코스 ${course.name} 캡처 실패:`, error);
+        }
+      }
+
+      // 원래 활성 코스로 복원
+      setActiveCourseId(originalActiveCourse);
+
+      if (shareImages.length === 0) {
+        toast({ 
+          title: '캡처 실패', 
+          description: '점수표 생성에 실패했습니다.', 
+          variant: 'destructive' 
+        });
+        return;
+      }
+
+      // Web Share API로 공유
+        await navigator.share({
+          title: `${selectedGroup} 점수표`,
+        text: `${selectedGroup} 점수표 - ${currentDate}`,
+          files: shareImages
+        });
+
+      toast({ title: '공유 완료', description: '점수표가 공유되었습니다.' });
+
+    } catch (error) {
+      console.error('공유 오류:', error);
+      toast({ 
+        title: '공유 실패', 
+        description: '공유 중 오류가 발생했습니다.', 
+        variant: 'destructive' 
+      });
+    }
   };
 
   const handleSignatureSave = () => {
