@@ -211,6 +211,11 @@ function ExternalScoreboard() {
     const [filterGroup, setFilterGroup] = useState('all');
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     
+    // 캐싱을 위한 상태 추가
+    const [lastScoresHash, setLastScoresHash] = useState('');
+    const [lastPlayersHash, setLastPlayersHash] = useState('');
+    const [lastTournamentHash, setLastTournamentHash] = useState('');
+
     useEffect(() => {
         if (!db) {
             setLoading(false);
@@ -223,14 +228,35 @@ function ExternalScoreboard() {
         const individualSuddenDeathRef = ref(dbInstance, 'tournaments/current/suddenDeath/individual');
         const teamSuddenDeathRef = ref(dbInstance, 'tournaments/current/suddenDeath/team');
 
-        const unsubPlayers = onValue(playersRef, snap => setPlayers(snap.val() || {}));
-        const unsubScores = onValue(scoresRef, snap => setScores(snap.val() || {}));
+        const unsubPlayers = onValue(playersRef, snap => {
+            const data = snap.val() || {};
+            const newHash = JSON.stringify(data);
+            if (newHash !== lastPlayersHash) {
+                setPlayers(data);
+                setLastPlayersHash(newHash);
+            }
+        });
+        
+        const unsubScores = onValue(scoresRef, snap => {
+            const data = snap.val() || {};
+            const newHash = JSON.stringify(data);
+            if (newHash !== lastScoresHash) {
+                setScores(data);
+                setLastScoresHash(newHash);
+            }
+        });
+        
         const unsubTournament = onValue(tournamentRef, snap => {
             const data = snap.val() || {};
-            setTournament(data);
-            setGroupsData(data.groups || {});
-            setLoading(false);
+            const newHash = JSON.stringify(data);
+            if (newHash !== lastTournamentHash) {
+                setTournament(data);
+                setGroupsData(data.groups || {});
+                setLastTournamentHash(newHash);
+                setLoading(false);
+            }
         });
+        
         const unsubIndividualSuddenDeath = onValue(individualSuddenDeathRef, snap => setIndividualSuddenDeathData(snap.val()));
         const unsubTeamSuddenDeath = onValue(teamSuddenDeathRef, snap => setTeamSuddenDeathData(snap.val()));
 
@@ -244,13 +270,18 @@ function ExternalScoreboard() {
             unsubTeamSuddenDeath();
             clearTimeout(timer);
         };
-    }, []);
+    }, [lastScoresHash, lastPlayersHash, lastTournamentHash]);
 
     const processedDataByGroup = useMemo(() => {
         const allCourses = Object.values(tournament.courses || {}).filter(Boolean);
         if (Object.keys(players).length === 0) return {};
 
-        const allProcessedPlayers: any[] = Object.entries(players).map(([playerId, player]: [string, any]) => {
+        // 그룹 필터링 최적화: 선택된 그룹의 선수만 우선 처리
+        const playersToProcess = filterGroup === 'all' 
+            ? Object.entries(players)
+            : Object.entries(players).filter(([_, player]) => player.group === filterGroup);
+
+        const allProcessedPlayers: any[] = playersToProcess.map(([playerId, player]: [string, any]) => {
             const playerGroupData = groupsData[player.group];
             const assignedCourseIds = playerGroupData?.courses 
                 ? Object.keys(playerGroupData.courses).filter((id: string) => playerGroupData.courses[id]) 
@@ -396,7 +427,12 @@ function ExternalScoreboard() {
         const progressByGroup: { [key: string]: number } = {};
         const allCourses = Object.values(tournament.courses || {}).filter(Boolean);
 
-        for (const groupName in processedDataByGroup) {
+        // 선택된 그룹만 우선 계산 (최적화)
+        const groupsToCalculate = filterGroup === 'all' 
+            ? Object.keys(processedDataByGroup)
+            : [filterGroup];
+
+        for (const groupName of groupsToCalculate) {
             const groupPlayers = processedDataByGroup[groupName];
             if (!groupPlayers || groupPlayers.length === 0) {
                 progressByGroup[groupName] = 0; continue;
@@ -427,7 +463,7 @@ function ExternalScoreboard() {
             progressByGroup[groupName] = isNaN(progress) ? 0 : progress;
         }
         return progressByGroup;
-    }, [processedDataByGroup, scores, groupsData, tournament.courses]);
+    }, [processedDataByGroup, scores, groupsData, tournament.courses, filterGroup]);
 
     const processSuddenDeath = (suddenDeathData: any) => {
         if (!suddenDeathData?.isActive || !suddenDeathData.players || !Array.isArray(suddenDeathData.holes)) return [];
@@ -508,7 +544,7 @@ function ExternalScoreboard() {
         }
 
         return finalData;
-    }, [processedDataByGroup, processedIndividualSuddenDeathData, processedTeamSuddenDeathData]);
+    }, [processedDataByGroup, processedIndividualSuddenDeathData, processedTeamSuddenDeathData, filterGroup]);
     
     const visibleGroups = Object.keys(finalDataByGroup).filter(groupName => finalDataByGroup[groupName]?.some(player => player.assignedCourses.length > 0));
     
@@ -524,13 +560,23 @@ function ExternalScoreboard() {
     // 로딩 상태
     const [logsLoading, setLogsLoading] = useState(false);
 
-    // 선수별 로그 미리 불러오기 (처음 한 번만)
+    // 선수별 로그 미리 불러오기 (최적화된 버전)
     useEffect(() => {
         const fetchLogs = async () => {
             setLogsLoading(true);
-            const playerIds = Object.values(finalDataByGroup).flat().map((p:any) => p.id);
+            // 수정된 점수가 있는 선수만 로그 로딩 (최적화)
+            const playersWithScores = Object.values(finalDataByGroup).flat()
+                .filter((p: any) => p.hasAnyScore) // 점수가 있는 선수만
+                .map((p: any) => p.id);
+            
             const logsMap: { [playerId: string]: ScoreLog[] } = {};
-            await Promise.all(playerIds.map(async (pid) => {
+            
+            // 기존 로그 캐시 유지하면서 새로운 선수만 로딩
+            const existingPlayerIds = Object.keys(playerScoreLogs);
+            const newPlayerIds = playersWithScores.filter(pid => !existingPlayerIds.includes(pid));
+            
+            // 새로운 선수만 로그 로딩
+            await Promise.all(newPlayerIds.map(async (pid) => {
                 try {
                     const logs = await getPlayerScoreLogs(pid);
                     logsMap[pid] = logs;
@@ -538,9 +584,15 @@ function ExternalScoreboard() {
                     logsMap[pid] = [];
                 }
             }));
-            setPlayerScoreLogs(logsMap);
+            
+            // 기존 로그와 새로운 로그 병합
+            setPlayerScoreLogs(prev => ({
+                ...prev,
+                ...logsMap
+            }));
             setLogsLoading(false);
         };
+        
         if (Object.keys(finalDataByGroup).length > 0) {
             fetchLogs();
         }

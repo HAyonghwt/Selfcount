@@ -262,12 +262,23 @@ export default function SelfScoringPage() {
       const courseIds = courseTabs.map((c) => c.id);
       let hasAnyForActive = false;
       
-      // 캐싱 전략: 변경된 데이터만 처리
-      const dataString = JSON.stringify(data);
-      if (cachedScores.dataString === dataString) {
+      // 데이터 최적화: 현재 그룹/조의 선수들만 필터링
+      const currentPlayers = playersInGroupJo;
+      const filteredData: Record<string, any> = {};
+      
+      // 필요한 선수의 데이터만 추출
+      currentPlayers.forEach(player => {
+        if (data[player.id]) {
+          filteredData[player.id] = data[player.id];
+        }
+      });
+      
+      // 캐싱 전략: 필터링된 데이터만 비교
+      const filteredDataString = JSON.stringify(filteredData);
+      if (cachedScores.dataString === filteredDataString) {
         return; // 데이터가 변경되지 않았으면 처리하지 않음
       }
-      setCachedScores(prev => ({ ...prev, dataString }));
+      setCachedScores(prev => ({ ...prev, dataString: filteredDataString }));
       
       setScoresByCourse((prev) => {
         const next: Record<string, (number | null)[][]> = { ...prev };
@@ -275,14 +286,13 @@ export default function SelfScoringPage() {
         for (const cid of courseIds) {
           const seed: (number | null)[][] = Array.from({ length: 4 }, () => Array(9).fill(null));
           
-          // 현재 그룹/조의 플레이어들만 처리 (데이터 사용량 최적화)
-          const currentPlayers = playersInGroupJo;
+          // 필터링된 데이터만 처리 (데이터 사용량 대폭 감소)
           currentPlayers.forEach((player, pi) => {
             const pid = player.id;
             if (!pid) return;
             
             // 필요한 데이터만 선택적으로 읽기
-            const perHole = data?.[pid]?.[cid] || {};
+            const perHole = filteredData?.[pid]?.[cid] as Record<string, any> || {};
             for (let h = 1; h <= 9; h++) {
               const v = perHole[h];
               seed[pi][h - 1] = typeof v === "number" ? v : null;
