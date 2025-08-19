@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Minus, Plus, Save, Lock, Trophy, ArrowLeft } from 'lucide-react';
 import { db, ensureAuthenticated } from '@/lib/firebase';
-import { ref, onValue, set } from 'firebase/database';
+import { ref, onValue, set, get } from 'firebase/database';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription } from "@/components/ui/alert-dialog";
 import { useToast } from '@/hooks/use-toast';
@@ -33,6 +33,14 @@ interface ScoreData {
     forfeitType?: 'absent' | 'disqualified' | 'forfeit' | null; // 추가: 기권 타입
 }
 
+// 캐시 인터페이스 추가
+interface DataCache {
+    players: { [groupId: string]: Player[] };
+    scores: { [courseId: string]: { [playerId: string]: any } };
+    tournament: any;
+    lastUpdated: { [key: string]: number };
+}
+
 export default function RefereePage() {
     const params = useParams();
     const router = useRouter();
@@ -40,13 +48,24 @@ export default function RefereePage() {
     const { toast } = useToast();
     const [refereeData, setRefereeData] = useState<any>(null);
 
-    // Data from Firebase
+    // 캐시 상태 추가
+    const dataCache = useRef<DataCache>({
+        players: {},
+        scores: {},
+        tournament: null,
+        lastUpdated: {}
+    });
+
+    // Data from Firebase - 최적화된 상태 관리
     const [allPlayers, setAllPlayers] = useState<Player[]>([]);
     const [allScores, setAllScores] = useState<any>({});
     const [courses, setCourses] = useState<Course[]>([]);
     const [groupsData, setGroupsData] = useState<any>({});
     const [loading, setLoading] = useState(true);
     const [unlockPasswordFromDb, setUnlockPasswordFromDb] = useState('');
+
+    // 구독 관리용 ref 추가
+    const subscriptions = useRef<{ [key: string]: () => void }>({});
 
     // UI State
     const [view, setView] = useState<'selection' | 'scoring'>('selection');
@@ -90,6 +109,21 @@ export default function RefereePage() {
     // 안내 모달 상태 추가
     const [showAllJosCompleteModal, setShowAllJosCompleteModal] = useState(false);
 
+    // 구독 해제 함수
+    const unsubscribeFrom = (key: string) => {
+        if (subscriptions.current[key]) {
+            subscriptions.current[key]();
+            delete subscriptions.current[key];
+        }
+    };
+
+    // 모든 구독 해제 함수
+    const unsubscribeAll = () => {
+        Object.keys(subscriptions.current).forEach(key => {
+            unsubscribeFrom(key);
+        });
+    };
+
     // 로그인 상태 확인 및 Firebase 인증
     useEffect(() => {
         const loggedInReferee = sessionStorage.getItem('refereeData');
@@ -120,6 +154,143 @@ export default function RefereePage() {
             return;
         }
     }, [hole, router]);
+
+    // 최적화된 데이터 페칭 - 토너먼트 설정은 한 번만 로드
+    useEffect(() => {
+        setLoading(true);
+        const dbInstance = db as import('firebase/database').Database;
+        
+        // 토너먼트 설정은 한 번만 로드 (캐시 확인)
+        const loadTournamentData = async () => {
+            const cacheKey = 'tournament';
+            const now = Date.now();
+            const cacheAge = now - (dataCache.current.lastUpdated[cacheKey] || 0);
+            
+            // 캐시가 5분 이내면 캐시 사용
+            if (dataCache.current.tournament && cacheAge < 5 * 60 * 1000) {
+                const cached = dataCache.current.tournament;
+                setCourses(cached.courses ? Object.values(cached.courses) : []);
+                setGroupsData(cached.groups || {});
+                setLoading(false);
+                return;
+            }
+
+            // 캐시가 없거나 오래된 경우 새로 로드
+            const tournamentRef = ref(dbInstance, 'tournaments/current');
+            const passwordRef = ref(dbInstance, 'config/scoreUnlockPassword');
+
+            const unsubTournament = onValue(tournamentRef, (snapshot) => {
+                const data = snapshot.val() || {};
+                dataCache.current.tournament = data;
+                dataCache.current.lastUpdated[cacheKey] = Date.now();
+                setCourses(data.courses ? Object.values(data.courses) : []);
+                setGroupsData(data.groups || {});
+                setLoading(false);
+            });
+            
+            const unsubPassword = onValue(passwordRef, (snapshot) => setUnlockPasswordFromDb(snapshot.val() || ''));
+
+            subscriptions.current['tournament'] = unsubTournament;
+            subscriptions.current['password'] = unsubPassword;
+        };
+
+        loadTournamentData();
+
+        return () => {
+            unsubscribeFrom('tournament');
+            unsubscribeFrom('password');
+        };
+    }, []);
+
+    // 선택된 그룹의 선수만 구독하는 최적화된 로직
+    useEffect(() => {
+        if (!selectedGroup || !selectedType) {
+            setAllPlayers([]);
+            return;
+        }
+
+        const cacheKey = `players_${selectedGroup}`;
+        const now = Date.now();
+        const cacheAge = now - (dataCache.current.lastUpdated[cacheKey] || 0);
+        
+        // 캐시가 1분 이내면 캐시 사용
+        if (dataCache.current.players[selectedGroup] && cacheAge < 60 * 1000) {
+            setAllPlayers(dataCache.current.players[selectedGroup]);
+            return;
+        }
+
+        const dbInstance = db as import('firebase/database').Database;
+        const playersRef = ref(dbInstance, 'players');
+
+        const unsubPlayers = onValue(playersRef, (snapshot) => {
+            const allPlayersData = Object.entries(snapshot.val() || {}).map(([id, player]) => ({ id, ...player as object } as Player));
+            const groupPlayers = allPlayersData.filter(p => p.group === selectedGroup);
+            
+            // 캐시 업데이트
+            dataCache.current.players[selectedGroup] = groupPlayers;
+            dataCache.current.lastUpdated[cacheKey] = Date.now();
+            
+            setAllPlayers(groupPlayers);
+        });
+
+        subscriptions.current['players'] = unsubPlayers;
+
+        return () => {
+            unsubscribeFrom('players');
+        };
+    }, [selectedGroup, selectedType]);
+
+    // 선택된 코스의 점수만 구독하는 최적화된 로직
+    useEffect(() => {
+        if (!selectedCourse) {
+            setAllScores({});
+            return;
+        }
+
+        const cacheKey = `scores_${selectedCourse}`;
+        const now = Date.now();
+        const cacheAge = now - (dataCache.current.lastUpdated[cacheKey] || 0);
+        
+        // 캐시가 30초 이내면 캐시 사용
+        if (dataCache.current.scores[selectedCourse] && cacheAge < 30 * 1000) {
+            setAllScores(dataCache.current.scores[selectedCourse]);
+            return;
+        }
+
+        const dbInstance = db as import('firebase/database').Database;
+        const scoresRef = ref(dbInstance, 'scores');
+
+        const unsubScores = onValue(scoresRef, (snapshot) => {
+            const allScoresData = snapshot.val() || {};
+            const courseScores: any = {};
+            
+            // 선택된 코스의 점수만 필터링
+            Object.keys(allScoresData).forEach(playerId => {
+                if (allScoresData[playerId] && allScoresData[playerId][selectedCourse]) {
+                    courseScores[playerId] = { [selectedCourse]: allScoresData[playerId][selectedCourse] };
+                }
+            });
+            
+            // 캐시 업데이트
+            dataCache.current.scores[selectedCourse] = courseScores;
+            dataCache.current.lastUpdated[cacheKey] = Date.now();
+            
+            setAllScores(courseScores);
+        });
+
+        subscriptions.current['scores'] = unsubScores;
+
+        return () => {
+            unsubscribeFrom('scores');
+        };
+    }, [selectedCourse]);
+
+    // 컴포넌트 언마운트 시 모든 구독 해제
+    useEffect(() => {
+        return () => {
+            unsubscribeAll();
+        };
+    }, []);
 
     // handleNextGroup 함수 수정
     const handleNextGroup = async (forceMoveOverride?: boolean) => {
@@ -233,33 +404,6 @@ export default function RefereePage() {
             localStorage.removeItem(`refereeState_${hole}`);
         }
     }, [view, selectedGroup, selectedCourse, selectedJo, hole]);
-
-    // Data fetching
-    useEffect(() => {
-        setLoading(true);
-        const dbInstance = db as import('firebase/database').Database;
-        const playersRef = ref(dbInstance, 'players');
-        const scoresRef = ref(dbInstance, 'scores');
-        const tournamentRef = ref(dbInstance, 'tournaments/current');
-        const passwordRef = ref(dbInstance, 'config/scoreUnlockPassword');
-
-        const unsubPlayers = onValue(playersRef, (snapshot) => setAllPlayers(Object.entries(snapshot.val() || {}).map(([id, player]) => ({ id, ...player as object } as Player))));
-        const unsubScores = onValue(scoresRef, (snapshot) => setAllScores(snapshot.val() || {}));
-        const unsubTournament = onValue(tournamentRef, (snapshot) => {
-            const data = snapshot.val() || {};
-            setCourses(data.courses ? Object.values(data.courses) : []);
-            setGroupsData(data.groups || {});
-            setLoading(false);
-        });
-        const unsubPassword = onValue(passwordRef, (snapshot) => setUnlockPasswordFromDb(snapshot.val() || ''));
-
-        return () => {
-            unsubPlayers();
-            unsubScores();
-            unsubTournament();
-            unsubPassword();
-        };
-    }, []);
 
     // Derived data
     const availableGroups = useMemo(() => {
@@ -593,6 +737,16 @@ export default function RefereePage() {
                         }
                     }
                     
+                    // 0점 처리 후 캐시 업데이트
+                    if (scoreData.score === 0) {
+                        // 모든 관련 코스의 캐시를 무효화하여 다음 로드 시 새로 가져오도록 함
+                        const group = groupsData[playerToSave.group];
+                        const assignedCourseIds = group && group.courses ? Object.keys(group.courses).filter((cid: any) => group.courses[cid]) : [];
+                        assignedCourseIds.forEach(cid => {
+                            delete dataCache.current.lastUpdated[`scores_${cid}`];
+                        });
+                    }
+                    
                     // 성공하면 루프 종료
                     break;
                     
@@ -623,14 +777,26 @@ export default function RefereePage() {
                 }
             }
             
-            // 성공 토스트 메시지
-            toast({ title: '저장 완료', description: '점수가 저장되었습니다.' });
-            
-            // 성공 후 상태 업데이트
-            setScores(prev => ({
-                ...prev,
-                [playerToSave.id]: { ...prev[playerToSave.id], status: 'locked' }
-            }));
+                                // 성공 토스트 메시지
+                    toast({ title: '저장 완료', description: '점수가 저장되었습니다.' });
+                    
+                    // 성공 후 상태 업데이트
+                    setScores(prev => ({
+                        ...prev,
+                        [playerToSave.id]: { ...prev[playerToSave.id], status: 'locked' }
+                    }));
+                    
+                    // 캐시 업데이트 - 점수 데이터 갱신
+                    if (dataCache.current.scores[selectedCourse]) {
+                        if (!dataCache.current.scores[selectedCourse][playerToSave.id]) {
+                            dataCache.current.scores[selectedCourse][playerToSave.id] = {};
+                        }
+                        dataCache.current.scores[selectedCourse][playerToSave.id][selectedCourse] = {
+                            ...dataCache.current.scores[selectedCourse][playerToSave.id][selectedCourse],
+                            [hole]: scoreData.score
+                        };
+                        dataCache.current.lastUpdated[`scores_${selectedCourse}`] = Date.now();
+                    }
             
         } catch (error) {
             console.error('점수 저장 중 오류:', error);
