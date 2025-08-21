@@ -31,7 +31,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar"
 import { Skeleton } from "@/components/ui/skeleton"
-import { get, ref, update } from "firebase/database"
+import { get, ref, update, onValue } from "firebase/database"
 import { db } from "@/lib/firebase"
 
 const mainNavItems = [
@@ -53,22 +53,38 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const pathname = usePathname();
   const [isClient, setIsClient] = React.useState(false);
   const [appName, setAppName] = React.useState('');
+  const [selfScoringEnabled, setSelfScoringEnabled] = React.useState(true);
 
   React.useEffect(() => {
     setIsClient(true)
     if (db) {
       const configRef = ref(db, 'config');
-      get(configRef).then((snapshot) => {
-          if (snapshot.exists() && snapshot.val().appName) {
-              setAppName(snapshot.val().appName);
+      // 실시간으로 설정 변경 감지
+      const unsubscribe = onValue(configRef, (snapshot) => {
+          if (snapshot.exists()) {
+              const data = snapshot.val();
+              if (data.appName) {
+                  setAppName(data.appName);
+              } else {
+                  setAppName('ParkScore');
+              }
+              // 자율 채점 활성화 설정 읽기 (기본값: true)
+              const enabled = data.selfScoringEnabled !== false;
+              setSelfScoringEnabled(enabled);
           } else {
               setAppName('ParkScore');
+              setSelfScoringEnabled(true);
           }
-      }).catch(() => {
+      }, (error) => {
+          console.error('설정 로드 실패:', error);
           setAppName('ParkScore');
+          setSelfScoringEnabled(true);
       });
+      
+      return () => unsubscribe();
     } else {
         setAppName('ParkScore');
+        setSelfScoringEnabled(true);
     }
   }, [])
 
@@ -101,6 +117,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         isMobile={isMobile}
         pathname={pathname}
         appName={appName}
+        selfScoringEnabled={selfScoringEnabled}
         children={children}
       />
     </SidebarProvider>
@@ -109,7 +126,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
 import { useRouter } from "next/navigation";
 
-function SidebarContentWithSidebarHooks({ isMobile, pathname, appName, children }: { isMobile: boolean, pathname: string, appName: string, children: React.ReactNode }) {
+function SidebarContentWithSidebarHooks({ isMobile, pathname, appName, selfScoringEnabled, children }: { isMobile: boolean, pathname: string, appName: string, selfScoringEnabled: boolean, children: React.ReactNode }) {
   const { setOpenMobile } = useSidebar();
   const router = useRouter();
 
@@ -205,18 +222,21 @@ function SidebarContentWithSidebarHooks({ isMobile, pathname, appName, children 
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
-            <SidebarMenuItem key={selfScoringNavItem.href}>
-              <SidebarMenuButton
-                asChild
-                isActive={pathname === selfScoringNavItem.href}
-                tooltip={{ children: selfScoringNavItem.label }}
-              >
-                <Link href={selfScoringNavItem.href} className="text-black" onClick={handleMenuClick(selfScoringNavItem.href)}>
-                  <selfScoringNavItem.icon className="h-5 w-5" />
-                  <span>{selfScoringNavItem.label}</span>
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
+            {selfScoringEnabled && (
+              <SidebarMenuItem key={selfScoringNavItem.href}>
+                <SidebarMenuButton
+                  asChild
+                  isActive={pathname === selfScoringNavItem.href}
+                  tooltip={{ children: selfScoringNavItem.label }}
+                >
+                  <Link href={selfScoringNavItem.href} className="text-black" onClick={handleMenuClick(selfScoringNavItem.href)}>
+                    <selfScoringNavItem.icon className="h-5 w-5" />
+                    <span>{selfScoringNavItem.label}</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            )}
+
           </SidebarMenu>
         </SidebarContent>
         <SidebarFooter className="p-4 border-t">

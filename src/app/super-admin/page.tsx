@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import { Save, LogOut, Users } from "lucide-react";
 import Link from 'next/link';
 import { useToast } from "@/hooks/use-toast";
@@ -24,6 +25,7 @@ export default function SuperAdminPage() {
         maxPlayers: 200,
         refereePassword: '',
         captainPassword: '',
+        selfScoringEnabled: true,
     });
     const [captainAccounts, setCaptainAccounts] = useState<any[]>([]);
     const [creatingCaptains, setCreatingCaptains] = useState(false);
@@ -52,6 +54,7 @@ export default function SuperAdminPage() {
                     maxPlayers: data.maxPlayers || 200,
                     refereePassword: data.refereePassword || '',
                     captainPassword: data.captainPassword || '',
+                    selfScoringEnabled: data.selfScoringEnabled !== false, // 기본값 true
                 });
             } else {
                  setConfig({
@@ -61,6 +64,7 @@ export default function SuperAdminPage() {
                     maxPlayers: 200,
                     refereePassword: '',
                     captainPassword: '',
+                    selfScoringEnabled: true,
                 });
             }
             setLoading(false);
@@ -79,14 +83,16 @@ export default function SuperAdminPage() {
 
         try {
             // 1. Save config to Realtime Database
-            await set(configRef, {
+            const configData = {
                 appName: config.appName.trim(),
                 userDomain: config.userDomain.trim(),
                 maxCourses: Number(config.maxCourses),
                 maxPlayers: Number(config.maxPlayers),
                 refereePassword: config.refereePassword.trim(),
                 captainPassword: config.captainPassword.trim(),
-            });
+                selfScoringEnabled: config.selfScoringEnabled,
+            };
+            await set(configRef, configData);
 
             toast({
                 title: "성공",
@@ -493,6 +499,19 @@ export default function SuperAdminPage() {
                                 <Label htmlFor="captainPassword">자율채점 조장 공용 비밀번호</Label>
                                 <Input id="captainPassword" value={config.captainPassword} onChange={handleInputChange} placeholder="예: 123456" />
                                 <p className="text-xs text-muted-foreground">모든 자율채점 조장 계정(player1, player2...)의 공용 비밀번호입니다. 설정 후 Firebase 콘솔에서 각 조장 계정의 비밀번호를 직접 변경해주셔야 합니다.</p>
+                            </div>
+                            <div className="space-y-2">
+                                <div className="flex items-center justify-between">
+                                    <div className="space-y-0.5">
+                                        <Label htmlFor="selfScoringEnabled">자율 채점 메뉴 활성화</Label>
+                                        <p className="text-xs text-muted-foreground">관리자 메뉴에서 자율 채점 메뉴를 표시할지 설정합니다.</p>
+                                    </div>
+                                    <Switch
+                                        id="selfScoringEnabled"
+                                        checked={config.selfScoringEnabled}
+                                        onCheckedChange={(checked) => setConfig(prev => ({ ...prev, selfScoringEnabled: checked }))}
+                                    />
+                                </div>
                             </div>
                         </CardContent>
                     </Card>
