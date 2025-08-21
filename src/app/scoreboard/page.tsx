@@ -215,6 +215,10 @@ function ExternalScoreboard() {
     const [lastScoresHash, setLastScoresHash] = useState('');
     const [lastPlayersHash, setLastPlayersHash] = useState('');
     const [lastTournamentHash, setLastTournamentHash] = useState('');
+    
+    // 폴링 기반 점수 업데이트를 위한 상태
+    const [lastScoreUpdateTime, setLastScoreUpdateTime] = useState(0);
+    const [scorePollingInterval, setScorePollingInterval] = useState<NodeJS.Timeout | null>(null);
 
     useEffect(() => {
         if (!db) {
@@ -237,14 +241,15 @@ function ExternalScoreboard() {
             }
         });
         
-        const unsubScores = onValue(scoresRef, snap => {
-            const data = snap.val() || {};
-            const newHash = JSON.stringify(data);
-            if (newHash !== lastScoresHash) {
-                setScores(data);
-                setLastScoresHash(newHash);
-            }
-        });
+        // Firebase scores 리스너 제거하고 폴링 방식으로 교체
+        // const unsubScores = onValue(scoresRef, snap => {
+        //     const data = snap.val() || {};
+        //     const newHash = JSON.stringify(data);
+        //     if (newHash !== lastScoresHash) {
+        //         setScores(data);
+        //         setLastScoresHash(newHash);
+        //     }
+        // });
         
         const unsubTournament = onValue(tournamentRef, snap => {
             const data = snap.val() || {};
@@ -257,6 +262,9 @@ function ExternalScoreboard() {
             }
         });
         
+        // 폴링 기반 점수 업데이트 시작
+        startScorePolling();
+        
         const unsubIndividualSuddenDeath = onValue(individualSuddenDeathRef, snap => setIndividualSuddenDeathData(snap.val()));
         const unsubTeamSuddenDeath = onValue(teamSuddenDeathRef, snap => setTeamSuddenDeathData(snap.val()));
 
@@ -264,11 +272,16 @@ function ExternalScoreboard() {
 
         return () => {
             unsubPlayers();
-            unsubScores();
+            // unsubScores(); // Firebase scores 리스너 제거됨
             unsubTournament();
             unsubIndividualSuddenDeath();
             unsubTeamSuddenDeath();
             clearTimeout(timer);
+            
+            // 폴링 정리
+            if (scorePollingInterval) {
+                clearInterval(scorePollingInterval);
+            }
         };
     }, [lastScoresHash, lastPlayersHash, lastTournamentHash]);
 
@@ -554,6 +567,13 @@ function ExternalScoreboard() {
         }
         return visibleGroups.filter(g => g === filterGroup);
     }, [filterGroup, visibleGroups]);
+    
+    // filterGroup 변경 시 폴링 재시작
+    useEffect(() => {
+        if (Object.keys(tournament).length > 0) {
+            startScorePolling();
+        }
+    }, [filterGroup, tournament]);
 
     // 선수별 점수 로그 캐시 상태 (playerId별)
     const [playerScoreLogs, setPlayerScoreLogs] = useState<{ [playerId: string]: ScoreLog[] }>({});
@@ -615,6 +635,45 @@ function ExternalScoreboard() {
         return () => document.removeEventListener('touchstart', handleTouch);
     }, [openTooltip]);
 
+
+    // 폴링 기반 점수 업데이트 함수
+    const startScorePolling = () => {
+        // 기존 폴링 정리
+        if (scorePollingInterval) {
+            clearInterval(scorePollingInterval);
+        }
+        
+        // 새로운 폴링 시작 (1초마다)
+        const interval = setInterval(async () => {
+            try {
+                const response = await fetch(`/api/scoreboard-polling?group=${filterGroup}&lastUpdate=${lastScoreUpdateTime}`);
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.success && data.hasChanges) {
+                        // 변경된 점수만 업데이트
+                        const newScores = { ...scores };
+                        Object.keys(data.changes).forEach(playerId => {
+                            if (!newScores[playerId]) newScores[playerId] = {};
+                            Object.keys(data.changes[playerId]).forEach(courseId => {
+                                if (!newScores[playerId][courseId]) newScores[playerId][courseId] = {};
+                                Object.keys(data.changes[playerId][courseId]).forEach(holeNumber => {
+                                    const change = data.changes[playerId][courseId][holeNumber];
+                                    newScores[playerId][courseId][holeNumber] = change.newValue;
+                                });
+                            });
+                        });
+                        
+                        setScores(newScores);
+                        setLastScoreUpdateTime(data.timestamp);
+                    }
+                }
+            } catch (error) {
+                console.error('점수 폴링 에러:', error);
+            }
+        }, 1000);
+        
+        setScorePollingInterval(interval);
+    };
 
     const handleScroll = (amount: number) => {
         if (scrollContainerRef.current) {
