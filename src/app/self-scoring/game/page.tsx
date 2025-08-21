@@ -116,19 +116,22 @@ export default function SelfScoringGameSetupPage() {
     const availableJos = useMemo(() => {
         if (!selectedGroup) return [];
         
-        // 조장 데이터에서 조 번호 추출
-        const captainJo = captainData?.jo || 1;
-        const startGroup = Math.floor((captainJo - 1) / 10) * 10 + 1;
-        const endGroup = Math.min(startGroup + 9, 100);
+        // 실제 등록된 선수가 있는 조만 표시
+        const registeredJos = new Set<number>();
         
-        // 1부터 100까지의 조 번호 생성 (실제로는 더 많을 수 있음)
-        const allJos = Array.from({ length: 100 }, (_, i) => (i + 1).toString());
-        
-        return allJos.filter(jo => {
-            const joNumber = parseInt(jo);
-            return joNumber >= startGroup && joNumber <= endGroup;
+        allPlayers.forEach((player: any) => {
+            if (player.group === selectedGroup && player.jo) {
+                registeredJos.add(Number(player.jo));
+            }
         });
-    }, [selectedGroup, captainData]);
+        
+
+        
+        // 조 번호 순으로 정렬
+        return Array.from(registeredJos)
+            .sort((a, b) => a - b)
+            .map(jo => jo.toString());
+    }, [selectedGroup, allPlayers]);
 
     // 선택된 그룹의 배정 코스 목록 계산 (활성 코스만)
     const assignedCourseList = useMemo(() => {
@@ -272,7 +275,7 @@ export default function SelfScoringGameSetupPage() {
                                 <SelectTrigger className="text-base">
                                     <SelectValue placeholder="경기방식을 선택하세요" />
                                 </SelectTrigger>
-                                <SelectContent position="popper" className="max-h-[60vh] overflow-y-auto">
+                                <SelectContent className="max-h-[60vh] overflow-y-auto">
                                     <SelectItem value="individual">개인전</SelectItem>
                                     <SelectItem value="team">2인1팀</SelectItem>
                                 </SelectContent>
@@ -288,7 +291,7 @@ export default function SelfScoringGameSetupPage() {
                                 <SelectTrigger className="text-base">
                                     <SelectValue placeholder={gameMode ? "그룹을 선택하세요" : "경기방식을 먼저 선택하세요"} />
                                 </SelectTrigger>
-                                <SelectContent position="popper" className="max-h-[60vh] overflow-y-auto">
+                                <SelectContent className="max-h-[60vh] overflow-y-auto">
                                     {availableGroups.map(group => (
                                         <SelectItem key={group} value={group}>
                                             {group}
@@ -304,7 +307,7 @@ export default function SelfScoringGameSetupPage() {
                                 <SelectTrigger className="text-base">
                                     <SelectValue placeholder={selectedGroup ? "조를 선택하세요" : "그룹을 먼저 선택하세요"} />
                                 </SelectTrigger>
-                                <SelectContent position="popper" className="max-h-[60vh] overflow-y-auto">
+                                <SelectContent className="max-h-[40vh] overflow-y-auto">
                                     {availableJos.map(jo => (
                                         <SelectItem key={jo} value={jo}>
                                             {jo}조
