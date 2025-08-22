@@ -112,17 +112,7 @@ export default function GiftEventDrawSmall({ winner, onAnimationEnd }: GiftEvent
 
   if (!winner || participants.length === 0) return null;
 
-  // 물레방아처럼 돌아가는 참가자 목록 생성
-  const createWheelList = () => {
-    const wheel = [];
-    // 2바퀴 정도로 충분한 목록 생성
-    for (let i = 0; i < 2; i++) {
-      wheel.push(...participants);
-    }
-    return wheel;
-  };
 
-  const wheelList = createWheelList();
 
   return (
     <div className="relative w-full h-full bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 rounded-lg overflow-hidden">
@@ -166,11 +156,21 @@ export default function GiftEventDrawSmall({ winner, onAnimationEnd }: GiftEvent
               <div className="text-4xl font-bold text-white mb-2">
                 🎉
               </div>
-              <div className="flex items-center justify-center gap-3">
+              {/* PC뷰: 가로 배치 */}
+              <div className="hidden md:flex items-center justify-center gap-3">
                 <div className="text-xl text-white/90">
                   {winner.club}
                 </div>
                 <div className="text-3xl font-bold text-white">
+                  {winner.name}
+                </div>
+              </div>
+              {/* 모바일뷰: 세로 배치 */}
+              <div className="md:hidden flex flex-col items-center justify-center gap-1">
+                <div className="text-lg text-white/90">
+                  {winner.club}
+                </div>
+                <div className="text-2xl font-bold text-white">
                   {winner.name}
                 </div>
               </div>
@@ -180,52 +180,65 @@ export default function GiftEventDrawSmall({ winner, onAnimationEnd }: GiftEvent
             </div>
           </div>
         ) : (
-          /* 물레방아 애니메이션 */
+          /* 슬롯머신 애니메이션 */
           <div className="relative flex-1 overflow-hidden rounded-lg bg-gradient-to-b from-purple-800/50 to-blue-800/50 backdrop-blur-sm border border-white/20 mx-4 mb-4">
             <div className="absolute inset-0 flex items-center justify-center">
-              <div className="relative w-full h-full">
-                {/* 물레방아처럼 돌아가는 참가자 목록 */}
-                <div 
-                  className="absolute left-1/2 transform -translate-x-1/2"
-                  style={{
-                    transform: `translateX(-50%) translateY(${rolling ? -currentIndex * 50 : 0}px)`,
-                  }}
-                >
-                  {wheelList.map((participant, index) => {
-                    const distance = Math.abs(index - currentIndex);
-                    const opacity = Math.max(0.1, 1 - distance * 0.25);
-                    const scale = Math.max(0.7, 1 - distance * 0.2);
-                    const blur = distance * 1;
-                    
-                    return (
-                      <div
-                        key={`${participant.id}_${index}`}
-                        className="absolute left-1/2 transform -translate-x-1/2 w-64 md:w-72"
-                        style={{
-                          top: `${index * 50}px`,
-                          opacity,
-                          transform: `scale(${scale})`,
-                          filter: `blur(${blur}px)`,
-                          zIndex: 1000 - distance,
-                        }}
-                      >
-                        <div className="bg-gradient-to-r from-white/90 to-gray-100/90 backdrop-blur-sm rounded-xl p-4 md:p-6 shadow-lg border border-white/30">
-                          <div className="flex items-center justify-center gap-2 md:gap-3">
-                            <div className="text-sm md:text-base text-gray-600">
-                              {participant.club}
-                            </div>
-                            <div className="text-lg md:text-xl font-bold text-gray-800">
-                              {participant.name}
-                            </div>
-                          </div>
-                        </div>
+              <div className="relative w-full h-full flex justify-center">
+                {/* 슬롯머신 카드 */}
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="w-56 md:w-64 h-32 md:h-40 bg-gradient-to-r from-white/90 to-gray-100/90 backdrop-blur-sm rounded-2xl shadow-lg border-2 border-yellow-400/60 flex flex-col items-center justify-center text-center p-3 md:p-4">
+                    {/* 슬롯머신 소속 + 이름 표시 */}
+                    <div className="flex flex-col items-center justify-center gap-2 md:gap-3">
+                      {/* 소속 슬롯 (위에) */}
+                      <div className="w-20 md:w-24 h-10 md:h-12 bg-gradient-to-b from-red-400 to-orange-500 rounded-xl flex items-center justify-center shadow-lg border-2 border-red-500">
+                        <span className="text-sm md:text-base font-bold text-white">
+                          {rolling ? participants[currentIndex]?.club || '크로바' : winner?.club || ''}
+                        </span>
                       </div>
-                    );
-                  })}
+                      
+                      {/* 이름 슬롯들 (아래에) */}
+                      <div className="flex items-center justify-center gap-2 md:gap-3">
+                        {(() => {
+                          const currentName = rolling ? participants[currentIndex]?.name || '김철수' : winner?.name || '';
+                          const nameArray = currentName.split('');
+                          
+                          // 3개 슬롯으로 나누기 (성씨, 첫글자, 둘째글자)
+                          const slot1 = nameArray[0] || '김';
+                          const slot2 = nameArray[1] || '철';
+                          const slot3 = nameArray[2] || '수';
+                          
+                          return (
+                            <>
+                              {/* 성씨 슬롯 */}
+                              <div className="w-12 md:w-14 h-12 md:h-14 bg-gradient-to-b from-yellow-400 to-orange-400 rounded-lg flex items-center justify-center shadow-lg border-2 border-yellow-500">
+                                <span className="text-lg md:text-xl font-bold text-white leading-none">{slot1}</span>
+                              </div>
+                              {/* 이름 첫글자 슬롯 */}
+                              <div className="w-12 md:w-14 h-12 md:h-14 bg-gradient-to-b from-blue-400 to-purple-400 rounded-lg flex items-center justify-center shadow-lg border-2 border-blue-500">
+                                <span className="text-lg md:text-xl font-bold text-white leading-none">{slot2}</span>
+                              </div>
+                              {/* 이름 둘째글자 슬롯 */}
+                              <div className="w-12 md:w-14 h-12 md:h-14 bg-gradient-to-b from-green-400 to-teal-400 rounded-lg flex items-center justify-center shadow-lg border-2 border-green-500">
+                                <span className="text-lg md:text-xl font-bold text-white leading-none">{slot3}</span>
+                              </div>
+                            </>
+                          );
+                        })()}
+                      </div>
+                    </div>
+                    
+                    {rolling && (
+                      <div className="text-xs md:text-sm text-yellow-600 font-semibold animate-pulse mt-1">
+                        추첨 중...
+                      </div>
+                    )}
+                  </div>
                 </div>
                 
                 {/* 중앙 하이라이트 */}
-                <div className="absolute left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 w-64 md:w-72 h-20 bg-gradient-to-r from-yellow-400/30 to-orange-400/30 rounded-full border-2 border-yellow-400/60 animate-pulse"></div>
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="w-56 md:w-64 h-32 md:h-40 bg-gradient-to-r from-yellow-400/20 to-orange-400/20 rounded-2xl border-2 border-yellow-400/40 animate-pulse"></div>
+                </div>
               </div>
             </div>
           </div>
