@@ -916,8 +916,37 @@ export default function AdminDashboard() {
                 }
             });
         });
-        // 점수 누락이 없으면 바로 순위/백카운트/서든데스 상태 안내
+        
+        // 점수 누락이 없으면 서든데스 체크 및 순위/백카운트/서든데스 상태 안내
         if (missingScores.length === 0) {
+            // 서든데스 상황 체크 추가
+            const playersInGroup = finalDataByGroup[groupName];
+            if (playersInGroup) {
+                const tiedFirstPlace = playersInGroup.filter(p => p.rank === 1);
+                
+                if (tiedFirstPlace.length > 1) {
+                    // 서든데스 필요 시 토스트 알림
+                    toast({
+                        title: `🚨 서든데스 필요: ${groupName}`,
+                        description: `${groupName} 그룹의 경기가 완료되었으며, 1위 동점자가 발생했습니다. 서든데스 관리가 필요합니다.`,
+                        action: (
+                            <ToastAction altText="관리하기" onClick={() => router.push('/admin/suddendeath')}>
+                                관리하기
+                            </ToastAction>
+                        ),
+                        duration: 30000
+                    });
+                    
+                    // 이미 알림을 보냈으므로 notifiedSuddenDeathGroups에 추가하여 중복 방지
+                    setNotifiedSuddenDeathGroups(prev => {
+                        const newSet = new Set(prev);
+                        newSet.add(groupName);
+                        return newSet;
+                    });
+                }
+            }
+            
+            // 기존 모달 표시 (순위/백카운트/서든데스 상태 안내)
             setScoreCheckModal({ open: true, groupName, missingScores, resultMsg: getGroupRankStatusMsg(groupName) });
         } else {
             setScoreCheckModal({ open: true, groupName, missingScores });
@@ -980,6 +1009,10 @@ export default function AdminDashboard() {
             console.log('playerId:', playerId, 'group:', player.group, 'assignedCourseIds:', assignedCourseIds, 'coursesForPlayer:', coursesForPlayer.map(c => c && c.id));
             const playerScoresData = scores[playerId] || {};
             const coursesData: any = {};
+            // 백카운트 계산을 위한 데이터 추가
+            const courseScores: { [courseId: string]: number } = {};
+            const detailedScores: { [courseId: string]: { [holeNumber: string]: number } } = {};
+            
             coursesForPlayer.forEach((course: any) => {
                 const courseId = course.id;
                 const scoresForCourse = playerScoresData[courseId] || {};
@@ -991,6 +1024,16 @@ export default function AdminDashboard() {
                     return typeof holeScore === 'number' ? holeScore : null;
                   })
                 };
+                
+                // 백카운트용 코스별 총점
+                courseScores[courseId] = coursesData[courseId].courseTotal;
+                
+                // 백카운트용 홀별 점수
+                detailedScores[courseId] = {};
+                for (let i = 1; i <= 9; i++) {
+                    const holeScore = scoresForCourse[i.toString()];
+                    detailedScores[courseId][i.toString()] = typeof holeScore === 'number' ? holeScore : 0;
+                }
             });
             // 외부 전광판과 동일하게 ± 및 총타수 계산
             const { total, plusMinus } = getPlayerTotalAndPlusMinus(courses, {
@@ -1010,7 +1053,11 @@ export default function AdminDashboard() {
                 hasAnyScore: total !== null,
                 hasForfeited: Object.values(coursesData).some((cd: any) => cd.holeScores.some((s: any) => s === 0)),
                 assignedCourses: coursesForPlayer,
-                plusMinus
+                plusMinus,
+                // 백카운트 계산을 위한 데이터 추가
+                courseScores,
+                detailedScores,
+                total: total // tieBreak 함수에서 사용
             };
         });
         const groupedData = allProcessedPlayers.reduce((acc, player) => {

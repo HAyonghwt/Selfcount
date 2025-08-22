@@ -1,7 +1,7 @@
 "use client"
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { db } from '@/lib/firebase';
-import { ref, onValue } from 'firebase/database';
+import { ref, onValue, onChildChanged, off, query, orderByKey, limitToLast } from 'firebase/database';
 import { Flame, ChevronUp, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -159,6 +159,8 @@ export default function ScoreboardPage() {
   const [giftEventData, setGiftEventData] = useState<any>({});
   
   useEffect(() => {
+    if (!db) return;
+    
     const giftEventRef = ref(db, 'giftEvent');
     const unsub = onValue(giftEventRef, snap => {
       const data = snap.val() || {};
@@ -216,74 +218,196 @@ function ExternalScoreboard() {
     const [lastPlayersHash, setLastPlayersHash] = useState('');
     const [lastTournamentHash, setLastTournamentHash] = useState('');
     
-    // 폴링 기반 점수 업데이트를 위한 상태
-    const [lastScoreUpdateTime, setLastScoreUpdateTime] = useState(0);
-    const [scorePollingInterval, setScorePollingInterval] = useState<NodeJS.Timeout | null>(null);
+    // 최적화된 데이터 구독을 위한 상태
+    const [initialDataLoaded, setInitialDataLoaded] = useState(false);
+    const [lastUpdateTime, setLastUpdateTime] = useState<number>(Date.now());
 
     useEffect(() => {
         if (!db) {
             setLoading(false);
             return;
         }
+        
         const dbInstance = db as any;
-        const playersRef = ref(dbInstance, 'players');
-        const scoresRef = ref(dbInstance, 'scores');
-        const tournamentRef = ref(dbInstance, 'tournaments/current');
-        const individualSuddenDeathRef = ref(dbInstance, 'tournaments/current/suddenDeath/individual');
-        const teamSuddenDeathRef = ref(dbInstance, 'tournaments/current/suddenDeath/team');
-
-        const unsubPlayers = onValue(playersRef, snap => {
-            const data = snap.val() || {};
-            const newHash = JSON.stringify(data);
-            if (newHash !== lastPlayersHash) {
+        
+        // 초기 데이터 로딩 (빠른 로딩을 위해 병렬 처리)
+        if (!initialDataLoaded) {
+            const playersRef = ref(dbInstance, 'players');
+            const scoresRef = ref(dbInstance, 'scores');
+            const tournamentRef = ref(dbInstance, 'tournaments/current');
+            
+            let loadedCount = 0;
+            const checkAllLoaded = () => {
+                loadedCount++;
+                if (loadedCount >= 3) {
+                    setInitialDataLoaded(true);
+                    setLoading(false);
+                }
+            };
+            
+            const unsubInitialPlayers = onValue(playersRef, snap => {
+                const data = snap.val() || {};
                 setPlayers(data);
-                setLastPlayersHash(newHash);
-            }
-        });
-        
-        // Firebase scores 리스너 제거하고 폴링 방식으로 교체
-        // const unsubScores = onValue(scoresRef, snap => {
-        //     const data = snap.val() || {};
-        //     const newHash = JSON.stringify(data);
-        //     if (newHash !== lastScoresHash) {
-        //         setScores(data);
-        //         setLastScoresHash(newHash);
-        //     }
-        // });
-        
-        const unsubTournament = onValue(tournamentRef, snap => {
-            const data = snap.val() || {};
-            const newHash = JSON.stringify(data);
-            if (newHash !== lastTournamentHash) {
+                setLastPlayersHash(JSON.stringify(data));
+                checkAllLoaded();
+            });
+            
+            const unsubInitialScores = onValue(scoresRef, snap => {
+                const data = snap.val() || {};
+                setScores(data);
+                setLastScoresHash(JSON.stringify(data));
+                checkAllLoaded();
+            });
+            
+            const unsubInitialTournament = onValue(tournamentRef, snap => {
+                const data = snap.val() || {};
                 setTournament(data);
                 setGroupsData(data.groups || {});
-                setLastTournamentHash(newHash);
-                setLoading(false);
+                setLastTournamentHash(JSON.stringify(data));
+                checkAllLoaded();
+            });
+            
+            // 3초 후에도 로딩이 안 되면 강제로 로딩 완료
+            const fallbackTimer = setTimeout(() => {
+                if (!initialDataLoaded) {
+                    setInitialDataLoaded(true);
+                    setLoading(false);
+                }
+            }, 3000);
+            
+            return () => {
+                unsubInitialPlayers();
+                unsubInitialScores();
+                unsubInitialTournament();
+                clearTimeout(fallbackTimer);
+            };
+        }
+        
+        // 초기 데이터 로딩 후 실시간 업데이트 (점수는 항상 실시간 반영 보장)
+        if (initialDataLoaded) {
+            // 선수 데이터: 변경사항만 감지하되 안전하게
+            const playersRef = ref(dbInstance, 'players');
+            const unsubPlayers = onChildChanged(playersRef, snap => {
+                const playerId = snap.key;
+                const playerData = snap.val();
+                if (playerId && playerData) {
+                    setPlayers((prev: any) => {
+                        const newPlayers = { ...prev, [playerId]: playerData };
+                        const newHash = JSON.stringify(newPlayers);
+                        if (newHash !== lastPlayersHash) {
+                            setLastPlayersHash(newHash);
+                            return newPlayers;
+                        }
+                        return prev;
+                    });
+                }
+            });
+            
+            // 점수 데이터: 실시간 반영을 위해 onValue 유지 (가장 중요!)
+            const scoresRef = ref(dbInstance, 'scores');
+            const unsubScores = onValue(scoresRef, snap => {
+                const data = snap.val() || {};
+                setScores((prev: any) => {
+                    // 해시 비교로 중복 데이터만 차단
+                    const newHash = JSON.stringify(data);
+                    if (newHash !== lastScoresHash) {
+                        setLastScoresHash(newHash);
+                        setLastUpdateTime(Date.now());
+                        return data;
+                    }
+                    return prev;
+                });
+            });
+            
+            // 토너먼트 설정: 변경사항만 감지
+            const tournamentRef = ref(dbInstance, 'tournaments/current');
+            const unsubTournament = onChildChanged(tournamentRef, snap => {
+                const key = snap.key;
+                const value = snap.val();
+                if (key && value) {
+                    setTournament((prev: any) => {
+                        const newTournament = { ...prev, [key]: value };
+                        if (key === 'groups') {
+                            setGroupsData(value);
+                        }
+                        const newHash = JSON.stringify(newTournament);
+                        if (newHash !== lastTournamentHash) {
+                            setLastTournamentHash(newHash);
+                            return newTournament;
+                        }
+                        return prev;
+                    });
+                }
+            });
+            
+            return () => {
+                unsubPlayers();
+                unsubScores();
+                unsubTournament();
+            };
+        }
+    }, [initialDataLoaded, lastScoresHash, lastPlayersHash, lastTournamentHash]);
+
+    // 서든데스 데이터 최적화된 구독 (활성화된 경우에만)
+    useEffect(() => {
+        if (!db || !initialDataLoaded) return;
+        
+        const dbInstance = db as any;
+        const individualSuddenDeathRef = ref(dbInstance, 'tournaments/current/suddenDeath/individual');
+        const teamSuddenDeathRef = ref(dbInstance, 'tournaments/current/suddenDeath/team');
+        
+        let unsubIndividualDetails: (() => void) | null = null;
+        let unsubTeamDetails: (() => void) | null = null;
+        
+        // 개인전 서든데스 상태 확인 후 구독
+        const unsubIndividualStatus = onValue(individualSuddenDeathRef, snap => {
+            const data = snap.val();
+            if (data?.isActive) {
+                setIndividualSuddenDeathData(data);
+                // 활성화된 경우에만 상세 데이터 구독
+                if (!unsubIndividualDetails) {
+                    unsubIndividualDetails = onValue(individualSuddenDeathRef, snap => {
+                        setIndividualSuddenDeathData(snap.val());
+                    });
+                }
+            } else {
+                setIndividualSuddenDeathData(null);
+                // 비활성화된 경우 구독 해제
+                if (unsubIndividualDetails) {
+                    unsubIndividualDetails();
+                    unsubIndividualDetails = null;
+                }
             }
         });
         
-        // 폴링 기반 점수 업데이트 시작
-        startScorePolling();
-        
-        const unsubIndividualSuddenDeath = onValue(individualSuddenDeathRef, snap => setIndividualSuddenDeathData(snap.val()));
-        const unsubTeamSuddenDeath = onValue(teamSuddenDeathRef, snap => setTeamSuddenDeathData(snap.val()));
-
-        const timer = setTimeout(() => setLoading(false), 5000);
-
-        return () => {
-            unsubPlayers();
-            // unsubScores(); // Firebase scores 리스너 제거됨
-            unsubTournament();
-            unsubIndividualSuddenDeath();
-            unsubTeamSuddenDeath();
-            clearTimeout(timer);
-            
-            // 폴링 정리
-            if (scorePollingInterval) {
-                clearInterval(scorePollingInterval);
+        // 팀 서든데스 상태 확인 후 구독
+        const unsubTeamStatus = onValue(teamSuddenDeathRef, snap => {
+            const data = snap.val();
+            if (data?.isActive) {
+                setTeamSuddenDeathData(data);
+                // 활성화된 경우에만 상세 데이터 구독
+                if (!unsubTeamDetails) {
+                    unsubTeamDetails = onValue(teamSuddenDeathRef, snap => {
+                        setTeamSuddenDeathData(snap.val());
+                    });
+                }
+            } else {
+                setTeamSuddenDeathData(null);
+                // 비활성화된 경우 구독 해제
+                if (unsubTeamDetails) {
+                    unsubTeamDetails();
+                    unsubTeamDetails = null;
+                }
             }
+        });
+        
+        return () => {
+            unsubIndividualStatus();
+            unsubTeamStatus();
+            if (unsubIndividualDetails) unsubIndividualDetails();
+            if (unsubTeamDetails) unsubTeamDetails();
         };
-    }, [lastScoresHash, lastPlayersHash, lastTournamentHash]);
+    }, [initialDataLoaded]);
 
     const processedDataByGroup = useMemo(() => {
         const allCourses = Object.values(tournament.courses || {}).filter(Boolean);
@@ -567,27 +691,26 @@ function ExternalScoreboard() {
         }
         return visibleGroups.filter(g => g === filterGroup);
     }, [filterGroup, visibleGroups]);
-    
-    // filterGroup 변경 시 폴링 재시작
-    useEffect(() => {
-        if (Object.keys(tournament).length > 0) {
-            startScorePolling();
-        }
-    }, [filterGroup, tournament]);
 
     // 선수별 점수 로그 캐시 상태 (playerId별)
     const [playerScoreLogs, setPlayerScoreLogs] = useState<{ [playerId: string]: ScoreLog[] }>({});
     // 로딩 상태
     const [logsLoading, setLogsLoading] = useState(false);
 
-    // 선수별 로그 미리 불러오기 (최적화된 버전)
+    // 선수별 로그 최적화된 로딩 (점수 변경 시 즉시 로딩)
     useEffect(() => {
         const fetchLogs = async () => {
+            if (Object.keys(finalDataByGroup).length === 0) return;
+            
             setLogsLoading(true);
+            console.log('기본 로그 로딩 시작 - finalDataByGroup 변경 감지');
+            
             // 수정된 점수가 있는 선수만 로그 로딩 (최적화)
             const playersWithScores = Object.values(finalDataByGroup).flat()
                 .filter((p: any) => p.hasAnyScore) // 점수가 있는 선수만
                 .map((p: any) => p.id);
+            
+            console.log('로그 로딩할 선수들:', playersWithScores);
             
             const logsMap: { [playerId: string]: ScoreLog[] } = {};
             
@@ -595,29 +718,79 @@ function ExternalScoreboard() {
             const existingPlayerIds = Object.keys(playerScoreLogs);
             const newPlayerIds = playersWithScores.filter(pid => !existingPlayerIds.includes(pid));
             
-            // 새로운 선수만 로그 로딩
-            await Promise.all(newPlayerIds.map(async (pid) => {
-                try {
-                    const logs = await getPlayerScoreLogs(pid);
-                    logsMap[pid] = logs;
-                } catch {
-                    logsMap[pid] = [];
-                }
-            }));
+            console.log('새로 로딩할 선수들:', newPlayerIds);
             
-            // 기존 로그와 새로운 로그 병합
-            setPlayerScoreLogs(prev => ({
-                ...prev,
-                ...logsMap
-            }));
+            // 새로운 선수만 로그 로딩 (병렬 처리로 성능 향상)
+            if (newPlayerIds.length > 0) {
+                await Promise.all(newPlayerIds.map(async (pid) => {
+                    try {
+                        const logs = await getPlayerScoreLogs(pid);
+                        logsMap[pid] = logs;
+                        console.log(`기본 로그 로딩 완료 - 선수 ${pid}:`, logs.length, '개');
+                    } catch (error) {
+                        console.error(`기본 로그 로딩 실패 - 선수 ${pid}:`, error);
+                        logsMap[pid] = [];
+                    }
+                }));
+                
+                // 기존 로그와 새로운 로그 병합
+                setPlayerScoreLogs((prev: any) => ({
+                    ...prev,
+                    ...logsMap
+                }));
+            }
+            
             setLogsLoading(false);
         };
         
-        if (Object.keys(finalDataByGroup).length > 0) {
-            fetchLogs();
-        }
+        // 점수 변경 시 즉시 로그 로딩 (실시간성 보장)
+        fetchLogs();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [finalDataByGroup]);
+    }, [finalDataByGroup, lastUpdateTime]);
+
+    // 점수 변경 시 로그 데이터 즉시 업데이트 (수정된 점수 표시를 위해)
+    useEffect(() => {
+        if (Object.keys(scores).length === 0) return;
+        
+        const updateLogsForChangedScores = async () => {
+            // 점수가 변경된 선수들의 로그를 즉시 업데이트
+            const playersWithChangedScores = Object.keys(scores);
+            console.log('점수 변경 감지 - 업데이트할 선수들:', playersWithChangedScores);
+            
+            for (const playerId of playersWithChangedScores) {
+                try {
+                    // 매번 새로운 로그를 가져오기 (캐시 무시)
+                    const logs = await getPlayerScoreLogs(playerId);
+                    console.log(`로그 로딩 완료 - 선수 ${playerId}:`, logs.length, '개');
+                    
+                    // 로그 데이터가 있는지 확인
+                    const hasModifiedScores = logs.some((log: any) => 
+                        log.oldValue !== 0 && log.oldValue !== log.newValue
+                    );
+                    
+                    if (hasModifiedScores) {
+                        console.log(`수정된 점수 발견 - 선수 ${playerId}:`, logs.filter((log: any) => 
+                            log.oldValue !== 0 && log.oldValue !== log.newValue
+                        ));
+                    }
+                    
+                    setPlayerScoreLogs((prev: any) => ({
+                        ...prev,
+                        [playerId]: logs
+                    }));
+                } catch (error) {
+                    console.error(`로그 로딩 실패 - 선수 ${playerId}:`, error);
+                    // 에러 발생 시 빈 배열로 설정
+                    setPlayerScoreLogs((prev: any) => ({
+                        ...prev,
+                        [playerId]: []
+                    }));
+                }
+            }
+        };
+        
+        updateLogsForChangedScores();
+    }, [scores]); // playerScoreLogs 의존성 제거하여 무한 루프 방지
 
     // 모바일 툴팁 상태 관리 (셀별로 open)
     const [openTooltip, setOpenTooltip] = useState<{ playerId: string; courseId: string; holeIndex: number } | null>(null);
@@ -635,45 +808,6 @@ function ExternalScoreboard() {
         return () => document.removeEventListener('touchstart', handleTouch);
     }, [openTooltip]);
 
-
-    // 폴링 기반 점수 업데이트 함수
-    const startScorePolling = () => {
-        // 기존 폴링 정리
-        if (scorePollingInterval) {
-            clearInterval(scorePollingInterval);
-        }
-        
-        // 새로운 폴링 시작 (1초마다)
-        const interval = setInterval(async () => {
-            try {
-                const response = await fetch(`/api/scoreboard-polling?group=${filterGroup}&lastUpdate=${lastScoreUpdateTime}`);
-                if (response.ok) {
-                    const data = await response.json();
-                    if (data.success && data.hasChanges) {
-                        // 변경된 점수만 업데이트
-                        const newScores = { ...scores };
-                        Object.keys(data.changes).forEach(playerId => {
-                            if (!newScores[playerId]) newScores[playerId] = {};
-                            Object.keys(data.changes[playerId]).forEach(courseId => {
-                                if (!newScores[playerId][courseId]) newScores[playerId][courseId] = {};
-                                Object.keys(data.changes[playerId][courseId]).forEach(holeNumber => {
-                                    const change = data.changes[playerId][courseId][holeNumber];
-                                    newScores[playerId][courseId][holeNumber] = change.newValue;
-                                });
-                            });
-                        });
-                        
-                        setScores(newScores);
-                        setLastScoreUpdateTime(data.timestamp);
-                    }
-                }
-            } catch (error) {
-                console.error('점수 폴링 에러:', error);
-            }
-        }, 1000);
-        
-        setScorePollingInterval(interval);
-    };
 
     const handleScroll = (amount: number) => {
         if (scrollContainerRef.current) {
@@ -875,10 +1009,39 @@ function ExternalScoreboard() {
     if (l.comment && l.comment.includes(`코스: ${course.id}`)) {
       return Number(l.holeNumber) === i + 1;
     }
+    // holeNumber와 코스 정보가 모두 일치하는지 확인
+    if (l.holeNumber && l.comment) {
+      const holeMatch = Number(l.holeNumber) === i + 1;
+      const courseMatch = l.comment.includes(`코스: ${course.id}`) || l.comment.includes(`코스:${course.id}`);
+      return holeMatch && courseMatch;
+    }
     return false;
   });
+  
   // 실제로 수정된 경우만 빨간색으로 표시 (oldValue가 0이고 newValue가 점수인 경우는 제외)
-  const isModified = !!cellLog && cellLog.oldValue !== 0;
+  const isModified = !!cellLog && cellLog.oldValue !== 0 && cellLog.oldValue !== cellLog.newValue;
+  
+  // 디버깅: 수정된 점수 정보 로깅
+  if (isModified && cellLog) {
+    console.log(`수정된 점수 발견 - 선수: ${player.id}, 코스: ${course.id}, 홀: ${i + 1}`, {
+      oldValue: cellLog.oldValue,
+      newValue: cellLog.newValue,
+      modifiedBy: cellLog.modifiedBy,
+      modifiedByType: cellLog.modifiedByType,
+      comment: cellLog.comment
+    });
+  }
+  
+  // 임시 디버깅: 모든 점수에 대해 로그 확인
+  if (score !== null && score !== undefined && score !== 0) {
+    console.log(`점수 셀 정보 - 선수: ${player.id}, 코스: ${course.id}, 홀: ${i + 1}`, {
+      score,
+      logs: logs.length,
+      cellLog: cellLog ? '있음' : '없음',
+      isModified
+    });
+  }
+  
   // 툴팁 내용 구성
   const tooltipContent = cellLog ? (
     <div>
