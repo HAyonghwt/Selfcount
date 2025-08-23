@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { db, ensureAuthenticated } from "@/lib/firebase";
 import { ref, set, get, onValue } from "firebase/database";
 import { useToast } from "@/hooks/use-toast";
@@ -201,6 +201,21 @@ export default function SelfScoringPage() {
     loadLogs();
   }, [playerNames, nameToPlayerId]);
 
+  // 로그 데이터 lazy loading을 위한 함수
+  const loadPlayerLogs = useCallback(async (playerId: string) => {
+    if (playerScoreLogs[playerId]) return; // 이미 로드된 경우 스킵
+    
+    try {
+      const logs = await getPlayerScoreLogs(playerId);
+      setPlayerScoreLogs(prev => ({ ...prev, [playerId]: logs }));
+    } catch (error) {
+      console.error('로그 로딩 실패:', error);
+    }
+  }, [playerScoreLogs]);
+
+  // 리스너 참조 관리를 위한 ref
+  const listenersRef = useRef<{ players?: () => void; scores?: () => void; tournament?: () => void }>({});
+
   // 브라우저 뒤로가기(popstate) 확인 (referee 페이지 방식 참조)
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -298,6 +313,14 @@ export default function SelfScoringPage() {
     if (!db || !selectedGroup || !selectedJo) return;
     const dbInstance = db as any;
 
+    // 기존 리스너 정리
+    if (listenersRef.current.players) {
+      listenersRef.current.players();
+    }
+    if (listenersRef.current.scores) {
+      listenersRef.current.scores();
+    }
+
     const unsubPlayers = onValue(ref(dbInstance, "players"), (snap) => {
       const data = snap.val() || {};
       const list: PlayerDb[] = Object.entries<any>(data)
@@ -371,6 +394,10 @@ export default function SelfScoringPage() {
       setDbHasAnyScore(hasAnyForActive);
     });
 
+    // 리스너 참조 저장
+    listenersRef.current.players = unsubPlayers;
+    listenersRef.current.scores = unsubScores;
+
     return () => {
       unsubPlayers();
       unsubScores();
@@ -382,6 +409,12 @@ export default function SelfScoringPage() {
   useEffect(() => {
     if (!db || !selectedGroup) return;
     const dbInstance = db as any;
+    
+    // 기존 리스너 정리
+    if (listenersRef.current.tournament) {
+      listenersRef.current.tournament();
+    }
+    
     const unsubTournament = onValue(ref(dbInstance, 'tournaments/current'), (snap) => {
       const data = snap.val() || {};
       const coursesObj = data.courses || {};
@@ -425,6 +458,9 @@ export default function SelfScoringPage() {
       }
     });
 
+    // 리스너 참조 저장
+    listenersRef.current.tournament = unsubTournament;
+    
     return () => unsubTournament();
   }, [db, selectedGroup, activeCourseId]);
 
@@ -581,8 +617,16 @@ export default function SelfScoringPage() {
     }
   }, [scoresByCourse, activeCourseId, selectedGroup, selectedJo]);
 
-  const handleOpenPad = (playerIndex: number, holeIndex: number) => {
+  const handleOpenPad = useCallback((playerIndex: number, holeIndex: number) => {
     if (isReadOnlyMode) return; // 관전용 모드에서는 입력 불가
+    
+    // 로그 데이터 lazy loading
+    const playerName = playerNames[playerIndex];
+    const playerId = nameToPlayerId[playerName];
+    if (playerId && !playerScoreLogs[playerId]) {
+      loadPlayerLogs(playerId);
+    }
+    
     // 활성 셀만 입력 허용
     const state = getCellState(playerIndex, holeIndex);
     if (state !== 'active') {
@@ -613,11 +657,19 @@ export default function SelfScoringPage() {
         }
       } catch {}
     }
-  };
+  }, [isReadOnlyMode, playerNames, nameToPlayerId, playerScoreLogs, loadPlayerLogs, getCellState, tableScores, draftScores, showCellLogTooltip]);
 
   // 저장된 셀(locked) 더블클릭 시에도 수정 가능하도록 별도 핸들러
-  const handleOpenPadForEdit = (playerIndex: number, holeIndex: number) => {
+  const handleOpenPadForEdit = useCallback((playerIndex: number, holeIndex: number) => {
     if (isReadOnlyMode) return; // 관전용 모드에서는 수정 불가
+    
+    // 로그 데이터 lazy loading
+    const playerName = playerNames[playerIndex];
+    const playerId = nameToPlayerId[playerName];
+    if (playerId && !playerScoreLogs[playerId]) {
+      loadPlayerLogs(playerId);
+    }
+    
     setPadPosition(holeIndex >= 7 ? 'top' : 'bottom');
     setPadPlayerIdx(playerIndex);
     setPadHoleIdx(holeIndex);
@@ -637,22 +689,28 @@ export default function SelfScoringPage() {
         setTimeout(() => setOpenTooltip(null), 2000);
       }
     } catch {}
-  };
+  }, [isReadOnlyMode, playerNames, nameToPlayerId, playerScoreLogs, loadPlayerLogs, tableScores, draftScores]);
 
   // 최근 수정 로그 툴팁 표시
-  const showCellLogTooltip = async (playerIndex: number, holeIndex: number) => {
+  const showCellLogTooltip = useCallback(async (playerIndex: number, holeIndex: number) => {
     try {
       const playerName = playerNames[playerIndex];
       const playerId = nameToPlayerId[playerName];
       if (!playerId) return;
-      const logs = playerScoreLogs[playerId] || await getPlayerScoreLogs(playerId);
+      
+      // 로그 데이터가 없으면 lazy loading
+      if (!playerScoreLogs[playerId]) {
+        await loadPlayerLogs(playerId);
+      }
+      
+      const logs = playerScoreLogs[playerId] || [];
       const courseId = String(activeCourse?.id || activeCourseId);
       const cellLog = logs.find(l => String(l.courseId) === courseId && Number(l.holeNumber) === holeIndex + 1);
       // 수정된 셀(빨간 표시 대상)만 안내: 변경 로그가 있고 oldValue != newValue & oldValue != 0 인 경우에만
       if (!cellLog || cellLog.oldValue === cellLog.newValue || cellLog.oldValue === 0) {
         setOpenTooltip(null);
-    return;
-  }
+        return;
+      }
       const who = cellLog.modifiedByType === 'captain' ? (cellLog.modifiedBy || '조장') : (cellLog.modifiedByType === 'judge' ? '심판' : '관리자');
       const when = cellLog.modifiedAt ? new Date(cellLog.modifiedAt).toLocaleString('ko-KR') : '';
       const what = `${cellLog.oldValue} → ${cellLog.newValue}`;
@@ -663,7 +721,7 @@ export default function SelfScoringPage() {
         setOpenTooltip(prev => (prev && prev.playerIdx === playerIndex && prev.holeIdx === holeIndex ? null : prev));
       }, 3000);
     } catch {}
-  };
+  }, [playerNames, nameToPlayerId, playerScoreLogs, loadPlayerLogs, activeCourse, activeCourseId]);
 
   const handleSetPadValue = (val: number) => {
     setPadTemp(val);
