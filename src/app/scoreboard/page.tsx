@@ -311,6 +311,8 @@ function ExternalScoreboard() {
                     // 해시 비교로 중복 데이터만 차단
                     const newHash = JSON.stringify(data);
                     if (newHash !== lastScoresHash) {
+                        // 강제 로그 출력 테스트
+                        console.log('🚨 강제 테스트: 점수 데이터 변경 감지됨!');
                         console.log('[실시간 업데이트] 점수 데이터 변경 감지됨');
                         setLastScoresHash(newHash);
                         setLastUpdateTime(Date.now());
@@ -322,6 +324,7 @@ function ExternalScoreboard() {
                                 const newScores = data[playerId] || {};
                                 const hasChanged = JSON.stringify(prevScores) !== JSON.stringify(newScores);
                                 if (hasChanged) {
+                                    console.log(`🚨 강제 테스트: 선수 ${playerId} 점수 변경 확인!`);
                                     console.log(`[실시간 업데이트] 선수 ${playerId} 점수 변경 확인:`, {
                                         이전: prevScores,
                                         현재: newScores
@@ -330,14 +333,17 @@ function ExternalScoreboard() {
                                 return hasChanged;
                             });
                             
+                            console.log(`🚨 강제 테스트: 총 ${changedPlayerIds.length}명의 선수 점수 변경됨!`);
                             console.log(`[실시간 업데이트] 총 ${changedPlayerIds.length}명의 선수 점수 변경됨:`, changedPlayerIds);
                             
                             // 변경된 선수들의 로그 캐시 무효화
                             changedPlayerIds.forEach(playerId => {
                                 invalidatePlayerLogCache(playerId);
+                                console.log(`🚨 강제 테스트: 선수 ${playerId} 로그 캐시 무효화 완료!`);
                                 console.log(`[실시간 업데이트] 선수 ${playerId} 로그 캐시 무효화 완료`);
                             });
                         } else {
+                            console.log('🚨 강제 테스트: 첫 번째 점수 데이터 로드 또는 이전 데이터 없음!');
                             console.log('[실시간 업데이트] 첫 번째 점수 데이터 로드 또는 이전 데이터 없음');
                         }
                         
@@ -783,14 +789,17 @@ function ExternalScoreboard() {
         const updateLogsForChangedScores = async () => {
             // 점수가 변경된 선수들의 로그를 즉시 업데이트
             const playersWithChangedScores = Object.keys(scores);
+            console.log('🚨 강제 테스트: useEffect 실행됨!');
             console.log('🔄 [실시간 업데이트] 점수 변경 감지 - 업데이트할 선수들:', playersWithChangedScores);
             
             for (const playerId of playersWithChangedScores) {
                 try {
+                    console.log(`🚨 강제 테스트: 선수 ${playerId} 로그 로딩 시작!`);
                     console.log(`📥 [실시간 업데이트] 선수 ${playerId} 로그 로딩 시작...`);
                     
                     // 최적화된 함수로 로그 가져오기 (캐시 적용)
                     const logs = await getPlayerScoreLogsOptimized(playerId);
+                    console.log(`🚨 강제 테스트: 선수 ${playerId} 로그 로딩 완료!`);
                     console.log(`✅ [실시간 업데이트] 로그 로딩 완료 - 선수 ${playerId}:`, logs.length, '개');
                     
                     setPlayerScoreLogs((prev: any) => ({
@@ -798,8 +807,10 @@ function ExternalScoreboard() {
                         [playerId]: logs
                     }));
                     
+                    console.log(`🚨 강제 테스트: 선수 ${playerId} 로그 상태 업데이트 완료!`);
                     console.log(`💾 [실시간 업데이트] 선수 ${playerId} 로그 상태 업데이트 완료`);
                 } catch (error) {
+                    console.error(`🚨 강제 테스트: 선수 ${playerId} 로그 로딩 실패!`);
                     console.error(`❌ [실시간 업데이트] 로그 로딩 실패 - 선수 ${playerId}:`, error);
                     // 에러 발생 시 빈 배열로 설정
                     setPlayerScoreLogs((prev: any) => ({
@@ -809,6 +820,7 @@ function ExternalScoreboard() {
                 }
             }
             
+            console.log('🚨 강제 테스트: 모든 선수 로그 업데이트 완료!');
             console.log('🎯 [실시간 업데이트] 모든 선수 로그 업데이트 완료');
         };
         
