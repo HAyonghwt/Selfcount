@@ -805,6 +805,7 @@ export default function AdminDashboard() {
                 try {
                     const logs = await getPlayerScoreLogsOptimized(playerId);
                     setPlayerScoreLogs((prev: any) => ({ ...prev, [playerId]: logs }));
+                    console.log(`[실시간 업데이트] 기권 처리 후 선수 ${playerId} 로그 즉시 갱신 완료`);
                 } catch {}
                 return;
             }
@@ -837,6 +838,7 @@ export default function AdminDashboard() {
                             ...prev,
                             [playerId]: logs
                         }));
+                        console.log(`[실시간 업데이트] 선수 ${playerId} 로그 즉시 갱신 완료`);
                     } catch (e) {
                         console.log("점수 로그 재조회 에러", e);
                     }
@@ -1503,6 +1505,36 @@ export default function AdminDashboard() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [finalDataByGroup]);
 
+    // scoreLogs 데이터베이스 변경 실시간 감지 및 업데이트
+    useEffect(() => {
+        if (!db) return;
+        
+        const scoreLogsRef = ref(db, 'scoreLogs');
+        const unsubScoreLogs = onValue(scoreLogsRef, async (snapshot) => {
+            if (snapshot.exists()) {
+                // 변경된 로그가 있으면 모든 선수의 로그를 다시 가져와서 업데이트
+                const playerIds = Object.values(finalDataByGroup).flat().map((p:any) => p.id);
+                const updatedLogsMap: { [playerId: string]: ScoreLog[] } = {};
+                
+                await Promise.all(playerIds.map(async (pid) => {
+                    try {
+                        const logs = await getPlayerScoreLogsOptimized(pid);
+                        updatedLogsMap[pid] = logs;
+                    } catch {
+                        // 에러 발생 시 기존 로그 유지
+                        updatedLogsMap[pid] = playerScoreLogs[pid] || [];
+                    }
+                }));
+                
+                setPlayerScoreLogs(updatedLogsMap);
+            }
+        });
+        
+        return () => {
+            unsubScoreLogs();
+        };
+    }, [db, finalDataByGroup]);
+
     const filteredPlayerResults = useMemo(() => {
         if (!searchPlayer) return [];
         const lowerCaseSearch = searchPlayer.toLowerCase();
@@ -1780,8 +1812,8 @@ export default function AdminDashboard() {
   // 해당 셀(플레이어/코스/홀)에 대한 최근 로그 찾기
   const logs = playerScoreLogs[player.id] || [];
   const cellLog = logs.find(l => String(l.courseId) === String(course.id) && Number(l.holeNumber) === i + 1);
-  // 실제로 수정된 경우만 빨간색으로 표시 (oldValue가 0이고 newValue가 점수인 경우는 제외)
-  const isModified = !!cellLog && cellLog.oldValue !== 0;
+  // 실제로 수정된 경우만 빨간색으로 표시 (oldValue와 newValue가 다르고, 0점이 아닌 경우)
+  const isModified = !!cellLog && cellLog.oldValue !== cellLog.newValue && cellLog.oldValue !== 0;
   // 툴팁 내용 구성
   const tooltipContent = cellLog ? (
     <div>
@@ -1948,6 +1980,7 @@ export default function AdminDashboard() {
                 try {
                     const logs = await getPlayerScoreLogsOptimized(player.id);
                     setPlayerScoreLogs(prev => ({ ...prev, [player.id]: logs }));
+                    console.log(`[실시간 업데이트] 기권 해제 후 선수 ${player.id} 로그 즉시 갱신 완료`);
                 } catch {}
               } else {
                 toast({ title: '복구할 점수가 없습니다.', description: '이미 기권이 해제된 상태입니다.' });
