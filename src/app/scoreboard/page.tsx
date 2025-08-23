@@ -11,10 +11,7 @@ import GiftEventStandby from '@/components/gift-event/GiftEventStandby';
 import { getPlayerScoreLogs, getPlayerScoreLogsOptimized, ScoreLog, invalidatePlayerLogCache } from '@/lib/scoreLogs';
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip';
 
-// 가장 기본적인 콘솔 출력 테스트
-console.log('🚨 최초 테스트: 파일이 로드됨!');
-console.log('🚨 최초 테스트: React import 완료!');
-console.log('🚨 최초 테스트: Firebase import 완료!');
+
 
 interface ProcessedPlayer {
     id: string;
@@ -90,7 +87,7 @@ function getTotalParForPlayer(tournament: any, assignedCourses: any[]) {
   assignedCourses.forEach(course => {
     const courseData = tournament?.courses?.[course.id];
     if (courseData && Array.isArray(courseData.pars)) {
-      total += courseData.pars.reduce((a, b) => a + (b || 0), 0);
+      total += courseData.pars.reduce((a: number, b: number) => a + (b || 0), 0);
     }
   });
   return total;
@@ -160,32 +157,15 @@ function getPlayerTotalAndPlusMinusAllCourses(tournament: any, player: any, allA
 }
 
 export default function ScoreboardPage() {
-  // 가장 강력한 콘솔 출력 테스트
-  console.log('🚨 최강 테스트: ScoreboardPage 함수 시작!');
-  console.log('🚨 최강 테스트: useState 호출 전!');
-  
   const [giftEventStatus, setGiftEventStatus] = useState<string>('');
   const [giftEventData, setGiftEventData] = useState<any>({});
   
-  // 기본 콘솔 출력 테스트
-  console.log('🚨 기본 테스트: ScoreboardPage 컴포넌트가 렌더링됨!');
-  console.log('🚨 최강 테스트: useState 호출 완료!');
-  
   useEffect(() => {
-    console.log('🚨 최강 테스트: useEffect 시작!');
-    if (!db) {
-      console.log('🚨 최강 테스트: db가 없음!');
-      return;
-    }
-    
-    console.log('🚨 기본 테스트: useEffect 실행됨!');
-    console.log('🚨 최강 테스트: db 연결 확인됨!');
+    if (!db) return;
     
     const giftEventRef = ref(db, 'giftEvent');
     const unsub = onValue(giftEventRef, snap => {
       const data = snap.val() || {};
-      console.log('🚨 기본 테스트: giftEvent 데이터 변경됨:', data);
-      console.log('🚨 최강 테스트: Firebase 데이터 수신됨!');
       setGiftEventStatus(data.status || '');
       setGiftEventData(data);
     });
@@ -225,9 +205,6 @@ const getForfeitTypeFromLogs = (logs: ScoreLog[]): 'absent' | 'disqualified' | '
 
 // 기존 점수표 함수는 이름만 변경해서 아래에 유지
 function ExternalScoreboard() {
-    // 기본 콘솔 출력 테스트
-    console.log('🚨 기본 테스트: ExternalScoreboard 함수가 실행됨!');
-    
     const [loading, setLoading] = useState(true);
     const [players, setPlayers] = useState({});
     const [scores, setScores] = useState({});
@@ -336,9 +313,6 @@ function ExternalScoreboard() {
                     // 해시 비교로 중복 데이터만 차단
                     const newHash = JSON.stringify(data);
                     if (newHash !== lastScoresHash) {
-                        // 강제 로그 출력 테스트
-                        console.log('🚨 강제 테스트: 점수 데이터 변경 감지됨!');
-                        console.log('[실시간 업데이트] 점수 데이터 변경 감지됨');
                         setLastScoresHash(newHash);
                         setLastUpdateTime(Date.now());
                         
@@ -347,29 +321,13 @@ function ExternalScoreboard() {
                             const changedPlayerIds = Object.keys(data).filter(playerId => {
                                 const prevScores = prev[playerId] || {};
                                 const newScores = data[playerId] || {};
-                                const hasChanged = JSON.stringify(prevScores) !== JSON.stringify(newScores);
-                                if (hasChanged) {
-                                    console.log(`🚨 강제 테스트: 선수 ${playerId} 점수 변경 확인!`);
-                                    console.log(`[실시간 업데이트] 선수 ${playerId} 점수 변경 확인:`, {
-                                        이전: prevScores,
-                                        현재: newScores
-                                    });
-                                }
-                                return hasChanged;
+                                return JSON.stringify(prevScores) !== JSON.stringify(newScores);
                             });
-                            
-                            console.log(`🚨 강제 테스트: 총 ${changedPlayerIds.length}명의 선수 점수 변경됨!`);
-                            console.log(`[실시간 업데이트] 총 ${changedPlayerIds.length}명의 선수 점수 변경됨:`, changedPlayerIds);
                             
                             // 변경된 선수들의 로그 캐시 무효화
                             changedPlayerIds.forEach(playerId => {
                                 invalidatePlayerLogCache(playerId);
-                                console.log(`🚨 강제 테스트: 선수 ${playerId} 로그 캐시 무효화 완료!`);
-                                console.log(`[실시간 업데이트] 선수 ${playerId} 로그 캐시 무효화 완료`);
                             });
-                        } else {
-                            console.log('🚨 강제 테스트: 첫 번째 점수 데이터 로드 또는 이전 데이터 없음!');
-                            console.log('[실시간 업데이트] 첫 번째 점수 데이터 로드 또는 이전 데이터 없음');
                         }
                         
                         return data;
@@ -475,7 +433,7 @@ function ExternalScoreboard() {
         // 그룹 필터링 최적화: 선택된 그룹의 선수만 우선 처리
         const playersToProcess = filterGroup === 'all' 
             ? Object.entries(players)
-            : Object.entries(players).filter(([_, player]) => player.group === filterGroup);
+            : Object.entries(players).filter(([_, player]: [string, any]) => player.group === filterGroup);
 
         const allProcessedPlayers: any[] = playersToProcess.map(([playerId, player]: [string, any]) => {
             const playerGroupData = groupsData[player.group];
@@ -742,7 +700,7 @@ function ExternalScoreboard() {
         return finalData;
     }, [processedDataByGroup, processedIndividualSuddenDeathData, processedTeamSuddenDeathData, filterGroup]);
     
-    const visibleGroups = Object.keys(finalDataByGroup).filter(groupName => finalDataByGroup[groupName]?.some(player => player.assignedCourses.length > 0));
+    const visibleGroups = Object.keys(finalDataByGroup).filter(groupName => finalDataByGroup[groupName]?.some((player: any) => player.assignedCourses.length > 0));
     
     const groupsToDisplay = useMemo(() => {
         if (filterGroup === 'all') {
@@ -814,29 +772,18 @@ function ExternalScoreboard() {
         const updateLogsForChangedScores = async () => {
             // 점수가 변경된 선수들의 로그를 즉시 업데이트
             const playersWithChangedScores = Object.keys(scores);
-            console.log('🚨 강제 테스트: useEffect 실행됨!');
-            console.log('🔄 [실시간 업데이트] 점수 변경 감지 - 업데이트할 선수들:', playersWithChangedScores);
             
             for (const playerId of playersWithChangedScores) {
                 try {
-                    console.log(`🚨 강제 테스트: 선수 ${playerId} 로그 로딩 시작!`);
-                    console.log(`📥 [실시간 업데이트] 선수 ${playerId} 로그 로딩 시작...`);
-                    
                     // 최적화된 함수로 로그 가져오기 (캐시 적용)
                     const logs = await getPlayerScoreLogsOptimized(playerId);
-                    console.log(`🚨 강제 테스트: 선수 ${playerId} 로그 로딩 완료!`);
-                    console.log(`✅ [실시간 업데이트] 로그 로딩 완료 - 선수 ${playerId}:`, logs.length, '개');
                     
                     setPlayerScoreLogs((prev: any) => ({
                         ...prev,
                         [playerId]: logs
                     }));
-                    
-                    console.log(`🚨 강제 테스트: 선수 ${playerId} 로그 상태 업데이트 완료!`);
-                    console.log(`💾 [실시간 업데이트] 선수 ${playerId} 로그 상태 업데이트 완료`);
                 } catch (error) {
-                    console.error(`🚨 강제 테스트: 선수 ${playerId} 로그 로딩 실패!`);
-                    console.error(`❌ [실시간 업데이트] 로그 로딩 실패 - 선수 ${playerId}:`, error);
+                    console.error(`로그 로딩 실패 - 선수 ${playerId}:`, error);
                     // 에러 발생 시 빈 배열로 설정
                     setPlayerScoreLogs((prev: any) => ({
                         ...prev,
@@ -844,9 +791,6 @@ function ExternalScoreboard() {
                     }));
                 }
             }
-            
-            console.log('🚨 강제 테스트: 모든 선수 로그 업데이트 완료!');
-            console.log('🎯 [실시간 업데이트] 모든 선수 로그 업데이트 완료');
         };
         
         updateLogsForChangedScores();
@@ -1174,7 +1118,7 @@ function ExternalScoreboard() {
   );
 })}
                                                         {(() => {
-  let courseSumElem = '-';
+  let courseSumElem: string | JSX.Element = '-';
   if (player.hasAnyScore && !player.hasForfeited) {
     const courseData = tournament?.courses?.[course.id];
     const { sum, pm } = getCourseSumAndPlusMinus(tournament, courseData, player.coursesData[course.id]?.holeScores || []);

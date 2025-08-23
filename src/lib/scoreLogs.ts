@@ -344,9 +344,6 @@ export const invalidatePlayerLogCache = (playerId: string): void => {
   const cacheKey = `player_${playerId}`;
   if (logCache.has(cacheKey)) {
     logCache.delete(cacheKey);
-    console.log(`🗑️ [캐시 무효화] 선수 ${playerId} 로그 캐시 삭제됨`);
-  } else {
-    console.log(`ℹ️ [캐시 무효화] 선수 ${playerId} 로그 캐시가 이미 없음`);
   }
 };
 
