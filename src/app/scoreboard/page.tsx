@@ -158,12 +158,18 @@ export default function ScoreboardPage() {
   const [giftEventStatus, setGiftEventStatus] = useState<string>('');
   const [giftEventData, setGiftEventData] = useState<any>({});
   
+  // 기본 콘솔 출력 테스트
+  console.log('🚨 기본 테스트: ScoreboardPage 컴포넌트가 렌더링됨!');
+  
   useEffect(() => {
     if (!db) return;
+    
+    console.log('🚨 기본 테스트: useEffect 실행됨!');
     
     const giftEventRef = ref(db, 'giftEvent');
     const unsub = onValue(giftEventRef, snap => {
       const data = snap.val() || {};
+      console.log('🚨 기본 테스트: giftEvent 데이터 변경됨:', data);
       setGiftEventStatus(data.status || '');
       setGiftEventData(data);
     });
@@ -203,6 +209,9 @@ const getForfeitTypeFromLogs = (logs: ScoreLog[]): 'absent' | 'disqualified' | '
 
 // 기존 점수표 함수는 이름만 변경해서 아래에 유지
 function ExternalScoreboard() {
+    // 기본 콘솔 출력 테스트
+    console.log('🚨 기본 테스트: ExternalScoreboard 함수가 실행됨!');
+    
     const [loading, setLoading] = useState(true);
     const [players, setPlayers] = useState({});
     const [scores, setScores] = useState({});
