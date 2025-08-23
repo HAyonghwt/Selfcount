@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { db, ensureAuthenticated } from "@/lib/firebase";
-import { ref, set, get, onValue } from "firebase/database";
+import { ref, set, get, onValue, query, orderByChild, equalTo } from "firebase/database";
 import { useToast } from "@/hooks/use-toast";
 import { logScoreChange, getPlayerScoreLogs, ScoreLog, invalidatePlayerLogCache } from "@/lib/scoreLogs";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -201,7 +201,7 @@ export default function SelfScoringPage() {
     loadLogs();
   }, [playerNames, nameToPlayerId]);
 
-  // 로그 데이터 lazy loading을 위한 함수
+  // 로그 데이터 lazy loading을 위한 함수 - 필요할 때만 로드
   const loadPlayerLogs = useCallback(async (playerId: string) => {
     if (playerScoreLogs[playerId]) return; // 이미 로드된 경우 스킵
     
@@ -215,6 +215,8 @@ export default function SelfScoringPage() {
 
   // 리스너 참조 관리를 위한 ref
   const listenersRef = useRef<{ players?: () => void; scores?: () => void; tournament?: () => void }>({});
+  // 점수 리스너(선수별/코스별) 해제를 저장하기 위한 맵
+  const scoreUnsubsRef = useRef<Record<string, () => void>>({});
 
   // 브라우저 뒤로가기(popstate) 확인 (referee 페이지 방식 참조)
   useEffect(() => {
@@ -317,15 +319,19 @@ export default function SelfScoringPage() {
     if (listenersRef.current.players) {
       listenersRef.current.players();
     }
-    if (listenersRef.current.scores) {
-      listenersRef.current.scores();
-    }
-
-    const unsubPlayers = onValue(ref(dbInstance, "players"), (snap) => {
+    // 최적화: 필요한 선수만 쿼리 - 그룹/조별로 필터링
+    // Firebase 쿼리를 사용하여 필요한 데이터만 가져오기 (데이터 사용량 대폭 감소)
+    const playersQuery = query(
+      ref(dbInstance, "players"),
+      orderByChild("group"),
+      equalTo(selectedGroup)
+    );
+    
+    const unsubPlayers = onValue(playersQuery, (snap) => {
       const data = snap.val() || {};
       const list: PlayerDb[] = Object.entries<any>(data)
         .map(([id, v]) => ({ id, ...v }))
-        .filter((p) => p.group === selectedGroup && String(p.jo) === String(selectedJo));
+        .filter((p) => String(p.jo) === String(selectedJo)); // 그룹은 이미 쿼리로 필터링됨
       setPlayersInGroupJo(list as any);
       
       // 관전 모드에서는 플레이어 이름을 실시간으로 설정
@@ -341,69 +347,88 @@ export default function SelfScoringPage() {
       }
     });
 
-    const unsubScores = onValue(ref(dbInstance, "scores"), (snap) => {
-      const data = snap.val() || {};
-      const courseIds = courseTabs.map((c) => c.id);
-      let hasAnyForActive = false;
-      
-      // 데이터 최적화: 현재 그룹/조의 선수들만 필터링
-      const currentPlayers = playersInGroupJo;
-      const filteredData: Record<string, any> = {};
-      
-      // 필요한 선수의 데이터만 추출
-      currentPlayers.forEach(player => {
-        if (data[player.id]) {
-          filteredData[player.id] = data[player.id];
-        }
-      });
-      
-      // 캐싱 전략: 필터링된 데이터만 비교
-      const filteredDataString = JSON.stringify(filteredData);
-      if (cachedScores.dataString === filteredDataString) {
-        return; // 데이터가 변경되지 않았으면 처리하지 않음
-      }
-      setCachedScores(prev => ({ ...prev, dataString: filteredDataString }));
-      
-      setScoresByCourse((prev) => {
-        const next: Record<string, (number | null)[][]> = { ...prev };
-        
-        for (const cid of courseIds) {
-          const seed: (number | null)[][] = Array.from({ length: 4 }, () => Array(9).fill(null));
-          
-          // 필터링된 데이터만 처리 (데이터 사용량 대폭 감소)
-          currentPlayers.forEach((player, pi) => {
-            const pid = player.id;
-            if (!pid) return;
-            
-            // 필요한 데이터만 선택적으로 읽기
-            const perHole = filteredData?.[pid]?.[cid] as Record<string, any> || {};
-            for (let h = 1; h <= 9; h++) {
-              const v = perHole[h];
-              seed[pi][h - 1] = typeof v === "number" ? v : null;
-              if (String(cid) === String(activeCourseId) && typeof v === 'number') {
-                hasAnyForActive = true;
-              }
-            }
-          });
-          
-          // 로컬 초기화 마스크가 켜진 코스는 기존 화면 값을 유지(연습 모드), 아니면 DB 반영
-          next[cid] = localCleared[cid] ? (prev[cid] ?? seed) : seed;
-        }
-        return next;
-      });
-      setDbHasAnyScore(hasAnyForActive);
-    });
-
-    // 리스너 참조 저장
+    // 리스너 참조 저장 및 정리
     listenersRef.current.players = unsubPlayers;
-    listenersRef.current.scores = unsubScores;
 
     return () => {
       unsubPlayers();
-      unsubScores();
     };
     // 최적화된 의존성 배열 - 핵심 의존성만 포함
-  }, [db, selectedGroup, selectedJo, courseTabs, playersInGroupJo, localCleared]);
+  }, [db, selectedGroup, selectedJo, isReadOnlyMode]);
+
+  // 점수 DB 로딩 (읽기) - 선수별/코스별 분할 구독
+  useEffect(() => {
+    if (!db || !activeCourseId) return;
+    const hasPlayers = playersInGroupJo && playersInGroupJo.length > 0;
+    if (!hasPlayers) {
+      // 선수 없으면 기존 점수 리스너 전부 해제
+      if (listenersRef.current.scores) listenersRef.current.scores();
+      Object.values(scoreUnsubsRef.current).forEach(u => { try { u(); } catch {} });
+      scoreUnsubsRef.current = {};
+      return;
+    }
+
+    const dbInstance = db as any;
+
+    // 기존 점수 리스너 정리
+    if (listenersRef.current.scores) listenersRef.current.scores();
+    Object.values(scoreUnsubsRef.current).forEach(u => { try { u(); } catch {} });
+    scoreUnsubsRef.current = {};
+
+    // pid -> index 매핑 생성
+    const pidToIndex = new Map<string, number>();
+    playersInGroupJo.forEach((p, idx) => { if (p.id) pidToIndex.set(p.id, idx); });
+
+    // 선수별 현재 코스 경로 구독
+    playersInGroupJo.forEach((player) => {
+      const pid = player.id;
+      if (!pid) return;
+      const key = `${pid}:${activeCourseId}`;
+      const r = ref(dbInstance, `/scores/${pid}/${activeCourseId}`);
+      const unsub = onValue(r, (snap) => {
+        const perHole = (snap.val() || {}) as Record<string, any>;
+        const pi = pidToIndex.get(pid);
+        if (pi == null) return;
+        setScoresByCourse((prev) => {
+          const next = { ...prev } as Record<string, (number | null)[][]>;
+          const base = (next[activeCourseId]
+            ? next[activeCourseId].map(row => [...row])
+            : Array.from({ length: 4 }, () => Array(9).fill(null)));
+          for (let h = 1; h <= 9; h++) {
+            const v = perHole[h];
+            base[pi][h - 1] = typeof v === 'number' ? v : null;
+          }
+          // 로컬 초기화 마스크가 켜진 코스는 기존 화면 값을 유지(연습 모드)
+          next[activeCourseId] = localCleared[activeCourseId] ? (prev[activeCourseId] ?? base) : base;
+          return next;
+        });
+      });
+      scoreUnsubsRef.current[key] = unsub;
+    });
+
+    // 일괄 해제 함수 보관
+    listenersRef.current.scores = () => {
+      Object.values(scoreUnsubsRef.current).forEach(u => { try { u(); } catch {} });
+      scoreUnsubsRef.current = {};
+    };
+
+    return () => {
+      if (listenersRef.current.scores) listenersRef.current.scores();
+    };
+  }, [db, playersInGroupJo, activeCourseId, localCleared]);
+
+  // 현재 코스 점수 존재 여부 재계산
+  useEffect(() => {
+    const mat = scoresByCourse[activeCourseId];
+    if (!mat) { setDbHasAnyScore(false); return; }
+    let any = false;
+    outer: for (let i = 0; i < mat.length; i++) {
+      for (let j = 0; j < mat[i].length; j++) {
+        if (typeof mat[i][j] === 'number') { any = true; break outer; }
+      }
+    }
+    setDbHasAnyScore(any);
+  }, [scoresByCourse, activeCourseId]);
 
   // 대회 설정(tournaments/current)과 그룹-코스 연동을 읽어 탭/파/이름 동기화
   useEffect(() => {
@@ -415,18 +440,19 @@ export default function SelfScoringPage() {
       listenersRef.current.tournament();
     }
     
+    // 최적화: 필요한 데이터만 쿼리 - 전체 대회 설정이 아닌 필요한 부분만
     const unsubTournament = onValue(ref(dbInstance, 'tournaments/current'), (snap) => {
       const data = snap.val() || {};
       const coursesObj = data.courses || {};
       const groupsObj = data.groups || {};
 
-      // 그룹에 배정된 코스 id 목록(true로 표시된 것만)
+      // 그룹에 배정된 코스 id 목록(true로 표시된 것만) - 필요한 코스만 필터링
       const group = groupsObj[selectedGroup] || {};
       const assignedIds: string[] = group.courses
         ? Object.keys(group.courses).filter((cid: string) => group.courses[cid])
         : Object.keys(coursesObj);
 
-      // 코스 탭 구성: id, name, pars
+      // 코스 탭 구성: id, name, pars - 필요한 코스만 구성
       const nextTabs: CourseTab[] = assignedIds
         .map((cid) => {
           const key = Object.keys(coursesObj).find((k) => String(k) === String(cid));
@@ -452,13 +478,13 @@ export default function SelfScoringPage() {
         }
       }
       
-      // 관전 모드에서는 게임 모드도 실시간으로 설정
+      // 관전 모드에서는 게임 모드도 실시간으로 설정 - 필요한 데이터만
       if (isReadOnlyMode && data.gameMode) {
         setGameMode(data.gameMode);
       }
     });
 
-    // 리스너 참조 저장
+    // 리스너 참조 저장 및 정리
     listenersRef.current.tournament = unsubTournament;
     
     return () => unsubTournament();
