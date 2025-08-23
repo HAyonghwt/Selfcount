@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { getPlayerScoreLogs, getPlayerScoreLogsOptimized, ScoreLog, logScoreChange } from '@/lib/scoreLogs';
+import { getPlayerScoreLogs, getPlayerScoreLogsOptimized, ScoreLog, logScoreChange, invalidatePlayerLogCache } from '@/lib/scoreLogs';
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -792,6 +792,10 @@ export default function AdminDashboard() {
                                     modifiedByType: 'admin',
                                     comment: `기권 처리(미입력 홀만, courseId=${cid})`
                                 });
+                                
+                                // 실시간 업데이트를 위한 로그 캐시 무효화
+                                invalidatePlayerLogCache(playerId);
+                                console.log(`[실시간 업데이트] 관리자 기권 처리 - 선수 ${playerId} 로그 캐시 무효화`);
                             }
                         }
                     }
@@ -822,6 +826,10 @@ export default function AdminDashboard() {
                         comment: `코스: ${courseId}`,
                         courseId: courseId
                     });
+                    
+                    // 실시간 업데이트를 위한 로그 캐시 무효화
+                    invalidatePlayerLogCache(playerId);
+                    console.log(`[실시간 업데이트] 관리자 점수 수정 - 선수 ${playerId} 로그 캐시 무효화`);
                     // 점수 로그 저장 후 해당 선수 로그 즉시 갱신 (최적화됨)
                     try {
                         const logs = await getPlayerScoreLogsOptimized(playerId);
@@ -1926,6 +1934,10 @@ export default function AdminDashboard() {
                       modifiedByType: 'admin',
                       comment: '기권 해제 복구'
                     });
+                    
+                    // 실시간 업데이트를 위한 로그 캐시 무효화
+                    invalidatePlayerLogCache(player.id);
+                    console.log(`[실시간 업데이트] 관리자 기권 해제 - 선수 ${player.id} 로그 캐시 무효화`);
                     anyRestored = true;
                   }
                 }

@@ -335,3 +335,85 @@ export const logScoreChangeWithCacheInvalidation = async (logData: Omit<ScoreLog
     throw error;
   }
 };
+
+/**
+ * 실시간 업데이트를 위한 점수 변경 감지 함수
+ * 점수가 변경될 때마다 해당 선수의 로그 캐시를 무효화
+ */
+export const invalidatePlayerLogCache = (playerId: string): void => {
+  const cacheKey = `player_${playerId}`;
+  if (logCache.has(cacheKey)) {
+    logCache.delete(cacheKey);
+    console.log(`[캐시 무효화] 선수 ${playerId} 로그 캐시 삭제됨`);
+  }
+};
+
+/**
+ * 실시간 업데이트를 위한 경기 로그 캐시 무효화
+ */
+export const invalidateMatchLogCache = (matchId: string): void => {
+  const cacheKey = `match_${matchId}`;
+  if (logCache.has(cacheKey)) {
+    logCache.delete(cacheKey);
+    console.log(`[캐시 무효화] 경기 ${matchId} 로그 캐시 삭제됨`);
+  }
+};
+
+/**
+ * 실시간 업데이트를 위한 자율채점 로그 캐시 무효화
+ */
+export const invalidateSelfScoringLogCache = (): void => {
+  const cacheKey = 'self_scoring';
+  if (logCache.has(cacheKey)) {
+    logCache.delete(cacheKey);
+    console.log(`[캐시 무효화] 자율채점 로그 캐시 삭제됨`);
+  }
+};
+
+/**
+ * 점수 변경 시 자동으로 관련 로그 캐시를 무효화하는 함수
+ * 이 함수를 사용하면 실시간 업데이트가 자동으로 보장됨
+ */
+export const logScoreChangeWithRealTimeUpdate = async (logData: Omit<ScoreLog, 'id' | 'modifiedAt'>): Promise<void> => {
+  try {
+    // 기존 함수로 로그 저장
+    await logScoreChange(logData);
+    
+    // 실시간 업데이트를 위한 캐시 무효화
+    if (logData.playerId) {
+      invalidatePlayerLogCache(logData.playerId);
+    }
+    if (logData.matchId) {
+      invalidateMatchLogCache(logData.matchId);
+    }
+    if (logData.modifiedByType === 'self') {
+      invalidateSelfScoringLogCache();
+    }
+    
+    console.log(`[실시간 업데이트] 점수 변경 로그 저장 및 캐시 무효화 완료`);
+  } catch (error) {
+    throw error;
+  }
+};
+
+/**
+ * 실시간 구독 최적화를 위한 함수
+ * 점수 변경 시 자동으로 로그 캐시를 무효화하여 실시간 업데이트 보장
+ */
+export const setupRealTimeScoreUpdate = (onScoreChange: (playerId: string) => void): void => {
+  if (typeof window === 'undefined') return;
+  
+  // 전역 이벤트 리스너 설정
+  const handleScoreChange = (event: CustomEvent) => {
+    const { playerId } = event.detail;
+    if (playerId) {
+      invalidatePlayerLogCache(playerId);
+      onScoreChange(playerId);
+    }
+  };
+  
+  window.addEventListener('scoreChange', handleScoreChange as EventListener);
+  
+  // 클린업 함수 반환 (사용하지 않음 - 전역 이벤트이므로)
+  console.log(`[실시간 업데이트] 점수 변경 이벤트 리스너 설정 완료`);
+};

@@ -4,7 +4,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { db, ensureAuthenticated } from "@/lib/firebase";
 import { ref, set, get, onValue } from "firebase/database";
 import { useToast } from "@/hooks/use-toast";
-import { logScoreChange, getPlayerScoreLogs, ScoreLog } from "@/lib/scoreLogs";
+import { logScoreChange, getPlayerScoreLogs, ScoreLog, invalidatePlayerLogCache } from "@/lib/scoreLogs";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import html2canvas from "html2canvas";
 import "./styles.css";
@@ -786,6 +786,10 @@ export default function SelfScoringPage() {
           comment: `자율 채점 - 코스: ${activeCourse.id}, 그룹: ${selectedGroup || ''}, 조: ${selectedJo || ''}`,
           courseId: String(activeCourse.id),
         });
+        
+        // 실시간 업데이트를 위한 로그 캐시 무효화
+        invalidatePlayerLogCache(playerId);
+        console.log(`[실시간 업데이트] 자율채점 점수 저장 - 선수 ${playerId} 로그 캐시 무효화`);
         
         // 성공하면 루프 종료
         break;

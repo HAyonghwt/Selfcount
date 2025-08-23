@@ -15,7 +15,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription } from "@/components/ui/alert-dialog";
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
-import { logScoreChange, getPlayerForfeitTypeOptimized } from '@/lib/scoreLogs';
+import { logScoreChange, getPlayerForfeitTypeOptimized, invalidatePlayerLogCache } from '@/lib/scoreLogs';
 
 interface Player {
     id: string;
@@ -716,6 +716,10 @@ export default function RefereePage() {
                                         comment: `심판 직접 ${scoreData.forfeitType === 'absent' ? '불참' : scoreData.forfeitType === 'disqualified' ? '실격' : '기권'} (코스: ${courseName}, 홀: ${h})`,
                                         courseId: cid
                                     });
+                                    
+                                    // 실시간 업데이트를 위한 로그 캐시 무효화
+                                    invalidatePlayerLogCache(playerToSave.id);
+                                    console.log(`[실시간 업데이트] 심판 기권 처리 - 선수 ${playerToSave.id} 로그 캐시 무효화`);
                                 } else if (existing === undefined || existing === null || existing === '' || isNaN(Number(existing))) {
                                     // 나머지 미입력 홀만 0점 처리 (기존 점수는 보존)
                                     await set(ref(dbInstance, `/scores/${playerToSave.id}/${cid}/${h}`), 0);
@@ -731,6 +735,10 @@ export default function RefereePage() {
                                         comment: `심판페이지에서 ${scoreData.forfeitType === 'absent' ? '불참' : scoreData.forfeitType === 'disqualified' ? '실격' : '기권'} 처리 (코스: ${courseName}, 홀: ${h})`,
                                         courseId: cid
                                     });
+                                    
+                                    // 실시간 업데이트를 위한 로그 캐시 무효화
+                                    invalidatePlayerLogCache(playerToSave.id);
+                                    console.log(`[실시간 업데이트] 심판 기권 처리 - 선수 ${playerToSave.id} 로그 캐시 무효화`);
                                 }
                                 // 기존 점수가 있는 홀은 그대로 보존 (0점으로 덮어쓰지 않음)
                             }

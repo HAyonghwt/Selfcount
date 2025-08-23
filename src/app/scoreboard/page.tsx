@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Label } from '@/components/ui/label';
 import GiftEventDisplay from '@/components/gift-event/GiftEventDisplay';
 import GiftEventStandby from '@/components/gift-event/GiftEventStandby';
-import { getPlayerScoreLogs, getPlayerScoreLogsOptimized, ScoreLog } from '@/lib/scoreLogs';
+import { getPlayerScoreLogs, getPlayerScoreLogsOptimized, ScoreLog, invalidatePlayerLogCache } from '@/lib/scoreLogs';
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip';
 
 interface ProcessedPlayer {
@@ -313,6 +313,22 @@ function ExternalScoreboard() {
                     if (newHash !== lastScoresHash) {
                         setLastScoresHash(newHash);
                         setLastUpdateTime(Date.now());
+                        
+                        // 점수 변경 감지 시 해당 선수들의 로그 캐시 무효화
+                        if (prev && Object.keys(prev).length > 0) {
+                            const changedPlayerIds = Object.keys(data).filter(playerId => {
+                                const prevScores = prev[playerId] || {};
+                                const newScores = data[playerId] || {};
+                                return JSON.stringify(prevScores) !== JSON.stringify(newScores);
+                            });
+                            
+                            // 변경된 선수들의 로그 캐시 무효화
+                            changedPlayerIds.forEach(playerId => {
+                                invalidatePlayerLogCache(playerId);
+                                console.log(`[실시간 업데이트] 선수 ${playerId} 점수 변경 감지, 로그 캐시 무효화`);
+                            });
+                        }
+                        
                         return data;
                     }
                     return prev;
@@ -748,38 +764,27 @@ function ExternalScoreboard() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [finalDataByGroup, lastUpdateTime]);
 
-    // 점수 변경 시 로그 데이터 즉시 업데이트 (수정된 점수 표시를 위해)
+    // 실시간 업데이트를 위한 점수 변경 감지 (최적화됨)
     useEffect(() => {
         if (Object.keys(scores).length === 0) return;
         
         const updateLogsForChangedScores = async () => {
             // 점수가 변경된 선수들의 로그를 즉시 업데이트
             const playersWithChangedScores = Object.keys(scores);
-            console.log('점수 변경 감지 - 업데이트할 선수들:', playersWithChangedScores);
+            console.log('[실시간 업데이트] 점수 변경 감지 - 업데이트할 선수들:', playersWithChangedScores);
             
             for (const playerId of playersWithChangedScores) {
                 try {
-                    // 매번 새로운 로그를 가져오기 (캐시 무시)
+                    // 최적화된 함수로 로그 가져오기 (캐시 적용)
                     const logs = await getPlayerScoreLogsOptimized(playerId);
-                    console.log(`로그 로딩 완료 - 선수 ${playerId}:`, logs.length, '개');
-                    
-                    // 로그 데이터가 있는지 확인
-                    const hasModifiedScores = logs.some((log: any) => 
-                        log.oldValue !== 0 && log.oldValue !== log.newValue
-                    );
-                    
-                    if (hasModifiedScores) {
-                        console.log(`수정된 점수 발견 - 선수 ${playerId}:`, logs.filter((log: any) => 
-                            log.oldValue !== 0 && log.oldValue !== log.newValue
-                        ));
-                    }
+                    console.log(`[실시간 업데이트] 로그 로딩 완료 - 선수 ${playerId}:`, logs.length, '개');
                     
                     setPlayerScoreLogs((prev: any) => ({
                         ...prev,
                         [playerId]: logs
                     }));
                 } catch (error) {
-                    console.error(`로그 로딩 실패 - 선수 ${playerId}:`, error);
+                    console.error(`[실시간 업데이트] 로그 로딩 실패 - 선수 ${playerId}:`, error);
                     // 에러 발생 시 빈 배열로 설정
                     setPlayerScoreLogs((prev: any) => ({
                         ...prev,
@@ -790,7 +795,7 @@ function ExternalScoreboard() {
         };
         
         updateLogsForChangedScores();
-    }, [scores]); // playerScoreLogs 의존성 제거하여 무한 루프 방지
+    }, [scores]); // scores 변경 시에만 실행
 
     // 모바일 툴팁 상태 관리 (셀별로 open)
     const [openTooltip, setOpenTooltip] = useState<{ playerId: string; courseId: string; holeIndex: number } | null>(null);
