@@ -617,6 +617,38 @@ export default function SelfScoringPage() {
     }
   }, [scoresByCourse, activeCourseId, selectedGroup, selectedJo]);
 
+  // 최근 수정 로그 툴팁 표시
+  const showCellLogTooltip = useCallback(async (playerIndex: number, holeIndex: number) => {
+    try {
+      const playerName = playerNames[playerIndex];
+      const playerId = nameToPlayerId[playerName];
+      if (!playerId) return;
+      
+      // 로그 데이터가 없으면 lazy loading
+      if (!playerScoreLogs[playerId]) {
+        await loadPlayerLogs(playerId);
+      }
+      
+      const logs = playerScoreLogs[playerId] || [];
+      const courseId = String(activeCourse?.id || activeCourseId);
+      const cellLog = logs.find(l => String(l.courseId) === courseId && Number(l.holeNumber) === holeIndex + 1);
+      // 수정된 셀(빨간 표시 대상)만 안내: 변경 로그가 있고 oldValue != newValue & oldValue != 0 인 경우에만
+      if (!cellLog || cellLog.oldValue === cellLog.newValue || cellLog.oldValue === 0) {
+        setOpenTooltip(null);
+        return;
+      }
+      const who = cellLog.modifiedByType === 'captain' ? (cellLog.modifiedBy || '조장') : (cellLog.modifiedByType === 'judge' ? '심판' : '관리자');
+      const when = cellLog.modifiedAt ? new Date(cellLog.modifiedAt).toLocaleString('ko-KR') : '';
+      const what = `${cellLog.oldValue} → ${cellLog.newValue}`;
+      const msg = `수정자: ${who}\n일시: ${when}\n변경: ${what}`;
+      setOpenTooltip(prev => (prev && prev.playerIdx === playerIndex && prev.holeIdx === holeIndex ? null : { playerIdx: playerIndex, holeIdx: holeIndex, content: msg }));
+      // 자동 닫힘
+      setTimeout(() => {
+        setOpenTooltip(prev => (prev && prev.playerIdx === playerIndex && prev.holeIdx === holeIndex ? null : prev));
+      }, 3000);
+    } catch {}
+  }, [playerNames, nameToPlayerId, playerScoreLogs, loadPlayerLogs, activeCourse, activeCourseId]);
+
   const handleOpenPad = useCallback((playerIndex: number, holeIndex: number) => {
     if (isReadOnlyMode) return; // 관전용 모드에서는 입력 불가
     
@@ -657,7 +689,7 @@ export default function SelfScoringPage() {
         }
       } catch {}
     }
-  }, [isReadOnlyMode, playerNames, nameToPlayerId, playerScoreLogs, loadPlayerLogs, getCellState, tableScores, draftScores, showCellLogTooltip]);
+  }, [isReadOnlyMode, playerNames, nameToPlayerId, playerScoreLogs, loadPlayerLogs, getCellState, tableScores, draftScores]);
 
   // 저장된 셀(locked) 더블클릭 시에도 수정 가능하도록 별도 핸들러
   const handleOpenPadForEdit = useCallback((playerIndex: number, holeIndex: number) => {
@@ -691,37 +723,7 @@ export default function SelfScoringPage() {
     } catch {}
   }, [isReadOnlyMode, playerNames, nameToPlayerId, playerScoreLogs, loadPlayerLogs, tableScores, draftScores]);
 
-  // 최근 수정 로그 툴팁 표시
-  const showCellLogTooltip = useCallback(async (playerIndex: number, holeIndex: number) => {
-    try {
-      const playerName = playerNames[playerIndex];
-      const playerId = nameToPlayerId[playerName];
-      if (!playerId) return;
-      
-      // 로그 데이터가 없으면 lazy loading
-      if (!playerScoreLogs[playerId]) {
-        await loadPlayerLogs(playerId);
-      }
-      
-      const logs = playerScoreLogs[playerId] || [];
-      const courseId = String(activeCourse?.id || activeCourseId);
-      const cellLog = logs.find(l => String(l.courseId) === courseId && Number(l.holeNumber) === holeIndex + 1);
-      // 수정된 셀(빨간 표시 대상)만 안내: 변경 로그가 있고 oldValue != newValue & oldValue != 0 인 경우에만
-      if (!cellLog || cellLog.oldValue === cellLog.newValue || cellLog.oldValue === 0) {
-        setOpenTooltip(null);
-        return;
-      }
-      const who = cellLog.modifiedByType === 'captain' ? (cellLog.modifiedBy || '조장') : (cellLog.modifiedByType === 'judge' ? '심판' : '관리자');
-      const when = cellLog.modifiedAt ? new Date(cellLog.modifiedAt).toLocaleString('ko-KR') : '';
-      const what = `${cellLog.oldValue} → ${cellLog.newValue}`;
-      const msg = `수정자: ${who}\n일시: ${when}\n변경: ${what}`;
-      setOpenTooltip(prev => (prev && prev.playerIdx === playerIndex && prev.holeIdx === holeIndex ? null : { playerIdx: playerIndex, holeIdx: holeIndex, content: msg }));
-      // 자동 닫힘
-      setTimeout(() => {
-        setOpenTooltip(prev => (prev && prev.playerIdx === playerIndex && prev.holeIdx === holeIndex ? null : prev));
-      }, 3000);
-    } catch {}
-  }, [playerNames, nameToPlayerId, playerScoreLogs, loadPlayerLogs, activeCourse, activeCourseId]);
+
 
   const handleSetPadValue = (val: number) => {
     setPadTemp(val);
