@@ -11,6 +11,11 @@ import GiftEventStandby from '@/components/gift-event/GiftEventStandby';
 import { getPlayerScoreLogs, getPlayerScoreLogsOptimized, ScoreLog, invalidatePlayerLogCache } from '@/lib/scoreLogs';
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip';
 
+// 가장 기본적인 콘솔 출력 테스트
+console.log('🚨 최초 테스트: 파일이 로드됨!');
+console.log('🚨 최초 테스트: React import 완료!');
+console.log('🚨 최초 테스트: Firebase import 완료!');
+
 interface ProcessedPlayer {
     id: string;
     jo: number;
@@ -155,21 +160,32 @@ function getPlayerTotalAndPlusMinusAllCourses(tournament: any, player: any, allA
 }
 
 export default function ScoreboardPage() {
+  // 가장 강력한 콘솔 출력 테스트
+  console.log('🚨 최강 테스트: ScoreboardPage 함수 시작!');
+  console.log('🚨 최강 테스트: useState 호출 전!');
+  
   const [giftEventStatus, setGiftEventStatus] = useState<string>('');
   const [giftEventData, setGiftEventData] = useState<any>({});
   
   // 기본 콘솔 출력 테스트
   console.log('🚨 기본 테스트: ScoreboardPage 컴포넌트가 렌더링됨!');
+  console.log('🚨 최강 테스트: useState 호출 완료!');
   
   useEffect(() => {
-    if (!db) return;
+    console.log('🚨 최강 테스트: useEffect 시작!');
+    if (!db) {
+      console.log('🚨 최강 테스트: db가 없음!');
+      return;
+    }
     
     console.log('🚨 기본 테스트: useEffect 실행됨!');
+    console.log('🚨 최강 테스트: db 연결 확인됨!');
     
     const giftEventRef = ref(db, 'giftEvent');
     const unsub = onValue(giftEventRef, snap => {
       const data = snap.val() || {};
       console.log('🚨 기본 테스트: giftEvent 데이터 변경됨:', data);
+      console.log('🚨 최강 테스트: Firebase 데이터 수신됨!');
       setGiftEventStatus(data.status || '');
       setGiftEventData(data);
     });
