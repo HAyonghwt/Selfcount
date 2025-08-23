@@ -135,3 +135,203 @@ export const getSelfScoringLogs = async (): Promise<ScoreLog[]> => {
     throw error;
   }
 };
+
+// ===== 새로운 최적화 함수들 (기존 함수와 별개) =====
+
+// 캐시 인터페이스
+interface LogCache {
+  data: ScoreLog[];
+  timestamp: number;
+  type: string;
+}
+
+// 메모리 캐시 (컴포넌트 간 공유)
+const logCache = new Map<string, LogCache>();
+const CACHE_DURATION = 2 * 60 * 1000; // 2분
+
+/**
+ * 새로운 함수: 최적화된 선수 로그 가져오기 (캐시 적용)
+ */
+export const getPlayerScoreLogsOptimized = async (playerId: string): Promise<ScoreLog[]> => {
+  if (!db) throw new Error('Firebase DB 연결 오류');
+  
+  const cacheKey = `player_${playerId}`;
+  const now = Date.now();
+  
+  // 캐시 확인
+  if (logCache.has(cacheKey)) {
+    const cached = logCache.get(cacheKey)!;
+    if (now - cached.timestamp < CACHE_DURATION) {
+      return cached.data;
+    }
+  }
+  
+  try {
+    // 기존 함수 사용 (안전성 보장)
+    const logs = await getPlayerScoreLogs(playerId);
+    
+    // 캐시 업데이트
+    logCache.set(cacheKey, {
+      data: logs,
+      timestamp: now,
+      type: 'player'
+    });
+    
+    return logs;
+  } catch (error) {
+    throw error;
+  }
+};
+
+/**
+ * 새로운 함수: 최적화된 경기 로그 가져오기 (캐시 적용)
+ */
+export const getMatchScoreLogsOptimized = async (matchId: string): Promise<ScoreLog[]> => {
+  if (!db) throw new Error('Firebase DB 연결 오류');
+  
+  const cacheKey = `match_${matchId}`;
+  const now = Date.now();
+  
+  // 캐시 확인
+  if (logCache.has(cacheKey)) {
+    const cached = logCache.get(cacheKey)!;
+    if (now - cached.timestamp < CACHE_DURATION) {
+      return cached.data;
+    }
+  }
+  
+  try {
+    // 기존 함수 사용 (안전성 보장)
+    const logs = await getMatchScoreLogs(matchId);
+    
+    // 캐시 업데이트
+    logCache.set(cacheKey, {
+      data: logs,
+      timestamp: now,
+      type: 'match'
+    });
+    
+    return logs;
+  } catch (error) {
+    throw error;
+  }
+};
+
+/**
+ * 새로운 함수: 최적화된 자율채점 로그 가져오기 (캐시 적용)
+ */
+export const getSelfScoringLogsOptimized = async (): Promise<ScoreLog[]> => {
+  if (!db) throw new Error('Firebase DB 연결 오류');
+  
+  const cacheKey = 'self_scoring';
+  const now = Date.now();
+  
+  // 캐시 확인
+  if (logCache.has(cacheKey)) {
+    const cached = logCache.get(cacheKey)!;
+    if (now - cached.timestamp < CACHE_DURATION) {
+      return cached.data;
+    }
+  }
+  
+  try {
+    // 기존 함수 사용 (안전성 보장)
+    const logs = await getSelfScoringLogs();
+    
+    // 캐시 업데이트
+    logCache.set(cacheKey, {
+      data: logs,
+      timestamp: now,
+      type: 'self_scoring'
+    });
+    
+    return logs;
+  } catch (error) {
+    throw error;
+  }
+};
+
+/**
+ * 새로운 함수: 특정 선수의 기권 타입을 효율적으로 가져오기 (캐시 적용)
+ */
+export const getPlayerForfeitTypeOptimized = async (playerId: string, courseId: string, holeNumber: string): Promise<'absent' | 'disqualified' | 'forfeit' | null> => {
+  if (!db) throw new Error('Firebase DB 연결 오류');
+  
+  const cacheKey = `forfeit_${playerId}_${courseId}_${holeNumber}`;
+  const now = Date.now();
+  
+  // 캐시 확인
+  if (logCache.has(cacheKey)) {
+    const cached = logCache.get(cacheKey)!;
+    if (now - cached.timestamp < CACHE_DURATION) {
+      return cached.data[0]?.forfeitType || null;
+    }
+  }
+  
+  try {
+    // 기존 함수 사용하여 로그 가져오기
+    const logs = await getPlayerScoreLogs(playerId);
+    
+    // 기존과 동일한 필터링 로직
+    const forfeitLogs = logs
+      .filter(l => l.newValue === 0 && l.modifiedByType === 'judge' && l.comment)
+      .filter(l => l.comment?.includes(`코스: ${courseId}`) || l.comment?.includes(`홀: ${holeNumber}`))
+      .sort((a, b) => b.modifiedAt - a.modifiedAt);
+    
+    if (forfeitLogs.length === 0) {
+      return null;
+    }
+    
+    // 기존과 동일한 기권 타입 추출 로직
+    const latestLog = forfeitLogs[0];
+    let forfeitType: 'absent' | 'disqualified' | 'forfeit' | null = null;
+    
+    if (latestLog.comment?.includes('불참')) forfeitType = 'absent';
+    else if (latestLog.comment?.includes('실격')) forfeitType = 'disqualified';
+    else if (latestLog.comment?.includes('기권')) forfeitType = 'forfeit';
+    
+    // 캐시 업데이트
+    logCache.set(cacheKey, {
+      data: [{ forfeitType } as any],
+      timestamp: now,
+      type: 'forfeit'
+    });
+    
+    return forfeitType;
+  } catch (error) {
+    console.error('기권 타입 가져오기 실패:', error);
+    return null;
+  }
+};
+
+/**
+ * 캐시 무효화 함수 (새로운 로그가 추가될 때 호출)
+ */
+export const invalidateLogCache = (type?: string): void => {
+  if (type) {
+    // 특정 타입의 캐시만 무효화
+    for (const [key, value] of logCache.entries()) {
+      if (value.type === type) {
+        logCache.delete(key);
+      }
+    }
+  } else {
+    // 모든 캐시 무효화
+    logCache.clear();
+  }
+};
+
+/**
+ * 점수 변경시 로그 캐시 자동 무효화 (새로운 로그 추가시 호출)
+ */
+export const logScoreChangeWithCacheInvalidation = async (logData: Omit<ScoreLog, 'id' | 'modifiedAt'>): Promise<void> => {
+  try {
+    // 기존 함수로 로그 저장
+    await logScoreChange(logData);
+    
+    // 캐시 무효화하여 실시간 업데이트 보장
+    invalidateLogCache();
+  } catch (error) {
+    throw error;
+  }
+};

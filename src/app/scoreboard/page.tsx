@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Label } from '@/components/ui/label';
 import GiftEventDisplay from '@/components/gift-event/GiftEventDisplay';
 import GiftEventStandby from '@/components/gift-event/GiftEventStandby';
-import { getPlayerScoreLogs, ScoreLog } from '@/lib/scoreLogs';
+import { getPlayerScoreLogs, getPlayerScoreLogsOptimized, ScoreLog } from '@/lib/scoreLogs';
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip';
 
 interface ProcessedPlayer {
@@ -724,7 +724,7 @@ function ExternalScoreboard() {
             if (newPlayerIds.length > 0) {
                 await Promise.all(newPlayerIds.map(async (pid) => {
                     try {
-                        const logs = await getPlayerScoreLogs(pid);
+                        const logs = await getPlayerScoreLogsOptimized(pid);
                         logsMap[pid] = logs;
                         console.log(`기본 로그 로딩 완료 - 선수 ${pid}:`, logs.length, '개');
                     } catch (error) {
@@ -760,7 +760,7 @@ function ExternalScoreboard() {
             for (const playerId of playersWithChangedScores) {
                 try {
                     // 매번 새로운 로그를 가져오기 (캐시 무시)
-                    const logs = await getPlayerScoreLogs(playerId);
+                    const logs = await getPlayerScoreLogsOptimized(playerId);
                     console.log(`로그 로딩 완료 - 선수 ${playerId}:`, logs.length, '개');
                     
                     // 로그 데이터가 있는지 확인

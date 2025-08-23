@@ -15,7 +15,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription } from "@/components/ui/alert-dialog";
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
-import { logScoreChange } from '@/lib/scoreLogs';
+import { logScoreChange, getPlayerForfeitTypeOptimized } from '@/lib/scoreLogs';
 
 interface Player {
     id: string;

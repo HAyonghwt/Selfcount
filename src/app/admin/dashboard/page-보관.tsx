@@ -1808,23 +1808,41 @@ export default function AdminDashboard() {
                   // 현재 점수가 0(기권)인 경우만 복구
                   if (scores?.[player.id]?.[course.id]?.[h] === 0) {
                     // 해당 홀의 로그 중, 0점(기권) 처리 이전의 마지막 점수 찾기
+                    console.log(`[기권해제] ${player.id} 선수, 코스: ${course.id}, 홀: ${h} 검색 시작`);
+                    console.log(`[기권해제] 전체 로그:`, logs);
+                    
+                    // 더 유연한 기권 로그 검색
                     const zeroLogIdx = logs.findIndex(l =>
                       l.holeNumber === h &&
                       l.newValue === 0 &&
-                      l.comment && l.comment.includes(`courseId=${course.id}`)
+                      l.modifiedByType === 'judge'
                     );
+                    
+                    console.log(`[기권해제] 0점 로그 인덱스: ${zeroLogIdx}`);
+                    
                     let restoreValue = null;
                     if (zeroLogIdx !== -1) {
+                      const zeroLog = logs[zeroLogIdx];
+                      console.log(`[기권해제] 찾은 0점 로그:`, zeroLog);
+                      
+                      // 0점 처리 이전의 마지막 점수 찾기 (더 유연한 검색)
                       for (let j = zeroLogIdx - 1; j >= 0; j--) {
                         const l = logs[j];
+                        console.log(`[기권해제] 검색 중인 로그 ${j}:`, l);
+                        
                         if (
                           l.holeNumber === h &&
-                          l.comment && l.comment.includes(`courseId=${course.id}`)
+                          l.newValue !== 0 && // 0점이 아닌 점수만
+                          l.newValue !== null && // null이 아닌 점수만
+                          l.newValue !== undefined // undefined가 아닌 점수만
                         ) {
                           restoreValue = l.newValue;
+                          console.log(`[기권해제] 복원할 점수 찾음: ${restoreValue}`);
                           break;
                         }
                       }
+                    } else {
+                      console.log(`[기권해제] 0점 로그를 찾을 수 없음`);
                     }
                     // 복구(없으면 null)
                     await set(ref(db, `scores/${player.id}/${course.id}/${h}`), restoreValue);
