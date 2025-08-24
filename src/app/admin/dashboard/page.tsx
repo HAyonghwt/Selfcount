@@ -1908,79 +1908,103 @@ export default function AdminDashboard() {
               // 선수, 코스, 그룹 정보 찾기
               const player = Object.values(finalDataByGroup).flat().find((p: any) => p.id === scoreEditModal.playerId);
               if (!player) return;
-              // 선수의 모든 배정 코스/홀 복구
+              // 1) 백업 우선 복원: /backups/scoresBeforeForfeit/{playerId}가 있으면 해당 데이터로 통째로 복원
               const logs = playerScoreLogs[player.id] || [];
-              let anyRestored = false;
-              for (const course of player.assignedCourses) {
-                for (let h = 1; h <= 9; h++) {
-                  // 현재 점수가 0(기권)인 경우만 복구
-                  if (scores?.[player.id]?.[course.id]?.[h] === 0) {
-                    // 해당 홀의 로그 중, 0점(기권) 처리 이전의 마지막 점수 찾기
-                    console.log(`[기권해제] ${player.id} 선수, 코스: ${course.id}, 홀: ${h} 검색 시작`);
-                    console.log(`[기권해제] 전체 로그:`, logs);
-                    
-                    // 더 유연한 기권 로그 검색
-                    const zeroLogIdx = logs.findIndex(l =>
-                      l.holeNumber === h &&
-                      l.newValue === 0 &&
-                      l.modifiedByType === 'judge'
-                    );
-                    
-                    console.log(`[기권해제] 0점 로그 인덱스: ${zeroLogIdx}`);
-                    
-                    let restoreValue = null;
-                    if (zeroLogIdx !== -1) {
-                      const zeroLog = logs[zeroLogIdx];
-                      console.log(`[기권해제] 찾은 0점 로그:`, zeroLog);
-                      
-                      // 0점 처리 이전의 마지막 점수 찾기 (더 유연한 검색)
-                      for (let j = zeroLogIdx - 1; j >= 0; j--) {
-                        const l = logs[j];
-                        console.log(`[기권해제] 검색 중인 로그 ${j}:`, l);
-                        
-                        if (
-                          l.holeNumber === h &&
-                          l.newValue !== 0 && // 0점이 아닌 점수만
-                          l.newValue !== null && // null이 아닌 점수만
-                          l.newValue !== undefined // undefined가 아닌 점수만
-                        ) {
-                          restoreValue = l.newValue;
-                          console.log(`[기권해제] 복원할 점수 찾음: ${restoreValue}`);
-                          break;
+              let restored = false;
+              try {
+                const backupRef = ref(db, `backups/scoresBeforeForfeit/${player.id}`);
+                const backupSnap = await get(backupRef);
+                if (backupSnap.exists()) {
+                  const backup = backupSnap.val();
+                  // scores/{playerId} 전체를 백업본으로 덮어쓰기(복원)
+                  await set(ref(db, `scores/${player.id}`), backup?.data || {});
+                  // 복원 후 백업은 제거(원터치)
+                  await set(backupRef, null);
+                  restored = true;
+                }
+              } catch (e) {
+                console.warn('백업 복원 실패, 로그 기반 복원으로 폴백합니다:', e);
+              }
+
+              // 2) 폴백: 백업이 없으면 기존 로그 기반 복원(현재 로직) 수행
+              if (!restored) {
+                let anyRestored = false;
+                for (const course of player.assignedCourses) {
+                  for (let h = 1; h <= 9; h++) {
+                    if (scores?.[player.id]?.[course.id]?.[h] === 0) {
+                      const zeroLogIdx = logs.findIndex(l =>
+                        l.holeNumber === h &&
+                        l.newValue === 0 &&
+                        l.modifiedByType === 'judge'
+                      );
+                      let restoreValue = null;
+                      if (zeroLogIdx !== -1) {
+                        for (let j = zeroLogIdx - 1; j >= 0; j--) {
+                          const l = logs[j];
+                          if (
+                            l.holeNumber === h &&
+                            l.newValue !== 0 &&
+                            l.newValue !== null &&
+                            l.newValue !== undefined
+                          ) {
+                            restoreValue = l.newValue;
+                            break;
+                          }
                         }
                       }
-                    } else {
-                      console.log(`[기권해제] 0점 로그를 찾을 수 없음`);
+                      await set(ref(db, `scores/${player.id}/${course.id}/${h}`), restoreValue);
+                      await logScoreChange({
+                        matchId: 'tournaments/current',
+                        playerId: player.id,
+                        scoreType: 'holeScore',
+                        courseId: course.id,
+                        holeNumber: h,
+                        oldValue: 0,
+                        newValue: restoreValue === null ? null : restoreValue,
+                        modifiedBy: 'admin',
+                        modifiedByType: 'admin',
+                        comment: '기권 해제 복구'
+                      });
+                      invalidatePlayerLogCache(player.id);
+                      anyRestored = true;
                     }
-                    // 복구(없으면 null)
-                    await set(ref(db, `scores/${player.id}/${course.id}/${h}`), restoreValue);
-                    await logScoreChange({
-                      matchId: 'tournaments/current',
-                      playerId: player.id,
-                      scoreType: 'holeScore',
-                      courseId: course.id,
-                      holeNumber: h,
-                      oldValue: 0,
-                      newValue: restoreValue === null ? null : restoreValue,
-                      modifiedBy: 'admin',
-                      modifiedByType: 'admin',
-                      comment: '기권 해제 복구'
-                    });
-                    
-                    // 실시간 업데이트를 위한 로그 캐시 무효화
-                    invalidatePlayerLogCache(player.id);
-                    console.log(`[실시간 업데이트] 관리자 기권 해제 - 선수 ${player.id} 로그 캐시 무효화`);
-                    anyRestored = true;
                   }
                 }
+                restored = anyRestored;
               }
-              if (anyRestored) {
-                toast({ title: '기권 해제 완료', description: '기권 처리 이전의 점수로 복구되었습니다.' });
-                                // 점수 로그 재조회 (최적화됨)
+
+              if (restored) {
+                // 안전 처리: 남아있는 0점(기권 표식)을 모두 null로 치환하여 합계/순위 계산에 반영되게 함
                 try {
-                    const logs = await getPlayerScoreLogsOptimized(player.id);
-                    setPlayerScoreLogs(prev => ({ ...prev, [player.id]: logs }));
-                    console.log(`[실시간 업데이트] 기권 해제 후 선수 ${player.id} 로그 즉시 갱신 완료`);
+                  const playerScoresSnap = await get(ref(db, `scores/${player.id}`));
+                  if (playerScoresSnap.exists()) {
+                    const fixed: any = {};
+                    const data = playerScoresSnap.val() || {};
+                    Object.keys(data).forEach((courseId: string) => {
+                      const holes = data[courseId] || {};
+                      Object.keys(holes).forEach((h: string) => {
+                        if (holes[h] === 0) {
+                          if (!fixed[courseId]) fixed[courseId] = {};
+                          fixed[courseId][h] = null;
+                        }
+                      });
+                    });
+                    if (Object.keys(fixed).length > 0) {
+                      // null로 치환 적용
+                      const merged: any = { ...data };
+                      Object.keys(fixed).forEach((cid: string) => {
+                        merged[cid] = { ...(merged[cid] || {}), ...fixed[cid] };
+                      });
+                      await set(ref(db, `scores/${player.id}`), merged);
+                    }
+                  }
+                } catch (e) {
+                  console.warn('0점 정리 실패(무시):', e);
+                }
+                toast({ title: '기권 해제 완료', description: '이전 점수로 복구되었습니다.' });
+                try {
+                  const logs = await getPlayerScoreLogsOptimized(player.id);
+                  setPlayerScoreLogs(prev => ({ ...prev, [player.id]: logs }));
                 } catch {}
               } else {
                 toast({ title: '복구할 점수가 없습니다.', description: '이미 기권이 해제된 상태입니다.' });

@@ -376,6 +376,10 @@ export default function RefereePage() {
             if (savedStateJSON) {
                 const savedState = JSON.parse(savedStateJSON);
                 if (savedState.group && savedState.course && savedState.jo && savedState.view === 'scoring') {
+                    // 저장된 타입이 있으면 함께 복원
+                    if (savedState.type === 'individual' || savedState.type === 'team') {
+                        setSelectedType(savedState.type);
+                    }
                     setSelectedGroup(savedState.group);
                     setSelectedCourse(savedState.course);
                     setSelectedJo(savedState.jo);
@@ -390,6 +394,17 @@ export default function RefereePage() {
         }
     }, [hole]);
     
+    // 보조 복원: 타입이 비어 있고 그룹이 설정된 경우 groupsData에서 타입 유추
+    useEffect(() => {
+        if (view === 'scoring' && selectedGroup && !selectedType) {
+            const group = groupsData[selectedGroup as string];
+            const inferredType = group?.type;
+            if (inferredType === 'individual' || inferredType === 'team') {
+                setSelectedType(inferredType);
+            }
+        }
+    }, [view, selectedGroup, selectedType, groupsData]);
+
     // Save view state to localStorage
     useEffect(() => {
         if (view === 'scoring' && selectedGroup && selectedCourse && selectedJo) {
@@ -397,13 +412,14 @@ export default function RefereePage() {
                 group: selectedGroup,
                 course: selectedCourse,
                 jo: selectedJo,
-                view: 'scoring'
+                view: 'scoring',
+                type: selectedType
             };
             localStorage.setItem(`refereeState_${hole}`, JSON.stringify(stateToSave));
         } else if (view === 'selection') {
             localStorage.removeItem(`refereeState_${hole}`);
         }
-    }, [view, selectedGroup, selectedCourse, selectedJo, hole]);
+    }, [view, selectedGroup, selectedCourse, selectedJo, selectedType, hole]);
 
     // Derived data
     const availableGroups = useMemo(() => {
@@ -693,6 +709,27 @@ export default function RefereePage() {
                     
                     // 0점 입력 시, 소속 그룹의 모든 코스/홀에 0점 처리
                     if (scoreData.score === 0) {
+                        // 백업: 기권 처리 전에 이 선수의 전체 점수를 1회 백업 (이미 백업이 없을 때만)
+                        try {
+                            const backupPath = `/backups/scoresBeforeForfeit/${playerToSave.id}`;
+                            const backupSnap = await get(ref(dbInstance, backupPath));
+                            if (!backupSnap.exists()) {
+                                const fullScoresSnap = await get(ref(dbInstance, `/scores/${playerToSave.id}`));
+                                const fullScoresData = fullScoresSnap.exists() ? fullScoresSnap.val() : {};
+                                await set(ref(dbInstance, backupPath), {
+                                    data: fullScoresData,
+                                    createdAt: Date.now(),
+                                    meta: {
+                                        courseId: selectedCourse,
+                                        holeNumber: Number(hole),
+                                        forfeitType: scoreData.forfeitType || null,
+                                        by: 'referee'
+                                    }
+                                });
+                            }
+                        } catch (backupErr) {
+                            console.warn('점수 백업 실패(무시하고 진행):', backupErr);
+                        }
                         // 그룹 정보에서 배정된 코스 id 목록 추출
                         const group = groupsData[playerToSave.group];
                         const assignedCourseIds = group && group.courses ? Object.keys(group.courses).filter((cid: any) => group.courses[cid]) : [];
