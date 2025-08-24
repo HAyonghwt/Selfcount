@@ -47,3 +47,6 @@ cypress/videos/
 certificates
 # Local Netlify folder
 .netlify
+functions/node_modules/
+functions/lib/
+firebase-debug.log

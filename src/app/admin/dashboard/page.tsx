@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogD
 import { Download, Filter, Printer } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import * as XLSX from 'xlsx-js-style';
-import { db } from '@/lib/firebase';
+import { db, app } from '@/lib/firebase';
 import { ref, onValue, set, get } from 'firebase/database';
 import { useToast } from '@/hooks/use-toast';
 import { ToastAction } from '@/components/ui/toast';
@@ -209,6 +209,32 @@ export default function AdminDashboard() {
             showAllGroups: filterGroup === 'all'
         });
     };
+
+    // ---- 보호 기능: 롤백/스냅샷 ----
+    function RestoreFromMirrorButton() {
+        const [running, setRunning] = useState(false);
+        const onClick = async () => {
+            const ok = typeof window !== 'undefined' && window.confirm('즉시 복구를 실행합니다. 미러 데이터로 본선 점수를 덮어씁니다. 진행할까요?');
+            if (!ok) return;
+            try {
+                setRunning(true);
+                const { getFunctions, httpsCallable } = await import('firebase/functions');
+                const functions = getFunctions(app as any, 'asia-southeast1');
+                const restore = httpsCallable(functions, 'restoreFromMirror');
+                const res: any = await restore();
+                toast({ title: '즉시 복구 완료', description: `복구 데이터 크기: ${res?.data?.size || 0}B` });
+            } catch (e: any) {
+                toast({ title: '복구 실패', description: e?.message || '오류가 발생했습니다.', variant: 'destructive' });
+            } finally {
+                setRunning(false);
+            }
+        };
+        return (
+            <Button className="bg-orange-500 hover:bg-orange-600 text-white min-w-[120px] px-4 py-2 font-bold" onClick={onClick} disabled={running}>
+                {running ? '복구중...' : '즉시 복구'}
+            </Button>
+        );
+    }
 
     // 인쇄 HTML 생성 함수
     const generatePrintHTML = () => {
@@ -964,6 +990,15 @@ export default function AdminDashboard() {
     };
 
     useEffect(() => {
+        // 대시보드 최초 진입 시, 미러 자동 준비(백그라운드)
+        (async () => {
+            try {
+                const { getFunctions, httpsCallable } = await import('firebase/functions');
+                const functions = getFunctions(app as any, 'asia-southeast1');
+                const init = httpsCallable(functions, 'initMirrorIfNeeded');
+                await init();
+            } catch { /* 무시: 백그라운드 준비 */ }
+        })();
         if (!db) return;
         
         const playersRef = ref(db, 'players');
@@ -1638,6 +1673,10 @@ export default function AdminDashboard() {
                     {/* 임시 콘솔 출력 버튼 제거됨 */}
                 </CardHeader>
                 <CardContent className="space-y-4">
+                    {/* 데이터 보호: 즉시 복구/미러링 */}
+                    <div className="flex flex-wrap gap-2 p-3 bg-muted/30 rounded-md">
+                        <RestoreFromMirrorButton />
+                    </div>
                     {/* 선수 검색 입력창 */}
                     <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center sm:justify-between p-4 bg-muted/50 rounded-lg">
   <div className="flex flex-row gap-2 items-center w-full sm:w-auto">

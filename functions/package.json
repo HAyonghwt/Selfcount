@@ -1,0 +1,24 @@
+{
+  "name": "selfcount-functions",
+  "version": "1.0.0",
+  "private": true,
+  "engines": { "node": "22" },
+  "main": "lib/index.js",
+  "scripts": {
+    "build": "tsc -p .",
+    "clean": "rimraf lib",
+    "deploy": "npm run build && firebase deploy --only functions",
+    "serve": "firebase emulators:start --only functions",
+    "lint": "echo 'No lint configured'"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.6.0",
+    "firebase-functions": "^5.1.1"
+  },
+  "devDependencies": {
+    "rimraf": "^5.0.5",
+    "typescript": "^5.6.3"
+  }
+}
+
+
