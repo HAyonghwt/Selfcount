@@ -1,6 +1,6 @@
 "use client"
 import React, { useEffect, useState, useMemo, useRef } from 'react';
-import { db } from '@/lib/firebase';
+import { db, ensureAuthenticated } from '@/lib/firebase';
 import { ref, onValue, onChildChanged, off, query, orderByKey, limitToLast } from 'firebase/database';
 import { Flame, ChevronUp, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -230,7 +230,14 @@ function ExternalScoreboard() {
             return;
         }
         
-        const dbInstance = db as any;
+        // 전광판은 익명 인증을 한 번만 수행하여 인증 상태 유지
+        ensureAuthenticated().then((isAuthenticated) => {
+            if (!isAuthenticated) {
+                setLoading(false);
+                return;
+            }
+            
+            const dbInstance = db as any;
         
         // 초기 데이터 로딩 (빠른 로딩을 위해 병렬 처리)
         if (!initialDataLoaded) {
@@ -363,6 +370,7 @@ function ExternalScoreboard() {
                 unsubTournament();
             };
         }
+        });
     }, [initialDataLoaded, lastScoresHash, lastPlayersHash, lastTournamentHash]);
 
     // 서든데스 데이터 최적화된 구독 (활성화된 경우에만)
