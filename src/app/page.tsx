@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { LogIn, Tv } from 'lucide-react';
-import { auth, db, firestore, firebaseConfig } from '@/lib/firebase';
+import { auth, db, firestore, firebaseConfig, ensureAuthenticated } from '@/lib/firebase';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { loginWithKoreanId, loginRefereeWithKoreanId } from '@/lib/auth';
 import { ref, get } from 'firebase/database';
@@ -44,21 +44,30 @@ export default function LoginPage() {
         return;
     }
 
-    const configRef = ref(db, 'config');
-    get(configRef).then((snapshot) => {
-      if (snapshot.exists()) {
-        const data = snapshot.val();
-        setConfig(data);
-      } else {
-        setConfig({ appName: 'ParkScore', userDomain: 'parkgolf.com' });
-      }
-    }).catch((err) => {
+    const load = async () => {
+      try {
+        // 규칙 강화에 따라 읽기 전에도 인증 필요
+        await ensureAuthenticated();
+        if (!db) {
+          throw new Error('Firebase DB가 초기화되지 않았습니다.');
+        }
+        const configRef = ref(db as any, 'config');
+        const snapshot = await get(configRef);
+        if (snapshot.exists()) {
+          const data = snapshot.val();
+          setConfig(data);
+        } else {
+          setConfig({ appName: 'ParkScore', userDomain: 'parkgolf.com' });
+        }
+      } catch (err) {
         console.error("Firebase config fetch error:", err);
         setError("Firebase 연결에 실패했습니다. 설정을 확인해주세요.");
         setConfig({ appName: 'ParkScore', userDomain: 'parkgolf.com' });
-    }).finally(() => {
+      } finally {
         setLoading(false);
-    });
+      }
+    };
+    load();
   }, [isConfigMissing]);
 
   // 카카오톡 브라우저 리다이렉트 처리
