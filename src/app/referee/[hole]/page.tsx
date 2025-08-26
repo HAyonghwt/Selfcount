@@ -15,7 +15,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription } from "@/components/ui/alert-dialog";
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
-import { logScoreChange, getPlayerForfeitTypeOptimized, invalidatePlayerLogCache } from '@/lib/scoreLogs';
+import { logScoreChange } from '@/lib/scoreLogs';
 
 interface Player {
     id: string;
@@ -376,10 +376,6 @@ export default function RefereePage() {
             if (savedStateJSON) {
                 const savedState = JSON.parse(savedStateJSON);
                 if (savedState.group && savedState.course && savedState.jo && savedState.view === 'scoring') {
-                    // 저장된 타입이 있으면 함께 복원
-                    if (savedState.type === 'individual' || savedState.type === 'team') {
-                        setSelectedType(savedState.type);
-                    }
                     setSelectedGroup(savedState.group);
                     setSelectedCourse(savedState.course);
                     setSelectedJo(savedState.jo);
@@ -394,17 +390,6 @@ export default function RefereePage() {
         }
     }, [hole]);
     
-    // 보조 복원: 타입이 비어 있고 그룹이 설정된 경우 groupsData에서 타입 유추
-    useEffect(() => {
-        if (view === 'scoring' && selectedGroup && !selectedType) {
-            const group = groupsData[selectedGroup as string];
-            const inferredType = group?.type;
-            if (inferredType === 'individual' || inferredType === 'team') {
-                setSelectedType(inferredType);
-            }
-        }
-    }, [view, selectedGroup, selectedType, groupsData]);
-
     // Save view state to localStorage
     useEffect(() => {
         if (view === 'scoring' && selectedGroup && selectedCourse && selectedJo) {
@@ -412,14 +397,13 @@ export default function RefereePage() {
                 group: selectedGroup,
                 course: selectedCourse,
                 jo: selectedJo,
-                view: 'scoring',
-                type: selectedType
+                view: 'scoring'
             };
             localStorage.setItem(`refereeState_${hole}`, JSON.stringify(stateToSave));
         } else if (view === 'selection') {
             localStorage.removeItem(`refereeState_${hole}`);
         }
-    }, [view, selectedGroup, selectedCourse, selectedJo, selectedType, hole]);
+    }, [view, selectedGroup, selectedCourse, selectedJo, hole]);
 
     // Derived data
     const availableGroups = useMemo(() => {
@@ -709,27 +693,6 @@ export default function RefereePage() {
                     
                     // 0점 입력 시, 소속 그룹의 모든 코스/홀에 0점 처리
                     if (scoreData.score === 0) {
-                        // 백업: 기권 처리 전에 이 선수의 전체 점수를 1회 백업 (이미 백업이 없을 때만)
-                        try {
-                            const backupPath = `/backups/scoresBeforeForfeit/${playerToSave.id}`;
-                            const backupSnap = await get(ref(dbInstance, backupPath));
-                            if (!backupSnap.exists()) {
-                                const fullScoresSnap = await get(ref(dbInstance, `/scores/${playerToSave.id}`));
-                                const fullScoresData = fullScoresSnap.exists() ? fullScoresSnap.val() : {};
-                                await set(ref(dbInstance, backupPath), {
-                                    data: fullScoresData,
-                                    createdAt: Date.now(),
-                                    meta: {
-                                        courseId: selectedCourse,
-                                        holeNumber: Number(hole),
-                                        forfeitType: scoreData.forfeitType || null,
-                                        by: 'referee'
-                                    }
-                                });
-                            }
-                        } catch (backupErr) {
-                            console.warn('점수 백업 실패(무시하고 진행):', backupErr);
-                        }
                         // 그룹 정보에서 배정된 코스 id 목록 추출
                         const group = groupsData[playerToSave.group];
                         const assignedCourseIds = group && group.courses ? Object.keys(group.courses).filter((cid: any) => group.courses[cid]) : [];
@@ -753,10 +716,6 @@ export default function RefereePage() {
                                         comment: `심판 직접 ${scoreData.forfeitType === 'absent' ? '불참' : scoreData.forfeitType === 'disqualified' ? '실격' : '기권'} (코스: ${courseName}, 홀: ${h})`,
                                         courseId: cid
                                     });
-                                    
-                                    // 실시간 업데이트를 위한 로그 캐시 무효화
-                                    invalidatePlayerLogCache(playerToSave.id);
-                                    console.log(`[실시간 업데이트] 심판 기권 처리 - 선수 ${playerToSave.id} 로그 캐시 무효화`);
                                 } else if (existing === undefined || existing === null || existing === '' || isNaN(Number(existing))) {
                                     // 나머지 미입력 홀만 0점 처리 (기존 점수는 보존)
                                     await set(ref(dbInstance, `/scores/${playerToSave.id}/${cid}/${h}`), 0);
@@ -772,10 +731,6 @@ export default function RefereePage() {
                                         comment: `심판페이지에서 ${scoreData.forfeitType === 'absent' ? '불참' : scoreData.forfeitType === 'disqualified' ? '실격' : '기권'} 처리 (코스: ${courseName}, 홀: ${h})`,
                                         courseId: cid
                                     });
-                                    
-                                    // 실시간 업데이트를 위한 로그 캐시 무효화
-                                    invalidatePlayerLogCache(playerToSave.id);
-                                    console.log(`[실시간 업데이트] 심판 기권 처리 - 선수 ${playerToSave.id} 로그 캐시 무효화`);
                                 }
                                 // 기존 점수가 있는 홀은 그대로 보존 (0점으로 덮어쓰지 않음)
                             }
