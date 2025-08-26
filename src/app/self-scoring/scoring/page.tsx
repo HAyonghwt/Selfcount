@@ -300,14 +300,12 @@ export default function SelfScoringPage() {
       }
     } catch {}
     
-    // Firebase 인증 수행 (관전 모드가 아닌 경우에만)
-    if (!isReadOnlyMode) {
-      ensureAuthenticated().then(success => {
-        if (!success) {
-          console.warn('Firebase 인증 실패 - 점수 저장 시 재시도됩니다.');
-        }
-      });
-    }
+    // Firebase 인증 수행 (관전/일반 공통)
+    ensureAuthenticated().then(success => {
+      if (!success) {
+        console.warn('Firebase 인증 실패 - 점수 저장 시 재시도됩니다.');
+      }
+    });
   }, []);
 
   // 플레이어/점수 DB 로딩 (읽기) - 최적화된 버전
