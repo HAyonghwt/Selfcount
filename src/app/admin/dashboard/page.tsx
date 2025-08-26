@@ -26,6 +26,7 @@ interface ProcessedPlayer {
     rank: number | null;
     hasAnyScore: boolean;
     hasForfeited: boolean;
+    forfeitType: 'absent' | 'disqualified' | 'forfeit' | null; // 기권 타입 추가
     coursesData: {
         [courseId: string]: {
             courseName: string;
@@ -391,7 +392,7 @@ export default function AdminDashboard() {
 
         // 각 그룹별 점수표 생성
         groupsToPrint.forEach((groupName, groupIndex) => {
-            const groupPlayers = finalDataByGroup[groupName];
+            const groupPlayers = updateForfeitTypes[groupName];
             if (!groupPlayers || groupPlayers.length === 0) return;
 
             // 그룹 섹션 시작 (첫 번째 그룹이 아니면 페이지 나누기)
@@ -436,7 +437,7 @@ export default function AdminDashboard() {
                             <tr>
                                 ${courseIndex === 0 ? `
                                     <td rowspan="${player.assignedCourses.length}" class="rank-cell responsive-column">
-                                        ${player.rank !== null ? `${player.rank}위` : (player.hasForfeited ? '기권' : '')}
+                                        ${player.rank !== null ? `${player.rank}위` : (player.hasForfeited ? (player.forfeitType === 'absent' ? '불참' : player.forfeitType === 'disqualified' ? '실격' : '기권') : '')}
                                     </td>
                                     <td rowspan="${player.assignedCourses.length}" class="responsive-column">${player.jo}</td>
                                     <td rowspan="${player.assignedCourses.length}" class="player-name responsive-column">${player.name}</td>
@@ -457,7 +458,7 @@ export default function AdminDashboard() {
 
                         // 총타수 (첫 번째 코스에서만 표시)
                         if (courseIndex === 0) {
-                            const totalText = player.hasForfeited ? '기권' : (player.hasAnyScore ? player.totalScore : '-');
+                            const totalText = player.hasForfeited ? (player.forfeitType === 'absent' ? '불참' : player.forfeitType === 'disqualified' ? '실격' : '기권') : (player.hasAnyScore ? player.totalScore : '-');
                             printContent += `<td rowspan="${player.assignedCourses.length}" class="total-score fixed-column">${totalText}</td>`;
                         }
 
@@ -466,12 +467,12 @@ export default function AdminDashboard() {
                 } else {
                     printContent += `
                         <tr>
-                            <td class="rank-cell responsive-column">${player.rank !== null ? `${player.rank}위` : (player.hasForfeited ? '기권' : '')}</td>
+                            <td class="rank-cell responsive-column">${player.rank !== null ? `${player.rank}위` : (player.hasForfeited ? (player.forfeitType === 'absent' ? '불참' : player.forfeitType === 'disqualified' ? '실격' : '기권') : '')}</td>
                             <td class="responsive-column">${player.jo}</td>
                             <td class="player-name responsive-column">${player.name}</td>
                             <td class="affiliation responsive-column">${player.affiliation}</td>
                             <td colspan="11" style="text-align: center; color: #64748b;" class="responsive-column">배정된 코스 없음</td>
-                            <td class="total-score fixed-column">${player.hasForfeited ? '기권' : (player.hasAnyScore ? player.totalScore : '-')}</td>
+                            <td class="total-score fixed-column">${player.hasForfeited ? (player.forfeitType === 'absent' ? '불참' : player.forfeitType === 'disqualified' ? '실격' : '기권') : (player.hasAnyScore ? player.totalScore : '-')}</td>
                         </tr>
                     `;
                 }
@@ -774,6 +775,20 @@ export default function AdminDashboard() {
                 const player = players[playerId];
                 if (player && player.group && groupsData[player.group]) {
                     const group = groupsData[player.group];
+                    // 대량 0점 입력 전에 선수 점수 백업 생성(1회성)
+                    try {
+                        const playerScoresSnap = await get(ref(db, `scores/${playerId}`));
+                        if (playerScoresSnap.exists()) {
+                            const backupRef = ref(db, `backups/scoresBeforeForfeit/${playerId}`);
+                            const backupSnap = await get(backupRef);
+                            if (!backupSnap.exists()) {
+                                await set(backupRef, { data: playerScoresSnap.val(), createdAt: Date.now() });
+                            }
+                        }
+                    } catch (e) {
+                        console.warn('백업 저장 실패(무시):', e);
+                    }
+
                     // 그룹에 배정된 코스 id 목록
                     const assignedCourseIds = group.courses ? Object.keys(group.courses).filter((cid: any) => group.courses[cid]) : [];
                     for (const cid of assignedCourseIds) {
@@ -1062,6 +1077,26 @@ export default function AdminDashboard() {
                 coursesData,
                 hasAnyScore: total !== null,
                 hasForfeited: Object.values(coursesData).some((cd: any) => cd.holeScores.some((s: any) => s === 0)),
+                forfeitType: (() => {
+                    // 기권 타입을 로그에서 추출
+                    const playerScoresData = scores[playerId] || {};
+                    let hasZeroScore = false;
+                    
+                    // 모든 배정 코스에서 0점이 있는지 확인
+                    for (const course of coursesForPlayer) {
+                        const scoresForCourse = playerScoresData[course.id] || {};
+                        for (let h = 1; h <= 9; h++) {
+                            if (scoresForCourse[h.toString()] === 0) {
+                                hasZeroScore = true;
+                                break;
+                            }
+                        }
+                        if (hasZeroScore) break;
+                    }
+                    
+                    // 0점이 있으면 기권 타입 추출 (나중에 로그에서 가져올 예정)
+                    return hasZeroScore ? 'pending' : null;
+                })(),
                 assignedCourses: coursesForPlayer,
                 plusMinus,
                 // 백카운트 계산을 위한 데이터 추가
@@ -1202,8 +1237,7 @@ export default function AdminDashboard() {
 
         return finalData;
     }, [processedDataByGroup, processedIndividualSuddenDeathData, processedTeamSuddenDeathData]);
-    
-    const allGroupsList = Object.keys(finalDataByGroup);
+
 
     const groupProgress = useMemo(() => {
         const progressByGroup: { [key: string]: number } = {};
@@ -1287,8 +1321,8 @@ export default function AdminDashboard() {
         const wb = XLSX.utils.book_new();
 
         const dataToExport = (filterGroup === 'all') 
-            ? finalDataByGroup 
-            : { [filterGroup]: finalDataByGroup[filterGroup] };
+            ? updateForfeitTypes 
+            : { [filterGroup]: updateForfeitTypes[filterGroup] };
 
         for (const groupName in dataToExport) {
             const groupPlayers = dataToExport[groupName];
@@ -1365,11 +1399,11 @@ export default function AdminDashboard() {
                 };
 
                 // Merged columns
-                addCell(startRow, 0, player.rank !== null ? `${player.rank}위` : (player.hasForfeited ? '기권' : ''));
+                addCell(startRow, 0, player.rank !== null ? `${player.rank}위` : (player.hasForfeited ? (player.forfeitType === 'absent' ? '불참' : player.forfeitType === 'disqualified' ? '실격' : '기권') : ''));
                 addCell(startRow, 1, player.jo);
                 addCell(startRow, 2, player.name);
                 addCell(startRow, 3, player.affiliation);
-                addCell(startRow, 15, player.hasForfeited ? '기권' : (player.hasAnyScore ? player.totalScore : '-'));
+                addCell(startRow, 15, player.hasForfeited ? (player.forfeitType === 'absent' ? '불참' : player.forfeitType === 'disqualified' ? '실격' : '기권') : (player.hasAnyScore ? player.totalScore : '-'));
 
                 if (numCourses > 1) {
                     merges.push({ s: { r: startRow, c: 0 }, e: { r: endRow, c: 0 } }); // Rank
@@ -1394,7 +1428,12 @@ export default function AdminDashboard() {
                         addCell(currentRow, 14, player.hasForfeited ? '기권' : (player.hasAnyScore ? (courseData?.courseTotal || 0) : '-'));
                     });
                 } else {
+                    addCell(startRow, 0, player.rank !== null ? `${player.rank}위` : (player.hasForfeited ? (player.forfeitType === 'absent' ? '불참' : player.forfeitType === 'disqualified' ? '실격' : '기권') : ''));
+                    addCell(startRow, 1, player.jo);
+                    addCell(startRow, 2, player.name);
+                    addCell(startRow, 3, player.affiliation);
                     addCell(startRow, 4, '배정된 코스 없음');
+                    addCell(startRow, 15, player.hasForfeited ? (player.forfeitType === 'absent' ? '불참' : player.forfeitType === 'disqualified' ? '실격' : '기권') : (player.hasAnyScore ? player.totalScore : '-'));
                     merges.push({ s: { r: startRow, c: 4 }, e: { r: startRow, c: 14 } });
                 }
 
@@ -1499,11 +1538,48 @@ export default function AdminDashboard() {
             setPlayerScoreLogs(logsMap);
             setLogsLoading(false);
         };
-        if (Object.keys(finalDataByGroup).length > 0) {
+        if (Object.keys(updateForfeitTypes).length > 0) {
             fetchLogs();
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [finalDataByGroup]);
+
+    // 기권 타입을 로그에서 추출하여 설정하는 함수
+    const getForfeitTypeFromLogs = (playerId: string): 'absent' | 'disqualified' | 'forfeit' | null => {
+        const logs = playerScoreLogs[playerId] || [];
+        const forfeitLogs = logs
+            .filter(l => l.newValue === 0 && l.modifiedByType === 'judge' && l.comment)
+            .sort((a, b) => b.modifiedAt - a.modifiedAt); // 최신순 정렬
+        
+        if (forfeitLogs.length > 0) {
+            const latestLog = forfeitLogs[0];
+            if (latestLog.comment?.includes('불참')) return 'absent';
+            if (latestLog.comment?.includes('실격')) return 'disqualified';
+            if (latestLog.comment?.includes('기권')) return 'forfeit';
+        }
+        return null;
+    };
+
+    // finalDataByGroup에서 기권 타입을 업데이트하는 함수
+    const updateForfeitTypes = useMemo(() => {
+        if (!playerScoreLogs || Object.keys(playerScoreLogs).length === 0) {
+            return finalDataByGroup;
+        }
+
+        const updatedData = { ...finalDataByGroup };
+        Object.keys(updatedData).forEach(groupName => {
+            updatedData[groupName] = updatedData[groupName].map((player: any) => {
+                if (player.hasForfeited) {
+                    const forfeitType = getForfeitTypeFromLogs(player.id);
+                    return { ...player, forfeitType };
+                }
+                return player;
+            });
+        });
+        return updatedData;
+    }, [finalDataByGroup, playerScoreLogs]);
+
+    const allGroupsList = Object.keys(updateForfeitTypes);
 
     // scoreLogs 데이터베이스 변경 실시간 감지 및 업데이트
     useEffect(() => {
@@ -1513,7 +1589,7 @@ export default function AdminDashboard() {
         const unsubScoreLogs = onValue(scoreLogsRef, async (snapshot) => {
             if (snapshot.exists()) {
                 // 변경된 로그가 있으면 모든 선수의 로그를 다시 가져와서 업데이트
-                const playerIds = Object.values(finalDataByGroup).flat().map((p:any) => p.id);
+                const playerIds = Object.values(updateForfeitTypes).flat().map((p:any) => p.id);
                 const updatedLogsMap: { [playerId: string]: ScoreLog[] } = {};
                 
                 await Promise.all(playerIds.map(async (pid) => {
@@ -1533,15 +1609,15 @@ export default function AdminDashboard() {
         return () => {
             unsubScoreLogs();
         };
-    }, [db, finalDataByGroup]);
+    }, [db, updateForfeitTypes]);
 
     const filteredPlayerResults = useMemo(() => {
         if (!searchPlayer) return [];
         const lowerCaseSearch = searchPlayer.toLowerCase();
-        return Object.values(finalDataByGroup).flat().filter(player => {
+        return Object.values(updateForfeitTypes).flat().filter(player => {
             return player.name.toLowerCase().includes(lowerCaseSearch) || player.affiliation.toLowerCase().includes(lowerCaseSearch);
         });
-    }, [searchPlayer, finalDataByGroup]);
+    }, [searchPlayer, updateForfeitTypes]);
 
     const handlePlayerSearchSelect = (playerId: number) => {
         setHighlightedPlayerId(playerId);
@@ -1600,11 +1676,41 @@ export default function AdminDashboard() {
                         if (val === undefined || val === null) missingCount++;
                     }
                     if (missingCount >= 3 && !alreadyForfeited.has(pid)) {
+                        // 대량 0 입력 전 백업 저장(선수 단위, 1회성)
+                        try {
+                            const playerScoresSnap = await get(ref(db, `scores/${pid}`));
+                            if (playerScoresSnap.exists()) {
+                                const backupRef = ref(db, `backups/scoresBeforeForfeit/${pid}`);
+                                const backupSnap = await get(backupRef);
+                                if (!backupSnap.exists()) {
+                                    await set(backupRef, { data: playerScoresSnap.val(), createdAt: Date.now() });
+                                }
+                            }
+                        } catch (e) {
+                            console.warn('자동 기권 백업 저장 실패(무시):', e);
+                        }
                         // 자동 기권 처리: 해당 선수의 모든 배정 코스/홀 0점 입력
                         for (const cid of courseIds) {
                             for (let h = 1; h <= 9; h++) {
                                 if (scores?.[pid]?.[cid]?.[h] !== 0) {
                                     await set(ref(db, `scores/${pid}/${cid}/${h}`), 0);
+                                    // 로그 기록 추가(복구 추적 가능)
+                                    try {
+                                        await logScoreChange({
+                                            matchId: 'tournaments/current',
+                                            playerId: pid,
+                                            scoreType: 'holeScore',
+                                            holeNumber: h,
+                                            oldValue: Number(scores?.[pid]?.[cid]?.[h]) || 0,
+                                            newValue: 0,
+                                            modifiedBy: 'admin',
+                                            modifiedByType: 'admin',
+                                            comment: `자동 기권 처리 (조: ${groupName}, 코스: ${courses?.[cid]?.name || cid}, 홀: ${h})`,
+                                            courseId: cid
+                                        });
+                                    } catch (e) {
+                                        console.warn('자동 기권 로그 기록 실패(무시):', e);
+                                    }
                                 }
                             }
                         }
@@ -1724,7 +1830,7 @@ export default function AdminDashboard() {
             </Card>
 
             {(filterGroup === 'all' ? allGroupsList : [filterGroup]).map(groupName => {
-                const groupPlayers = finalDataByGroup[groupName];
+                const groupPlayers = updateForfeitTypes[groupName];
                 if (!groupPlayers || groupPlayers.length === 0) return null;
 
                 return (
@@ -1775,18 +1881,10 @@ export default function AdminDashboard() {
                                                         {courseIndex === 0 && (
                                                             <>
                                                                 <TableCell rowSpan={player.assignedCourses.length || 1} className="text-center align-middle font-bold text-lg px-2 py-1 border-r">{player.rank !== null ? `${player.rank}위` : (player.hasForfeited ? (() => {
-    // 기권 타입을 로그에서 추출
-    const logs = playerScoreLogs[player.id] || [];
-    const forfeitLogs = logs
-        .filter(l => l.newValue === 0 && l.modifiedByType === 'judge' && l.comment)
-        .sort((a, b) => b.modifiedAt - a.modifiedAt); // 최신순 정렬
-    
-    if (forfeitLogs.length > 0) {
-      const latestLog = forfeitLogs[0];
-      if (latestLog.comment?.includes('불참')) return '불참';
-      if (latestLog.comment?.includes('실격')) return '실격';
-      return '기권';
-    }
+    // 기권 타입을 player.forfeitType에서 가져오기
+    if (player.forfeitType === 'absent') return '불참';
+    if (player.forfeitType === 'disqualified') return '실격';
+    if (player.forfeitType === 'forfeit') return '기권';
     return '기권';
   })() : '')}</TableCell>
                                                                 <TableCell rowSpan={player.assignedCourses.length || 1} className="text-center align-middle font-medium px-2 py-1 border-r">{player.jo}</TableCell>
@@ -1882,7 +1980,7 @@ export default function AdminDashboard() {
         <DialogDescription>
           선수: <b>{player.name}</b> / 코스: <b>{player.coursesData[course.id]?.courseName}</b> / 홀: <b>{scoreEditModal.holeIndex + 1}번</b>
           <br />
-          입력 점수: <b>{scoreEditModal.score === "0" ? "기권" : scoreEditModal.score}</b>
+          입력 점수: <b>{scoreEditModal.score === "0" ? "기권/불참/실격" : scoreEditModal.score}</b>
         </DialogDescription>
       </DialogHeader>
       <input
@@ -1895,7 +1993,7 @@ export default function AdminDashboard() {
         autoFocus
       />
       {(scoreEditModal.score === 0 || scoreEditModal.score === "0") && (
-        <div className="mt-2 text-red-600 text-center font-bold text-lg">기권</div>
+        <div className="mt-2 text-red-600 text-center font-bold text-lg">기권/불참/실격</div>
       )}
       <DialogFooter>
         <Button onClick={() => handleScoreEditSave()}>저장</Button>
@@ -1935,7 +2033,7 @@ export default function AdminDashboard() {
                       const zeroLogIdx = logs.findIndex(l =>
                         l.holeNumber === h &&
                         l.newValue === 0 &&
-                        l.modifiedByType === 'judge'
+                        (l.modifiedByType === 'judge' || l.modifiedByType === 'admin' || l.modifiedByType === 'captain')
                       );
                       let restoreValue = null;
                       if (zeroLogIdx !== -1) {
@@ -2012,12 +2110,12 @@ export default function AdminDashboard() {
               setScoreEditModal({ ...scoreEditModal, open: false });
             }}
           >
-            기권 해제
+            기권/불참/실격 해제
           </Button>
         )}
         {/* 안내문구 */}
         {(scoreEditModal.score === 0 || scoreEditModal.score === "0") && (
-          <div className="w-full text-center text-sm text-yellow-700 mt-2">기권 처리 이전의 모든 점수를 복구합니다.</div>
+          <div className="w-full text-center text-sm text-yellow-700 mt-2">기권/불참/실격 처리 이전의 모든 점수를 복구합니다.</div>
         )}
       </DialogFooter>
     </DialogContent>
@@ -2054,21 +2152,11 @@ export default function AdminDashboard() {
         </span>
       );
     } else if (player.hasForfeited) {
-      // 기권 타입을 로그에서 추출
-      const logs = playerScoreLogs[player.id] || [];
-      const forfeitLogs = logs
-          .filter(l => l.newValue === 0 && l.modifiedByType === 'judge' && l.comment)
-          .sort((a, b) => b.modifiedAt - a.modifiedAt); // 최신순 정렬
-      
-      if (forfeitLogs.length > 0) {
-        const latestLog = forfeitLogs[0];
-        if (latestLog.comment?.includes('불참')) {
-          courseSumElem = '불참';
-        } else if (latestLog.comment?.includes('실격')) {
-          courseSumElem = '실격';
-        } else {
-          courseSumElem = '기권';
-        }
+      // 기권 타입을 player.forfeitType에서 가져오기
+      if (player.forfeitType === 'absent') {
+        courseSumElem = '불참';
+      } else if (player.forfeitType === 'disqualified') {
+        courseSumElem = '실격';
       } else {
         courseSumElem = '기권';
       }
@@ -2080,19 +2168,11 @@ export default function AdminDashboard() {
                                                         {courseIndex === 0 && (
                                                             <TableCell rowSpan={player.assignedCourses.length || 1} className="text-center align-middle font-bold text-primary text-lg px-2 py-1">
                                                                                                                              {player.hasForfeited ? (() => {
-    // 기권 타입을 로그에서 추출
-    const logs = playerScoreLogs[player.id] || [];
-    const forfeitLogs = logs
-        .filter(l => l.newValue === 0 && l.modifiedByType === 'judge' && l.comment)
-        .sort((a, b) => b.modifiedAt - a.modifiedAt); // 최신순 정렬
-    
+    // 기권 타입을 player.forfeitType에서 가져오기
     let forfeitType = '기권';
-    if (forfeitLogs.length > 0) {
-      const latestLog = forfeitLogs[0];
-      if (latestLog.comment?.includes('불참')) forfeitType = '불참';
-      else if (latestLog.comment?.includes('실격')) forfeitType = '실격';
-      else forfeitType = '기권';
-    }
+    if (player.forfeitType === 'absent') forfeitType = '불참';
+    else if (player.forfeitType === 'disqualified') forfeitType = '실격';
+    else forfeitType = '기권';
 
     return (
       <TooltipProvider delayDuration={0}>
@@ -2171,37 +2251,21 @@ export default function AdminDashboard() {
                                                 )) : (
                                                     <TableRow key={`${player.id}-no-course`} className="text-base text-muted-foreground">
                                                          <TableCell className="text-center align-middle font-bold text-lg px-2 py-1 border-r">{player.rank !== null ? `${player.rank}위` : (player.hasForfeited ? (() => {
-    // 기권 타입을 로그에서 추출
-    const logs = playerScoreLogs[player.id] || [];
-    const forfeitLogs = logs
-        .filter(l => l.newValue === 0 && l.modifiedByType === 'judge' && l.comment)
-        .sort((a, b) => b.modifiedAt - a.modifiedAt); // 최신순 정렬
-    
-    if (forfeitLogs.length > 0) {
-      const latestLog = forfeitLogs[0];
-      if (latestLog.comment?.includes('불참')) return '불참';
-      if (latestLog.comment?.includes('실격')) return '실격';
-      return '기권';
-    }
+    // 기권 타입을 player.forfeitType에서 가져오기
+    if (player.forfeitType === 'absent') return '불참';
+    if (player.forfeitType === 'disqualified') return '실격';
+    if (player.forfeitType === 'forfeit') return '기권';
     return '기권';
   })() : '-')}</TableCell>
                                                          <TableCell className="text-center align-middle font-medium px-2 py-1 border-r">{player.jo}</TableCell>
                                                          <TableCell className="align-middle font-semibold px-2 py-1 border-r text-center">{player.name}</TableCell>
                                                          <TableCell className="align-middle px-2 py-1 border-r text-center">{player.affiliation}</TableCell>
                                                          <TableCell colSpan={11} className="text-center px-2 py-1 border-r">이 그룹에 배정된 코스가 없습니다.</TableCell>
-                                                         <TableCell className="text-center align-middle font-bold text-primary text-lg px-2 py-1">{player.hasForfeited ? (() => {
-    // 기권 타입을 로그에서 추출
-    const logs = playerScoreLogs[player.id] || [];
-    const forfeitLogs = logs
-        .filter(l => l.newValue === 0 && l.modifiedByType === 'judge' && l.comment)
-        .sort((a, b) => b.modifiedAt - a.modifiedAt); // 최신순 정렬
-    
-    if (forfeitLogs.length > 0) {
-      const latestLog = forfeitLogs[0];
-      if (latestLog.comment?.includes('불참')) return '불참';
-      if (latestLog.comment?.includes('실격')) return '실격';
-      return '기권';
-    }
+                                                                                                                    <TableCell className="text-center align-middle font-bold text-primary text-lg px-2 py-1">{player.hasForfeited ? (() => {
+    // 기권 타입을 player.forfeitType에서 가져오기
+    if (player.forfeitType === 'absent') return '불참';
+    if (player.forfeitType === 'disqualified') return '실격';
+    if (player.forfeitType === 'forfeit') return '기권';
     return '기권';
   })() : (player.hasAnyScore ? player.totalScore : '-')}</TableCell>
                                                     </TableRow>

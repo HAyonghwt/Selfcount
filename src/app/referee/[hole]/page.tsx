@@ -380,6 +380,9 @@ export default function RefereePage() {
                     setSelectedCourse(savedState.course);
                     setSelectedJo(savedState.jo);
                     setView(savedState.view);
+                    if (savedState.selectedType) {
+                        setSelectedType(savedState.selectedType);
+                    }
                 } else {
                     localStorage.removeItem(`refereeState_${hole}`);
                 }
@@ -397,13 +400,14 @@ export default function RefereePage() {
                 group: selectedGroup,
                 course: selectedCourse,
                 jo: selectedJo,
-                view: 'scoring'
+                view: 'scoring',
+                selectedType
             };
             localStorage.setItem(`refereeState_${hole}`, JSON.stringify(stateToSave));
         } else if (view === 'selection') {
             localStorage.removeItem(`refereeState_${hole}`);
         }
-    }, [view, selectedGroup, selectedCourse, selectedJo, hole]);
+    }, [view, selectedGroup, selectedCourse, selectedJo, selectedType, hole]);
 
     // Derived data
     const availableGroups = useMemo(() => {
@@ -693,6 +697,20 @@ export default function RefereePage() {
                     
                     // 0점 입력 시, 소속 그룹의 모든 코스/홀에 0점 처리
                     if (scoreData.score === 0) {
+                        // 대량 0 입력 전에 선수 점수 백업 저장(1회성)
+                        try {
+                            const playerScoresSnap = await get(ref(db as import('firebase/database').Database, `/scores/${playerToSave.id}`));
+                            if (playerScoresSnap.exists()) {
+                                const backupRef = ref(db as import('firebase/database').Database, `backups/scoresBeforeForfeit/${playerToSave.id}`);
+                                const backupSnap = await get(backupRef);
+                                if (!backupSnap.exists()) {
+                                    await set(backupRef, { data: playerScoresSnap.val(), createdAt: Date.now() });
+                                }
+                            }
+                        } catch (e) {
+                            console.warn('심판페이지 백업 저장 실패(무시):', e);
+                        }
+
                         // 그룹 정보에서 배정된 코스 id 목록 추출
                         const group = groupsData[playerToSave.group];
                         const assignedCourseIds = group && group.courses ? Object.keys(group.courses).filter((cid: any) => group.courses[cid]) : [];

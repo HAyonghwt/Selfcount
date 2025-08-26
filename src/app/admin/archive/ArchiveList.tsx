@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { getPlayerScoreLogsOptimized } from "@/lib/scoreLogs";
 
 interface ArchiveData {
   archiveId: string;
@@ -20,6 +21,19 @@ interface ArchiveData {
   processedByGroup: any;
 }
 
+interface ScoreLog {
+  id: string;
+  playerId: string;
+  courseId: string;
+  holeIndex: number;
+  oldValue: number | null;
+  newValue: number | null;
+  modifiedBy: string;
+  modifiedByType: string;
+  modifiedAt: number;
+  comment?: string;
+}
+
 interface ProcessedPlayer {
   id: string;
   jo: number;
@@ -30,6 +44,7 @@ interface ProcessedPlayer {
   rank: number | null;
   hasAnyScore: boolean;
   hasForfeited: boolean;
+  forfeitType: 'absent' | 'disqualified' | 'forfeit' | null; // 기권 타입 추가
   coursesData: {
     [courseId: string]: {
       courseName: string;
@@ -84,10 +99,31 @@ function getPlayerTotalAndPlusMinus(courses: any, player: any) {
   return { total, plusMinus: totalPar > 0 ? total - totalPar : null };
 }
 
+// 기권 타입을 로그에서 추출하는 함수
+async function getForfeitTypeFromLogs(playerId: string): Promise<'absent' | 'disqualified' | 'forfeit' | null> {
+  try {
+    const logs = await getPlayerScoreLogsOptimized(playerId);
+    const forfeitLogs = logs
+      .filter(l => l.newValue === 0 && l.modifiedByType === 'judge' && l.comment)
+      .sort((a, b) => b.modifiedAt - a.modifiedAt); // 최신순 정렬
+    
+    if (forfeitLogs.length > 0) {
+      const latestLog = forfeitLogs[0];
+      if (latestLog.comment?.includes('불참')) return 'absent';
+      if (latestLog.comment?.includes('실격')) return 'disqualified';
+      if (latestLog.comment?.includes('기권')) return 'forfeit';
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 const ArchiveList: React.FC = () => {
   const [archives, setArchives] = useState<ArchiveData[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<ArchiveData|null>(null);
+  const [processedArchiveData, setProcessedArchiveData] = useState<any>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -101,6 +137,27 @@ const ArchiveList: React.FC = () => {
     });
     return () => unsub();
   }, []);
+
+  // 선택된 기록보관 데이터에서 기권 타입을 설정하는 useEffect
+  useEffect(() => {
+    if (!selected || !selected.processedByGroup) return;
+
+    const updateForfeitTypes = async () => {
+      const updatedData = { ...selected.processedByGroup };
+      
+      for (const groupName in updatedData) {
+        for (const player of updatedData[groupName]) {
+          if (player.hasForfeited) {
+            player.forfeitType = await getForfeitTypeFromLogs(player.id);
+          }
+        }
+      }
+      
+      setProcessedArchiveData(updatedData);
+    };
+
+    updateForfeitTypes();
+  }, [selected]);
 
   const handleDeleteAll = async () => {
     if (!window.confirm("정말 모든 기록을 삭제하시겠습니까?")) return;
@@ -257,6 +314,7 @@ const ArchiveDetail: React.FC<{ archive: ArchiveData }> = ({ archive }) => {
         rank: null, // 나중에 계산
         hasAnyScore,
         hasForfeited,
+        forfeitType: null, // 나중에 로그에서 설정
         coursesData,
         total,
         courseScores,
@@ -289,6 +347,27 @@ const ArchiveDetail: React.FC<{ archive: ArchiveData }> = ({ archive }) => {
 
     setFinalDataByGroup(groupData);
   }, [archive]);
+
+  // 기권 타입을 로그에서 설정하는 useEffect
+  useEffect(() => {
+    if (!finalDataByGroup || Object.keys(finalDataByGroup).length === 0) return;
+
+    const updateForfeitTypes = async () => {
+      const updatedData = { ...finalDataByGroup };
+      
+      for (const groupName in updatedData) {
+        for (const player of updatedData[groupName]) {
+          if (player.hasForfeited) {
+            player.forfeitType = await getForfeitTypeFromLogs(player.id);
+          }
+        }
+      }
+      
+      setFinalDataByGroup(updatedData);
+    };
+
+    updateForfeitTypes();
+  }, []);
 
   const handleExportToExcel = async () => {
     const XLSX = await import('xlsx-js-style');
@@ -353,7 +432,7 @@ const ArchiveDetail: React.FC<{ archive: ArchiveData }> = ({ archive }) => {
           const row: any[] = [];
           
           if (courseIndex === 0) {
-            row.push(player.rank !== null ? player.rank : (player.hasForfeited ? '기권' : ''));
+            row.push(player.rank !== null ? player.rank : (player.hasForfeited ? (player.forfeitType === 'absent' ? '불참' : player.forfeitType === 'disqualified' ? '실격' : '기권') : ''));
             row.push(player.jo);
             row.push(player.name);
             row.push(player.affiliation);
@@ -370,9 +449,9 @@ const ArchiveDetail: React.FC<{ archive: ArchiveData }> = ({ archive }) => {
           row.push(typeof courseData?.courseTotal === 'number' ? courseData.courseTotal : '');
           
           if (courseIndex === 0) {
-            row.push(player.hasForfeited ? '기권' : (player.hasAnyScore ? player.totalScore : '-'));
-            row.push(player.hasForfeited ? '기권' : (player.plusMinus !== null ? (player.plusMinus === 0 ? 'E' : (player.plusMinus > 0 ? `+${player.plusMinus}` : player.plusMinus)) : ''));
-            row.push(player.hasForfeited ? '기권' : (player.hasAnyScore ? '' : '미출전'));
+            row.push(player.hasForfeited ? (player.forfeitType === 'absent' ? '불참' : player.forfeitType === 'disqualified' ? '실격' : '기권') : (player.hasAnyScore ? player.totalScore : '-'));
+            row.push(player.hasForfeited ? (player.forfeitType === 'absent' ? '불참' : player.forfeitType === 'disqualified' ? '실격' : '기권') : (player.plusMinus !== null ? (player.plusMinus === 0 ? 'E' : (player.plusMinus > 0 ? `+${player.plusMinus}` : player.plusMinus)) : ''));
+            row.push(player.hasForfeited ? (player.forfeitType === 'absent' ? '불참' : player.forfeitType === 'disqualified' ? '실격' : '기권') : (player.hasAnyScore ? '' : '미출전'));
           } else {
             row.push('', '', '');
           }
@@ -424,109 +503,118 @@ const ArchiveDetail: React.FC<{ archive: ArchiveData }> = ({ archive }) => {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mb-4">
-            <div className="flex gap-2 items-center">
-              <span>그룹 선택:</span>
-              <Select value={filterGroup} onValueChange={setFilterGroup}>
-                <SelectTrigger className="w-32">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">전체</SelectItem>
-                  {groupKeys.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}
-                </SelectContent>
-              </Select>
+          {Object.keys(finalDataByGroup).length === 0 ? (
+            <div className="text-center py-20">
+              <div className="text-lg font-semibold text-gray-600 mb-2">데이터를 불러오는 중...</div>
+              <div className="text-sm text-gray-500">잠시만 기다려주세요.</div>
             </div>
-            <Button variant="outline" onClick={handleExportToExcel}>
-              엑셀로 저장
-            </Button>
-          </div>
-
-          <div className="overflow-x-auto">
-            {(filterGroup === 'all' ? groupKeys : [filterGroup]).map(groupName => {
-              let groupPlayers = finalDataByGroup[groupName] || [];
-              // 1위부터 순위대로 정렬 (rank 오름차순, null/기권/미출전은 맨 뒤)
-              groupPlayers = [...groupPlayers].sort((a, b) => {
-                if (a.rank === null && b.rank === null) return 0;
-                if (a.rank === null) return 1;
-                if (b.rank === null) return -1;
-                return a.rank - b.rank;
-              });
-              if (!groupPlayers.length) return null;
-
-              return (
-                <div key={groupName} className="mb-8">
-                  <div className="font-bold text-lg mb-2">{groupName}</div>
-                  <table className="min-w-max w-full border text-center text-sm">
-                    <thead>
-                      <tr>
-                        <th className="border px-2 py-1 bg-blue-600 text-white">순위</th>
-                        <th className="border px-2 py-1 bg-blue-600 text-white">조</th>
-                        <th className="border px-2 py-1 bg-blue-600 text-white">이름</th>
-                        <th className="border px-2 py-1 bg-blue-600 text-white">소속</th>
-                        <th className="border px-2 py-1 bg-blue-600 text-white">코스</th>
-                        {[...Array(9)].map((_, i) => <th key={i} className="border px-2 py-1 bg-blue-600 text-white">{i+1}</th>)}
-                        <th className="border px-2 py-1 bg-blue-600 text-white">코스 합계</th>
-                        <th className="border px-2 py-1 bg-blue-600 text-white">총타수</th>
-                        <th className="border px-2 py-1 bg-blue-600 text-white">±타수</th>
-                        <th className="border px-2 py-1 bg-blue-600 text-white">비고</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {groupPlayers.map((player) => {
-                        const assignedCourses = player.assignedCourses || [];
-                        const numCourses = assignedCourses.length > 0 ? assignedCourses.length : 1;
-
-                        return assignedCourses.map((course, courseIndex) => {
-                          const courseData = player.coursesData[course.id];
-                          const holeScores = courseData?.holeScores || Array(9).fill(null);
-
-                          return (
-                            <tr key={course.id + '-' + player.id}>
-                              {courseIndex === 0 && (
-                                <>
-                                  <td className="border px-2 py-1" rowSpan={numCourses}>
-                                    {player.rank !== null ? player.rank : (player.hasForfeited ? '기권' : '')}
-                                  </td>
-                                  <td className="border px-2 py-1" rowSpan={numCourses}>{player.jo}</td>
-                                  <td className="border px-2 py-1" rowSpan={numCourses}>{player.name}</td>
-                                  <td className="border px-2 py-1" rowSpan={numCourses}>{player.affiliation}</td>
-                                </>
-                              )}
-                              <td className="border px-2 py-1">{courseData?.courseName || course.name}</td>
-                              {holeScores.map((score, i) => (
-                                <td key={i} className="border px-2 py-1">
-                                  {score !== null ? score : '-'}
-                                </td>
-                              ))}
-                              <td className="border px-2 py-1">
-                                {typeof courseData?.courseTotal === 'number' ? courseData.courseTotal : ''}
-                              </td>
-                              {courseIndex === 0 && (
-                                <td className="border px-2 py-1" rowSpan={numCourses}>
-                                  {player.hasForfeited ? '기권' : (player.hasAnyScore ? player.totalScore : '-')}
-                                </td>
-                              )}
-                              {courseIndex === 0 && (
-                                <td className="border px-2 py-1" rowSpan={numCourses}>
-                                  {player.hasForfeited ? '기권' : (player.plusMinus !== null ? (player.plusMinus === 0 ? 'E' : (player.plusMinus > 0 ? `+${player.plusMinus}` : player.plusMinus)) : '')}
-                                </td>
-                              )}
-                              {courseIndex === 0 && (
-                                <td className="border px-2 py-1" rowSpan={numCourses}>
-                                  {player.hasForfeited ? '기권' : (player.hasAnyScore ? '' : '미출전')}
-                                </td>
-                              )}
-                            </tr>
-                          );
-                        });
-                      })}
-                    </tbody>
-                  </table>
+          ) : (
+            <>
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mb-4">
+                <div className="flex gap-2 items-center">
+                  <span>그룹 선택:</span>
+                  <Select value={filterGroup} onValueChange={setFilterGroup}>
+                    <SelectTrigger className="w-32">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">전체</SelectItem>
+                      {groupKeys.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
                 </div>
-              );
-            })}
-          </div>
+                <Button variant="outline" onClick={handleExportToExcel}>
+                  엑셀로 저장
+                </Button>
+              </div>
+
+              <div className="overflow-x-auto">
+                {(filterGroup === 'all' ? groupKeys : [filterGroup]).map(groupName => {
+                  let groupPlayers = finalDataByGroup[groupName] || [];
+                  // 1위부터 순위대로 정렬 (rank 오름차순, null/기권/미출전은 맨 뒤)
+                  groupPlayers = [...groupPlayers].sort((a, b) => {
+                    if (a.rank === null && b.rank === null) return 0;
+                    if (a.rank === null) return 1;
+                    if (b.rank === null) return -1;
+                    return a.rank - b.rank;
+                  });
+                  if (!groupPlayers.length) return null;
+
+                  return (
+                    <div key={groupName} className="mb-8">
+                      <div className="font-bold text-lg mb-2">{groupName}</div>
+                      <table className="min-w-max w-full border text-center text-sm">
+                        <thead>
+                          <tr>
+                            <th className="border px-2 py-1 bg-blue-600 text-white">순위</th>
+                            <th className="border px-2 py-1 bg-blue-600 text-white">조</th>
+                            <th className="border px-2 py-1 bg-blue-600 text-white">이름</th>
+                            <th className="border px-2 py-1 bg-blue-600 text-white">소속</th>
+                            <th className="border px-2 py-1 bg-blue-600 text-white">코스</th>
+                            {[...Array(9)].map((_, i) => <th key={i} className="border px-2 py-1 bg-blue-600 text-white">{i+1}</th>)}
+                            <th className="border px-2 py-1 bg-blue-600 text-white">코스 합계</th>
+                            <th className="border px-2 py-1 bg-blue-600 text-white">총타수</th>
+                            <th className="border px-2 py-1 bg-blue-600 text-white">±타수</th>
+                            <th className="border px-2 py-1 bg-blue-600 text-white">비고</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {groupPlayers.map((player) => {
+                            const assignedCourses = player.assignedCourses || [];
+                            const numCourses = assignedCourses.length > 0 ? assignedCourses.length : 1;
+
+                            return assignedCourses.map((course, courseIndex) => {
+                              const courseData = player.coursesData[course.id];
+                              const holeScores = courseData?.holeScores || Array(9).fill(null);
+
+                              return (
+                                <tr key={course.id + '-' + player.id}>
+                                  {courseIndex === 0 && (
+                                    <>
+                                      <td className="border px-2 py-1" rowSpan={numCourses}>
+                                        {player.rank !== null ? player.rank : (player.hasForfeited ? (player.forfeitType === 'absent' ? '불참' : player.forfeitType === 'disqualified' ? '실격' : '기권') : '')}
+                                      </td>
+                                      <td className="border px-2 py-1" rowSpan={numCourses}>{player.jo}</td>
+                                      <td className="border px-2 py-1" rowSpan={numCourses}>{player.name}</td>
+                                      <td className="border px-2 py-1" rowSpan={numCourses}>{player.affiliation}</td>
+                                    </>
+                                  )}
+                                  <td className="border px-2 py-1">{courseData?.courseName || course.name}</td>
+                                  {holeScores.map((score, i) => (
+                                    <td key={i} className="border px-2 py-1">
+                                      {score !== null ? score : '-'}
+                                    </td>
+                                  ))}
+                                  <td className="border px-2 py-1">
+                                    {typeof courseData?.courseTotal === 'number' ? courseData.courseTotal : ''}
+                                  </td>
+                                  {courseIndex === 0 && (
+                                    <td className="border px-2 py-1" rowSpan={numCourses}>
+                                      {player.hasForfeited ? (player.forfeitType === 'absent' ? '불참' : player.forfeitType === 'disqualified' ? '실격' : '기권') : (player.hasAnyScore ? player.totalScore : '-')}
+                                    </td>
+                                  )}
+                                  {courseIndex === 0 && (
+                                    <td className="border px-2 py-1" rowSpan={numCourses}>
+                                      {player.hasForfeited ? (player.forfeitType === 'absent' ? '불참' : player.forfeitType === 'disqualified' ? '실격' : '기권') : (player.plusMinus !== null ? (player.plusMinus === 0 ? 'E' : (player.plusMinus > 0 ? `+${player.plusMinus}` : player.plusMinus)) : '')}
+                                    </td>
+                                  )}
+                                  {courseIndex === 0 && (
+                                    <td className="border px-2 py-1" rowSpan={numCourses}>
+                                      {player.hasForfeited ? (player.forfeitType === 'absent' ? '불참' : player.forfeitType === 'disqualified' ? '실격' : '기권') : (player.hasAnyScore ? '' : '미출전')}
+                                    </td>
+                                  )}
+                                </tr>
+                              );
+                            });
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
         </CardContent>
       </Card>
     </div>
