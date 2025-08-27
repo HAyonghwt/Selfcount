@@ -223,155 +223,180 @@ function ExternalScoreboard() {
     // 최적화된 데이터 구독을 위한 상태
     const [initialDataLoaded, setInitialDataLoaded] = useState(false);
     const [lastUpdateTime, setLastUpdateTime] = useState<number>(Date.now());
+    // 탭 비활성화 최적화: 현재 활성 구독 언서브 보관 및 재시작 트리거
+    const activeUnsubsRef = useRef<(() => void)[]>([]);
+    const [resumeSeq, setResumeSeq] = useState(0);
+
+    const stopSubscriptions = () => {
+        try {
+            activeUnsubsRef.current.forEach(u => { try { u(); } catch {} });
+        } finally {
+            activeUnsubsRef.current = [];
+        }
+    };
 
     useEffect(() => {
         if (!db) {
             setLoading(false);
             return;
         }
-        
-        // 전광판은 익명 인증을 한 번만 수행하여 인증 상태 유지
+        // 기존 구독 정리 후 시작
+        stopSubscriptions();
+
+        // 익명 인증 후에만 구독 시작
         ensureAuthenticated().then((isAuthenticated) => {
             if (!isAuthenticated) {
                 setLoading(false);
                 return;
             }
-            
             const dbInstance = db as any;
-        
-        // 초기 데이터 로딩 (빠른 로딩을 위해 병렬 처리)
-        if (!initialDataLoaded) {
-            const playersRef = ref(dbInstance, 'players');
-            const scoresRef = ref(dbInstance, 'scores');
-            const tournamentRef = ref(dbInstance, 'tournaments/current');
-            
-            let loadedCount = 0;
-            const checkAllLoaded = () => {
-                loadedCount++;
-                if (loadedCount >= 3) {
-                    setInitialDataLoaded(true);
-                    setLoading(false);
-                }
-            };
-            
-            const unsubInitialPlayers = onValue(playersRef, snap => {
-                const data = snap.val() || {};
-                setPlayers(data);
-                setLastPlayersHash(JSON.stringify(data));
-                checkAllLoaded();
-            });
-            
-            const unsubInitialScores = onValue(scoresRef, snap => {
-                const data = snap.val() || {};
-                setScores(data);
-                setLastScoresHash(JSON.stringify(data));
-                checkAllLoaded();
-            });
-            
-            const unsubInitialTournament = onValue(tournamentRef, snap => {
-                const data = snap.val() || {};
-                setTournament(data);
-                setGroupsData(data.groups || {});
-                setLastTournamentHash(JSON.stringify(data));
-                checkAllLoaded();
-            });
-            
-            // 3초 후에도 로딩이 안 되면 강제로 로딩 완료
-            const fallbackTimer = setTimeout(() => {
-                if (!initialDataLoaded) {
-                    setInitialDataLoaded(true);
-                    setLoading(false);
-                }
-            }, 3000);
-            
-            return () => {
-                unsubInitialPlayers();
-                unsubInitialScores();
-                unsubInitialTournament();
-                clearTimeout(fallbackTimer);
-            };
-        }
-        
-        // 초기 데이터 로딩 후 실시간 업데이트 (점수는 항상 실시간 반영 보장)
-        if (initialDataLoaded) {
-            // 선수 데이터: 변경사항만 감지하되 안전하게
-            const playersRef = ref(dbInstance, 'players');
-            const unsubPlayers = onChildChanged(playersRef, snap => {
-                const playerId = snap.key;
-                const playerData = snap.val();
-                if (playerId && playerData) {
-                    setPlayers((prev: any) => {
-                        const newPlayers = { ...prev, [playerId]: playerData };
-                        const newHash = JSON.stringify(newPlayers);
-                        if (newHash !== lastPlayersHash) {
-                            setLastPlayersHash(newHash);
-                            return newPlayers;
-                        }
-                        return prev;
-                    });
-                }
-            });
-            
-            // 점수 데이터: 실시간 반영을 위해 onValue 유지 (가장 중요!)
-            const scoresRef = ref(dbInstance, 'scores');
-            const unsubScores = onValue(scoresRef, snap => {
-                const data = snap.val() || {};
-                setScores((prev: any) => {
-                    // 해시 비교로 중복 데이터만 차단
-                    const newHash = JSON.stringify(data);
-                    if (newHash !== lastScoresHash) {
-                        setLastScoresHash(newHash);
-                        setLastUpdateTime(Date.now());
-                        
-                        // 점수 변경 감지 시 해당 선수들의 로그 캐시 무효화
-                        if (prev && Object.keys(prev).length > 0) {
-                            const changedPlayerIds = Object.keys(data).filter(playerId => {
-                                const prevScores = prev[playerId] || {};
-                                const newScores = data[playerId] || {};
-                                return JSON.stringify(prevScores) !== JSON.stringify(newScores);
-                            });
-                            
-                            // 변경된 선수들의 로그 캐시 무효화
-                            changedPlayerIds.forEach(playerId => {
-                                invalidatePlayerLogCache(playerId);
-                            });
-                        }
-                        
-                        return data;
+
+            // 초기 데이터 로딩 (빠른 로딩을 위해 병렬 처리)
+            if (!initialDataLoaded) {
+                const playersRef = ref(dbInstance, 'players');
+                const scoresRef = ref(dbInstance, 'scores');
+                const tournamentRef = ref(dbInstance, 'tournaments/current');
+                
+                let loadedCount = 0;
+                const checkAllLoaded = () => {
+                    loadedCount++;
+                    if (loadedCount >= 3) {
+                        setInitialDataLoaded(true);
+                        setLoading(false);
                     }
-                    return prev;
+                };
+                
+                const unsubInitialPlayers = onValue(playersRef, snap => {
+                    const data = snap.val() || {};
+                    setPlayers(data);
+                    setLastPlayersHash(JSON.stringify(data));
+                    checkAllLoaded();
                 });
-            });
+                
+                const unsubInitialScores = onValue(scoresRef, snap => {
+                    const data = snap.val() || {};
+                    setScores(data);
+                    setLastScoresHash(JSON.stringify(data));
+                    checkAllLoaded();
+                });
+                
+                const unsubInitialTournament = onValue(tournamentRef, snap => {
+                    const data = snap.val() || {};
+                    setTournament(data);
+                    setGroupsData(data.groups || {});
+                    setLastTournamentHash(JSON.stringify(data));
+                    checkAllLoaded();
+                });
+                
+                // 3초 후에도 로딩이 안 되면 강제로 로딩 완료
+                const fallbackTimer = setTimeout(() => {
+                    if (!initialDataLoaded) {
+                        setInitialDataLoaded(true);
+                        setLoading(false);
+                    }
+                }, 3000);
+                // 언서브/타이머 해제 등록
+                activeUnsubsRef.current.push(unsubInitialPlayers);
+                activeUnsubsRef.current.push(unsubInitialScores);
+                activeUnsubsRef.current.push(unsubInitialTournament);
+                activeUnsubsRef.current.push(() => clearTimeout(fallbackTimer));
+            }
             
-            // 토너먼트 설정: 변경사항만 감지
-            const tournamentRef = ref(dbInstance, 'tournaments/current');
-            const unsubTournament = onChildChanged(tournamentRef, snap => {
-                const key = snap.key;
-                const value = snap.val();
-                if (key && value) {
-                    setTournament((prev: any) => {
-                        const newTournament = { ...prev, [key]: value };
-                        if (key === 'groups') {
-                            setGroupsData(value);
-                        }
-                        const newHash = JSON.stringify(newTournament);
-                        if (newHash !== lastTournamentHash) {
-                            setLastTournamentHash(newHash);
-                            return newTournament;
+            // 초기 데이터 로딩 후 실시간 업데이트 (점수는 항상 실시간 반영 보장)
+            if (initialDataLoaded) {
+                // 선수 데이터: 변경사항만 감지하되 안전하게
+                const playersRef = ref(dbInstance, 'players');
+                const unsubPlayers = onChildChanged(playersRef, snap => {
+                    const playerId = snap.key;
+                    const playerData = snap.val();
+                    if (playerId && playerData) {
+                        setPlayers((prev: any) => {
+                            const newPlayers = { ...prev, [playerId]: playerData };
+                            const newHash = JSON.stringify(newPlayers);
+                            if (newHash !== lastPlayersHash) {
+                                setLastPlayersHash(newHash);
+                                return newPlayers;
+                            }
+                            return prev;
+                        });
+                    }
+                });
+                
+                // 점수 데이터: 실시간 반영을 위해 onValue 유지 (가장 중요!)
+                const scoresRef = ref(dbInstance, 'scores');
+                const unsubScores = onValue(scoresRef, snap => {
+                    const data = snap.val() || {};
+                    setScores((prev: any) => {
+                        // 해시 비교로 중복 데이터만 차단
+                        const newHash = JSON.stringify(data);
+                        if (newHash !== lastScoresHash) {
+                            setLastScoresHash(newHash);
+                            setLastUpdateTime(Date.now());
+                            
+                            // 점수 변경 감지 시 해당 선수들의 로그 캐시 무효화
+                            if (prev && Object.keys(prev).length > 0) {
+                                const changedPlayerIds = Object.keys(data).filter(playerId => {
+                                    const prevScores = prev[playerId] || {};
+                                    const newScores = data[playerId] || {};
+                                    return JSON.stringify(prevScores) !== JSON.stringify(newScores);
+                                });
+                                
+                                // 변경된 선수들의 로그 캐시 무효화
+                                changedPlayerIds.forEach(playerId => {
+                                    invalidatePlayerLogCache(playerId);
+                                });
+                            }
+                            
+                            return data;
                         }
                         return prev;
                     });
-                }
-            });
-            
-            return () => {
-                unsubPlayers();
-                unsubScores();
-                unsubTournament();
-            };
-        }
+                });
+                
+                // 토너먼트 설정: 변경사항만 감지
+                const tournamentRef = ref(dbInstance, 'tournaments/current');
+                const unsubTournament = onChildChanged(tournamentRef, snap => {
+                    const key = snap.key;
+                    const value = snap.val();
+                    if (key && value) {
+                        setTournament((prev: any) => {
+                            const newTournament = { ...prev, [key]: value };
+                            if (key === 'groups') {
+                                setGroupsData(value);
+                            }
+                            const newHash = JSON.stringify(newTournament);
+                            if (newHash !== lastTournamentHash) {
+                                setLastTournamentHash(newHash);
+                                return newTournament;
+                            }
+                            return prev;
+                        });
+                    }
+                });
+                
+                // 언서브 등록
+                activeUnsubsRef.current.push(unsubPlayers);
+                activeUnsubsRef.current.push(unsubScores);
+                activeUnsubsRef.current.push(unsubTournament);
+            }
         });
-    }, [initialDataLoaded, lastScoresHash, lastPlayersHash, lastTournamentHash]);
+        // 클린업: 이 이펙트가 재실행/언마운트 시 구독 해제
+        return () => stopSubscriptions();
+    }, [initialDataLoaded, lastScoresHash, lastPlayersHash, lastTournamentHash, resumeSeq]);
+
+    // 탭 비활성화 시 구독 일시 중단, 다시 보이면 재개
+    useEffect(() => {
+        const onVisibilityChange = () => {
+            if (typeof document === 'undefined') return;
+            if (document.hidden) {
+                stopSubscriptions();
+            } else {
+                setResumeSeq((s) => s + 1);
+            }
+        };
+        document.addEventListener('visibilitychange', onVisibilityChange);
+        return () => document.removeEventListener('visibilitychange', onVisibilityChange);
+    }, []);
 
     // 서든데스 데이터 최적화된 구독 (활성화된 경우에만)
     useEffect(() => {
