@@ -50,3 +50,15 @@ certificates
 functions/node_modules/
 functions/lib/
 firebase-debug.log
+# Firebase 백업 및 마이그레이션 파일들
+selfcount-backup.json
+verify-backup.json
+firebase-migration.js
+simple-migration.js
+migration-package.json
+quick-migration.bat
+quick-migration.sh
+MIGRATION_GUIDE.md
+firebase-cli-migration.md
+src/app/admin/dashboard/page-1.tsx
+src/app/admin/dashboard/page-실격되는것.tsx
