@@ -189,7 +189,7 @@ export default function AdminDashboard() {
                 scores,
                 courses,
                 groups: groupsData,
-                processedByGroup: finalDataByGroup // 그룹별 순위/점수 등 가공 데이터 추가 저장
+                processedByGroup: updateForfeitTypes // 그룹별 순위/점수 등 가공 데이터 추가 저장 (실격/불참/기권 구분 포함)
             };
             await set(ref(db, `archives/${archiveId}`), archiveData);
             toast({ title: '기록 보관 완료', description: `대회명: ${tournamentName || '대회'} / 참가자: ${playerCount}명` });

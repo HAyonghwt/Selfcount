@@ -99,7 +99,7 @@ function getPlayerTotalAndPlusMinus(courses: any, player: any) {
   return { total, plusMinus: totalPar > 0 ? total - totalPar : null };
 }
 
-// 기권 타입을 로그에서 추출하는 함수
+// 기권 타입을 로그에서 추출하는 함수 (기존 기록보관 데이터용)
 async function getForfeitTypeFromLogs(playerId: string): Promise<'absent' | 'disqualified' | 'forfeit' | null> {
   try {
     const logs = await getPlayerScoreLogsOptimized(playerId);
@@ -113,9 +113,9 @@ async function getForfeitTypeFromLogs(playerId: string): Promise<'absent' | 'dis
       if (latestLog.comment?.includes('실격')) return 'disqualified';
       if (latestLog.comment?.includes('기권')) return 'forfeit';
     }
-    return null;
+    return 'forfeit';
   } catch {
-    return null;
+    return 'forfeit';
   }
 }
 
@@ -138,22 +138,29 @@ const ArchiveList: React.FC = () => {
     return () => unsub();
   }, []);
 
-  // 선택된 기록보관 데이터에서 기권 타입을 설정하는 useEffect
+  // 기존 기록보관 데이터의 forfeitType 보정 (필요시에만)
   useEffect(() => {
     if (!selected || !selected.processedByGroup) return;
 
     const updateForfeitTypes = async () => {
       const updatedData = { ...selected.processedByGroup };
+      let hasChanges = false;
       
       for (const groupName in updatedData) {
         for (const player of updatedData[groupName]) {
-          if (player.hasForfeited) {
+          if (player.hasForfeited && (!player.forfeitType || player.forfeitType === 'pending')) {
+            // 기존 데이터에 forfeitType이 없는 경우에만 로그에서 조회
             player.forfeitType = await getForfeitTypeFromLogs(player.id);
+            hasChanges = true;
           }
         }
       }
       
-      setProcessedArchiveData(updatedData);
+      if (hasChanges) {
+        setProcessedArchiveData(updatedData);
+      } else {
+        setProcessedArchiveData(selected.processedByGroup);
+      }
     };
 
     updateForfeitTypes();
@@ -348,26 +355,37 @@ const ArchiveDetail: React.FC<{ archive: ArchiveData }> = ({ archive }) => {
     setFinalDataByGroup(groupData);
   }, [archive]);
 
-  // 기권 타입을 로그에서 설정하는 useEffect
+  // 데이터 처리 완료 후 기권 타입 업데이트
   useEffect(() => {
     if (!finalDataByGroup || Object.keys(finalDataByGroup).length === 0) return;
 
     const updateForfeitTypes = async () => {
       const updatedData = { ...finalDataByGroup };
+      let hasChanges = false;
       
       for (const groupName in updatedData) {
         for (const player of updatedData[groupName]) {
           if (player.hasForfeited) {
-            player.forfeitType = await getForfeitTypeFromLogs(player.id);
+            // 모든 기권 선수에 대해 로그에서 정확한 타입 조회
+            const newForfeitType = await getForfeitTypeFromLogs(player.id);
+            if (newForfeitType && newForfeitType !== player.forfeitType) {
+              player.forfeitType = newForfeitType;
+              hasChanges = true;
+            }
           }
         }
       }
       
-      setFinalDataByGroup(updatedData);
+      if (hasChanges) {
+        setFinalDataByGroup(updatedData);
+      }
     };
 
-    updateForfeitTypes();
-  }, []);
+    // 약간의 지연 후 실행 (데이터 로딩 완료 후)
+    setTimeout(() => {
+      updateForfeitTypes();
+    }, 100);
+  }, [Object.keys(finalDataByGroup).length]); // finalDataByGroup의 키 개수가 변경될 때만 실행
 
   const handleExportToExcel = async () => {
     const XLSX = await import('xlsx-js-style');
