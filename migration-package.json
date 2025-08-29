@@ -1,0 +1,24 @@
+{
+  "name": "firebase-migration-tool",
+  "version": "1.0.0",
+  "description": "Firebase Realtime Database 마이그레이션 도구",
+  "main": "firebase-migration.js",
+  "scripts": {
+    "backup": "node firebase-migration.js --mode=backup",
+    "migrate": "node firebase-migration.js --mode=migrate", 
+    "verify": "node firebase-migration.js --mode=verify",
+    "full-migration": "node firebase-migration.js --mode=full",
+    "install-deps": "npm install firebase-admin"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.0.0"
+  },
+  "keywords": [
+    "firebase",
+    "migration",
+    "database",
+    "backup"
+  ],
+  "author": "",
+  "license": "MIT"
+}

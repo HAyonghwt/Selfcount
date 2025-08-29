@@ -11,7 +11,7 @@ import { Download, Filter, Printer } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import * as XLSX from 'xlsx-js-style';
 import { db } from '@/lib/firebase';
-import { ref, onValue, set, get, query, limitToLast, onChildChanged, off } from 'firebase/database';
+import { ref, onValue, set, get } from 'firebase/database';
 import { useToast } from '@/hooks/use-toast';
 import { ToastAction } from '@/components/ui/toast';
 import ExternalScoreboardInfo from '@/components/ExternalScoreboardInfo';
@@ -878,11 +878,6 @@ export default function AdminDashboard() {
     const [courses, setCourses] = useState<any>({});
     const [groupsData, setGroupsData] = useState<any>({});
     const [filterGroup, setFilterGroup] = useState('all');
-    
-    // 🛡️ 외부 전광판과 동일한 최적화 상태 관리 (useEffect보다 먼저 선언)
-    const [initialDataLoaded, setInitialDataLoaded] = useState(false);
-    const [resumeSeq, setResumeSeq] = useState(0);
-    const activeUnsubsRef = useRef<(() => void)[]>([]);
     const [individualSuddenDeathData, setIndividualSuddenDeathData] = useState<any>(null);
     const [teamSuddenDeathData, setTeamSuddenDeathData] = useState<any>(null);
     const [notifiedSuddenDeathGroups, setNotifiedSuddenDeathGroups] = useState<Set<string>>(new Set());
@@ -986,154 +981,54 @@ export default function AdminDashboard() {
     useEffect(() => {
         if (!db) return;
         
-        // 🟢 기본 설정 데이터는 항상 구독 (용량이 작음)
+        const playersRef = ref(db, 'players');
+        const scoresRef = ref(db, 'scores');
         const tournamentRef = ref(db, 'tournaments/current');
         const tournamentNameRef = ref(db, 'tournaments/current/name');
         const individualSuddenDeathRef = ref(db, 'tournaments/current/suddenDeath/individual');
         const teamSuddenDeathRef = ref(db, 'tournaments/current/suddenDeath/team');
 
-        // 🟢 메인 데이터 구독 - 해시 기반 중복 방지
-        const playersRef = ref(db, 'players');
-        const scoresRef = ref(db, 'scores');
-        
-        // 해시 변수들은 각 구독 내부에서 선언
 
-        // 🚀 혁신적 최적화: 변경된 데이터만 다운로드
-        
-        // 🛡️ 외부 전광판과 동일한 초기 데이터 로딩 방식
-        if (!initialDataLoaded) {
-            console.log('🚀 초기 데이터 로딩 시작...');
-            
-            let loadedCount = 0;
-            const checkAllLoaded = () => {
-                loadedCount++;
-                if (loadedCount >= 3) { // Players, Scores, Tournament 모두 로드되면
-                    setInitialDataLoaded(true);
-                    console.log('✅ 초기 데이터 로딩 완료');
-                }
-            };
-            
-            // Players 초기 로드
-            const unsubInitialPlayers = onValue(playersRef, snap => {
-                const data = snap.val() || {};
-                setPlayers(data);
-                console.log('🔄 Players 초기 로드:', Object.keys(data).length, '명');
-                checkAllLoaded();
-            });
-            
-            // Scores 초기 로드
-            const unsubInitialScores = onValue(scoresRef, snap => {
-                const data = snap.val() || {};
-                setScores(data);
-                console.log('🔄 Scores 초기 로드:', Object.keys(data).length, '개');
-                checkAllLoaded();
-            });
-            
-            // Tournament 초기 로드
-            const unsubInitialTournament = onValue(tournamentRef, snap => {
-                const data = snap.val() || {};
-                setCourses(data.courses || {});
-                setGroupsData(data.groups || {});
-                console.log('🔄 Tournament 초기 로드');
-                checkAllLoaded();
-            });
-            
-            // 3초 후에도 로딩이 안 되면 강제로 로딩 완료
-            const fallbackTimer = setTimeout(() => {
-                if (!initialDataLoaded) {
-                    setInitialDataLoaded(true);
-                    console.log('⏰ 강제 로딩 완료 (3초 타임아웃)');
-                }
-            }, 3000);
-            
-            // 구독 등록
-            activeUnsubsRef.current.push(unsubInitialPlayers);
-            activeUnsubsRef.current.push(unsubInitialScores);
-            activeUnsubsRef.current.push(unsubInitialTournament);
-            activeUnsubsRef.current.push(() => clearTimeout(fallbackTimer));
-        }
-        
-        // 🛡️ 초기 데이터 로딩 후 실시간 업데이트 (외부 전광판과 동일)
-        if (initialDataLoaded) {
-            console.log('🔄 실시간 업데이트 모드 시작');
-            
-            // Players: 변경된 선수만 감지 (외부 전광판과 완전히 동일)
-            let lastPlayersHash = '';
-            const unsubPlayersChanges = onChildChanged(playersRef, snap => {
-                const playerId = snap.key;
-                const playerData = snap.val();
-                if (playerId && playerData) {
-                    setPlayers((prev: any) => {
-                        const newPlayers = { ...prev, [playerId]: playerData };
-                        const newHash = JSON.stringify(newPlayers);
-                        if (newHash !== lastPlayersHash) {
-                            lastPlayersHash = newHash;
-                            console.log('🔄 Player 변경:', playerId);
-                            return newPlayers;
-                        }
-                        return prev;
+        const unsubPlayers = onValue(playersRef, snap => setPlayers(snap.val() || {}));
+        const unsubScores = onValue(scoresRef, snap => {
+            const data = snap.val() || {};
+            setScores(prevScores => {
+                // 점수 변경 감지 시 해당 선수들의 로그 캐시 무효화 (외부전광판 방식)
+                if (prevScores && Object.keys(prevScores).length > 0) {
+                    const changedPlayerIds = Object.keys(data).filter(playerId => {
+                        const prevPlayerScores = prevScores[playerId] || {};
+                        const newPlayerScores = data[playerId] || {};
+                        return JSON.stringify(prevPlayerScores) !== JSON.stringify(newPlayerScores);
+                    });
+                    
+                    // 변경된 선수들의 로그 캐시 무효화
+                    changedPlayerIds.forEach(playerId => {
+                        invalidatePlayerLogCache(playerId);
+                        console.log(`[캐시 무효화] 선수 ${playerId} 로그 캐시 무효화 완료`);
+                        
+                        // 5초 후 해당 선수 로그 자동 갱신
+                        setTimeout(async () => {
+                            try {
+                                const logs = await getPlayerScoreLogsOptimized(playerId);
+                                setPlayerScoreLogs((prev: any) => ({
+                                    ...prev,
+                                    [playerId]: logs
+                                }));
+                                console.log(`[자동 갱신] 선수 ${playerId} 로그 5초 후 자동 갱신 완료`);
+                            } catch (error) {
+                                console.error(`[자동 갱신] 선수 ${playerId} 로그 갱신 실패:`, error);
+                            }
+                        }, 5000);
                     });
                 }
+                return data;
             });
-            
-            // Scores: 외부 전광판과 동일한 실시간 반영 (해시 비교 개선)
-            let lastScoresHash = '';
-            const unsubScores = onValue(scoresRef, snap => {
-                const data = snap.val() || {};
-                setScores((prev: any) => {
-                    // 🟢 외부 전광판과 동일한 해시 비교 방식
-                    const newHash = JSON.stringify(data);
-                    if (newHash !== lastScoresHash) {
-                        lastScoresHash = newHash;
-                        console.log('🔄 Scores 실시간 업데이트:', Object.keys(data).length, '개');
-                        
-                        // 🟢 점수 변경 감지 시 해당 선수들의 로그 캐시 무효화 (외부 전광판 방식)
-                        if (prev && Object.keys(prev).length > 0) {
-                            const changedPlayerIds = Object.keys(data).filter(playerId => {
-                                const prevScores = prev[playerId] || {};
-                                const newScores = data[playerId] || {};
-                                return JSON.stringify(prevScores) !== JSON.stringify(newScores);
-                            });
-                            
-                            // 변경된 선수들의 로그 캐시 무효화
-                            changedPlayerIds.forEach(playerId => {
-                                invalidatePlayerLogCache(playerId);
-                            });
-                        }
-                        
-                        return data;
-                    }
-                    return prev;
-                });
-            });
-            
-            // 구독 등록
-            activeUnsubsRef.current.push(unsubPlayersChanges);
-            activeUnsubsRef.current.push(unsubScores);
-        }
-
-        // Tournament 변경사항만 감지 (외부 전광판과 완전히 동일)
-        let lastTournamentHash = '';
-        const unsubTournament = onChildChanged(tournamentRef, snap => {
-            const key = snap.key;
-            const value = snap.val();
-            if (key && value) {
-                const currentHash = JSON.stringify(value);
-                if (currentHash !== lastTournamentHash) {
-                    lastTournamentHash = currentHash;
-                    if (key === 'courses') {
-                        setCourses(value);
-                        console.log('🔄 Courses 변경');
-                    } else if (key === 'groups') {
-                        setGroupsData(value);
-                        console.log('🔄 Groups 변경');
-                    }
-                }
-            }
         });
-        activeUnsubsRef.current.push(unsubTournament);
-        
-        // 기본 구독들 (항상 필요)
+        const unsubTournament = onValue(tournamentRef, snap => {
+            const data = snap.val() || {};
+            setCourses(data.courses || {});
+            setGroupsData(data.groups || {});
+        });
         const unsubTournamentName = onValue(tournamentNameRef, snap => {
             const name = snap.val();
             setTournamentName(name || '골프 대회');
@@ -1141,26 +1036,21 @@ export default function AdminDashboard() {
         const unsubIndividualSuddenDeath = onValue(individualSuddenDeathRef, snap => setIndividualSuddenDeathData(snap.val()));
         const unsubTeamSuddenDeath = onValue(teamSuddenDeathRef, snap => setTeamSuddenDeathData(snap.val()));
         
-        // 기본 구독들 등록
-        activeUnsubsRef.current.push(unsubTournamentName);
-        activeUnsubsRef.current.push(unsubIndividualSuddenDeath);
-        activeUnsubsRef.current.push(unsubTeamSuddenDeath);
-        
-        // 클린업은 stopSubscriptions()에서 처리
-        return () => stopSubscriptions();
-    }, [db, initialDataLoaded, resumeSeq]);
+        return () => {
+            unsubPlayers();
+            unsubScores();
+            unsubTournament();
+            unsubTournamentName();
+            unsubIndividualSuddenDeath();
+            unsubTeamSuddenDeath();
+        }
+    }, [db]);
     
-    // 🟢 메모리 최적화 - 의존성 최소화 및 조건부 계산
     const processedDataByGroup = useMemo(() => {
         const allCoursesList = Object.values(courses).filter(Boolean);
         if (Object.keys(players).length === 0 || allCoursesList.length === 0) return {};
 
-        // 🟢 filterGroup이 'all'이 아닌 경우 해당 그룹만 처리
-        const playersToProcess = filterGroup === 'all' 
-            ? Object.entries(players)
-            : Object.entries(players).filter(([, player]: [string, any]) => player.group === filterGroup);
-
-        const allProcessedPlayers: any[] = playersToProcess.map(([playerId, player]: [string, any]) => {
+        const allProcessedPlayers: any[] = Object.entries(players).map(([playerId, player]: [string, any]) => {
             const playerGroupData = groupsData[player.group];
             // 그룹별 코스설정만을 기준으로 assignedCourses 생성 (샘플 방식 적용)
             const assignedCourseIds = playerGroupData?.courses 
@@ -1256,12 +1146,8 @@ export default function AdminDashboard() {
             acc[groupName].push(player);
             return acc;
         }, {} as Record<string, any[]>);
-        
-        // 🟢 필터된 그룹만 순위 계산 (성능 최적화)
         const rankedData: { [key: string]: ProcessedPlayer[] } = {};
-        const groupsToRank = filterGroup === 'all' ? Object.keys(groupedData) : [filterGroup].filter(g => groupedData[g]);
-        
-        for (const groupName of groupsToRank) {
+        for (const groupName in groupedData) {
             // 코스 추가 역순에서 undefined/null/잘못된 객체 제거
             const coursesForGroup = [...(groupedData[groupName][0]?.assignedCourses || [])].filter(c => c && c.id !== undefined).reverse();
             const playersToSort = groupedData[groupName].filter((p: any) => p.hasAnyScore && !p.hasForfeited);
@@ -1306,7 +1192,7 @@ export default function AdminDashboard() {
             rankedData[groupName] = finalPlayers;
         }
         return rankedData;
-    }, [players, scores, courses, groupsData, filterGroup]);
+    }, [players, scores, courses, groupsData]);
     
     const processSuddenDeath = (suddenDeathData: any) => {
         if (!suddenDeathData?.isActive || !suddenDeathData.players || !suddenDeathData.holes || !Array.isArray(suddenDeathData.holes)) return [];
@@ -1665,29 +1551,6 @@ export default function AdminDashboard() {
 
     // 선수별 점수 로그 캐시 상태 (playerId별)
     const [playerScoreLogs, setPlayerScoreLogs] = useState<{ [playerId: string]: ScoreLog[] }>({});
-    
-    // 🚀 데이터 사용량 모니터링
-    const [dataUsage, setDataUsage] = useState({ 
-        totalDownloaded: 0, 
-        lastUpdate: Date.now(),
-        downloadsPerMinute: 0 
-    });
-    
-    // 이미 위에서 선언됨 - 중복 제거
-    
-    // 🛡️ 안전한 구독 중단 함수 (외부 전광판과 동일)
-    const stopSubscriptions = () => {
-        console.log('🔴 모든 구독 중단 (데이터 절약)');
-        activeUnsubsRef.current.forEach(unsub => {
-            try {
-                unsub();
-            } catch (error) {
-                console.warn('구독 해제 중 오류:', error);
-            }
-        });
-        activeUnsubsRef.current = [];
-    };
-    
     // 로딩 상태
     const [logsLoading, setLogsLoading] = useState(false);
 
@@ -1751,110 +1614,35 @@ export default function AdminDashboard() {
 
     const allGroupsList = Object.keys(updateForfeitTypes);
 
-    // 🛡️ ScoreLogs 최적화 - 외부 전광판과 완전히 동일한 방식
-    // 선수별 로그 최적화된 로딩 (finalDataByGroup 변경 시 기본 로딩)
+    // scoreLogs 데이터베이스 변경 실시간 감지 및 업데이트
     useEffect(() => {
-        const fetchLogs = async () => {
-            if (Object.keys(finalDataByGroup).length === 0) return;
-            
-            console.log('🔄 ScoreLogs 기본 로딩 시작 - finalDataByGroup 변경 감지');
-            
-            // 점수가 있는 선수들만 로그 로딩 대상
-            const allPlayersWithScores = Object.values(finalDataByGroup)
-                .flat()
-                .filter((p: any) => p.hasAnyScore)
-                .map((p: any) => p.id);
-            
-            const logsMap: { [playerId: string]: ScoreLog[] } = {};
-            
-            // 기존 로그 캐시 유지하면서 새로운 선수만 로딩 (외부 전광판과 동일)
-            const existingPlayerIds = Object.keys(playerScoreLogs);
-            const newPlayerIds = allPlayersWithScores.filter(pid => !existingPlayerIds.includes(pid));
-            
-            console.log('🔄 새로 로딩할 선수들:', newPlayerIds);
-            
-            // 새로운 선수만 로그 로딩 (병렬 처리로 성능 향상)
-            if (newPlayerIds.length > 0) {
-                await Promise.all(newPlayerIds.map(async (pid) => {
+        if (!db) return;
+        
+        const scoreLogsRef = ref(db, 'scoreLogs');
+        const unsubScoreLogs = onValue(scoreLogsRef, async (snapshot) => {
+            if (snapshot.exists()) {
+                // 변경된 로그가 있으면 모든 선수의 로그를 다시 가져와서 업데이트
+                const playerIds = Object.values(updateForfeitTypes).flat().map((p:any) => p.id);
+                const updatedLogsMap: { [playerId: string]: ScoreLog[] } = {};
+                
+                await Promise.all(playerIds.map(async (pid) => {
                     try {
                         const logs = await getPlayerScoreLogsOptimized(pid);
-                        logsMap[pid] = logs;
-                        console.log(`✅ ScoreLogs 기본 로딩 완료 - 선수 ${pid}:`, logs.length, '개');
-                    } catch (error) {
-                        console.error(`❌ ScoreLogs 기본 로딩 실패 - 선수 ${pid}:`, error);
-                        logsMap[pid] = [];
+                        updatedLogsMap[pid] = logs;
+                    } catch {
+                        // 에러 발생 시 기존 로그 유지
+                        updatedLogsMap[pid] = playerScoreLogs[pid] || [];
                     }
                 }));
                 
-                // 기존 로그와 새로운 로그 병합 (외부 전광판과 동일)
-                setPlayerScoreLogs((prev: any) => ({
-                    ...prev,
-                    ...logsMap
-                }));
+                setPlayerScoreLogs(updatedLogsMap);
             }
-        };
+        });
         
-        // finalDataByGroup 변경 시 즉시 로그 로딩 (실시간성 보장)
-        fetchLogs();
-    }, [finalDataByGroup]); // finalDataByGroup 변경 시에만 실행
-    
-    // 점수 변경 시 해당 선수의 로그만 즉시 업데이트 (외부 전광판과 동일)
-    useEffect(() => {
-        const updateLogsForChangedScores = async () => {
-            if (!scores || Object.keys(scores).length === 0) return;
-            
-            // 점수가 변경된 선수들의 로그만 업데이트
-            const scorePlayerIds = Object.keys(scores);
-            
-            for (const playerId of scorePlayerIds) {
-                try {
-                    // 최적화된 함수로 로그 가져오기 (캐시 적용)
-                    const logs = await getPlayerScoreLogsOptimized(playerId);
-                    
-                    setPlayerScoreLogs((prev: any) => ({
-                        ...prev,
-                        [playerId]: logs
-                    }));
-                } catch (error) {
-                    console.error(`❌ ScoreLogs 로딩 실패 - 선수 ${playerId}:`, error);
-                    // 에러 발생 시 빈 배열로 설정
-                    setPlayerScoreLogs((prev: any) => ({
-                        ...prev,
-                        [playerId]: []
-                    }));
-                }
-            }
+        return () => {
+            unsubScoreLogs();
         };
-        
-        updateLogsForChangedScores();
-    }, [scores]); // scores 변경 시에만 실행
-
-    // 🛡️ 탭 비활성화 시 데이터 다운로드 중단 (외부 전광판과 동일)
-    useEffect(() => {
-        const onVisibilityChange = () => {
-            if (typeof document === 'undefined') return;
-            if (document.hidden) {
-                console.log('🔴 탭 비활성화 - 데이터 다운로드 중단');
-                stopSubscriptions();
-            } else {
-                console.log('🟢 탭 활성화 - 데이터 구독 재개');
-                setResumeSeq((s) => s + 1);
-            }
-        };
-        document.addEventListener('visibilitychange', onVisibilityChange);
-        return () => document.removeEventListener('visibilitychange', onVisibilityChange);
-    }, []);
-
-    // 🚀 점수 수정 시 즉시 해당 선수 로그 업데이트 (중요 기능 보장)
-    const updatePlayerLogImmediately = async (playerId: string) => {
-        try {
-            const logs = await getPlayerScoreLogsOptimized(playerId);
-            setPlayerScoreLogs(prev => ({ ...prev, [playerId]: logs }));
-            console.log('⚡ 즉시 로그 업데이트:', playerId);
-        } catch (error) {
-            console.error('로그 업데이트 실패:', playerId, error);
-        }
-    };
+    }, [db, updateForfeitTypes]);
 
     const filteredPlayerResults = useMemo(() => {
         if (!searchPlayer) return [];
