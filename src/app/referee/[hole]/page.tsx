@@ -95,6 +95,10 @@ export default function RefereePage() {
     // Local state for scoring UI
     const [scores, setScores] = useState<{ [key: string]: ScoreData }>({});
     const [playerToSave, setPlayerToSave] = useState<Player | null>(null);
+    
+    // scores 상태를 참조하기 위한 ref (무한 렌더링 방지)
+    const scoresRef = useRef(scores);
+    scoresRef.current = scores;
 
     // Unlock modal state
     const [isUnlockModalOpen, setIsUnlockModalOpen] = useState(false);
@@ -108,6 +112,9 @@ export default function RefereePage() {
 
     // 안내 모달 상태 추가
     const [showAllJosCompleteModal, setShowAllJosCompleteModal] = useState(false);
+    
+    // completedJos를 별도 상태로 관리
+    const [completedJosState, setCompletedJosState] = useState<Set<string>>(new Set());
 
     // 구독 해제 함수
     const unsubscribeFrom = (key: string) => {
@@ -123,6 +130,8 @@ export default function RefereePage() {
             unsubscribeFrom(key);
         });
     };
+
+
 
     // 로그인 상태 확인 및 Firebase 인증
     useEffect(() => {
@@ -166,8 +175,8 @@ export default function RefereePage() {
             const now = Date.now();
             const cacheAge = now - (dataCache.current.lastUpdated[cacheKey] || 0);
             
-            // 캐시가 5분 이내면 캐시 사용
-            if (dataCache.current.tournament && cacheAge < 5 * 60 * 1000) {
+            // 캐시가 30분 이내면 캐시 사용 (토너먼트 설정은 거의 바뀌지 않음)
+            if (dataCache.current.tournament && cacheAge < 30 * 60 * 1000) {
                 const cached = dataCache.current.tournament;
                 setCourses(cached.courses ? Object.values(cached.courses) : []);
                 setGroupsData(cached.groups || {});
@@ -175,23 +184,38 @@ export default function RefereePage() {
                 return;
             }
 
-            // 캐시가 없거나 오래된 경우 새로 로드
+            // 캐시가 없거나 오래된 경우 새로 로드 (한 번만)
             const tournamentRef = ref(dbInstance, 'tournaments/current');
             const passwordRef = ref(dbInstance, 'config/scoreUnlockPassword');
 
-            const unsubTournament = onValue(tournamentRef, (snapshot) => {
-                const data = snapshot.val() || {};
-                dataCache.current.tournament = data;
-                dataCache.current.lastUpdated[cacheKey] = Date.now();
-                setCourses(data.courses ? Object.values(data.courses) : []);
-                setGroupsData(data.groups || {});
-                setLoading(false);
-            });
-            
-            const unsubPassword = onValue(passwordRef, (snapshot) => setUnlockPasswordFromDb(snapshot.val() || ''));
+            // 최적화: 한 번만 로드하여 캐시에 저장
+            const loadTournamentOnce = async () => {
+                try {
+                    const [tournamentSnapshot, passwordSnapshot] = await Promise.all([
+                        get(tournamentRef),
+                        get(passwordRef)
+                    ]);
+                    
+                    const data = tournamentSnapshot.val() || {};
+                    const password = passwordSnapshot.val() || '';
+                    
+                    dataCache.current.tournament = data;
+                    dataCache.current.lastUpdated[cacheKey] = Date.now();
+                    setCourses(data.courses ? Object.values(data.courses) : []);
+                    setGroupsData(data.groups || {});
+                    setUnlockPasswordFromDb(password);
+                    setLoading(false);
+                } catch (error) {
+                    console.error('토너먼트 데이터 로드 실패:', error);
+                    setLoading(false);
+                }
+            };
 
-            subscriptions.current['tournament'] = unsubTournament;
-            subscriptions.current['password'] = unsubPassword;
+            loadTournamentOnce();
+
+            // 구독 해제 함수는 빈 함수로 설정 (한 번만 로드하므로)
+            subscriptions.current['tournament'] = () => {};
+            subscriptions.current['password'] = () => {};
         };
 
         loadTournamentData();
@@ -213,36 +237,63 @@ export default function RefereePage() {
         const now = Date.now();
         const cacheAge = now - (dataCache.current.lastUpdated[cacheKey] || 0);
         
-        // 캐시가 1분 이내면 캐시 사용
-        if (dataCache.current.players[selectedGroup] && cacheAge < 60 * 1000) {
+        // 캐시가 5분 이내면 캐시 사용 (선수 정보는 자주 바뀌지 않음)
+        if (dataCache.current.players[selectedGroup] && cacheAge < 5 * 60 * 1000) {
             setAllPlayers(dataCache.current.players[selectedGroup]);
             return;
         }
 
         const dbInstance = db as import('firebase/database').Database;
+        // 최적화: 전체 players 대신 한 번만 로드하여 그룹별로 필터링
         const playersRef = ref(dbInstance, 'players');
 
-        const unsubPlayers = onValue(playersRef, (snapshot) => {
-            const allPlayersData = Object.entries(snapshot.val() || {}).map(([id, player]) => ({ id, ...player as object } as Player));
-            const groupPlayers = allPlayersData.filter(p => p.group === selectedGroup);
-            
-            // 캐시 업데이트
-            dataCache.current.players[selectedGroup] = groupPlayers;
-            dataCache.current.lastUpdated[cacheKey] = Date.now();
-            
-            setAllPlayers(groupPlayers);
-        });
+        // 최적화: 전체 players 대신 특정 그룹 선수만 조회하려 시도, 실패 시 전체에서 필터링
+        const loadPlayersOnce = async () => {
+            try {
+                let groupPlayers: Player[] = [];
+                
+                // 방법 1: 특정 그룹 경로로 직접 조회 시도 (데이터 최소화)
+                try {
+                    const groupPlayersRef = ref(dbInstance, `playersByGroup/${selectedGroup}`);
+                    const groupSnapshot = await get(groupPlayersRef);
+                    if (groupSnapshot.exists()) {
+                        groupPlayers = Object.entries(groupSnapshot.val()).map(([id, player]) => ({ id, ...player as object } as Player));
+                    }
+                } catch (groupError) {
+                    // 그룹별 인덱스가 없는 경우 무시하고 다음 방법 시도
+                }
+                
+                // 방법 2: 그룹별 인덱스가 없으면 전체에서 필터링 (최소한의 fallback)
+                if (groupPlayers.length === 0) {
+                    const snapshot = await get(playersRef);
+                    const allPlayersData = Object.entries(snapshot.val() || {}).map(([id, player]) => ({ id, ...player as object } as Player));
+                    groupPlayers = allPlayersData.filter(p => p.group === selectedGroup);
+                }
+                
+                // 캐시 업데이트
+                dataCache.current.players[selectedGroup] = groupPlayers;
+                dataCache.current.lastUpdated[cacheKey] = Date.now();
+                
+                setAllPlayers(groupPlayers);
+            } catch (error) {
+                console.error('선수 데이터 로드 실패:', error);
+                setAllPlayers([]);
+            }
+        };
 
-        subscriptions.current['players'] = unsubPlayers;
+        loadPlayersOnce();
+
+        // 구독 해제 함수는 빈 함수로 설정 (한 번만 로드하므로)
+        subscriptions.current['players'] = () => {};
 
         return () => {
             unsubscribeFrom('players');
         };
     }, [selectedGroup, selectedType]);
 
-    // 선택된 코스의 점수만 구독하는 최적화된 로직
+    // 현재 선수들의 현재 코스만 구독하는 최적화된 로직
     useEffect(() => {
-        if (!selectedCourse) {
+        if (!selectedCourse || !selectedGroup || !selectedJo || !allPlayers.length) {
             setAllScores({});
             return;
         }
@@ -258,32 +309,44 @@ export default function RefereePage() {
         }
 
         const dbInstance = db as import('firebase/database').Database;
-        const scoresRef = ref(dbInstance, 'scores');
+        const filteredPlayers = allPlayers.filter(p => p.group === selectedGroup && p.jo.toString() === selectedJo);
+        
 
-        const unsubScores = onValue(scoresRef, (snapshot) => {
-            const allScoresData = snapshot.val() || {};
-            const courseScores: any = {};
-            
-            // 선택된 코스의 점수만 필터링
-            Object.keys(allScoresData).forEach(playerId => {
-                if (allScoresData[playerId] && allScoresData[playerId][selectedCourse]) {
-                    courseScores[playerId] = { [selectedCourse]: allScoresData[playerId][selectedCourse] };
+
+        // 현재 선수들의 현재 코스만 개별 구독 (최소 데이터)
+        const courseScores: any = {};
+        
+        filteredPlayers.forEach(player => {
+            const playerCourseRef = ref(dbInstance, `scores/${player.id}/${selectedCourse}`);
+            const unsubscribe = onValue(playerCourseRef, (snapshot) => {
+                const playerCourseScores = snapshot.val();
+                if (playerCourseScores) {
+                    courseScores[player.id] = { [selectedCourse]: playerCourseScores };
+                } else {
+                    // 점수가 없는 경우 빈 객체로 설정
+                    courseScores[player.id] = { [selectedCourse]: {} };
                 }
+                
+                // 전체 상태 업데이트
+                setAllScores({ ...courseScores });
+                
+
             });
             
-            // 캐시 업데이트
-            dataCache.current.scores[selectedCourse] = courseScores;
-            dataCache.current.lastUpdated[cacheKey] = Date.now();
-            
-            setAllScores(courseScores);
+            subscriptions.current[`score_${player.id}`] = unsubscribe;
         });
 
-        subscriptions.current['scores'] = unsubScores;
+        // 캐시 업데이트
+        dataCache.current.scores[selectedCourse] = courseScores;
+        dataCache.current.lastUpdated[cacheKey] = Date.now();
 
         return () => {
-            unsubscribeFrom('scores');
+            // 개별 점수 구독 해제
+            filteredPlayers.forEach(player => {
+                unsubscribeFrom(`score_${player.id}`);
+            });
         };
-    }, [selectedCourse]);
+    }, [selectedCourse, selectedGroup, selectedJo, allPlayers, hole]);
 
     // 컴포넌트 언마운트 시 모든 구독 해제
     useEffect(() => {
@@ -337,12 +400,15 @@ export default function RefereePage() {
         for (let i = 1; i <= allJos.length; i++) {
             const idx = (currentIdx + i) % allJos.length;
             const candidateJo = allJos[idx];
-            if (!completedJos.has(candidateJo)) {
+            if (!completedJosState.has(candidateJo)) {
                 nextJo = candidateJo;
                 break;
             }
         }
         if (!nextJo) {
+            console.log('모든 조 완료 - 모달 띄우기');
+            console.log('availableJos:', allJos);
+            console.log('completedJosState:', Array.from(completedJosState));
             setShowAllJosCompleteModal(true);
             return;
         }
@@ -447,52 +513,83 @@ export default function RefereePage() {
         return allPlayers.filter(p => p.group === selectedGroup && p.jo.toString() === selectedJo);
     }, [allPlayers, selectedGroup, selectedJo]);
     
-    const completedJos = useMemo(() => {
-        if (!selectedGroup || !selectedCourse || !hole || !allPlayers.length || !Object.keys(allScores).length) {
-            return new Set<string>();
+    // 완료된 조들을 확인하는 useEffect
+    useEffect(() => {
+        if (!selectedGroup || !selectedCourse || !hole || !allPlayers.length) {
+            setCompletedJosState(new Set());
+            return;
         }
     
         const groupPlayers = allPlayers.filter(p => p.group === selectedGroup);
         const josInGroup = [...new Set(groupPlayers.map(p => p.jo.toString()))];
     
-        const completed = new Set<string>();
+        // 비동기 함수로 Firebase에서 직접 확인
+        const checkCompletedJos = async () => {
+            const completed = new Set<string>();
+            const dbInstance = db as import('firebase/database').Database;
     
-        josInGroup.forEach(joNum => {
-            const playersInThisJo = groupPlayers.filter(p => p.jo.toString() === joNum);
+            for (const joNum of josInGroup) {
+                const playersInThisJo = groupPlayers.filter(p => p.jo.toString() === joNum);
     
-            if (playersInThisJo.length === 0) return;
+                if (playersInThisJo.length === 0) continue;
     
-            const allInJoAreScored = playersInThisJo.every(player => {
-                return allScores[player.id]?.[selectedCourse as string]?.[hole as string] !== undefined;
-            });
+                let allInJoAreScored = true;
+                
+                for (const player of playersInThisJo) {
+                    try {
+                        // allScores에서 먼저 확인
+                        let hasScore = allScores[player.id]?.[selectedCourse as string]?.[hole as string] !== undefined;
+                        
+                        // allScores에 없으면 Firebase에서 직접 확인
+                        if (!hasScore) {
+                            const playerHoleRef = ref(dbInstance, `scores/${player.id}/${selectedCourse}/${hole}`);
+                            const snapshot = await get(playerHoleRef);
+                            hasScore = snapshot.val() !== undefined && snapshot.val() !== null;
+                        }
+                        
+                        console.log(`${joNum}조 선수 ${player.id}: hasScore=${hasScore}`);
+                        
+                        if (!hasScore) {
+                            allInJoAreScored = false;
+                            break;
+                        }
+                    } catch (error) {
+                        console.warn(`선수 ${player.id} 점수 확인 실패:`, error);
+                        allInJoAreScored = false;
+                        break;
+                    }
+                }
+                
+                console.log(`${joNum}조 완료 여부: ${allInJoAreScored}`);
     
-            if (allInJoAreScored) {
-                completed.add(joNum);
+                if (allInJoAreScored) {
+                    completed.add(joNum);
+                }
             }
-        });
-    
-        return completed;
+            
+                        console.log('완료된 조들 업데이트:', Array.from(completed));
+            setCompletedJosState(completed);
+        };
+
+        checkCompletedJos();
     }, [allPlayers, allScores, selectedGroup, selectedCourse, hole]);
+
+    // completedJos는 이제 단순히 상태를 반환
+    const completedJos = completedJosState;
 
     const isCourseCompleteForThisHole = useMemo(() => {
         if (!selectedCourse || !hole || !allPlayers.length || !Object.keys(groupsData).length) {
             return false;
         }
 
-        const playersOnCourse = allPlayers.filter(player => {
-            const playerGroup = groupsData[player.group];
-            return playerGroup?.courses?.[selectedCourse];
-        });
+        // 현재 그룹의 모든 조가 완료되었는지 확인
+        const groupPlayers = allPlayers.filter(p => p.group === selectedGroup);
+        const josInGroup = [...new Set(groupPlayers.map(p => p.jo.toString()))];
+        
+        // 모든 조가 완료되었으면 코스 완료
+        return josInGroup.length > 0 && josInGroup.every(jo => completedJosState.has(jo));
 
-        if (playersOnCourse.length === 0) {
-            return false;
-        }
-
-        return playersOnCourse.every(player => {
-            return allScores[player.id]?.[selectedCourse as string]?.[hole as string] !== undefined;
-        });
-
-    }, [selectedCourse, hole, allPlayers, allScores, groupsData]);
+    }, [selectedCourse, hole, allPlayers, selectedGroup, completedJosState]);
 
     const hasUnsavedChanges = useMemo(() => {
         return Object.values(scores).some(s => s.status === 'editing');
@@ -551,10 +648,25 @@ export default function RefereePage() {
             const newScoresState: { [key: string]: ScoreData } = {};
             
             for (const player of currentPlayers) {
-                const existingScoreFromDb = allScores[player.id]?.[selectedCourse as string]?.[hole as string];
+                // 먼저 Firebase에서 직접 확인 (allScores가 불완전할 수 있음)
+                let existingScoreFromDb = allScores[player.id]?.[selectedCourse as string]?.[hole as string];
                 
-                if (existingScoreFromDb !== undefined) {
-                    // 저장된 점수가 0점인 경우 forfeitType을 로그에서 추출
+                // allScores에 없으면 Firebase에서 직접 확인
+                if (existingScoreFromDb === undefined) {
+                    try {
+                        const dbInstance = db as import('firebase/database').Database;
+                        const playerHoleRef = ref(dbInstance, `scores/${player.id}/${selectedCourse}/${hole}`);
+                        const snapshot = await get(playerHoleRef);
+                        existingScoreFromDb = snapshot.val();
+                        
+                        console.log(`직접 Firebase 확인 - 선수 ${player.id}:`, existingScoreFromDb);
+                    } catch (error) {
+                        console.warn(`선수 ${player.id} 점수 직접 확인 실패:`, error);
+                    }
+                }
+                
+                if (existingScoreFromDb !== undefined && existingScoreFromDb !== null) {
+                    // 저장된 점수가 있으면 잠금 상태로 설정
                     let forfeitType: 'absent' | 'disqualified' | 'forfeit' | null = null;
                     if (Number(existingScoreFromDb) === 0) {
                         forfeitType = await getForfeitTypeFromLogs(player.id, selectedCourse as string, hole as string);
@@ -566,6 +678,7 @@ export default function RefereePage() {
                         forfeitType: forfeitType
                     };
                 } else {
+                    // 저장된 점수가 없으면 편집 상태로 설정
                     const interimScore = savedInterimScores[player.id];
                     if (interimScore && interimScore.status === 'editing') {
                         newScoresState[player.id] = { 
@@ -585,6 +698,39 @@ export default function RefereePage() {
         initializeScores();
         
     }, [view, selectedJo, selectedCourse, hole, allScores, currentPlayers]);
+
+    // allScores 변경 시 실격 복구를 위한 scores 상태 업데이트
+    useEffect(() => {
+        if (view !== 'scoring' || !selectedJo || !currentPlayers.length || Object.keys(scores).length === 0) {
+            return;
+        }
+
+
+        
+        // 현재 선수들의 실격 복구 체크
+        currentPlayers.forEach(player => {
+            const currentScoreState = scores[player.id];
+            const firebaseScore = allScores[player.id]?.[selectedCourse as string]?.[hole as string];
+            
+            // 실격 복구 감지: scores에서는 0점이지만 Firebase에서는 0이 아닌 점수
+            if (currentScoreState && 
+                currentScoreState.score === 0 && 
+                firebaseScore !== undefined && 
+                Number(firebaseScore) > 0) {
+                
+
+                
+                setScores(prev => ({
+                    ...prev,
+                    [player.id]: {
+                        score: Number(firebaseScore),
+                        status: 'editing',
+                        forfeitType: null
+                    }
+                }));
+            }
+        });
+    }, [allScores, view, selectedJo, selectedCourse, hole, currentPlayers, scores]);
 
 
     // ---- Handlers ----
@@ -755,15 +901,7 @@ export default function RefereePage() {
                         }
                     }
                     
-                    // 0점 처리 후 캐시 업데이트
-                    if (scoreData.score === 0) {
-                        // 모든 관련 코스의 캐시를 무효화하여 다음 로드 시 새로 가져오도록 함
-                        const group = groupsData[playerToSave.group];
-                        const assignedCourseIds = group && group.courses ? Object.keys(group.courses).filter((cid: any) => group.courses[cid]) : [];
-                        assignedCourseIds.forEach(cid => {
-                            delete dataCache.current.lastUpdated[`scores_${cid}`];
-                        });
-                    }
+                    // 0점 처리 후에는 refreshScoresData()가 호출되므로 별도 캐시 무효화 불필요
                     
                     // 성공하면 루프 종료
                     break;
@@ -959,7 +1097,7 @@ export default function RefereePage() {
                         <SelectTrigger className="h-12 text-base"><SelectValue placeholder={selectedCourse === '' ? "코스 먼저 선택" : (availableJos.length === 0 ? "배정된 선수 없음" : "4. 조 선택")} /></SelectTrigger>
                         <SelectContent position="item-aligned">
                             {availableJos.map(jo => {
-                                const isCompleted = completedJos.has(jo);
+                                const isCompleted = completedJosState.has(jo);
                                 return (
                                     <SelectItem key={jo} value={jo}>
                                         <div className="flex items-center justify-between w-full">
@@ -1113,7 +1251,7 @@ export default function RefereePage() {
                                     </SelectTrigger>
                                     <SelectContent>
                                         {availableJos.map(jo => {
-                                            const isCompleted = completedJos.has(jo);
+                                            const isCompleted = completedJosState.has(jo);
                                             return (
                                                 <SelectItem key={jo} value={jo}>
                                                     <div className="flex items-center justify-between w-full gap-4">

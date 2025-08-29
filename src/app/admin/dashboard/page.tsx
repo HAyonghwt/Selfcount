@@ -1031,9 +1031,9 @@ export default function AdminDashboard() {
             
             // Tournament 초기 로드
             const unsubInitialTournament = onValue(tournamentRef, snap => {
-                const data = snap.val() || {};
-                setCourses(data.courses || {});
-                setGroupsData(data.groups || {});
+            const data = snap.val() || {};
+            setCourses(data.courses || {});
+            setGroupsData(data.groups || {});
                 console.log('🔄 Tournament 초기 로드');
                 checkAllLoaded();
             });
