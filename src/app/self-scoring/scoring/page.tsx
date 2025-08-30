@@ -1896,7 +1896,7 @@ export default function SelfScoringPage() {
                     <td key={idx} className={`signature-cell ${isReadOnlyMode ? 'readonly' : ''}`} onClick={() => openSignatureModal(pi)}>
                       {signatures[pi]
                         ? (<img src={signatures[pi]} alt="signature" className="signature-image" />)
-                        : (<div className="signature-placeholder">{isReadOnlyMode ? '관전' : '싸인'}</div>)}
+                        : (<div className="signature-placeholder">{isReadOnlyMode ? '보기용' : '싸인'}</div>)}
                     </td>
                   ))}
               </tr>
@@ -2046,7 +2046,7 @@ export default function SelfScoringPage() {
               box.style.textAlign = 'center';
               box.addEventListener('click', e => e.stopPropagation());
               const title = document.createElement('div');
-              title.textContent = '조원 관전용 QR';
+              title.textContent = '동반자 점수보기용 QR';
               title.style.fontWeight = '800';
               title.style.marginBottom = '8px';
               const urlDiv = document.createElement('div');

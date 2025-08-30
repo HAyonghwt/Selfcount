@@ -16,6 +16,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { logScoreChange } from '@/lib/scoreLogs';
+import QRCodeViewer from '@/components/QRCodeViewer';
 
 interface Player {
     id: string;
@@ -406,9 +407,6 @@ export default function RefereePage() {
             }
         }
         if (!nextJo) {
-            console.log('모든 조 완료 - 모달 띄우기');
-            console.log('availableJos:', allJos);
-            console.log('completedJosState:', Array.from(completedJosState));
             setShowAllJosCompleteModal(true);
             return;
         }
@@ -547,8 +545,6 @@ export default function RefereePage() {
                             hasScore = snapshot.val() !== undefined && snapshot.val() !== null;
                         }
                         
-                        console.log(`${joNum}조 선수 ${player.id}: hasScore=${hasScore}`);
-                        
                         if (!hasScore) {
                             allInJoAreScored = false;
                             break;
@@ -560,14 +556,11 @@ export default function RefereePage() {
                     }
                 }
                 
-                console.log(`${joNum}조 완료 여부: ${allInJoAreScored}`);
-    
                 if (allInJoAreScored) {
                     completed.add(joNum);
                 }
             }
             
-                        console.log('완료된 조들 업데이트:', Array.from(completed));
             setCompletedJosState(completed);
         };
 
@@ -658,8 +651,6 @@ export default function RefereePage() {
                         const playerHoleRef = ref(dbInstance, `scores/${player.id}/${selectedCourse}/${hole}`);
                         const snapshot = await get(playerHoleRef);
                         existingScoreFromDb = snapshot.val();
-                        
-                        console.log(`직접 Firebase 확인 - 선수 ${player.id}:`, existingScoreFromDb);
                     } catch (error) {
                         console.warn(`선수 ${player.id} 점수 직접 확인 실패:`, error);
                     }
@@ -915,7 +906,6 @@ export default function RefereePage() {
                                              e?.message?.includes('Permission denied');
                     
                     if (isPermissionError && attempt < maxRetries && isMobile) {
-                        console.log(`모바일 환경 Firebase 재시도 ${attempt}/${maxRetries}:`, e?.message || e?.code);
                         continue;
                     }
                     
@@ -1240,10 +1230,18 @@ export default function RefereePage() {
                     {view === 'scoring' && (
                        <Card>
                             <CardHeader className="p-3 space-y-2">
-                                <div className="text-xl sm:text-2xl font-extrabold text-center text-foreground break-words">
-                                    <span>{selectedGroup}</span>
-                                    <span className="mx-1">/</span>
-                                    <span>{selectedCourseName}</span>
+                                <div className="text-xl sm:text-2xl font-extrabold text-center text-foreground break-words flex items-center justify-center gap-3">
+                                    <div>
+                                        <span>{selectedGroup}</span>
+                                        <span className="mx-1">/</span>
+                                        <span>{selectedCourseName}</span>
+                                    </div>
+
+                                    <QRCodeViewer 
+                                        group={selectedGroup} 
+                                        jo={selectedJo} 
+                                        courseName={selectedCourseName} 
+                                    />
                                 </div>
                                 <Select value={selectedJo} onValueChange={setSelectedJo}>
                                     <SelectTrigger className="w-full h-12 text-lg font-bold">

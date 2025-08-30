@@ -15,6 +15,7 @@ import { createUserWithEmailAndPassword, updatePassword } from "firebase/auth";
 import { createBulkCaptainAccounts, getCaptainAccounts, deactivateCaptainAccount, activateCaptainAccount, updateCaptainPassword, createBulkRefereeAccounts, getRefereeAccounts, updateRefereePassword } from "@/lib/auth";
 import { Skeleton } from "@/components/ui/skeleton";
 
+
 export default function SuperAdminPage() {
     const { toast } = useToast();
     const [loading, setLoading] = useState(true);
@@ -26,6 +27,7 @@ export default function SuperAdminPage() {
         refereePassword: '',
         captainPassword: '',
         selfScoringEnabled: true,
+        qrCodeEnabled: true,
     });
     const [captainAccounts, setCaptainAccounts] = useState<any[]>([]);
     const [creatingCaptains, setCreatingCaptains] = useState(false);
@@ -55,6 +57,7 @@ export default function SuperAdminPage() {
                     refereePassword: data.refereePassword || '',
                     captainPassword: data.captainPassword || '',
                     selfScoringEnabled: data.selfScoringEnabled !== false, // 기본값 true
+                    qrCodeEnabled: data.qrCodeEnabled !== false, // 기본값 true
                 });
             } else {
                  setConfig({
@@ -65,6 +68,7 @@ export default function SuperAdminPage() {
                     refereePassword: '',
                     captainPassword: '',
                     selfScoringEnabled: true,
+                    qrCodeEnabled: true,
                 });
             }
             setLoading(false);
@@ -91,6 +95,7 @@ export default function SuperAdminPage() {
                 refereePassword: config.refereePassword.trim(),
                 captainPassword: config.captainPassword.trim(),
                 selfScoringEnabled: config.selfScoringEnabled,
+                qrCodeEnabled: config.qrCodeEnabled,
             };
             await set(configRef, configData);
 
@@ -513,6 +518,23 @@ export default function SuperAdminPage() {
                                     />
                                 </div>
                             </div>
+                            
+                            <div className="flex items-center justify-between">
+                                <div className="space-y-0.5">
+                                    <Label htmlFor="qrCodeEnabled">심판 페이지 QR코드 활성화</Label>
+                                    <p className="text-xs text-muted-foreground">
+                                        심판 페이지에서 뷰어 페이지 QR코드 아이콘을 표시할지 설정합니다.
+                                    </p>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                    <Switch
+                                        id="qrCodeEnabled"
+                                        checked={config.qrCodeEnabled}
+                                        onCheckedChange={(checked) => setConfig(prev => ({ ...prev, qrCodeEnabled: checked }))}
+                                    />
+                                </div>
+                            </div>
+
                         </CardContent>
                     </Card>
 

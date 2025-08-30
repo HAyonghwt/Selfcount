@@ -1572,7 +1572,7 @@ export default function AdminDashboard() {
                             addCell(currentRow, 5 + i, score);
                         });
 
-                        addCell(currentRow, 14, player.hasForfeited ? '기권' : (player.hasAnyScore ? (courseData?.courseTotal || 0) : '-'));
+                        addCell(currentRow, 14, player.hasForfeited ? (player.forfeitType === 'absent' ? '불참' : player.forfeitType === 'disqualified' ? '실격' : '기권') : (player.hasAnyScore ? (courseData?.courseTotal || 0) : '-'));
                     });
                 } else {
                     addCell(startRow, 0, player.rank !== null ? `${player.rank}위` : (player.hasForfeited ? (player.forfeitType === 'absent' ? '불참' : player.forfeitType === 'disqualified' ? '실격' : '기권') : ''));
