@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -511,8 +511,8 @@ export default function RefereePage() {
         return allPlayers.filter(p => p.group === selectedGroup && p.jo.toString() === selectedJo);
     }, [allPlayers, selectedGroup, selectedJo]);
     
-    // 완료된 조들을 확인하는 useEffect
-    useEffect(() => {
+    // 완료된 조들을 확인하는 함수 (재사용 가능하도록 분리)
+    const checkCompletedJos = useCallback(async () => {
         if (!selectedGroup || !selectedCourse || !hole || !allPlayers.length) {
             setCompletedJosState(new Set());
             return;
@@ -520,52 +520,46 @@ export default function RefereePage() {
     
         const groupPlayers = allPlayers.filter(p => p.group === selectedGroup);
         const josInGroup = [...new Set(groupPlayers.map(p => p.jo.toString()))];
-    
-        // 비동기 함수로 Firebase에서 직접 확인
-        const checkCompletedJos = async () => {
-            const completed = new Set<string>();
-            const dbInstance = db as import('firebase/database').Database;
-    
-            for (const joNum of josInGroup) {
-                const playersInThisJo = groupPlayers.filter(p => p.jo.toString() === joNum);
-    
-                if (playersInThisJo.length === 0) continue;
-    
-                let allInJoAreScored = true;
-                
-                for (const player of playersInThisJo) {
-                    try {
-                        // allScores에서 먼저 확인
-                        let hasScore = allScores[player.id]?.[selectedCourse as string]?.[hole as string] !== undefined;
-                        
-                        // allScores에 없으면 Firebase에서 직접 확인
-                        if (!hasScore) {
-                            const playerHoleRef = ref(dbInstance, `scores/${player.id}/${selectedCourse}/${hole}`);
-                            const snapshot = await get(playerHoleRef);
-                            hasScore = snapshot.val() !== undefined && snapshot.val() !== null;
-                        }
-                        
-                        if (!hasScore) {
-                            allInJoAreScored = false;
-                            break;
-                        }
-                    } catch (error) {
-                        console.warn(`선수 ${player.id} 점수 확인 실패:`, error);
+        const completed = new Set<string>();
+        const dbInstance = db as import('firebase/database').Database;
+
+        for (const joNum of josInGroup) {
+            const playersInThisJo = groupPlayers.filter(p => p.jo.toString() === joNum);
+
+            if (playersInThisJo.length === 0) continue;
+
+            let allInJoAreScored = true;
+            
+            for (const player of playersInThisJo) {
+                try {
+                    // Firebase에서 직접 확인 (더 정확한 데이터를 위해)
+                    const playerHoleRef = ref(dbInstance, `scores/${player.id}/${selectedCourse}/${hole}`);
+                    const snapshot = await get(playerHoleRef);
+                    const hasScore = snapshot.val() !== undefined && snapshot.val() !== null;
+                    
+                    if (!hasScore) {
                         allInJoAreScored = false;
                         break;
                     }
-                }
-                
-                if (allInJoAreScored) {
-                    completed.add(joNum);
+                } catch (error) {
+                    console.warn(`선수 ${player.id} 점수 확인 실패:`, error);
+                    allInJoAreScored = false;
+                    break;
                 }
             }
             
-            setCompletedJosState(completed);
-        };
+            if (allInJoAreScored) {
+                completed.add(joNum);
+            }
+        }
+        
+        setCompletedJosState(completed);
+    }, [selectedGroup, selectedCourse, hole, allPlayers]);
 
+    // 완료된 조들을 확인하는 useEffect
+    useEffect(() => {
         checkCompletedJos();
-    }, [allPlayers, allScores, selectedGroup, selectedCourse, hole]);
+    }, [checkCompletedJos]);
 
     // completedJos는 이제 단순히 상태를 반환
     const completedJos = completedJosState;
@@ -947,6 +941,11 @@ export default function RefereePage() {
                         };
                         dataCache.current.lastUpdated[`scores_${selectedCourse}`] = Date.now();
                     }
+
+                    // 점수 저장 후 완료된 조 상태 즉시 업데이트
+                    setTimeout(() => {
+                        checkCompletedJos();
+                    }, 500); // Firebase 동기화를 위한 약간의 지연
             
         } catch (error) {
             console.error('점수 저장 중 오류:', error);

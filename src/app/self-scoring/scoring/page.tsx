@@ -121,13 +121,21 @@ export default function SelfScoringPage() {
     return map;
   }, [playersInGroupJo, playerNames]);
 
-  // 렌더링할 열 구성: 개인전은 4열, 2인1팀은 [0,1] / [2,3] 두 열
+  // 렌더링할 열 구성: 개인전은 4열, 2인1팀은 실제 데이터 위치에 맞게 설정
   const renderColumns: number[][] = useMemo(() => {
-    return gameMode === 'team' ? [[0,1],[2,3]] : [[0],[1],[2],[3]];
+    return gameMode === 'team' ? [[0],[1]] : [[0],[1],[2],[3]];
   }, [gameMode]);
   const renderNames: string[] = useMemo(() => {
-    return renderColumns.map(idxs => idxs.map(i => (playerNames[i] || '')).filter(Boolean).join('/'));
-  }, [renderColumns, playerNames]);
+    if (gameMode === 'team') {
+      // 팀전에서는 강제로 팀 이름 형식으로 표시
+      return [
+        playerNames[0] && playerNames[1] ? `${playerNames[0]}/${playerNames[1]}` : (playerNames[0] || playerNames[1] || ''),
+        playerNames[2] && playerNames[3] ? `${playerNames[2]}/${playerNames[3]}` : (playerNames[2] || playerNames[3] || '')
+      ].filter(name => name.length > 0);
+    } else {
+      return renderColumns.map(idxs => idxs.map(i => (playerNames[i] || '')).filter(Boolean).join('/'));
+    }
+  }, [gameMode, renderColumns, playerNames]);
   // 서명 표시 인덱스: 개인전은 4명, 팀전은 각 팀의 대표(각 묶음의 첫 인덱스)
   const signatureIndexes: number[] = useMemo(() => {
     return gameMode === 'team' ? renderColumns.map(arr => arr[0]) : [0,1,2,3];
@@ -341,6 +349,7 @@ export default function SelfScoringPage() {
             return p.name || '';
           }
         });
+        
         setPlayerNames(names);
       }
     });
@@ -373,7 +382,7 @@ export default function SelfScoringPage() {
     Object.values(scoreUnsubsRef.current).forEach(u => { try { u(); } catch {} });
     scoreUnsubsRef.current = {};
 
-    // pid -> index 매핑 생성
+    // pid -> index 매핑 생성 (원래 순서 유지)
     const pidToIndex = new Map<string, number>();
     playersInGroupJo.forEach((p, idx) => { if (p.id) pidToIndex.set(p.id, idx); });
 
@@ -413,7 +422,7 @@ export default function SelfScoringPage() {
     return () => {
       if (listenersRef.current.scores) listenersRef.current.scores();
     };
-  }, [db, playersInGroupJo, activeCourseId, localCleared]);
+  }, [db, playersInGroupJo, activeCourseId, localCleared, gameMode]);
 
   // 현재 코스 점수 존재 여부 재계산
   useEffect(() => {
@@ -761,7 +770,8 @@ export default function SelfScoringPage() {
           // 팀 모드에서는 팀 열의 primary index에 기록
           let targetPlayer = padPlayerIdx;
           if (gameMode === 'team' && padPlayerIdx !== null) {
-            targetPlayer = renderColumns[padPlayerIdx][0];
+            // 팀전에서는 1팀(padPlayerIdx=0) → targetPlayer=0, 2팀(padPlayerIdx=1) → targetPlayer=1
+            targetPlayer = padPlayerIdx === 0 ? 0 : 1;
           }
           parsed.draft[targetPlayer!][padHoleIdx] = Number(val);
           parsed.start = parsed.start ?? groupStartHole;
@@ -772,7 +782,7 @@ export default function SelfScoringPage() {
       setDraftScores((prev) => {
         const next = prev.map((row) => [...row]);
         let targetPlayer = padPlayerIdx!;
-        if (gameMode === 'team') targetPlayer = renderColumns[padPlayerIdx!][0];
+        if (gameMode === 'team') targetPlayer = padPlayerIdx === 0 ? 0 : 1;
         next[targetPlayer][padHoleIdx!] = Number(val);
         return next;
       });
@@ -826,7 +836,7 @@ export default function SelfScoringPage() {
     
     // 팀 모드면 팀 열의 primary index 기준으로 저장/로그 처리
     let displayName = playerNames[playerIndex];
-    const targetRawIndex = (gameMode === 'team') ? (renderColumns[playerIndex]?.[0] ?? playerIndex) : playerIndex;
+    const targetRawIndex = (gameMode === 'team') ? (playerIndex === 0 ? 0 : 1) : playerIndex;
     if (gameMode === 'team') {
       displayName = playerNames[targetRawIndex];
     }
@@ -963,19 +973,25 @@ export default function SelfScoringPage() {
     for (let pi = 0; pi < 4; pi++) {
       const val = draftScores?.[pi]?.[targetHole] ?? (pi === targetPlayer ? targetVal : null);
       if (typeof val === 'number') {
-        // 수정 여부 판단을 위해 저장 전 뷰 값 보관
-        const displayCol = (gameMode === 'team') ? (renderColumns.findIndex(a => a.includes(pi))) : pi;
-        const prevVal = tableScores?.[displayCol]?.[targetHole];
+        // 팀전에서는 대표 선수(팀의 첫 번째 선수)에 대해서만 수정 여부 판단
+        const displayCol = (gameMode === 'team') ? (pi === 0 ? 0 : pi === 1 ? 1 : -1) : pi;
+        const isTeamPrimary = (gameMode === 'team') ? (pi === 0 || pi === 1) : true;
+        
         await saveToFirebase(pi, targetHole, val);
-        if (typeof prevVal === 'number' && prevVal !== val) {
-          setModifiedMap(prev => {
-            const next: Record<string, boolean[][]> = { ...prev };
-            const base = next[activeCourseId] ? next[activeCourseId].map(r => [...r]) : Array.from({ length: tableScores.length || 4 }, () => Array(9).fill(false));
-            if (!base[displayCol]) base[displayCol] = Array(9).fill(false);
-            base[displayCol][targetHole] = true;
-            next[activeCourseId] = base;
-            return next;
-          });
+        
+        // 팀전에서는 팀의 대표 선수일 때만 수정 표시 처리
+        if (isTeamPrimary) {
+          const prevVal = tableScores?.[displayCol]?.[targetHole];
+          if (typeof prevVal === 'number' && prevVal !== val) {
+            setModifiedMap(prev => {
+              const next: Record<string, boolean[][]> = { ...prev };
+              const base = next[activeCourseId] ? next[activeCourseId].map(r => [...r]) : Array.from({ length: tableScores.length || 4 }, () => Array(9).fill(false));
+              if (!base[displayCol]) base[displayCol] = Array(9).fill(false);
+              base[displayCol][targetHole] = true;
+              next[activeCourseId] = base;
+              return next;
+            });
+          }
         }
         flashSavedCell(pi, targetHole);
       }
@@ -1805,6 +1821,8 @@ export default function SelfScoringPage() {
           <span>조: <b>{selectedJo || '-'}</b></span>
           {isReadOnlyMode && <span style={{ color: '#666', fontStyle: 'italic' }}>보기전용모드</span>}
         </div>
+
+
 
         <div id="captureArea">
           <table className="score-table" id="scoreTable">
