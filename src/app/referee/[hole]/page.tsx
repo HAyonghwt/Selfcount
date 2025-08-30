@@ -1099,45 +1099,7 @@ export default function RefereePage() {
                         </SelectContent>
                     </Select>
 
-                    {/* 조 선택 후 선수 명단 표시 */}
-                    {selectedJo && currentPlayers.length > 0 && (
-                        <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
-                            <h3 className="text-lg font-bold text-blue-800 mb-3">
-                                {selectedJo}조 선수 명단
-                            </h3>
-                            <div className="space-y-2">
-                                {currentPlayers.map((player, index) => (
-                                    <div key={player.id} className="flex items-center p-2 bg-white rounded border">
-                                        <span className="w-8 h-8 bg-blue-100 text-blue-800 rounded-full flex items-center justify-center font-bold text-sm mr-3">
-                                            {index + 1}
-                                        </span>
-                                        <div className="flex-1">
-                                            {player.type === 'team' ? (
-                                                <div className="text-base font-semibold">
-                                                    <div>{player.p1_name}</div>
-                                                    <div>{player.p2_name}</div>
-                                                </div>
-                                            ) : (
-                                                <div className="text-base font-semibold">{player.name}</div>
-                                            )}
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
 
-                    {/* 조 선택했지만 선수가 없을 때 */}
-                    {selectedJo && currentPlayers.length === 0 && allPlayers.length > 0 && (
-                        <div className="mt-6 p-4 bg-yellow-50 rounded-lg border border-yellow-200">
-                            <div className="text-yellow-800 font-semibold">
-                                ⚠️ {selectedJo}조에 등록된 선수가 없습니다
-                            </div>
-                            <div className="text-yellow-600 text-sm mt-1">
-                                다른 조를 선택해주세요.
-                            </div>
-                        </div>
-                    )}
 
 
                 </CardContent>

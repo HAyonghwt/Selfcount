@@ -817,6 +817,7 @@ export default function SelfScoringPage() {
   const saveToFirebase = async (playerIndex: number, holeIndex: number, score: number) => {
     if (!db) return;
     if (!activeCourse) return;
+    
     // 서명 완료 이후에는 관리자 초기화 전까지 외부 DB 반영 차단
     if (postSignLock && dbHasAnyScore) {
       toast({ title: '저장 차단', description: '서명 완료 후에는 관리자 초기화 전까지 점수 수정이 제한됩니다.', variant: 'destructive' });
@@ -834,33 +835,41 @@ export default function SelfScoringPage() {
       return;
     }
     
-    // 팀 모드면 팀 열의 primary index 기준으로 저장/로그 처리
-    let displayName = playerNames[playerIndex];
-    const targetRawIndex = (gameMode === 'team') ? (playerIndex === 0 ? 0 : 1) : playerIndex;
+    // 팀 모드에서 올바른 playerId 매핑
+    let playerId: string | undefined;
+    
     if (gameMode === 'team') {
-      displayName = playerNames[targetRawIndex];
+      // 팀 모드에서는 renderColumns를 사용해서 올바른 팀의 playerId를 가져옴
+      const teamColumnIndexes = renderColumns[playerIndex];
+      if (teamColumnIndexes && teamColumnIndexes.length > 0) {
+        const teamPrimaryIndex = teamColumnIndexes[0]; // 팀의 첫 번째 선수 인덱스
+        const teamPrimaryName = playersInGroupJo[teamPrimaryIndex]?.id;
+        playerId = teamPrimaryName;
+      }
+    } else {
+      // 개인전에서는 기존 방식
+      const displayName = playerNames[playerIndex];
+      playerId = nameToPlayerId[displayName] || nameToPlayerId[(displayName||'').split('/')[0]];
     }
-    const playerId = nameToPlayerId[displayName] || nameToPlayerId[(displayName||'').split('/')[0]];
+    
     if (!playerId) {
-      toast({ title: "선수 식별 실패", description: `${displayName || ''} 선수를 찾을 수 없습니다.`, variant: "destructive" });
-    return;
-  }
+      toast({ title: "선수 식별 실패", description: `선수를 찾을 수 없습니다.`, variant: "destructive" });
+      return;
+    }
     
     // 모바일 환경 감지 및 Firebase 인증 재시도 로직
     const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     const maxRetries = isMobile ? 5 : 1; // 모바일에서 더 많은 재시도
     let attempt = 0;
     
-    // 디버깅 정보
-    console.log('Firebase 저장 시도 - 모바일:', isMobile, 'User Agent:', navigator.userAgent);
-    
     while (attempt < maxRetries) {
       try {
         const dbInstance = db as any;
         const holeNum = holeIndex + 1;
         const scoreRef = ref(dbInstance, `/scores/${playerId}/${activeCourse.id}/${holeNum}`);
+        
         // 팀 모드에서는 원본 매트릭스에서 대표 인덱스의 기존 값을 사용해야 올바른 oldValue가 기록됨
-        const prev = (rawTableScores?.[targetRawIndex]?.[holeIndex] ?? 0) as number;
+        const prev = (rawTableScores?.[playerIndex]?.[holeIndex] ?? 0) as number;
         
         // 모바일에서는 잠시 대기 후 재시도 (대기 시간 증가)
         if (isMobile && attempt > 0) {
@@ -883,7 +892,6 @@ export default function SelfScoringPage() {
         
         // 실시간 업데이트를 위한 로그 캐시 무효화
         invalidatePlayerLogCache(playerId);
-        console.log(`[실시간 업데이트] 자율채점 점수 저장 - 선수 ${playerId} 로그 캐시 무효화`);
         
         // 성공하면 루프 종료
         break;
@@ -899,7 +907,6 @@ export default function SelfScoringPage() {
                                  e?.message?.includes('authentication');
         
         if (isPermissionError && attempt < maxRetries && isMobile) {
-          console.log(`모바일 환경 Firebase 재시도 ${attempt}/${maxRetries}:`, e?.message || e?.code);
           continue;
         }
         
@@ -970,16 +977,19 @@ export default function SelfScoringPage() {
     }));
 
     // 초안이 들어있는 모든 선수의 해당 홀 점수를 저장
-    for (let pi = 0; pi < 4; pi++) {
+    const maxPlayers = gameMode === 'team' ? 2 : 4; // 팀전은 2명, 개인전은 4명
+    
+    for (let pi = 0; pi < maxPlayers; pi++) {
       const val = draftScores?.[pi]?.[targetHole] ?? (pi === targetPlayer ? targetVal : null);
+      
       if (typeof val === 'number') {
         // 팀전에서는 대표 선수(팀의 첫 번째 선수)에 대해서만 수정 여부 판단
-        const displayCol = (gameMode === 'team') ? (pi === 0 ? 0 : pi === 1 ? 1 : -1) : pi;
-        const isTeamPrimary = (gameMode === 'team') ? (pi === 0 || pi === 1) : true;
+        const displayCol = (gameMode === 'team') ? pi : pi; // 팀전에서는 pi가 그대로 displayCol
+        const isTeamPrimary = true; // 실제 존재하는 선수들만 순회하므로 모두 primary
         
         await saveToFirebase(pi, targetHole, val);
         
-        // 팀전에서는 팀의 대표 선수일 때만 수정 표시 처리
+        // 수정 표시 처리
         if (isTeamPrimary) {
           const prevVal = tableScores?.[displayCol]?.[targetHole];
           if (typeof prevVal === 'number' && prevVal !== val) {
@@ -1001,7 +1011,7 @@ export default function SelfScoringPage() {
     setScoresByCourse(prev => {
       const next = { ...prev } as Record<string, (number | null)[][]>;
       const mat = next[activeCourseId] ? next[activeCourseId].map(r => [...r]) : Array.from({ length: 4 }, () => Array(9).fill(null));
-      for (let pi = 0; pi < 4; pi++) {
+      for (let pi = 0; pi < maxPlayers; pi++) {
         const val = draftScores?.[pi]?.[targetHole] ?? (pi === targetPlayer ? targetVal : null);
         if (typeof val === 'number') mat[pi][targetHole] = val;
       }
@@ -1013,7 +1023,7 @@ export default function SelfScoringPage() {
         const key = `selfScoringDraft_${activeCourseId}_${selectedGroup || 'g'}_${selectedJo || 'j'}`;
         const saved = localStorage.getItem(key);
         const parsed = saved ? JSON.parse(saved) : { draft: Array.from({ length: 4 }, () => Array(9).fill(null)) };
-        for (let pi = 0; pi < 4; pi++) parsed.draft[pi][targetHole] = null;
+        for (let pi = 0; pi < maxPlayers; pi++) parsed.draft[pi][targetHole] = null;
         parsed.start = (courseStartHoles[activeCourseId] ?? groupStartHole ?? targetHole);
         parsed.current = (courseCurrentHoles[activeCourseId] ?? groupCurrentHole ?? targetHole);
         localStorage.setItem(key, JSON.stringify(parsed));
@@ -1021,7 +1031,7 @@ export default function SelfScoringPage() {
     } catch {}
     setDraftScores(prev => {
       const next = prev.map(row => [...row]);
-      for (let pi = 0; pi < 4; pi++) next[pi][targetHole] = null;
+      for (let pi = 0; pi < maxPlayers; pi++) next[pi][targetHole] = null;
       return next;
     });
     handleCancelPad();
