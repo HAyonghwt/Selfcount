@@ -67,6 +67,10 @@ export default function PlayerManagementPage() {
     const [individualSearchTerm, setIndividualSearchTerm] = useState('');
     const [teamSearchTerm, setTeamSearchTerm] = useState('');
 
+    // Group filter states
+    const [selectedIndividualGroupFilter, setSelectedIndividualGroupFilter] = useState<string>('all');
+    const [selectedTeamGroupFilter, setSelectedTeamGroupFilter] = useState<string>('all');
+
 
     useEffect(() => {
         const playersRef = ref(db!, 'players');
@@ -351,32 +355,52 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
     }, [allPlayers]);
 
     const filteredGroupedIndividualPlayers = useMemo(() => {
-        if (!individualSearchTerm) return groupedIndividualPlayers;
+        let filtered: { [key: string]: any[] } = {};
+        
+        // 그룹 필터링
+        if (selectedIndividualGroupFilter === 'all') {
+            filtered = { ...groupedIndividualPlayers };
+        } else {
+            filtered = { [selectedIndividualGroupFilter]: groupedIndividualPlayers[selectedIndividualGroupFilter] || [] };
+        }
+        
+        // 검색어 필터링
+        if (!individualSearchTerm) return filtered;
         
         const lowercasedFilter = individualSearchTerm.toLowerCase();
-        const filtered: { [key: string]: any[] } = {};
+        const searchFiltered: { [key: string]: any[] } = {};
         
-        for (const groupName in groupedIndividualPlayers) {
-            const players = groupedIndividualPlayers[groupName].filter((p: any) => 
+        for (const groupName in filtered) {
+            const players = filtered[groupName].filter((p: any) => 
                 p.name.toLowerCase().includes(lowercasedFilter) ||
                 p.affiliation.toLowerCase().includes(lowercasedFilter) ||
                 p.jo.toString().includes(individualSearchTerm)
             );
             if (players.length > 0) {
-                filtered[groupName] = players;
+                searchFiltered[groupName] = players;
             }
         }
-        return filtered;
-    }, [groupedIndividualPlayers, individualSearchTerm]);
+        return searchFiltered;
+    }, [groupedIndividualPlayers, individualSearchTerm, selectedIndividualGroupFilter]);
 
     const filteredGroupedTeamPlayers = useMemo(() => {
-        if (!teamSearchTerm) return groupedTeamPlayers;
+        let filtered: { [key: string]: any[] } = {};
+        
+        // 그룹 필터링
+        if (selectedTeamGroupFilter === 'all') {
+            filtered = { ...groupedTeamPlayers };
+        } else {
+            filtered = { [selectedTeamGroupFilter]: groupedTeamPlayers[selectedTeamGroupFilter] || [] };
+        }
+        
+        // 검색어 필터링
+        if (!teamSearchTerm) return filtered;
     
         const lowercasedFilter = teamSearchTerm.toLowerCase();
-        const filtered: { [key: string]: any[] } = {};
+        const searchFiltered: { [key: string]: any[] } = {};
         
-        for (const groupName in groupedTeamPlayers) {
-            const players = groupedTeamPlayers[groupName].filter((t: any) => 
+        for (const groupName in filtered) {
+            const players = filtered[groupName].filter((t: any) => 
                 t.p1_name.toLowerCase().includes(lowercasedFilter) ||
                 (t.p2_name && t.p2_name.toLowerCase().includes(lowercasedFilter)) ||
                 t.p1_affiliation.toLowerCase().includes(lowercasedFilter) ||
@@ -384,11 +408,11 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                 t.jo.toString().includes(teamSearchTerm)
             );
             if (players.length > 0) {
-                filtered[groupName] = players;
+                searchFiltered[groupName] = players;
             }
         }
-        return filtered;
-    }, [groupedTeamPlayers, teamSearchTerm]);
+        return searchFiltered;
+    }, [groupedTeamPlayers, teamSearchTerm, selectedTeamGroupFilter]);
 
 
     const individualPlayersCount = allPlayers.filter(p => p.type === 'individual').length;
@@ -673,7 +697,14 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
             </CardHeader>
         </Card>
 
-        <Tabs defaultValue="individual-group">
+        <Tabs defaultValue="individual-group" onValueChange={(value) => {
+            // 탭 변경 시 그룹 필터 초기화
+            if (value === 'individual-group') {
+                setSelectedIndividualGroupFilter('all');
+            } else if (value === 'team-group') {
+                setSelectedTeamGroupFilter('all');
+            }
+        }}>
             <TabsList className="grid w-full grid-cols-2 h-12 mb-4">
                 <TabsTrigger value="individual-group" className="h-10 text-base">개인전 그룹 관리</TabsTrigger>
                 <TabsTrigger value="team-group" className="h-10 text-base">2인1팀 그룹 관리</TabsTrigger>
@@ -799,17 +830,46 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                                 </CardDescription>
                             </CardHeader>
                             <CardContent>
-                                <div className="relative mb-4">
-                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                                    <Input
-                                        id="individual-player-search"
-                                        name="individual-player-search"
-                                        placeholder="선수명, 소속, 조 번호로 검색"
-                                        value={individualSearchTerm}
-                                        onChange={(e) => setIndividualSearchTerm(e.target.value)}
-                                        className="pl-10"
-                                        autoComplete="new-password"
-                                    />
+                                <div className="space-y-4 mb-4">
+                                    {/* 그룹별 필터 */}
+                                    <div className="flex flex-wrap gap-2">
+                                        <Button
+                                            variant={selectedIndividualGroupFilter === 'all' ? 'default' : 'outline'}
+                                            size="sm"
+                                            onClick={() => {
+                                                setSelectedIndividualGroupFilter('all');
+                                                setIndividualSearchTerm('');
+                                            }}
+                                        >
+                                            전체 그룹
+                                        </Button>
+                                        {Object.keys(groupedIndividualPlayers).sort().map((groupName) => (
+                                            <Button
+                                                key={groupName}
+                                                variant={selectedIndividualGroupFilter === groupName ? 'default' : 'outline'}
+                                                size="sm"
+                                                onClick={() => {
+                                                    setSelectedIndividualGroupFilter(groupName);
+                                                    setIndividualSearchTerm('');
+                                                }}
+                                            >
+                                                {groupName}
+                                            </Button>
+                                        ))}
+                                    </div>
+                                    {/* 검색 */}
+                                    <div className="relative">
+                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                        <Input
+                                            id="individual-player-search"
+                                            name="individual-player-search"
+                                            placeholder="선수명, 소속, 조 번호로 검색"
+                                            value={individualSearchTerm}
+                                            onChange={(e) => setIndividualSearchTerm(e.target.value)}
+                                            className="pl-10"
+                                            autoComplete="new-password"
+                                        />
+                                    </div>
                                 </div>
                                 <Table>
                                     <TableHeader>
@@ -1010,17 +1070,46 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                                 </CardDescription>
                             </CardHeader>
                             <CardContent>
-                                <div className="relative mb-4">
-                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                                    <Input
-                                        id="team-player-search"
-                                        name="team-player-search"
-                                        placeholder="팀원명, 소속, 조 번호로 검색"
-                                        value={teamSearchTerm}
-                                        onChange={(e) => setTeamSearchTerm(e.target.value)}
-                                        className="pl-10"
-                                        autoComplete="new-password"
-                                    />
+                                <div className="space-y-4 mb-4">
+                                    {/* 그룹별 필터 */}
+                                    <div className="flex flex-wrap gap-2">
+                                        <Button
+                                            variant={selectedTeamGroupFilter === 'all' ? 'default' : 'outline'}
+                                            size="sm"
+                                            onClick={() => {
+                                                setSelectedTeamGroupFilter('all');
+                                                setTeamSearchTerm('');
+                                            }}
+                                        >
+                                            전체 그룹
+                                        </Button>
+                                        {Object.keys(groupedTeamPlayers).sort().map((groupName) => (
+                                            <Button
+                                                key={groupName}
+                                                variant={selectedTeamGroupFilter === groupName ? 'default' : 'outline'}
+                                                size="sm"
+                                                onClick={() => {
+                                                    setSelectedTeamGroupFilter(groupName);
+                                                    setTeamSearchTerm('');
+                                                }}
+                                            >
+                                                {groupName}
+                                            </Button>
+                                        ))}
+                                    </div>
+                                    {/* 검색 */}
+                                    <div className="relative">
+                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                        <Input
+                                            id="team-player-search"
+                                            name="team-player-search"
+                                            placeholder="팀원명, 소속, 조 번호로 검색"
+                                            value={teamSearchTerm}
+                                            onChange={(e) => setTeamSearchTerm(e.target.value)}
+                                            className="pl-10"
+                                            autoComplete="new-password"
+                                        />
+                                    </div>
                                 </div>
                                 <Table>
                                     <TableHeader>
