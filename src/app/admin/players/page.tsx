@@ -168,7 +168,7 @@ export default function PlayerManagementPage() {
                 if (extraGroups.length > 0) {
                     toast({
                         title: '그룹명 불일치',
-                        description: `엑셀 파일에 그룹 목록에 없는 그룹이 포함되어 있습니다: ${extraGroups.join(', ')}`,
+                        description: `엑셀 파일에 그룹 목록에 없는 ${extraGroups.join(', ')} 그룹이 포함되어 있습니다.\n먼저 그룹과 코스를 등록하고 다시 업로드해 주시기 바랍니다.`,
                     });
                     return;
                 }
@@ -180,7 +180,7 @@ export default function PlayerManagementPage() {
                     return;
                 }
                 if (missingGroups.length > 0) {
-                    if (!window.confirm(`엑셀 파일에 그룹이 일부 빠져 있습니다: ${missingGroups.join(', ')}\n이대로 선수 등록을 진행하시겠습니까?`)) {
+                    if (!window.confirm(`엑셀파일에 그룹이 일부 빠져 있습니다. ${missingGroups.join(', ')}(은)는 추가나 변동없이 이대로 선수 등록을 진행하시겠습니까?`)) {
                         return;
                     }
                 }

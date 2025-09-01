@@ -920,8 +920,8 @@ export default function RefereePage() {
                                 // 성공 토스트 메시지
                     toast({ 
                         title: '저장 완료', 
-                        description: '점수가 저장되었습니다.',
-                        duration: 1000
+                        description: '',
+                        duration: 500
                     });
                     
                     // 성공 후 상태 업데이트
