@@ -885,6 +885,8 @@ export default function AdminDashboard() {
     const activeUnsubsRef = useRef<(() => void)[]>([]);
     const [individualSuddenDeathData, setIndividualSuddenDeathData] = useState<any>(null);
     const [teamSuddenDeathData, setTeamSuddenDeathData] = useState<any>(null);
+    const [individualBackcountApplied, setIndividualBackcountApplied] = useState<boolean>(false);
+    const [teamBackcountApplied, setTeamBackcountApplied] = useState<boolean>(false);
     const [notifiedSuddenDeathGroups, setNotifiedSuddenDeathGroups] = useState<Set<string>>(new Set());
     const [scoreCheckModal, setScoreCheckModal] = useState<{ open: boolean, groupName: string, missingScores: any[], resultMsg?: string }>({ open: false, groupName: '', missingScores: [] });
     const [autoFilling, setAutoFilling] = useState(false);
@@ -991,6 +993,8 @@ export default function AdminDashboard() {
         const tournamentNameRef = ref(db, 'tournaments/current/name');
         const individualSuddenDeathRef = ref(db, 'tournaments/current/suddenDeath/individual');
         const teamSuddenDeathRef = ref(db, 'tournaments/current/suddenDeath/team');
+        const individualBackcountRef = ref(db, 'tournaments/current/backcountApplied/individual');
+        const teamBackcountRef = ref(db, 'tournaments/current/backcountApplied/team');
 
         // 🟢 메인 데이터 구독 - 해시 기반 중복 방지
         const playersRef = ref(db, 'players');
@@ -1140,11 +1144,15 @@ export default function AdminDashboard() {
         });
         const unsubIndividualSuddenDeath = onValue(individualSuddenDeathRef, snap => setIndividualSuddenDeathData(snap.val()));
         const unsubTeamSuddenDeath = onValue(teamSuddenDeathRef, snap => setTeamSuddenDeathData(snap.val()));
+        const unsubIndividualBackcount = onValue(individualBackcountRef, snap => setIndividualBackcountApplied(snap.val() || false));
+        const unsubTeamBackcount = onValue(teamBackcountRef, snap => setTeamBackcountApplied(snap.val() || false));
         
         // 기본 구독들 등록
         activeUnsubsRef.current.push(unsubTournamentName);
         activeUnsubsRef.current.push(unsubIndividualSuddenDeath);
         activeUnsubsRef.current.push(unsubTeamSuddenDeath);
+        activeUnsubsRef.current.push(unsubIndividualBackcount);
+        activeUnsubsRef.current.push(unsubTeamBackcount);
         
         // 클린업은 stopSubscriptions()에서 처리
         return () => stopSubscriptions();
@@ -1352,38 +1360,99 @@ export default function AdminDashboard() {
     const processedIndividualSuddenDeathData = useMemo(() => processSuddenDeath(individualSuddenDeathData), [individualSuddenDeathData, players]);
     const processedTeamSuddenDeathData = useMemo(() => processSuddenDeath(teamSuddenDeathData), [teamSuddenDeathData, players]);
 
+    // 백카운트 적용된 1위 동점자들의 순위를 다시 계산하는 함수 (기존 로직 활용)
+    const applyBackcountToTiedPlayers = (data: any) => {
+        if (!individualBackcountApplied && !teamBackcountApplied) {
+            return data;
+        }
+
+        const finalData = JSON.parse(JSON.stringify(data));
+
+        for (const groupName in finalData) {
+            const groupPlayers = finalData[groupName];
+            if (!groupPlayers || groupPlayers.length === 0) continue;
+
+            // 1위 동점자들 찾기
+            const firstPlacePlayers = groupPlayers.filter((p: any) => p.rank === 1);
+            
+            if (firstPlacePlayers.length > 1) {
+                // 개인전 또는 팀전에 따라 백카운트 적용 여부 확인
+                const shouldApplyBackcount = (firstPlacePlayers[0].type === 'individual' && individualBackcountApplied) ||
+                                          (firstPlacePlayers[0].type === 'team' && teamBackcountApplied);
+
+                if (shouldApplyBackcount) {
+                    // 기존 순위 계산 로직과 동일하게 백카운트 적용
+                    const coursesForGroup = firstPlacePlayers[0]?.assignedCourses || Object.values(courses);
+                    firstPlacePlayers.sort((a: any, b: any) => {
+                        if (a.plusMinus !== b.plusMinus) return a.plusMinus - b.plusMinus;
+                        return tieBreak(a, b, coursesForGroup);
+                    });
+                    
+                    // 새로운 순위 부여 (기존 로직과 동일)
+                    let rank = 1;
+                    firstPlacePlayers[0].rank = rank;
+                    for (let i = 1; i < firstPlacePlayers.length; i++) {
+                        const prev = firstPlacePlayers[i-1];
+                        const curr = firstPlacePlayers[i];
+                        if (curr.plusMinus !== prev.plusMinus || tieBreak(curr, prev, coursesForGroup) !== 0) {
+                            rank = i + 1;
+                        }
+                        curr.rank = rank;
+                    }
+
+                    // 전체 그룹을 다시 정렬
+                    groupPlayers.sort((a: any, b: any) => {
+                        const rankA = a.rank === null ? Infinity : a.rank;
+                        const rankB = b.rank === null ? Infinity : b.rank;
+                        if (rankA !== rankB) return rankA - rankB;
+
+                        const scoreA = a.hasAnyScore && !a.hasForfeited ? a.totalScore : Infinity;
+                        const scoreB = b.hasAnyScore && !b.hasForfeited ? b.totalScore : Infinity;
+                        return scoreA - scoreB;
+                    });
+                }
+            }
+        }
+
+        return finalData;
+    };
+
     const finalDataByGroup = useMemo(() => {
         const individualRankMap = new Map(processedIndividualSuddenDeathData.map(p => [p.id, p.rank]));
         const teamRankMap = new Map(processedTeamSuddenDeathData.map(p => [p.id, p.rank]));
         const combinedRankMap = new Map([...individualRankMap, ...teamRankMap]);
 
-        if (combinedRankMap.size === 0) {
-            return processedDataByGroup;
+        let finalData = processedDataByGroup;
+
+        // 서든데스 순위가 있는 경우 적용
+        if (combinedRankMap.size > 0) {
+            finalData = JSON.parse(JSON.stringify(processedDataByGroup));
+
+            for (const groupName in finalData) {
+                finalData[groupName].forEach((player: ProcessedPlayer) => {
+                    if (combinedRankMap.has(player.id)) {
+                        player.rank = combinedRankMap.get(player.id) as number;
+                    }
+                });
+
+                // Re-sort the groups based on the new ranks from sudden death
+                finalData[groupName].sort((a,b) => {
+                    const rankA = a.rank === null ? Infinity : a.rank;
+                    const rankB = b.rank === null ? Infinity : b.rank;
+                    if (rankA !== rankB) return rankA - rankB;
+
+                    const scoreA = a.hasAnyScore && !a.hasForfeited ? a.totalScore : Infinity;
+                    const scoreB = b.hasAnyScore && !b.hasForfeited ? b.totalScore : Infinity;
+                    return scoreA - scoreB;
+                })
+            }
         }
-        
-        const finalData = JSON.parse(JSON.stringify(processedDataByGroup));
 
-        for (const groupName in finalData) {
-            finalData[groupName].forEach((player: ProcessedPlayer) => {
-                if (combinedRankMap.has(player.id)) {
-                    player.rank = combinedRankMap.get(player.id) as number;
-                }
-            });
-
-            // Re-sort the groups based on the new ranks from sudden death
-            finalData[groupName].sort((a,b) => {
-                const rankA = a.rank === null ? Infinity : a.rank;
-                const rankB = b.rank === null ? Infinity : b.rank;
-                if (rankA !== rankB) return rankA - rankB;
-
-                const scoreA = a.hasAnyScore && !a.hasForfeited ? a.totalScore : Infinity;
-                const scoreB = b.hasAnyScore && !b.hasForfeited ? b.totalScore : Infinity;
-                return scoreA - scoreB;
-            })
-        }
+        // 백카운트 적용
+        finalData = applyBackcountToTiedPlayers(finalData);
 
         return finalData;
-    }, [processedDataByGroup, processedIndividualSuddenDeathData, processedTeamSuddenDeathData]);
+    }, [processedDataByGroup, processedIndividualSuddenDeathData, processedTeamSuddenDeathData, individualBackcountApplied, teamBackcountApplied, courses]);
 
 
     const groupProgress = useMemo(() => {

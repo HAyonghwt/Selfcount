@@ -71,6 +71,10 @@ export default function SuddenDeathPage() {
     const [selectedTeamHoles, setSelectedTeamHoles] = useState<number[]>([]);
     const [teamSuddenDeathScores, setTeamSuddenDeathScores] = useState<{ [key: string]: { [key: string]: string } }>({});
 
+    // Backcount states (separated for individual and team)
+    const [individualBackcountApplied, setIndividualBackcountApplied] = useState<boolean>(false);
+    const [teamBackcountApplied, setTeamBackcountApplied] = useState<boolean>(false);
+
     // Tie-breaking logic from dashboard (needed to find tied players)
     const tieBreak = (a: any, b: any, coursesForGroup: any[]) => {
         if (a.hasForfeited && !b.hasForfeited) return 1;
@@ -104,14 +108,56 @@ export default function SuddenDeathPage() {
         return 0;
     };
 
+    // Backcount logic for 1st place tied players
+    const backcountBreak = (a: any, b: any, coursesForGroup: any[]) => {
+        if (a.hasForfeited && !b.hasForfeited) return 1;
+        if (!a.hasForfeited && b.hasForfeited) return -1;
+        if (!a.hasAnyScore && !b.hasAnyScore) return 0;
+        if (!a.hasAnyScore) return 1;
+        if (!b.hasAnyScore) return -1;
+        if (a.total !== b.total) return a.total - b.total;
+        
+        // Backcount: Start from the last course and work backwards
+        const sortedCourses = [...coursesForGroup].sort((c1, c2) => {
+            const name1 = c1?.name || '';
+            const name2 = c2?.name || '';
+            return name2.localeCompare(name1);
+        });
+        
+        for (const course of sortedCourses) {
+            const courseId = course.id;
+            const aCourseScore = a.courseScores[courseId] || 0;
+            const bCourseScore = b.courseScores[courseId] || 0;
+            if (aCourseScore !== bCourseScore) return aCourseScore - bCourseScore;
+        }
+        
+        // If all courses are tied, compare holes from last hole to first hole
+        if (sortedCourses.length > 0) {
+            const lastCourseId = sortedCourses[0].id;
+            const aHoleScores = a.detailedScores[lastCourseId] || {};
+            const bHoleScores = b.detailedScores[lastCourseId] || {};
+            for (let i = 9; i >= 1; i--) {
+                const hole = i.toString();
+                const aHole = aHoleScores[hole] || 0;
+                const bHole = bHoleScores[hole] || 0;
+                if (aHole !== bHole) return aHole - bHole;
+            }
+        }
+        return 0;
+    };
+
 
     // Fetch all necessary data
     useEffect(() => {
+        if (!db) return;
+        
         const playersRef = ref(db, 'players');
         const scoresRef = ref(db, 'scores');
         const tournamentRef = ref(db, 'tournaments/current');
         const individualSuddenDeathRef = ref(db, 'tournaments/current/suddenDeath/individual');
         const teamSuddenDeathRef = ref(db, 'tournaments/current/suddenDeath/team');
+        const individualBackcountRef = ref(db, 'tournaments/current/backcountApplied/individual');
+        const teamBackcountRef = ref(db, 'tournaments/current/backcountApplied/team');
 
         const unsubPlayers = onValue(playersRef, snap => setPlayers(snap.val() || {}));
         const unsubScores = onValue(scoresRef, snap => setScores(snap.val() || {}));
@@ -140,6 +186,8 @@ export default function SuddenDeathPage() {
 
         const unsubIndividualSuddenDeath = onValue(individualSuddenDeathRef, setupSuddenDeathListener(setIndividualSuddenDeathData, setIndividualSuddenDeathScores));
         const unsubTeamSuddenDeath = onValue(teamSuddenDeathRef, setupSuddenDeathListener(setTeamSuddenDeathData, setTeamSuddenDeathScores));
+        const unsubIndividualBackcount = onValue(individualBackcountRef, snap => setIndividualBackcountApplied(snap.val() || false));
+        const unsubTeamBackcount = onValue(teamBackcountRef, snap => setTeamBackcountApplied(snap.val() || false));
 
         return () => {
             unsubPlayers();
@@ -147,6 +195,8 @@ export default function SuddenDeathPage() {
             unsubTournament();
             unsubIndividualSuddenDeath();
             unsubTeamSuddenDeath();
+            unsubIndividualBackcount();
+            unsubTeamBackcount();
         };
     }, []);
 
@@ -156,10 +206,10 @@ export default function SuddenDeathPage() {
         if (Object.keys(players).length === 0 || allCoursesList.length === 0) return;
 
         const allProcessedPlayers: any[] = Object.entries(players).map(([playerId, player]: [string, any]) => {
-            const playerGroupData = groupsData[player.group];
+            const playerGroupData = (groupsData as any)[player.group];
             const assignedCourseIds = playerGroupData?.courses ? Object.keys(playerGroupData.courses).filter(id => playerGroupData.courses[id]) : [];
             const coursesForPlayer = allCoursesList.filter((c:any) => assignedCourseIds.includes(c.id.toString()));
-            const playerScoresData = scores[playerId] || {};
+            const playerScoresData = (scores as any)[playerId] || {};
             let totalScore = 0;
             const courseScoresForTieBreak: { [courseId: string]: number } = {};
             const detailedScoresForTieBreak: { [courseId: string]: { [holeNumber: string]: number } } = {};
@@ -196,7 +246,7 @@ export default function SuddenDeathPage() {
         });
 
         const rankedData: { [key: string]: Player[] } = {};
-        const groupedData = allProcessedPlayers.reduce((acc, player) => {
+        const groupedData = allProcessedPlayers.reduce((acc: any, player: any) => {
             const groupName = player.group || '미지정';
             if (!acc[groupName]) acc[groupName] = [];
             acc[groupName].push(player);
@@ -205,11 +255,11 @@ export default function SuddenDeathPage() {
 
         for (const groupName in groupedData) {
             const coursesForGroup = groupedData[groupName][0]?.assignedCourses || Object.values(courses);
-            const playersToSort = groupedData[groupName].filter(p => p.hasAnyScore && !p.hasForfeited);
-            const otherPlayers = groupedData[groupName].filter(p => !p.hasAnyScore || p.hasForfeited);
+            const playersToSort = groupedData[groupName].filter((p: any) => p.hasAnyScore && !p.hasForfeited);
+            const otherPlayers = groupedData[groupName].filter((p: any) => !p.hasAnyScore || p.hasForfeited);
             if (playersToSort.length > 0) {
-                const leaderScore = playersToSort.reduce((min, p) => Math.min(min, p.totalScore), Infinity);
-                playersToSort.sort((a, b) => {
+                const leaderScore = playersToSort.reduce((min: any, p: any) => Math.min(min, p.totalScore), Infinity);
+                playersToSort.sort((a: any, b: any) => {
                     if (a.totalScore !== b.totalScore) return a.totalScore - b.totalScore;
                     if (a.totalScore === leaderScore) return a.name.localeCompare(b.name);
                     return tieBreak(a, b, coursesForGroup);
@@ -226,7 +276,7 @@ export default function SuddenDeathPage() {
                     if (isTied) curr.rank = prev.rank; else { rank = i + 1; curr.rank = rank; }
                 }
             }
-            rankedData[groupName] = [...playersToSort, ...otherPlayers.map(p => ({ ...p, rank: null }))];
+            rankedData[groupName] = [...playersToSort, ...otherPlayers.map((p: any) => ({ ...p, rank: null }))];
         }
 
         const individualTies: Player[] = [];
@@ -279,15 +329,63 @@ export default function SuddenDeathPage() {
             scores: {},
         };
 
+        if (!db) {
+            toast({ title: "오류", description: "데이터베이스 연결이 없습니다." });
+            return;
+        }
+        
         set(ref(db, `tournaments/current/suddenDeath/${type}`), suddenDeathSetup)
             .then(() => toast({ title: "성공", description: `${isIndividual ? '개인전' : '2인 1팀'} 서든데스 플레이오프가 시작되었습니다.` }))
             .catch(err => toast({ title: "오류", description: err.message }));
     };
     
     const handleResetSuddenDeath = (type: 'individual' | 'team') => {
+        if (!db) {
+            toast({ title: "오류", description: "데이터베이스 연결이 없습니다." });
+            return;
+        }
+        
         remove(ref(db, `tournaments/current/suddenDeath/${type}`))
             .then(() => toast({ title: "초기화 완료", description: "서든데스 정보가 초기화되었습니다." }))
             .catch(err => toast({ title: "오류", description: err.message }));
+    };
+
+    const handleApplyBackcount = (type: 'individual' | 'team') => {
+        if (!db) {
+            toast({ title: "오류", description: "데이터베이스 연결이 없습니다." });
+            return;
+        }
+        
+        if (type === 'individual') {
+            setIndividualBackcountApplied(true);
+            // Firebase에 백카운트 적용 상태 저장
+            set(ref(db, `tournaments/current/backcountApplied/individual`), true);
+            toast({ title: "백카운트 적용", description: "개인전 1위 동점자가 백카운트로 결정되었습니다." });
+        } else {
+            setTeamBackcountApplied(true);
+            // Firebase에 백카운트 적용 상태 저장
+            set(ref(db, `tournaments/current/backcountApplied/team`), true);
+            toast({ title: "백카운트 적용", description: "2인 1팀 1위 동점자가 백카운트로 결정되었습니다." });
+        }
+    };
+
+    const handleResetBackcount = (type: 'individual' | 'team') => {
+        if (!db) {
+            toast({ title: "오류", description: "데이터베이스 연결이 없습니다." });
+            return;
+        }
+        
+        if (type === 'individual') {
+            setIndividualBackcountApplied(false);
+            // Firebase에서 백카운트 적용 상태 제거
+            remove(ref(db, `tournaments/current/backcountApplied/individual`));
+            toast({ title: "백카운트 초기화", description: "개인전 1위 동점자가 다시 동점자 상태로 복원되었습니다." });
+        } else {
+            setTeamBackcountApplied(false);
+            // Firebase에서 백카운트 적용 상태 제거
+            remove(ref(db, `tournaments/current/backcountApplied/team`));
+            toast({ title: "백카운트 초기화", description: "2인 1팀 1위 동점자가 다시 동점자 상태로 복원되었습니다." });
+        }
     };
 
     const handleSuddenDeathScoreChange = (type: 'individual' | 'team', playerId: string, hole: number, value: string) => {
@@ -301,6 +399,11 @@ export default function SuddenDeathPage() {
             return newScores;
         });
 
+        if (!db) {
+            toast({ title: "오류", description: "데이터베이스 연결이 없습니다." });
+            return;
+        }
+        
         const scoreRef = ref(db, `tournaments/current/suddenDeath/${type}/scores/${playerId}/${hole}`);
         const numericValue = parseInt(value, 10);
         if (!isNaN(numericValue)) {
@@ -374,6 +477,7 @@ export default function SuddenDeathPage() {
         const suddenDeathData = isIndividual ? individualSuddenDeathData : teamSuddenDeathData;
         const processedData = isIndividual ? processedIndividualSuddenDeathData : processedTeamSuddenDeathData;
         const suddenDeathScores = isIndividual ? individualSuddenDeathScores : teamSuddenDeathScores;
+        const backcountApplied = isIndividual ? individualBackcountApplied : teamBackcountApplied;
 
         const playersGroupedByGroup = tiedPlayers.reduce((acc, player) => {
             const groupName = player.group || '미지정';
@@ -384,12 +488,56 @@ export default function SuddenDeathPage() {
             return acc;
         }, {} as Record<string, Player[]>);
 
+        // Calculate backcount rankings if backcount is applied
+        const getBackcountRankedPlayers = () => {
+            if (!backcountApplied || tiedPlayers.length < 2) return tiedPlayers;
+            
+            const allCoursesList = Object.values(courses);
+            const backcountRankedPlayers = [...tiedPlayers];
+            
+            // Group by group and apply backcount within each group
+            const groupedByGroup = backcountRankedPlayers.reduce((acc, player) => {
+                const groupName = player.group || '미지정';
+                if (!acc[groupName]) acc[groupName] = [];
+                acc[groupName].push(player);
+                return acc;
+            }, {} as Record<string, Player[]>);
+
+            Object.values(groupedByGroup).forEach(groupPlayers => {
+                if (groupPlayers.length < 2) return;
+                
+                const coursesForGroup = (groupPlayers[0] as any)?.assignedCourses || allCoursesList;
+                groupPlayers.sort((a, b) => backcountBreak(a, b, coursesForGroup));
+                
+                // Assign ranks
+                let rank = 1;
+                groupPlayers[0].rank = rank;
+                for (let i = 1; i < groupPlayers.length; i++) {
+                    const prev = groupPlayers[i-1];
+                    const curr = groupPlayers[i];
+                    if (backcountBreak(curr, prev, coursesForGroup) !== 0) {
+                        rank = i + 1;
+                    }
+                    curr.rank = rank;
+                }
+            });
+            
+            return backcountRankedPlayers;
+        };
+
+        const displayPlayers = backcountApplied ? getBackcountRankedPlayers() : tiedPlayers;
+
         return (
             <div className="space-y-6">
                 <Card>
                     <CardHeader>
                         <CardTitle>플레이오프 설정</CardTitle>
-                        <CardDescription>플레이오프를 진행할 선수, 코스, 홀을 선택하고 시작하세요.</CardDescription>
+                        <CardDescription>
+                            {backcountApplied 
+                                ? "1위 동점자가 백카운트로 결정되었습니다. 서든데스는 비활성화됩니다." 
+                                : "플레이오프를 진행할 선수, 코스, 홀을 선택하고 시작하세요."
+                            }
+                        </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-6">
                         {Object.keys(playersGroupedByGroup).length > 0 ? (
@@ -397,77 +545,103 @@ export default function SuddenDeathPage() {
                                 <div>
                                     <Label className="font-semibold text-base">1. 참가 선수 선택</Label>
                                     <div className="space-y-4 mt-2">
-                                        {Object.entries(playersGroupedByGroup).map(([groupName, tiedPlayersInGroup]) => (
-                                            <div key={groupName} className="p-4 border rounded-md">
-                                                <p className="font-bold mb-3">{groupName} 그룹 ({tiedPlayersInGroup.length}명 동점)</p>
-                                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                                    {tiedPlayersInGroup.map(player => (
-                                                        <div key={player.id} className="flex items-center space-x-3">
-                                                            <Checkbox
-                                                                id={`${type}-player-${player.id}`}
-                                                                checked={selectedPlayers[player.id] || false}
-                                                                onCheckedChange={(checked) => setSelectedPlayers(prev => ({...prev, [player.id]: !!checked}))}
-                                                                disabled={suddenDeathData?.isActive}
-                                                            />
-                                                            <Label htmlFor={`${type}-player-${player.id}`} className="font-medium text-base">
-                                                                {player.name} <span className="text-muted-foreground text-sm">({player.affiliation})</span>
-                                                            </Label>
-                                                        </div>
-                                                    ))}
+                                        {Object.entries(playersGroupedByGroup).map(([groupName, tiedPlayersInGroup]) => {
+                                            const displayPlayersInGroup = backcountApplied 
+                                                ? displayPlayers.filter(p => p.group === groupName)
+                                                : tiedPlayersInGroup;
+                                            
+                                            return (
+                                                <div key={groupName} className="p-4 border rounded-md">
+                                                    <p className="font-bold mb-3">
+                                                        {groupName} 그룹 
+                                                        {backcountApplied 
+                                                            ? ` (백카운트로 결정됨 - ${displayPlayersInGroup.length}명)`
+                                                            : ` (${tiedPlayersInGroup.length}명 동점)`
+                                                        }
+                                                    </p>
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                                        {displayPlayersInGroup.map(player => (
+                                                            <div key={player.id} className="flex items-center space-x-3">
+                                                                {!backcountApplied && (
+                                                                    <Checkbox
+                                                                        id={`${type}-player-${player.id}`}
+                                                                        checked={selectedPlayers[player.id] || false}
+                                                                        onCheckedChange={(checked) => setSelectedPlayers(prev => ({...prev, [player.id]: !!checked}))}
+                                                                        disabled={suddenDeathData?.isActive}
+                                                                    />
+                                                                )}
+                                                                <Label 
+                                                                    htmlFor={`${type}-player-${player.id}`} 
+                                                                    className={`font-medium text-base ${backcountApplied ? 'flex items-center gap-2' : ''}`}
+                                                                >
+                                                                    {backcountApplied && (
+                                                                        <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded text-sm font-bold">
+                                                                            {player.rank}위
+                                                                        </span>
+                                                                    )}
+                                                                    {player.name} <span className="text-muted-foreground text-sm">({player.affiliation})</span>
+                                                                </Label>
+                                                            </div>
+                                                        ))}
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        ))}
+                                            );
+                                        })}
                                     </div>
                                 </div>
                                 
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <div className="space-y-2">
-                                        <Label htmlFor={`${type}-course-select`} className="font-semibold">2. 코스 선택</Label>
-                                        <Select 
-                                            value={selectedCourseId}
-                                            onValueChange={setSelectedCourseId}
-                                            disabled={suddenDeathData?.isActive}
-                                        >
-                                            <SelectTrigger id={`${type}-course-select`}><SelectValue placeholder="코스 선택" /></SelectTrigger>
-                                            <SelectContent>
-                                                {courses.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-                                    <div className="space-y-2">
-                                        <Label htmlFor={`${type}-hole-select`} className="font-semibold">3. 홀 선택</Label>
-                                        <MultiSelect
-                                            options={holeOptions}
-                                            selected={selectedHoles.map(String)}
-                                            onChange={(values) => setSelectedHoles(values.map(Number))}
-                                            placeholder="홀 선택..."
-                                            disabled={suddenDeathData?.isActive}
-                                        />
-                                    </div>
-                                </div>
+                                {!backcountApplied && (
+                                    <>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div className="space-y-2">
+                                                <Label htmlFor={`${type}-course-select`} className="font-semibold">2. 코스 선택</Label>
+                                                <Select 
+                                                    value={selectedCourseId}
+                                                    onValueChange={setSelectedCourseId}
+                                                    disabled={suddenDeathData?.isActive}
+                                                >
+                                                    <SelectTrigger id={`${type}-course-select`}><SelectValue placeholder="코스 선택" /></SelectTrigger>
+                                                    <SelectContent>
+                                                        {courses.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                            <div className="space-y-2">
+                                                <Label htmlFor={`${type}-hole-select`} className="font-semibold">3. 홀 선택</Label>
+                                                <MultiSelect
+                                                    options={holeOptions}
+                                                    selected={selectedHoles.map(String)}
+                                                    onChange={(values) => setSelectedHoles(values.map(Number))}
+                                                    placeholder="홀 선택..."
+                                                    disabled={suddenDeathData?.isActive}
+                                                />
+                                            </div>
+                                        </div>
 
-                                <div className="flex gap-4">
-                                    <Button onClick={() => handleStartSuddenDeath(type)} disabled={suddenDeathData?.isActive} size="lg">
-                                        <Play className="mr-2 h-4 w-4"/> 서든데스 시작
-                                    </Button>
-                                    <AlertDialog>
-                                        <AlertDialogTrigger asChild>
-                                            <Button variant="destructive" size="lg" disabled={!suddenDeathData?.isActive}>
-                                                <RotateCcw className="mr-2 h-4 w-4"/> 서든데스 초기화
+                                        <div className="flex gap-4">
+                                            <Button onClick={() => handleStartSuddenDeath(type)} disabled={suddenDeathData?.isActive} size="lg">
+                                                <Play className="mr-2 h-4 w-4"/> 서든데스 시작
                                             </Button>
-                                        </AlertDialogTrigger>
-                                        <AlertDialogContent>
-                                            <AlertDialogHeader>
-                                                <AlertDialogTitle>정말 초기화하시겠습니까?</AlertDialogTitle>
-                                                <AlertDialogDescription>진행 중인 서든데스 플레이오프 정보와 점수가 모두 삭제됩니다. 이 작업은 되돌릴 수 없습니다.</AlertDialogDescription>
-                                            </AlertDialogHeader>
-                                            <AlertDialogFooter>
-                                                <AlertDialogCancel>취소</AlertDialogCancel>
-                                                <AlertDialogAction onClick={() => handleResetSuddenDeath(type)}>초기화</AlertDialogAction>
-                                            </AlertDialogFooter>
-                                        </AlertDialogContent>
-                                    </AlertDialog>
-                                </div>
+                                            <AlertDialog>
+                                                <AlertDialogTrigger asChild>
+                                                    <Button variant="destructive" size="lg" disabled={!suddenDeathData?.isActive}>
+                                                        <RotateCcw className="mr-2 h-4 w-4"/> 서든데스 초기화
+                                                    </Button>
+                                                </AlertDialogTrigger>
+                                                <AlertDialogContent>
+                                                    <AlertDialogHeader>
+                                                        <AlertDialogTitle>정말 초기화하시겠습니까?</AlertDialogTitle>
+                                                        <AlertDialogDescription>진행 중인 서든데스 플레이오프 정보와 점수가 모두 삭제됩니다. 이 작업은 되돌릴 수 없습니다.</AlertDialogDescription>
+                                                    </AlertDialogHeader>
+                                                    <AlertDialogFooter>
+                                                        <AlertDialogCancel>취소</AlertDialogCancel>
+                                                        <AlertDialogAction onClick={() => handleResetSuddenDeath(type)}>초기화</AlertDialogAction>
+                                                    </AlertDialogFooter>
+                                                </AlertDialogContent>
+                                            </AlertDialog>
+                                        </div>
+                                    </>
+                                )}
                             </div>
                         ) : (
                             <div className="text-center py-10 text-muted-foreground">
@@ -525,6 +699,38 @@ export default function SuddenDeathPage() {
 
     return (
         <div className="space-y-6">
+            <Card>
+                <CardHeader>
+                    <CardTitle className="text-xl font-bold">1위 동점자 백카운트 관리</CardTitle>
+                    <CardDescription>1위 동점자를 백카운트로 결정하거나 서든데스로 처리할 수 있습니다.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    <div className="flex gap-4">
+                        <Button 
+                            onClick={() => handleApplyBackcount('individual')} 
+                            disabled={tiedIndividualPlayers.length < 2 || individualBackcountApplied}
+                            className="bg-blue-600 hover:bg-blue-700 text-white"
+                            size="lg"
+                        >
+                            백카운트로 선정
+                        </Button>
+                        <Button 
+                            onClick={() => handleResetBackcount('individual')} 
+                            disabled={!individualBackcountApplied}
+                            variant="outline"
+                            className="border-blue-600 text-blue-600 hover:bg-blue-50"
+                            size="lg"
+                        >
+                            백카운트 초기화
+                        </Button>
+                    </div>
+                    <div className="text-sm text-muted-foreground space-y-1">
+                        <p>• 1위 동점자를 그냥 백카운트로 결정하려면 위의 단추를 눌러주세요.</p>
+                        <p>• 1위 동점자를 서든데스로 선정할 경우 여기 단추는 누르지 마시고 아래 서든데스 관리를 이용하세요.</p>
+                    </div>
+                </CardContent>
+            </Card>
+
             <Card>
                 <CardHeader>
                     <CardTitle className="text-2xl font-bold font-headline flex items-center gap-2"><Flame className="text-destructive"/>서든데스 관리</CardTitle>
