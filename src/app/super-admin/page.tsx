@@ -45,6 +45,7 @@ export default function SuperAdminPage() {
     const [selectedReferees, setSelectedReferees] = useState<string[]>([]);
 
     useEffect(() => {
+        if (!db) return;
         const configRef = ref(db, 'config');
         const unsubscribe = onValue(configRef, (snapshot) => {
             if (snapshot.exists()) {
@@ -82,6 +83,7 @@ export default function SuperAdminPage() {
     };
 
     const handleSaveChanges = async () => {
+        if (!db) return;
         setLoading(true);
         const configRef = ref(db, 'config');
 
@@ -352,7 +354,7 @@ export default function SuperAdminPage() {
             description = '1번홀심판부터 9번홀심판까지 재생성됩니다';
         } else if (addMoreReferees) {
             action = '추가로 생성';
-            description = '기존 계정 이후부터 9개 추가 생성됩니다';
+            description = '1번홀심판1부터 9번홀심판1까지 생성됩니다 (코스별 구분 가능)';
         }
         
         if (!confirm(`정말로 9명의 심판 계정을 ${action}하시겠습니까?\n\n- ${description}\n- 기본 비밀번호: 123456${replaceReferees ? '\n- 기존 계정은 모두 삭제됩니다' : ''}`)) {

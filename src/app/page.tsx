@@ -170,7 +170,7 @@ export default function LoginPage() {
       }
 
       // 한글 아이디로 로그인 시도 (심판)
-      if (email.match(/^\d+번홀심판$/)) {
+      if (email.match(/^\d+번홀심판\d*$/)) {
         try {
           // Firestore 초기화 대기
           await new Promise(resolve => setTimeout(resolve, 100));

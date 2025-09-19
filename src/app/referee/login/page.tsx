@@ -43,12 +43,12 @@ export default function RefereeLoginPage() {
             return;
         }
 
-        // 한글 아이디 형식 검증 (1번홀심판, 2번홀심판, ... 형식)
-        const koreanIdPattern = /^\d+번홀심판$/;
+        // 한글 아이디 형식 검증 (1번홀심판, 1번홀심판1, 2번홀심판2, ... 형식)
+        const koreanIdPattern = /^\d+번홀심판\d*$/;
         if (!koreanIdPattern.test(koreanId)) {
             toast({
                 title: '로그인 실패',
-                description: '올바른 아이디 형식이 아닙니다. (예: 1번홀심판, 2번홀심판, ...)',
+                description: '올바른 아이디 형식이 아닙니다. (예: 1번홀심판, 1번홀심판1, 2번홀심판2, ...)',
                 variant: 'destructive',
             });
             return;
@@ -123,13 +123,13 @@ export default function RefereeLoginPage() {
                         <Input
                             id="koreanId"
                             type="text"
-                            placeholder="1번홀심판"
+                            placeholder="1번홀심판 또는 1번홀심판1"
                             value={koreanId}
                             onChange={(e) => setKoreanId(e.target.value)}
                             onKeyPress={(e) => e.key === 'Enter' && handleLogin()}
                         />
                         <p className="text-xs text-muted-foreground">
-                            형식: 1번홀심판, 2번홀심판, 3번홀심판, ... (1번홀심판~9번홀심판)
+                            형식: 1번홀심판, 1번홀심판1, 2번홀심판2, ... (코스별 구분 가능)
                         </p>
                     </div>
                     <div className="space-y-2">

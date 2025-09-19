@@ -373,21 +373,30 @@ export const createBulkRefereeAccounts = async (replaceExisting: boolean = false
       }
     }
     
-    // 시작 번호 결정
-    let startNumber = 1;
+    // 번호 부여 로직 개선
+    let suffixNumber = 0;
     if (addMore && !replaceExisting) {
       const existingDocs = await getDocs(refereesRef);
       const existingIds = existingDocs.docs.map(doc => doc.data().id);
-      const maxNumber = Math.max(...existingIds.map(id => parseInt(id.replace('번홀심판', ''))), 0);
-      startNumber = maxNumber + 1;
+      
+      // 기존 계정에서 번호 패턴 추출 (예: "1번홀심판", "1번홀심판1", "1번홀심판2")
+      const numberPatterns = existingIds.map(id => {
+        const match = id.match(/(\d+)번홀심판(\d*)/);
+        return match ? parseInt(match[2] || '0') : 0;
+      });
+      
+      // 가장 큰 번호 + 1을 다음 번호로 설정
+      suffixNumber = Math.max(...numberPatterns, 0) + 1;
     }
     
-    for (let i = startNumber; i <= startNumber + 8; i++) {
+    for (let i = 1; i <= 9; i++) {
+      const refereeId = suffixNumber > 0 ? `${i}번홀심판${suffixNumber}` : `${i}번홀심판`;
+      const emailSuffix = suffixNumber > 0 ? `_${suffixNumber}` : '';
       const refereeData = {
-        id: `${i}번홀심판`,
+        id: refereeId,
         password: `123456`, // 기본 비밀번호
         hole: i,
-        email: `referee${i}@yongin.com`,
+        email: `referee${i}${emailSuffix}@yongin.com`,
         createdAt: new Date(),
         lastLogin: null,
         isActive: true

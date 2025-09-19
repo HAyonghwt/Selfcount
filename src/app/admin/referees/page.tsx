@@ -24,6 +24,7 @@ export default function RefereeManagementPage() {
     const [copied, setCopied] = useState(false);
     const [refereeAccounts, setRefereeAccounts] = useState<any[]>([]);
     const [showPasswords, setShowPasswords] = useState<{ [key: string]: boolean }>({});
+    const [tournamentCourses, setTournamentCourses] = useState<any[]>([]);
 
     useEffect(() => {
         if (!db) return;
@@ -42,6 +43,28 @@ export default function RefereeManagementPage() {
         };
     }, []);
 
+    // 대회 코스 정보 불러오기
+    useEffect(() => {
+        if (!db) return;
+        const tournamentRef = ref(db, 'tournaments/current');
+        
+        const unsubTournament = onValue(tournamentRef, (snapshot) => {
+            const data = snapshot.val();
+            if (data?.courses) {
+                const selectedCourses = Object.values(data.courses)
+                    .filter((course: any) => course.isActive)
+                    .sort((a: any, b: any) => a.name.localeCompare(b.name));
+                setTournamentCourses(selectedCourses);
+            } else {
+                setTournamentCourses([]);
+            }
+        });
+
+        return () => {
+            unsubTournament();
+        };
+    }, []);
+
     // 심판 계정 목록 불러오기
     useEffect(() => {
         const loadRefereeAccounts = async () => {
@@ -54,6 +77,48 @@ export default function RefereeManagementPage() {
         };
         loadRefereeAccounts();
     }, []);
+
+    // 심판 계정을 코스별로 그룹화하는 함수
+    const getRefereesByCourse = () => {
+        const refereesByCourse: { [courseName: string]: any[] } = {};
+        
+        tournamentCourses.forEach((course, courseIndex) => {
+            const courseReferees: any[] = [];
+            
+            for (let hole = 1; hole <= 9; hole++) {
+                // 코스별로 다른 심판 ID 패턴 사용
+                const refereeId = courseIndex === 0 
+                    ? `${hole}번홀심판` 
+                    : `${hole}번홀심판${courseIndex}`;
+                
+                const referee = refereeAccounts.find(acc => acc.id === refereeId);
+                if (referee) {
+                    courseReferees.push({
+                        ...referee,
+                        displayHole: `${course.name} ${hole}번홀`,
+                        courseName: course.name,
+                        holeNumber: hole
+                    });
+                } else {
+                    // 계정이 없는 경우에도 표시용으로 추가
+                    courseReferees.push({
+                        id: refereeId,
+                        password: '••••••',
+                        hole: hole,
+                        isActive: false,
+                        displayHole: `${course.name} ${hole}번홀`,
+                        courseName: course.name,
+                        holeNumber: hole,
+                        isPlaceholder: true
+                    });
+                }
+            }
+            
+            refereesByCourse[course.name] = courseReferees;
+        });
+        
+        return refereesByCourse;
+    };
 
     const handleCopyUrl = async () => {
         try {
@@ -213,86 +278,82 @@ export default function RefereeManagementPage() {
             <Card>
                 <CardHeader>
                     <CardTitle>심판 계정 목록</CardTitle>
+                    <CardDescription>
+                        대회에서 선택된 코스별로 심판 계정을 표시합니다. 
+                        {tournamentCourses.length === 0 && " 먼저 대회 및 코스 관리에서 코스를 선택해주세요."}
+                    </CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <div className="overflow-x-auto">
-                        {loading ? renderSkeleton() : (
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead className="w-24 font-bold">홀</TableHead>
-                                        <TableHead className="font-bold">심판 아이디</TableHead>
-                                        <TableHead className="font-bold">비밀번호</TableHead>
-                                        <TableHead className="w-20 font-bold">상태</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {refereeAccounts.length > 0 ? (
-                                        refereeAccounts.map(account => (
-                                            <TableRow key={account.id} className={!account.isActive ? 'bg-gray-50' : ''}>
-                                                <TableCell className="font-medium">{account.hole}번홀</TableCell>
-                                                <TableCell>
-                                                    <code className="bg-muted px-2 py-1 rounded-md text-base">{account.id}</code>
-                                                    {!account.isActive && <span className="ml-2 text-sm text-gray-500">(비활성화)</span>}
-                                                </TableCell>
-                                                <TableCell>
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="font-mono text-base">
-                                                            {showPasswords[account.id] ? account.password : account.password.replace(/./g, '•')}
-                                                        </span>
-                                                        <button
-                                                            type="button"
-                                                            className="text-muted-foreground hover:text-foreground"
-                                                            onClick={() => setShowPasswords(prev => ({
-                                                                ...prev,
-                                                                [account.id]: !prev[account.id]
-                                                            }))}
-                                                            aria-label={showPasswords[account.id] ? "비밀번호 숨기기" : "비밀번호 보기"}
-                                                        >
-                                                            {showPasswords[account.id] ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                                                        </button>
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                                        account.isActive 
-                                                            ? 'bg-green-100 text-green-800' 
-                                                            : 'bg-red-100 text-red-800'
-                                                    }`}>
-                                                        {account.isActive ? '활성' : '비활성'}
-                                                    </span>
-                                                </TableCell>
-                                            </TableRow>
-                                        ))
-                                    ) : (
-                                        Array.from({ length: MAX_HOLES }, (_, i) => i + 1).map(hole => (
-                                            <TableRow key={hole}>
-                                                <TableCell className="font-medium">{hole}번홀</TableCell>
-                                                <TableCell>
-                                                    <code className="bg-muted px-2 py-1 rounded-md text-base">{hole}번홀심판</code>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="font-mono text-base">••••••</span>
-                                                        <button
-                                                            type="button"
-                                                            className="text-muted-foreground hover:text-foreground"
-                                                            disabled
-                                                        >
-                                                            <Eye className="h-5 w-5" />
-                                                        </button>
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <span className="px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                                                        미생성
-                                                    </span>
-                                                </TableCell>
-                                            </TableRow>
-                                        ))
-                                    )}
-                                </TableBody>
-                            </Table>
+                    <div className="space-y-6">
+                        {loading ? (
+                            renderSkeleton()
+                        ) : tournamentCourses.length === 0 ? (
+                            <div className="text-center py-8 text-muted-foreground">
+                                <p>대회에서 선택된 코스가 없습니다.</p>
+                                <p className="text-sm mt-2">대회 및 코스 관리에서 코스를 먼저 선택해주세요.</p>
+                            </div>
+                        ) : (
+                            Object.entries(getRefereesByCourse()).map(([courseName, referees]) => (
+                                <div key={courseName} className="space-y-3">
+                                    <h3 className="text-lg font-semibold text-primary border-b pb-2 text-center">{courseName}</h3>
+                                    <div className="overflow-x-auto">
+                                        <Table>
+                                            <TableHeader>
+                                                <TableRow>
+                                                    <TableHead className="w-32 font-bold">홀</TableHead>
+                                                    <TableHead className="font-bold">심판 아이디</TableHead>
+                                                    <TableHead className="font-bold">비밀번호</TableHead>
+                                                    <TableHead className="w-20 font-bold">상태</TableHead>
+                                                </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {referees.map(referee => (
+                                                    <TableRow key={referee.id} className={!referee.isActive ? 'bg-gray-50' : ''}>
+                                                        <TableCell className="font-medium">{referee.displayHole}</TableCell>
+                                                        <TableCell>
+                                                            <code className="bg-muted px-2 py-1 rounded-md text-base">{referee.id}</code>
+                                                            {!referee.isActive && !referee.isPlaceholder && <span className="ml-2 text-sm text-gray-500">(비활성화)</span>}
+                                                            {referee.isPlaceholder && <span className="ml-2 text-sm text-gray-500">(미생성)</span>}
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="font-mono text-base">
+                                                                    {referee.isPlaceholder ? '••••••' : 
+                                                                     showPasswords[referee.id] ? referee.password : referee.password.replace(/./g, '•')}
+                                                                </span>
+                                                                {!referee.isPlaceholder && (
+                                                                    <button
+                                                                        type="button"
+                                                                        className="text-muted-foreground hover:text-foreground"
+                                                                        onClick={() => setShowPasswords(prev => ({
+                                                                            ...prev,
+                                                                            [referee.id]: !prev[referee.id]
+                                                                        }))}
+                                                                        aria-label={showPasswords[referee.id] ? "비밀번호 숨기기" : "비밀번호 보기"}
+                                                                    >
+                                                                        {showPasswords[referee.id] ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                                                referee.isPlaceholder 
+                                                                    ? 'bg-gray-100 text-gray-800'
+                                                                    : referee.isActive 
+                                                                        ? 'bg-green-100 text-green-800' 
+                                                                        : 'bg-red-100 text-red-800'
+                                                            }`}>
+                                                                {referee.isPlaceholder ? '미생성' : referee.isActive ? '활성' : '비활성'}
+                                                            </span>
+                                                        </TableCell>
+                                                    </TableRow>
+                                                ))}
+                                            </TableBody>
+                                        </Table>
+                                    </div>
+                                </div>
+                            ))
                         )}
                     </div>
                 </CardContent>

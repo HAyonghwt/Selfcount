@@ -64,6 +64,7 @@ export default function RefereePage() {
     const [groupsData, setGroupsData] = useState<any>({});
     const [loading, setLoading] = useState(true);
     const [unlockPasswordFromDb, setUnlockPasswordFromDb] = useState('');
+    const [tournamentCourses, setTournamentCourses] = useState<any[]>([]);
 
     // 구독 관리용 ref 추가
     const subscriptions = useRef<{ [key: string]: () => void }>({});
@@ -164,6 +165,28 @@ export default function RefereePage() {
             return;
         }
     }, [hole, router]);
+
+    // 대회 코스 정보 불러오기
+    useEffect(() => {
+        if (!db) return;
+        const tournamentRef = ref(db, 'tournaments/current');
+        
+        const unsubTournament = onValue(tournamentRef, (snapshot) => {
+            const data = snapshot.val();
+            if (data?.courses) {
+                const selectedCourses = Object.values(data.courses)
+                    .filter((course: any) => course.isActive)
+                    .sort((a: any, b: any) => a.name.localeCompare(b.name));
+                setTournamentCourses(selectedCourses);
+            } else {
+                setTournamentCourses([]);
+            }
+        });
+
+        return () => {
+            unsubTournament();
+        };
+    }, []);
 
     // 최적화된 데이터 페칭 - 토너먼트 설정은 한 번만 로드
     useEffect(() => {
@@ -819,7 +842,7 @@ export default function RefereePage() {
                             holeNumber: Number(hole),
                             oldValue: prevScore !== null && prevScore !== undefined ? prevScore : 0,
                             newValue: scoreData.score !== null && scoreData.score !== undefined ? scoreData.score : 0,
-                            modifiedBy: 'referee', // 필요시 실제 심판 id로 대체
+                            modifiedBy: refereeData?.id || 'referee',
                             modifiedByType: 'judge',
                             comment: `코스: ${selectedCourse}`,
                             courseId: selectedCourse
@@ -990,6 +1013,30 @@ export default function RefereePage() {
 
     const getPlayerName = (player: Player) => player.type === 'team' ? `${player.p1_name}/${player.p2_name}` : player.name;
     const selectedCourseName = useMemo(() => courses.find(c => c.id.toString() === selectedCourse)?.name || '', [courses, selectedCourse]);
+    
+    // 심판 아이디를 코스명과 함께 표시하는 함수
+    const getRefereeDisplayName = () => {
+        if (!refereeData?.id || tournamentCourses.length === 0) {
+            return refereeData?.id || `${hole}번홀 심판`;
+        }
+        
+        // 심판 아이디에서 번호 추출 (예: "1번홀심판3" -> 3)
+        const match = refereeData.id.match(/(\d+)번홀심판(\d*)/);
+        if (!match) return refereeData.id;
+        
+        const holeNumber = match[1];
+        const suffixNumber = match[2] ? parseInt(match[2]) : 0;
+        
+        // 코스 인덱스에 따라 코스명 결정
+        if (suffixNumber < tournamentCourses.length) {
+            const courseName = tournamentCourses[suffixNumber]?.name;
+            if (courseName) {
+                return `${courseName} ${holeNumber}번홀심판`;
+            }
+        }
+        
+        return refereeData.id;
+    };
     
     // 기권 타입에 따른 표시 텍스트 반환 함수
     const getForfeitDisplayText = (forfeitType: string | null | undefined) => {
@@ -1207,7 +1254,7 @@ export default function RefereePage() {
             <div className="bg-slate-50 min-h-screen p-2 sm:p-4 flex flex-col font-body">
                  <header className="flex justify-between items-center mb-4">
                      <h1 className="text-2xl sm:text-3xl font-extrabold text-primary break-keep leading-tight">
-                         {refereeData?.id || `${hole}번홀 심판`}
+                         {getRefereeDisplayName()}
                      </h1>
                      <div className="flex gap-2 items-center">
                          {view === 'scoring' && (
