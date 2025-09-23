@@ -2,6 +2,14 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+
+// 정적 생성용 함수 추가
+export async function generateStaticParams() {
+    // 홀 번호 1-18까지 생성
+    return Array.from({ length: 18 }, (_, i) => ({
+        hole: (i + 1).toString()
+    }));
+}
 import { useParams, useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
