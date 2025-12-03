@@ -117,20 +117,19 @@ export default function SelfScoringGameSetupPage() {
         if (!selectedGroup) return [];
         
         // 실제 등록된 선수가 있는 조만 표시
-        const registeredJos = new Set<number>();
+        const registeredJos = new Set<string>();
         
         allPlayers.forEach((player: any) => {
             if (player.group === selectedGroup && player.jo) {
-                registeredJos.add(Number(player.jo));
+                registeredJos.add(String(player.jo));
             }
         });
         
 
         
-        // 조 번호 순으로 정렬
+        // 조 번호 순으로 정렬 (자연 정렬: 숫자와 문자 혼합 지원)
         return Array.from(registeredJos)
-            .sort((a, b) => a - b)
-            .map(jo => jo.toString());
+            .sort((a, b) => a.localeCompare(b, 'ko', { numeric: true, sensitivity: 'base' }));
     }, [selectedGroup, allPlayers]);
 
     // 선택된 그룹의 배정 코스 목록 계산 (활성 코스만)
