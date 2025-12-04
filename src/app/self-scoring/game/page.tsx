@@ -115,22 +115,18 @@ export default function SelfScoringGameSetupPage() {
     // 선택된 그룹에 해당하는 조 목록 계산
     const availableJos = useMemo(() => {
         if (!selectedGroup) return [];
-        
-        // 실제 등록된 선수가 있는 조만 표시
-        const registeredJos = new Set<string>();
-        
-        allPlayers.forEach((player: any) => {
-            if (player.group === selectedGroup && player.jo) {
-                registeredJos.add(String(player.jo));
+        const groupPlayers = allPlayers.filter((p: any) => p.group === selectedGroup);
+        const seen = new Set<string>();
+        const orderedJos: string[] = [];
+        groupPlayers.forEach((p: any) => {
+            const joStr = p.jo?.toString() || '';
+            if (joStr && !seen.has(joStr)) {
+                seen.add(joStr);
+                orderedJos.push(joStr);
             }
         });
-        
-
-        
-        // 조 번호 순으로 정렬 (자연 정렬: 숫자와 문자 혼합 지원)
-        return Array.from(registeredJos)
-            .sort((a, b) => a.localeCompare(b, 'ko', { numeric: true, sensitivity: 'base' }));
-    }, [selectedGroup, allPlayers]);
+        return orderedJos;
+    }, [allPlayers, selectedGroup]);
 
     // 선택된 그룹의 배정 코스 목록 계산 (활성 코스만)
     const assignedCourseList = useMemo(() => {
