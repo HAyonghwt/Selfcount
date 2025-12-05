@@ -907,6 +907,8 @@ function ExternalScoreboard() {
 
     // 모바일 툴팁 상태 관리 (셀별로 open)
     const [openTooltip, setOpenTooltip] = useState<{ playerId: string; courseId: string; holeIndex: number } | null>(null);
+    const touchStartTimeRef = useRef<{ [key: string]: number }>({});
+    const touchTimerRef = useRef<{ [key: string]: NodeJS.Timeout }>({});
 
     // 모바일 외부 터치 시 툴팁 닫기
     useEffect(() => {
@@ -917,7 +919,7 @@ function ExternalScoreboard() {
             if (tooltipEl && e.target instanceof Node && tooltipEl.contains(e.target)) return;
             setOpenTooltip(null);
         };
-        document.addEventListener('touchstart', handleTouch);
+        document.addEventListener('touchstart', handleTouch, { passive: true });
         return () => document.removeEventListener('touchstart', handleTouch);
     }, [openTooltip]);
 
@@ -1158,7 +1160,11 @@ function ExternalScoreboard() {
   // 툴팁 내용 구성
   const tooltipContent = cellLog ? (
     <div>
-      <div><b>수정자:</b> {cellLog.modifiedByType === 'admin' ? '관리자' : cellLog.modifiedByType === 'captain' ? (cellLog.modifiedBy || '조장') : (cellLog.modifiedBy || '심판')}</div>
+      <div><b>수정자:</b> {
+        cellLog.modifiedByType === 'admin' ? '관리자' : 
+        cellLog.modifiedByType === 'captain' ? (cellLog.modifiedBy || '조장') : 
+        (cellLog.modifiedBy && cellLog.modifiedBy !== 'referee' ? cellLog.modifiedBy : '심판')
+      }</div>
       <div><b>일시:</b> {cellLog.modifiedAt ? new Date(cellLog.modifiedAt).toLocaleString('ko-KR') : ''}</div>
       <div><b>변경:</b> {cellLog.oldValue} → {cellLog.newValue}</div>
       {cellLog.comment && <div><b>비고:</b> {cellLog.comment}</div>}
@@ -1185,9 +1191,28 @@ function ExternalScoreboard() {
       )}
       style={isModified ? { position: 'relative', zIndex: 10 } : {}}
       onTouchStart={isModified && isMobile ? (e) => {
-        e.stopPropagation();
-        if (tooltipOpen) setOpenTooltip(null);
-        else setOpenTooltip({ playerId: player.id, courseId: course.id, holeIndex: i });
+        const cellKey = `${player.id}-${course.id}-${i}`;
+        touchStartTimeRef.current[cellKey] = Date.now();
+        touchTimerRef.current[cellKey] = setTimeout(() => {
+          if (tooltipOpen) setOpenTooltip(null);
+          else setOpenTooltip({ playerId: player.id, courseId: course.id, holeIndex: i });
+        }, 500);
+      } : undefined}
+      onTouchEnd={isModified && isMobile ? (e) => {
+        const cellKey = `${player.id}-${course.id}-${i}`;
+        if (touchTimerRef.current[cellKey]) {
+          clearTimeout(touchTimerRef.current[cellKey]);
+          delete touchTimerRef.current[cellKey];
+        }
+        delete touchStartTimeRef.current[cellKey];
+      } : undefined}
+      onTouchCancel={isModified && isMobile ? (e) => {
+        const cellKey = `${player.id}-${course.id}-${i}`;
+        if (touchTimerRef.current[cellKey]) {
+          clearTimeout(touchTimerRef.current[cellKey]);
+          delete touchTimerRef.current[cellKey];
+        }
+        delete touchStartTimeRef.current[cellKey];
       } : undefined}
       id={isModified ? `score-tooltip-${player.id}-${course.id}-${i}` : undefined}
     >

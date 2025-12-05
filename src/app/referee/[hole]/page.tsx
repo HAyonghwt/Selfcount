@@ -835,6 +835,7 @@ export default function RefereePage() {
                     
                     // 점수 변경 로그 기록
                     if (prevScore !== scoreData.score) {
+                        const refereeId = (refereeData && refereeData.id) ? refereeData.id : `${hole}번홀심판`;
                         await logScoreChange({
                             matchId: 'tournaments/current',
                             playerId: playerToSave.id,
@@ -842,7 +843,7 @@ export default function RefereePage() {
                             holeNumber: Number(hole),
                             oldValue: prevScore !== null && prevScore !== undefined ? prevScore : 0,
                             newValue: scoreData.score !== null && scoreData.score !== undefined ? scoreData.score : 0,
-                            modifiedBy: refereeData?.id || 'referee',
+                            modifiedBy: refereeId,
                             modifiedByType: 'judge',
                             comment: `코스: ${selectedCourse}`,
                             courseId: selectedCourse
@@ -876,6 +877,7 @@ export default function RefereePage() {
                                 if (cid === selectedCourse && h === Number(hole)) {
                                     // 직접 입력한 코스/홀
                                     await set(ref(dbInstance, `/scores/${playerToSave.id}/${cid}/${h}`), 0);
+                                    const refereeId = (refereeData && refereeData.id) ? refereeData.id : `${hole}번홀심판`;
                                     await logScoreChange({
                                         matchId: 'tournaments/current',
                                         playerId: playerToSave.id,
@@ -883,7 +885,7 @@ export default function RefereePage() {
                                         holeNumber: h,
                                         oldValue: existing === undefined || existing === null || existing === '' || isNaN(Number(existing)) ? 0 : Number(existing),
                                         newValue: 0,
-                                        modifiedBy: 'referee',
+                                        modifiedBy: refereeId,
                                         modifiedByType: 'judge',
                                         comment: `심판 직접 ${scoreData.forfeitType === 'absent' ? '불참' : scoreData.forfeitType === 'disqualified' ? '실격' : '기권'} (코스: ${courseName}, 홀: ${h})`,
                                         courseId: cid
@@ -891,6 +893,7 @@ export default function RefereePage() {
                                 } else if (existing === undefined || existing === null || existing === '' || isNaN(Number(existing))) {
                                     // 나머지 미입력 홀만 0점 처리 (기존 점수는 보존)
                                     await set(ref(dbInstance, `/scores/${playerToSave.id}/${cid}/${h}`), 0);
+                                    const refereeId = (refereeData && refereeData.id) ? refereeData.id : `${hole}번홀심판`;
                                     await logScoreChange({
                                         matchId: 'tournaments/current',
                                         playerId: playerToSave.id,
@@ -898,7 +901,7 @@ export default function RefereePage() {
                                         holeNumber: h,
                                         oldValue: existing === undefined || existing === null || existing === '' || isNaN(Number(existing)) ? 0 : Number(existing),
                                         newValue: 0,
-                                        modifiedBy: 'referee',
+                                        modifiedBy: refereeId,
                                         modifiedByType: 'judge',
                                         comment: `심판페이지에서 ${scoreData.forfeitType === 'absent' ? '불참' : scoreData.forfeitType === 'disqualified' ? '실격' : '기권'} 처리 (코스: ${courseName}, 홀: ${h})`,
                                         courseId: cid
