@@ -376,10 +376,26 @@ function ExternalScoreboard() {
                     }
                 });
                 
+                // 코스 활성/비활성 상태 실시간 반영 (isActive 변경 감지)
+                const coursesRef = ref(dbInstance, 'tournaments/current/courses');
+                const unsubCourses = onValue(coursesRef, snap => {
+                    const coursesData = snap.val() || {};
+                    setTournament((prev: any) => {
+                        const newTournament = { ...prev, courses: coursesData };
+                        const newHash = JSON.stringify(newTournament);
+                        if (newHash !== lastTournamentHash) {
+                            setLastTournamentHash(newHash);
+                            return newTournament;
+                        }
+                        return prev;
+                    });
+                });
+                
                 // 언서브 등록
                 activeUnsubsRef.current.push(unsubPlayers);
                 activeUnsubsRef.current.push(unsubScores);
                 activeUnsubsRef.current.push(unsubTournament);
+                activeUnsubsRef.current.push(unsubCourses);
             }
         });
         // 클린업: 이 이펙트가 재실행/언마운트 시 구독 해제
