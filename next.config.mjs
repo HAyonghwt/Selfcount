@@ -3,9 +3,6 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
   images: {
     remotePatterns: [
       {
@@ -21,7 +18,9 @@ const nextConfig = {
     // 파일 시스템 캐시 개선
     optimizePackageImports: ['lucide-react'],
   },
-  // 웹팩 설정 개선
+  // Turbopack 설정 (Next.js 16 기본값)
+  turbopack: {},
+  // 웹팩 설정 개선 (Turbopack과 함께 사용)
   webpack: (config, { dev, isServer }) => {
     if (dev) {
       // 개발 환경에서는 청크 분할 비활성화 (Windows 호환성)

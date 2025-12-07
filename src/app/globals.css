@@ -61,10 +61,6 @@
     text-align: left !important;
   }
 
-    justify-content: center !important;
-    align-items: center !important;
-  }
-
   .gift-mobile-wrap {
     padding: 4px !important;
     font-size: 8px !important;
@@ -242,11 +238,14 @@
     padding-right: 4px !important;
   }
 
-.gift-mobile-draw .prize-message {
-  font-size: 14px !important;
-  white-space: normal !important;
-  word-break: keep-all !important;
-  text-align: center !important;
+  .gift-mobile-draw .prize-message {
+    font-size: 14px !important;
+    white-space: normal !important;
+    word-break: keep-all !important;
+    text-align: center !important;
+  }
+}
+
 body {
   font-family: 'Noto Sans KR', sans-serif;
   font-size: 110%;
@@ -315,5 +314,4 @@ body {
   body {
     @apply bg-background text-foreground;
   }
-}
 }
