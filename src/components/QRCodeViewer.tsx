@@ -114,19 +114,65 @@ export default function QRCodeViewer({ group, jo, courseName }: QRCodeViewerProp
             copy.style.border = 'none';
             copy.style.borderRadius = '4px';
             copy.style.cursor = 'pointer';
-            copy.addEventListener('click', () => {
-                navigator.clipboard.writeText(viewerUrl).then(() => {
-                    toast({
-                        title: '복사 완료',
-                        description: '링크가 클립보드에 복사되었습니다.',
-                    });
-                }).catch(() => {
+            copy.addEventListener('click', async () => {
+                try {
+                    // 모바일에서도 동작하도록 클립보드 복사 유틸
+                    let copied = false;
+                    
+                    // 방법 1: Clipboard API 시도 (HTTPS 환경)
+                    if (navigator.clipboard && window.isSecureContext) {
+                        try {
+                            await navigator.clipboard.writeText(viewerUrl);
+                            copied = true;
+                        } catch (e) {
+                            // Clipboard API 실패 시 fallback으로 진행
+                        }
+                    }
+                    
+                    // 방법 2: execCommand fallback (모바일/HTTP 환경)
+                    if (!copied) {
+                        const textArea = document.createElement('textarea');
+                        textArea.value = viewerUrl;
+                        textArea.setAttribute('readonly', '');
+                        textArea.style.position = 'fixed';
+                        textArea.style.top = '-1000px';
+                        textArea.style.opacity = '0';
+                        document.body.appendChild(textArea);
+                        textArea.select();
+                        textArea.setSelectionRange(0, viewerUrl.length);
+                        
+                        try {
+                            const success = document.execCommand('copy');
+                            if (success) {
+                                copied = true;
+                            }
+                        } catch (e) {
+                            // execCommand도 실패
+                        }
+                        
+                        document.body.removeChild(textArea);
+                    }
+                    
+                    if (copied) {
+                        toast({
+                            title: '복사 완료',
+                            description: '링크가 클립보드에 복사되었습니다.',
+                        });
+                    } else {
+                        // 모든 방법 실패 시 수동 복사 안내
+                        toast({
+                            title: '복사 실패',
+                            description: '링크 복사에 실패했습니다. 링크를 길게 눌러 수동 복사해 주세요.',
+                            variant: 'destructive'
+                        });
+                    }
+                } catch (error) {
                     toast({
                         title: '복사 실패',
-                        description: '링크 복사에 실패했습니다.',
+                        description: '링크 복사에 실패했습니다. 링크를 길게 눌러 수동 복사해 주세요.',
                         variant: 'destructive'
                     });
-                });
+                }
             });
             
             const close = document.createElement('button');

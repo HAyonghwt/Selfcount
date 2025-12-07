@@ -133,7 +133,11 @@ export default function SelfScoringPage() {
         playerNames[2] && playerNames[3] ? `${playerNames[2]}/${playerNames[3]}` : (playerNames[2] || playerNames[3] || '')
       ].filter(name => name.length > 0);
     } else {
-      return renderColumns.map(idxs => idxs.map(i => (playerNames[i] || '')).filter(Boolean).join('/'));
+      // 개인전에서는 각 선수 이름을 개별적으로 표시 (빈 이름도 표시)
+      return renderColumns.map(idxs => {
+        const name = idxs.map(i => (playerNames[i] || '')).filter(Boolean).join('/');
+        return name || `이름${idxs[0] + 1}`;
+      });
     }
   }, [gameMode, renderColumns, playerNames]);
   // 서명 표시 인덱스: 개인전은 4명, 팀전은 각 팀의 대표(각 묶음의 첫 인덱스)
@@ -341,16 +345,32 @@ export default function SelfScoringPage() {
       setPlayersInGroupJo(list as any);
       
       // 관전 모드에서는 플레이어 이름을 실시간으로 설정
-      if (isReadOnlyMode && list.length > 0) {
-        const names = list.map(p => {
-          if (p.type === 'team') {
-            return `${p.p1_name}/${p.p2_name}`;
-          } else {
-            return p.name || '';
+      if (isReadOnlyMode) {
+        if (list.length > 0) {
+          // 개인전과 팀전 구분하여 이름 설정
+          const names: string[] = [];
+          list.forEach(p => {
+            if (p.type === 'team') {
+              // 팀전: p1_name과 p2_name을 각각 names 배열에 추가
+              if (p.p1_name) names.push(p.p1_name);
+              if (p.p2_name) names.push(p.p2_name);
+            } else {
+              // 개인전: name을 names 배열에 추가
+              if (p.name) names.push(p.name);
+            }
+          });
+          
+          // 항상 4개로 채우기 (부족한 부분은 빈 문자열로)
+          const filledNames = [...names];
+          while (filledNames.length < 4) {
+            filledNames.push('');
           }
-        });
-        
-        setPlayerNames(names);
+          
+          setPlayerNames(filledNames.slice(0, 4));
+        } else {
+          // 선수가 없을 때는 기본값 유지
+          setPlayerNames(["이름1", "이름2", "이름3", "이름4"]);
+        }
       }
     });
 

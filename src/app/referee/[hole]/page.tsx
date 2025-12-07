@@ -496,23 +496,74 @@ export default function RefereePage() {
         }
     }, [view, selectedGroup, selectedCourse, selectedJo, selectedType, hole]);
 
+    // 심판이 담당하는 코스 찾기
+    const assignedCourse = useMemo(() => {
+        if (!refereeData?.id || tournamentCourses.length === 0) return null;
+        
+        // 심판 아이디에서 번호 추출 (예: "1번홀심판3" -> 3)
+        const match = refereeData.id.match(/(\d+)번홀심판(\d*)/);
+        if (!match) return null;
+        
+        const suffixNumber = match[2] ? parseInt(match[2]) : 0;
+        
+        // 코스 인덱스에 따라 코스 찾기
+        if (suffixNumber < tournamentCourses.length) {
+            const course = tournamentCourses[suffixNumber];
+            // courses 배열에서 해당 코스 찾기
+            return courses.find(c => c.id === course.id) || course;
+        }
+        
+        return null;
+    }, [refereeData, tournamentCourses, courses]);
+
+    // 해당 코스가 배정된 경기 형태 찾기
+    const availableTypes = useMemo(() => {
+        if (!assignedCourse) return [];
+        
+        const types = new Set<'individual' | 'team'>();
+        Object.values(groupsData).forEach((group: any) => {
+            if (group.courses && group.courses[assignedCourse.id]) {
+                types.add(group.type);
+            }
+        });
+        
+        return Array.from(types);
+    }, [assignedCourse, groupsData]);
+
     // Derived data
     const availableGroups = useMemo(() => {
-        if (!selectedType) return [];
+        if (!selectedType || !assignedCourse) return [];
         return Object.values(groupsData)
-            .filter((g: any) => g.type === selectedType)
+            .filter((g: any) => {
+                // 선택된 경기 형태와 일치하고, 해당 코스가 배정된 그룹만
+                return g.type === selectedType && g.courses && g.courses[assignedCourse.id];
+            })
             .map((g: any) => g.name)
             .filter(Boolean)
             .sort();
-    }, [groupsData, selectedType]);
+    }, [groupsData, selectedType, assignedCourse]);
     
     const availableCoursesForGroup = useMemo(() => {
-        if (!selectedGroup) return [];
-        const group = groupsData[selectedGroup as string];
-        if (!group || !group.courses) return [];
-        const assignedCourseIds = Object.keys(group.courses).filter(id => group.courses[id]);
-        return courses.filter(c => assignedCourseIds.includes(c.id.toString()));
-    }, [selectedGroup, groupsData, courses]);
+        // 심판이 담당하는 코스만 반환
+        if (!assignedCourse) return [];
+        return [assignedCourse];
+    }, [assignedCourse]);
+
+    // 코스 자동 선택
+    useEffect(() => {
+        if (!assignedCourse) return;
+        
+        // 코스 자동 선택
+        const courseIdStr = String(assignedCourse.id);
+        setSelectedCourse(courseIdStr);
+    }, [assignedCourse?.id]);
+    
+    // 경기 형태 자동 선택 (1개만 있을 때)
+    useEffect(() => {
+        if (availableTypes.length === 1 && selectedType !== availableTypes[0]) {
+            setSelectedType(availableTypes[0]);
+        }
+    }, [availableTypes.length]);
 
     const availableJos = useMemo(() => {
         if (!selectedGroup) return [];
@@ -743,8 +794,21 @@ export default function RefereePage() {
 
     // ---- Handlers ----
     const handleStartScoring = () => {
-        if (selectedGroup && selectedCourse && selectedJo) {
+        // 코스는 자동 선택되므로 assignedCourse가 있으면 코스는 선택된 것으로 간주
+        const isCourseSelected = selectedCourse || (assignedCourse && String(assignedCourse.id));
+        
+        if (selectedGroup && isCourseSelected && selectedJo && currentPlayers.length > 0) {
+            // 코스가 자동 선택되었지만 selectedCourse가 설정되지 않은 경우 설정
+            if (!selectedCourse && assignedCourse) {
+                setSelectedCourse(String(assignedCourse.id));
+            }
             setView('scoring');
+        } else {
+            toast({
+                title: '선택 오류',
+                description: '그룹, 코스, 조를 모두 선택해주세요.',
+                variant: 'destructive',
+            });
         }
     };
     
@@ -1098,19 +1162,28 @@ export default function RefereePage() {
                     <CardDescription className="text-sm">점수를 기록할 경기 형태, 그룹, 코스, 조를 선택하세요.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                    <Select value={selectedType as string} onValueChange={v => {
-                        const val = (v || '').toString();
-                        if (val === 'individual' || val === 'team') {
-                            setSelectedType(val);
-                        } else {
-                            setSelectedType('');
-                        }
-                        setSelectedGroup(''); setSelectedCourse(''); setSelectedJo('');
-                    }}>
-                        <SelectTrigger className="h-12 text-base"><SelectValue placeholder="1. 경기 형태 선택" /></SelectTrigger>
+                    <Select 
+                        value={selectedType as string} 
+                        onValueChange={v => {
+                            const val = (v || '').toString();
+                            if (val === 'individual' || val === 'team') {
+                                setSelectedType(val);
+                            } else {
+                                setSelectedType('');
+                            }
+                            setSelectedGroup(''); setSelectedCourse(''); setSelectedJo('');
+                        }}
+                        disabled={availableTypes.length === 0 || (availableTypes.length === 1 && selectedType === availableTypes[0])}
+                    >
+                        <SelectTrigger className="h-12 text-base">
+                            <SelectValue placeholder="1. 경기 형태 선택" />
+                        </SelectTrigger>
                         <SelectContent position="item-aligned">
-                            <SelectItem value="individual" className="text-base">개인전</SelectItem>
-                            <SelectItem value="team" className="text-base">2인1팀</SelectItem>
+                            {availableTypes.map(type => (
+                                <SelectItem key={type} value={type} className="text-base">
+                                    {type === 'individual' ? '개인전' : '2인1팀'}
+                                </SelectItem>
+                            ))}
                         </SelectContent>
                     </Select>
                     <Select
@@ -1120,20 +1193,37 @@ export default function RefereePage() {
                         setSelectedCourse('');
                         setSelectedJo('');
                       }}
+                      disabled={!selectedType || availableGroups.length === 0}
                     >
-                        <SelectTrigger className="h-12 text-base"><SelectValue placeholder={selectedType === '' ? "경기 형태 먼저 선택" : "2. 그룹 선택"} /></SelectTrigger>
+                        <SelectTrigger className="h-12 text-base">
+                            <SelectValue placeholder={selectedType === '' ? "경기 형태 먼저 선택" : availableGroups.length === 0 ? "배정된 그룹 없음" : "2. 그룹 선택"} />
+                        </SelectTrigger>
                         <SelectContent position="item-aligned">
                             {availableGroups.map(g => <SelectItem key={g} value={g.toString()} className="text-base">{g}</SelectItem>)}
                         </SelectContent>
                     </Select>
-                    <Select value={selectedCourse || ''} onValueChange={v => {setSelectedCourse((v || '').toString()); setSelectedJo('');}} disabled={!selectedGroup || availableCoursesForGroup.length === 0}>
-                        <SelectTrigger className="h-12 text-base"><SelectValue placeholder={selectedGroup === '' ? "그룹 먼저 선택" : (availableCoursesForGroup.length === 0 ? "배정된 코스 없음" : "3. 코스 선택")} /></SelectTrigger>
+                    <Select 
+                        value={selectedCourse || ''} 
+                        onValueChange={v => {setSelectedCourse((v || '').toString()); setSelectedJo('');}} 
+                        disabled={true}
+                    >
+                        <SelectTrigger className="h-12 text-base bg-muted">
+                            <SelectValue placeholder={
+                                assignedCourse 
+                                    ? `${assignedCourse.name} (${hole}번홀심판)` 
+                                    : "코스 정보 없음"
+                            } />
+                        </SelectTrigger>
                         <SelectContent position="item-aligned">
-                            {availableCoursesForGroup.map(c => <SelectItem key={c.id} value={c.id.toString()} className="text-base">{c.name}</SelectItem>)}
+                            {availableCoursesForGroup.map(c => (
+                                <SelectItem key={c.id} value={c.id.toString()} className="text-base">
+                                    {c.name} ({hole}번홀심판)
+                                </SelectItem>
+                            ))}
                         </SelectContent>
                     </Select>
-                    <Select value={selectedJo || ''} onValueChange={v => setSelectedJo((v || '').toString())} disabled={!selectedCourse || availableJos.length === 0}>
-                        <SelectTrigger className="h-12 text-base"><SelectValue placeholder={selectedCourse === '' ? "코스 먼저 선택" : (availableJos.length === 0 ? "배정된 선수 없음" : "4. 조 선택")} /></SelectTrigger>
+                    <Select value={selectedJo || ''} onValueChange={v => setSelectedJo((v || '').toString())} disabled={!selectedGroup || availableJos.length === 0}>
+                        <SelectTrigger className="h-12 text-base"><SelectValue placeholder={!selectedGroup ? "그룹 먼저 선택" : (availableJos.length === 0 ? "배정된 선수 없음" : "4. 조 선택")} /></SelectTrigger>
                         <SelectContent position="item-aligned">
                             {availableJos.map(jo => {
                                 const isCompleted = completedJosState.has(jo);
@@ -1286,8 +1376,6 @@ export default function RefereePage() {
                                 <div className="text-xl sm:text-2xl font-extrabold text-center text-foreground break-words flex items-center justify-center gap-3">
                                     <div>
                                         <span>{selectedGroup}</span>
-                                        <span className="mx-1">/</span>
-                                        <span>{selectedCourseName}</span>
                                     </div>
 
                                     <QRCodeViewer 
