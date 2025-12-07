@@ -15,7 +15,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "check": "npm run typecheck && npm run lint",
+    "check:all": "npm run typecheck && npm run lint && npm run build"
   },
   "dependencies": {
     "@genkit-ai/googleai": "1.25.0",
