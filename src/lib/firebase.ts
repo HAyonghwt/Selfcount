@@ -60,5 +60,20 @@ export const onAuthStateChange = (callback: (user: User | null) => void) => {
   return onAuthStateChanged(auth, callback);
 };
 
+// Firebase null 체크 헬퍼 함수들
+export const getDb = () => {
+  if (!db) {
+    throw new Error('Firebase Database가 초기화되지 않았습니다. 환경 변수를 확인해주세요.');
+  }
+  return db;
+};
+
+export const getFirestoreDb = () => {
+  if (!firestore) {
+    throw new Error('Firestore가 초기화되지 않았습니다. 환경 변수를 확인해주세요.');
+  }
+  return firestore;
+};
+
 // Export the Firebase services and the getDatabase function
 export { db, app, auth, firestore, getDatabase };

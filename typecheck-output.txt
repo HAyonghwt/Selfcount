@@ -1,0 +1,134 @@
+
+> nextn@0.1.0 typecheck
+> tsc --noEmit
+
+src/app/admin/dashboard/page-1.tsx(430,35): error TS7006: Parameter 'player' implicitly has an 'any' type.
+src/app/admin/dashboard/page-1.tsx(646,56): error TS2345: Argument of type 'Database | null' is not assignable to parameter of type 'Database'.
+  Type 'null' is not assignable to type 'Database'.
+src/app/admin/dashboard/page-1.tsx(909,25): error TS2345: Argument of type 'Database | null' is not assignable to parameter of type 'Database'.
+  Type 'null' is not assignable to type 'Database'.
+src/app/admin/dashboard/page-1.tsx(950,62): error TS7006: Parameter 'p' implicitly has an 'any' type.
+src/app/admin/dashboard/page-1.tsx(1227,40): error TS7006: Parameter 'a' implicitly has an 'any' type.
+src/app/admin/dashboard/page-1.tsx(1227,42): error TS7006: Parameter 'b' implicitly has an 'any' type.
+src/app/admin/dashboard/page-1.tsx(1293,66): error TS7006: Parameter 'p' implicitly has an 'any' type.
+src/app/admin/dashboard/page-1.tsx(1368,63): error TS7006: Parameter 'p' implicitly has an 'any' type.
+src/app/admin/dashboard/page-1.tsx(1390,46): error TS7006: Parameter 'player' implicitly has an 'any' type.
+src/app/admin/dashboard/page-1.tsx(1618,20): error TS18046: 'player' is of type 'unknown'.
+src/app/admin/dashboard/page-1.tsx(1618,75): error TS18046: 'player' is of type 'unknown'.
+src/app/admin/dashboard/page-1.tsx(1623,32): error TS2345: Argument of type 'number' is not assignable to parameter of type 'SetStateAction<null>'.
+src/app/admin/dashboard/page-1.tsx(1625,27): error TS7053: Element implicitly has an 'any' type because expression of type 'number' can't be used to index type '{}'.
+  No index signature with a parameter of type 'number' was found on type '{}'.
+src/app/admin/dashboard/page-1.tsx(1817,20): error TS18046: 'result' is of type 'unknown'.
+src/app/admin/dashboard/page-1.tsx(1819,55): error TS18046: 'result' is of type 'unknown'.
+src/app/admin/dashboard/page-1.tsx(1821,16): error TS18046: 'result' is of type 'unknown'.
+src/app/admin/dashboard/page-1.tsx(1821,79): error TS18046: 'result' is of type 'unknown'.
+src/app/admin/dashboard/page-1.tsx(1870,61): error TS7006: Parameter 'player' implicitly has an 'any' type.
+src/app/admin/dashboard/page-1.tsx(1876,66): error TS7053: Element implicitly has an 'any' type because expression of type 'any' can't be used to index type '{}'.
+src/app/admin/dashboard/page-1.tsx(1876,100): error TS7053: Element implicitly has an 'any' type because expression of type 'any' can't be used to index type '{}'.
+src/app/admin/dashboard/page-1.tsx(1877,61): error TS7053: Element implicitly has an 'any' type because expression of type 'any' can't be used to index type '{}'.
+src/app/admin/dashboard/page-1.tsx(1909,105): error TS7006: Parameter 'score' implicitly has an 'any' type.
+src/app/admin/dashboard/page-1.tsx(1909,112): error TS7006: Parameter 'i' implicitly has an 'any' type.
+src/app/admin/dashboard/page-1.tsx(1954,53): error TS18047: 'pm' is possibly 'null'.
+src/app/admin/dashboard/page-1.tsx(1954,80): error TS18047: 'pm' is possibly 'null'.
+src/app/admin/dashboard/page-1.tsx(1958,38): error TS18047: 'pm' is possibly 'null'.
+src/app/admin/dashboard/page-1.tsx(1995,9): error TS2367: This comparison appears to be unintentional because the types 'string' and 'number' have no overlap.
+src/app/admin/dashboard/page-1.tsx(2002,11): error TS2367: This comparison appears to be unintentional because the types 'string' and 'number' have no overlap.
+src/app/admin/dashboard/page-1.tsx(2010,51): error TS2339: Property 'id' does not exist on type '{}'.
+src/app/admin/dashboard/page-1.tsx(2013,39): error TS2345: Argument of type 'Database | null' is not assignable to parameter of type 'Database'.
+  Type 'null' is not assignable to type 'Database'.
+src/app/admin/dashboard/page-1.tsx(2013,81): error TS2339: Property 'id' does not exist on type '{}'.
+src/app/admin/dashboard/page-1.tsx(2018,33): error TS2345: Argument of type 'Database | null' is not assignable to parameter of type 'Database'.
+  Type 'null' is not assignable to type 'Database'.
+src/app/admin/dashboard/page-1.tsx(2018,54): error TS2339: Property 'id' does not exist on type '{}'.
+src/app/admin/dashboard/page-1.tsx(2030,45): error TS2339: Property 'assignedCourses' does not exist on type '{}'.
+src/app/admin/dashboard/page-1.tsx(2032,41): error TS2339: Property 'id' does not exist on type '{}'.
+src/app/admin/dashboard/page-1.tsx(2053,37): error TS2345: Argument of type 'Database | null' is not assignable to parameter of type 'Database'.
+  Type 'null' is not assignable to type 'Database'.
+src/app/admin/dashboard/page-1.tsx(2053,58): error TS2339: Property 'id' does not exist on type '{}'.
+src/app/admin/dashboard/page-1.tsx(2056,42): error TS2339: Property 'id' does not exist on type '{}'.
+src/app/admin/dashboard/page-1.tsx(2061,25): error TS2322: Type 'number | null' is not assignable to type 'number'.
+  Type 'null' is not assignable to type 'number'.
+src/app/admin/dashboard/page-1.tsx(2066,55): error TS2339: Property 'id' does not exist on type '{}'.
+src/app/admin/dashboard/page-1.tsx(2077,58): error TS2345: Argument of type 'Database | null' is not assignable to parameter of type 'Database'.
+  Type 'null' is not assignable to type 'Database'.
+src/app/admin/dashboard/page-1.tsx(2077,79): error TS2339: Property 'id' does not exist on type '{}'.
+src/app/admin/dashboard/page-1.tsx(2096,37): error TS2345: Argument of type 'Database | null' is not assignable to parameter of type 'Database'.
+  Type 'null' is not assignable to type 'Database'.
+src/app/admin/dashboard/page-1.tsx(2096,58): error TS2339: Property 'id' does not exist on type '{}'.
+src/app/admin/dashboard/page-1.tsx(2104,73): error TS2339: Property 'id' does not exist on type '{}'.
+src/app/admin/dashboard/page-1.tsx(2105,66): error TS2339: Property 'id' does not exist on type '{}'.
+src/app/admin/dashboard/page-1.tsx(2117,11): error TS2367: This comparison appears to be unintentional because the types 'string' and 'number' have no overlap.
+src/app/admin/dashboard/page-1.tsx(2142,7): error TS2322: Type 'Element' is not assignable to type 'string'.
+src/app/admin/dashboard/page-1.tsx(2147,47): error TS18047: 'pm' is possibly 'null'.
+src/app/admin/dashboard/page-1.tsx(2147,74): error TS18047: 'pm' is possibly 'null'.
+src/app/admin/dashboard/page-1.tsx(2149,34): error TS18047: 'pm' is possibly 'null'.
+src/app/admin/dashboard/page-?ㅺ꺽?섎뒗寃?tsx(430,35): error TS7006: Parameter 'player' implicitly has an 'any' type.
+src/app/admin/dashboard/page-?ㅺ꺽?섎뒗寃?tsx(646,56): error TS2345: Argument of type 'Database | null' is not assignable to parameter of type 'Database'.
+  Type 'null' is not assignable to type 'Database'.
+src/app/admin/dashboard/page-?ㅺ꺽?섎뒗寃?tsx(909,25): error TS2345: Argument of type 'Database | null' is not assignable to parameter of type 'Database'.
+  Type 'null' is not assignable to type 'Database'.
+src/app/admin/dashboard/page-?ㅺ꺽?섎뒗寃?tsx(950,62): error TS7006: Parameter 'p' implicitly has an 'any' type.
+src/app/admin/dashboard/page-?ㅺ꺽?섎뒗寃?tsx(995,23): error TS7006: Parameter 'prevScores' implicitly has an 'any' type.
+src/app/admin/dashboard/page-?ㅺ꺽?섎뒗寃?tsx(1260,40): error TS7006: Parameter 'a' implicitly has an 'any' type.
+src/app/admin/dashboard/page-?ㅺ꺽?섎뒗寃?tsx(1260,42): error TS7006: Parameter 'b' implicitly has an 'any' type.
+src/app/admin/dashboard/page-?ㅺ꺽?섎뒗寃?tsx(1326,66): error TS7006: Parameter 'p' implicitly has an 'any' type.
+src/app/admin/dashboard/page-?ㅺ꺽?섎뒗寃?tsx(1401,63): error TS7006: Parameter 'p' implicitly has an 'any' type.
+src/app/admin/dashboard/page-?ㅺ꺽?섎뒗寃?tsx(1423,46): error TS7006: Parameter 'player' implicitly has an 'any' type.
+src/app/admin/dashboard/page-?ㅺ꺽?섎뒗寃?tsx(1651,20): error TS18046: 'player' is of type 'unknown'.
+src/app/admin/dashboard/page-?ㅺ꺽?섎뒗寃?tsx(1651,75): error TS18046: 'player' is of type 'unknown'.
+src/app/admin/dashboard/page-?ㅺ꺽?섎뒗寃?tsx(1656,32): error TS2345: Argument of type 'number' is not assignable to parameter of type 'SetStateAction<null>'.
+src/app/admin/dashboard/page-?ㅺ꺽?섎뒗寃?tsx(1658,27): error TS7053: Element implicitly has an 'any' type because expression of type 'number' can't be used to index type '{}'.
+  No index signature with a parameter of type 'number' was found on type '{}'.
+src/app/admin/dashboard/page-?ㅺ꺽?섎뒗寃?tsx(1850,20): error TS18046: 'result' is of type 'unknown'.
+src/app/admin/dashboard/page-?ㅺ꺽?섎뒗寃?tsx(1852,55): error TS18046: 'result' is of type 'unknown'.
+src/app/admin/dashboard/page-?ㅺ꺽?섎뒗寃?tsx(1854,16): error TS18046: 'result' is of type 'unknown'.
+src/app/admin/dashboard/page-?ㅺ꺽?섎뒗寃?tsx(1854,79): error TS18046: 'result' is of type 'unknown'.
+src/app/admin/dashboard/page-?ㅺ꺽?섎뒗寃?tsx(1903,61): error TS7006: Parameter 'player' implicitly has an 'any' type.
+src/app/admin/dashboard/page-?ㅺ꺽?섎뒗寃?tsx(1909,66): error TS7053: Element implicitly has an 'any' type because expression of type 'any' can't be used to index type '{}'.
+src/app/admin/dashboard/page-?ㅺ꺽?섎뒗寃?tsx(1909,100): error TS7053: Element implicitly has an 'any' type because expression of type 'any' can't be used to index type '{}'.
+src/app/admin/dashboard/page-?ㅺ꺽?섎뒗寃?tsx(1910,61): error TS7053: Element implicitly has an 'any' type because expression of type 'any' can't be used to index type '{}'.
+src/app/admin/dashboard/page-?ㅺ꺽?섎뒗寃?tsx(1942,105): error TS7006: Parameter 'score' implicitly has an 'any' type.
+src/app/admin/dashboard/page-?ㅺ꺽?섎뒗寃?tsx(1942,112): error TS7006: Parameter 'i' implicitly has an 'any' type.
+src/app/admin/dashboard/page-?ㅺ꺽?섎뒗寃?tsx(1987,53): error TS18047: 'pm' is possibly 'null'.
+src/app/admin/dashboard/page-?ㅺ꺽?섎뒗寃?tsx(1987,80): error TS18047: 'pm' is possibly 'null'.
+src/app/admin/dashboard/page-?ㅺ꺽?섎뒗寃?tsx(1991,38): error TS18047: 'pm' is possibly 'null'.
+src/app/admin/dashboard/page-?ㅺ꺽?섎뒗寃?tsx(2028,9): error TS2367: This comparison appears to be unintentional because the types 'string' and 'number' have no overlap.
+src/app/admin/dashboard/page-?ㅺ꺽?섎뒗寃?tsx(2035,11): error TS2367: This comparison appears to be unintentional because the types 'string' and 'number' have no overlap.
+src/app/admin/dashboard/page-?ㅺ꺽?섎뒗寃?tsx(2043,51): error TS2339: Property 'id' does not exist on type '{}'.
+src/app/admin/dashboard/page-?ㅺ꺽?섎뒗寃?tsx(2046,39): error TS2345: Argument of type 'Database | null' is not assignable to parameter of type 'Database'.
+  Type 'null' is not assignable to type 'Database'.
+src/app/admin/dashboard/page-?ㅺ꺽?섎뒗寃?tsx(2046,81): error TS2339: Property 'id' does not exist on type '{}'.
+src/app/admin/dashboard/page-?ㅺ꺽?섎뒗寃?tsx(2051,33): error TS2345: Argument of type 'Database | null' is not assignable to parameter of type 'Database'.
+  Type 'null' is not assignable to type 'Database'.
+src/app/admin/dashboard/page-?ㅺ꺽?섎뒗寃?tsx(2051,54): error TS2339: Property 'id' does not exist on type '{}'.
+src/app/admin/dashboard/page-?ㅺ꺽?섎뒗寃?tsx(2063,45): error TS2339: Property 'assignedCourses' does not exist on type '{}'.
+src/app/admin/dashboard/page-?ㅺ꺽?섎뒗寃?tsx(2065,41): error TS2339: Property 'id' does not exist on type '{}'.
+src/app/admin/dashboard/page-?ㅺ꺽?섎뒗寃?tsx(2086,37): error TS2345: Argument of type 'Database | null' is not assignable to parameter of type 'Database'.
+  Type 'null' is not assignable to type 'Database'.
+src/app/admin/dashboard/page-?ㅺ꺽?섎뒗寃?tsx(2086,58): error TS2339: Property 'id' does not exist on type '{}'.
+src/app/admin/dashboard/page-?ㅺ꺽?섎뒗寃?tsx(2089,42): error TS2339: Property 'id' does not exist on type '{}'.
+src/app/admin/dashboard/page-?ㅺ꺽?섎뒗寃?tsx(2094,25): error TS2322: Type 'number | null' is not assignable to type 'number'.
+  Type 'null' is not assignable to type 'number'.
+src/app/admin/dashboard/page-?ㅺ꺽?섎뒗寃?tsx(2099,55): error TS2339: Property 'id' does not exist on type '{}'.
+src/app/admin/dashboard/page-?ㅺ꺽?섎뒗寃?tsx(2110,58): error TS2345: Argument of type 'Database | null' is not assignable to parameter of type 'Database'.
+  Type 'null' is not assignable to type 'Database'.
+src/app/admin/dashboard/page-?ㅺ꺽?섎뒗寃?tsx(2110,79): error TS2339: Property 'id' does not exist on type '{}'.
+src/app/admin/dashboard/page-?ㅺ꺽?섎뒗寃?tsx(2129,37): error TS2345: Argument of type 'Database | null' is not assignable to parameter of type 'Database'.
+  Type 'null' is not assignable to type 'Database'.
+src/app/admin/dashboard/page-?ㅺ꺽?섎뒗寃?tsx(2129,58): error TS2339: Property 'id' does not exist on type '{}'.
+src/app/admin/dashboard/page-?ㅺ꺽?섎뒗寃?tsx(2137,73): error TS2339: Property 'id' does not exist on type '{}'.
+src/app/admin/dashboard/page-?ㅺ꺽?섎뒗寃?tsx(2138,66): error TS2339: Property 'id' does not exist on type '{}'.
+src/app/admin/dashboard/page-?ㅺ꺽?섎뒗寃?tsx(2150,11): error TS2367: This comparison appears to be unintentional because the types 'string' and 'number' have no overlap.
+src/app/admin/dashboard/page-?ㅺ꺽?섎뒗寃?tsx(2175,7): error TS2322: Type 'Element' is not assignable to type 'string'.
+src/app/admin/dashboard/page-?ㅺ꺽?섎뒗寃?tsx(2180,47): error TS18047: 'pm' is possibly 'null'.
+src/app/admin/dashboard/page-?ㅺ꺽?섎뒗寃?tsx(2180,74): error TS18047: 'pm' is possibly 'null'.
+src/app/admin/dashboard/page-?ㅺ꺽?섎뒗寃?tsx(2182,34): error TS18047: 'pm' is possibly 'null'.
+src/app/admin/dashboard/page.tsx(918,25): error TS2345: Argument of type 'Database | null' is not assignable to parameter of type 'Database'.
+  Type 'null' is not assignable to type 'Database'.
+src/app/admin/dashboard/page.tsx(2197,81): error TS2367: This comparison appears to be unintentional because the types 'number | null' and 'string' have no overlap.
+src/app/admin/dashboard/page.tsx(2247,10): error TS18047: 'score' is possibly 'null'.
+src/app/admin/referees/page.tsx(188,78): error TS2345: Argument of type 'Database | null' is not assignable to parameter of type 'Database'.
+  Type 'null' is not assignable to type 'Database'.
+src/components/gift-event/GiftEventDisplay.tsx(119,62): error TS2345: Argument of type 'Database | null' is not assignable to parameter of type 'Database'.
+  Type 'null' is not assignable to type 'Database'.
+src/components/ui/calendar.tsx(5,27): error TS2307: Cannot find module 'react-day-picker' or its corresponding type declarations.

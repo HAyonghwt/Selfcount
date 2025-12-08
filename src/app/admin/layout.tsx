@@ -66,6 +66,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       // 🟢 딜레이를 두고 config 접근 (인증 완료 대기)
       const timer = setTimeout(() => {
         try {
+          if (!db) return;
           const configRef = ref(db, 'config');
           // 실시간으로 설정 변경 감지
           const unsubscribe = onValue(configRef, (snapshot) => {

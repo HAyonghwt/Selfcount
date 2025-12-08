@@ -113,7 +113,7 @@ export default function SelfScoringManagementPage() {
 
     // 로그를 조장별로 그룹화
     const logsByCaptain = selfScoringLogs.reduce((acc, log) => {
-        const captainEmail = log.captainEmail || log.modifiedBy;
+        const captainEmail = (log as any).captainEmail || log.modifiedBy;
         if (!acc[captainEmail]) {
             acc[captainEmail] = [];
         }

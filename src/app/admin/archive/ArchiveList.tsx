@@ -127,6 +127,7 @@ const ArchiveList: React.FC = () => {
   const { toast } = useToast();
 
   useEffect(() => {
+    if (!db) return;
     const archivesRef = ref(db, "archives");
     const unsub = onValue(archivesRef, snap => {
       const val = snap.val() || {};
@@ -169,6 +170,7 @@ const ArchiveList: React.FC = () => {
   const handleDeleteAll = async () => {
     if (!window.confirm("정말 모든 기록을 삭제하시겠습니까?")) return;
     try {
+      if (!db) return;
       await remove(ref(db, "archives"));
       toast({ title: "전체 삭제 완료", description: "모든 기록이 삭제되었습니다." });
     } catch (e) {
@@ -225,6 +227,7 @@ const ArchiveList: React.FC = () => {
                           e.stopPropagation();
                           if (window.confirm('정말 이 기록을 삭제하시겠습니까?')) {
                             try {
+                              if (!db) return;
                               await remove(ref(db, `archives/${a.archiveId}`));
                               toast({ title: '삭제 완료', description: '기록이 삭제되었습니다.' });
                             } catch (e) {

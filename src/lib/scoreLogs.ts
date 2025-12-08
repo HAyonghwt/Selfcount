@@ -264,7 +264,7 @@ export const getPlayerForfeitTypeOptimized = async (playerId: string, courseId: 
   if (logCache.has(cacheKey)) {
     const cached = logCache.get(cacheKey)!;
     if (now - cached.timestamp < CACHE_DURATION) {
-      return cached.data[0]?.forfeitType || null;
+      return (cached.data[0] as any)?.forfeitType || null;
     }
   }
   
@@ -385,7 +385,8 @@ export const logScoreChangeWithRealTimeUpdate = async (logData: Omit<ScoreLog, '
     if (logData.matchId) {
       invalidateMatchLogCache(logData.matchId);
     }
-    if (logData.modifiedByType === 'self') {
+    // modifiedByType이 'self'인 경우는 타입상 존재하지 않지만, 런타임에서 체크
+    if ((logData.modifiedByType as any) === 'self') {
       invalidateSelfScoringLogCache();
     }
     

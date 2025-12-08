@@ -643,6 +643,7 @@ export default function AdminDashboard() {
                                 if (logData && 
                                     logData.comment && 
                                     logData.comment.includes(`그룹: ${filterGroup}`)) {
+                                    if (!db) return;
                                     const logRef = ref(db, `scoreLogs/${childSnapshot.key}`);
                                     deleteTasks.push(set(logRef, null));
                                 }
@@ -912,6 +913,7 @@ export default function AdminDashboard() {
         setAutoFilling(true);
         try {
             const { ref, set } = await import('firebase/database');
+            if (!db) return;
             const promises = scoreCheckModal.missingScores.map(item =>
                 set(ref(db, `scores/${item.playerId}/${item.courseId}/${item.hole}`), 0)
             );
@@ -1729,8 +1731,8 @@ export default function AdminDashboard() {
     };
 
     const [searchPlayer, setSearchPlayer] = useState('');
-    const [highlightedPlayerId, setHighlightedPlayerId] = useState(null);
-    const playerRowRefs = useRef({});
+    const [highlightedPlayerId, setHighlightedPlayerId] = useState<number | null>(null);
+    const playerRowRefs = useRef<Record<string, (HTMLTableRowElement | null)[]>>({});
 
     // 선수별 점수 로그 캐시 상태 (playerId별)
     const [playerScoreLogs, setPlayerScoreLogs] = useState<{ [playerId: string]: ScoreLog[] }>({});
@@ -1933,10 +1935,11 @@ export default function AdminDashboard() {
         });
     }, [searchPlayer, updateForfeitTypes]);
 
-    const handlePlayerSearchSelect = (playerId: number) => {
-        setHighlightedPlayerId(playerId);
+    const handlePlayerSearchSelect = (playerId: string | number) => {
+        const id = String(playerId);
+        setHighlightedPlayerId(Number(playerId));
         // rowRef가 배열 또는 undefined일 수 있음. 첫 번째 DOM 요소만 스크롤.
-        const rowRefArr = playerRowRefs.current[playerId];
+        const rowRefArr = playerRowRefs.current[id];
         if (Array.isArray(rowRefArr) && rowRefArr[0] && typeof rowRefArr[0].scrollIntoView === 'function') {
             rowRefArr[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
@@ -2126,7 +2129,7 @@ export default function AdminDashboard() {
       />
       {searchPlayer && filteredPlayerResults.length > 0 && (
         <div className="absolute bg-white border rounded shadow-lg z-50 mt-10 max-h-60 overflow-y-auto">
-          {filteredPlayerResults.map((result, idx) => (
+          {filteredPlayerResults.map((result: any, idx) => (
             <div
               key={result.id}
               className="px-3 py-2 hover:bg-primary/20 cursor-pointer"
@@ -2187,8 +2190,9 @@ export default function AdminDashboard() {
                                                     <TableRow
                                                         key={`${player.id}-${course.id}`}
                                                         ref={el => {
-                                                            if (!playerRowRefs.current[player.id]) playerRowRefs.current[player.id] = [];
-                                                            playerRowRefs.current[player.id][courseIndex] = el;
+                                                            const playerId = String(player.id);
+                                                            if (!playerRowRefs.current[playerId]) playerRowRefs.current[playerId] = [];
+                                                            playerRowRefs.current[playerId][courseIndex] = el;
                                                         }}
                                                         className={`text-base ${highlightedPlayerId === player.id ? 'bg-yellow-100 animate-pulse' : ''}`}
                                                     >
@@ -2252,7 +2256,7 @@ export default function AdminDashboard() {
           playerId: player.id,
           courseId: course.id,
           holeIndex: i,
-          score: score === null ? '' : score
+          score: score === null ? '' : String(score)
         });
       }}
     >
@@ -2262,7 +2266,7 @@ export default function AdminDashboard() {
             <span>
               {isValidNumber(score) ? score : '-'}
               {/* ±타수 표기 */}
-              {isValidNumber(pm) && score !== 0 && (
+              {isValidNumber(pm) && score !== 0 && pm !== null && (
                 <span
                   className={
                     'ml-1 text-xs align-middle ' + (pm < 0 ? 'text-blue-400' : pm > 0 ? 'text-red-400' : 'text-gray-400')
@@ -2306,17 +2310,21 @@ export default function AdminDashboard() {
         max={20}
         autoFocus
       />
-      {(scoreEditModal.score === 0 || scoreEditModal.score === "0") && (
+      {(scoreEditModal.score === "0" || Number(scoreEditModal.score) === 0) && (
         <div className="mt-2 text-red-600 text-center font-bold text-lg">기권/불참/실격</div>
       )}
       <DialogFooter>
         <Button onClick={() => handleScoreEditSave()}>저장</Button>
         <Button variant="outline" onClick={() => setScoreEditModal({ ...scoreEditModal, open: false })}>취소</Button>
         {/* 기권 해제 버튼: 0점(기권) 상태에서만 노출 */}
-        {(scoreEditModal.score === 0 || scoreEditModal.score === "0") && (
+        {(scoreEditModal.score === "0" || Number(scoreEditModal.score) === 0) && (
           <Button
             className="bg-yellow-500 hover:bg-yellow-600 text-white ml-2"
             onClick={async () => {
+              if (!db) {
+                toast({ title: '오류', description: '데이터베이스 연결이 없습니다.', variant: 'destructive' });
+                return;
+              }
               // 선수, 코스, 그룹 정보 찾기
               const player = Object.values(finalDataByGroup).flat().find((p: any) => p.id === scoreEditModal.playerId);
               if (!player) return;
@@ -2372,7 +2380,7 @@ export default function AdminDashboard() {
                         courseId: course.id,
                         holeNumber: h,
                         oldValue: 0,
-                        newValue: restoreValue === null ? null : restoreValue,
+                        newValue: restoreValue === null ? 0 : restoreValue,
                         modifiedBy: 'admin',
                         modifiedByType: 'admin',
                         comment: '기권 해제 복구'
@@ -2428,7 +2436,7 @@ export default function AdminDashboard() {
           </Button>
         )}
         {/* 안내문구 */}
-        {(scoreEditModal.score === 0 || scoreEditModal.score === "0") && (
+        {(scoreEditModal.score === "0" || Number(scoreEditModal.score) === 0) && (
           <div className="w-full text-center text-sm text-yellow-700 mt-2">기권/불참/실격 처리 이전의 모든 점수를 복구합니다.</div>
         )}
       </DialogFooter>
@@ -2438,7 +2446,7 @@ export default function AdminDashboard() {
                                                         
                                                         <TableCell className="text-center font-bold px-2 py-1 border-r">
   {(() => {
-    let courseSumElem = '-';
+    let courseSumElem: string | React.ReactElement = '-';
     if (player.hasAnyScore && !player.hasForfeited) {
       const courseData = courses[course.id];
       let sum = 0, parSum = 0;
@@ -2446,7 +2454,7 @@ export default function AdminDashboard() {
         for (let i = 0; i < 9; i++) {
           const s = player.coursesData[course.id]?.holeScores[i];
           const p = courseData.pars[i];
-          if (isValidNumber(s) && isValidNumber(p)) {
+          if (isValidNumber(s) && isValidNumber(p) && s !== null) {
             sum += s;
             parSum += p;
           }
@@ -2456,7 +2464,7 @@ export default function AdminDashboard() {
       courseSumElem = (
         <span>
           {isValidNumber(sum) ? sum : '-'}
-          {isValidNumber(pm) && (
+          {isValidNumber(pm) && pm !== null && (
             <span className={
               'ml-1 align-middle text-xs ' + (pm < 0 ? 'text-blue-400' : pm > 0 ? 'text-red-400' : 'text-gray-400')
             } style={{ fontSize: '0.7em', fontWeight: 600 }}>
@@ -2536,7 +2544,7 @@ export default function AdminDashboard() {
   })() : player.hasAnyScore ? (
     <span>
       {isValidNumber(player.totalScore) ? player.totalScore : '-'}
-      {isValidNumber(player.plusMinus) && (
+      {isValidNumber(player.plusMinus) && player.plusMinus !== null && (
         <span
           className={
             'ml-1 align-middle text-xs ' +

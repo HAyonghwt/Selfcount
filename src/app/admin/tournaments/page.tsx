@@ -9,7 +9,7 @@ import { Switch } from '@/components/ui/switch';
 import { Trash2, PlusCircle, Save, RotateCcw, AlertTriangle } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useToast } from '@/hooks/use-toast';
-import { db } from '@/lib/firebase';
+import { db, getDb } from '@/lib/firebase';
 import { ref, onValue, set, remove, update } from 'firebase/database';
 
 interface Course {
@@ -44,6 +44,7 @@ export default function TournamentManagementPage() {
   const pageTitle = "코스 관리";
 
   useEffect(() => {
+    if (!db) return;
     const tournamentRef = ref(db, 'tournaments/current');
     const unsubscribe = onValue(tournamentRef, (snapshot) => {
       const data = snapshot.val();
@@ -68,6 +69,7 @@ export default function TournamentManagementPage() {
   }, []);
 
   useEffect(() => {
+    if (!db) return;
     const configRef = ref(db, 'config');
     const unsubscribe = onValue(configRef, (snapshot) => {
         const data = snapshot.val();
@@ -137,6 +139,7 @@ export default function TournamentManagementPage() {
     const targetCourse = courses.find(c => c.id === courseId);
     if (!targetCourse) return;
     const updatedCourse = { ...targetCourse, isActive: checked };
+    if (!db) return;
     const courseRef = ref(db, `tournaments/current/courses/${courseId}`);
     set(courseRef, updatedCourse)
         .then(() => {
@@ -159,7 +162,7 @@ export default function TournamentManagementPage() {
   const handleSaveChanges = () => {
     // 모든 코스의 Par 합계 체크
     for (const course of courses) {
-      const parSum = course.pars.reduce((a, b) => a + (b || 0), 0);
+      const parSum = course.pars.reduce((a, b) => (a || 0) + (b || 0), 0);
       if (parSum !== 33) {
         alert(`${course.name}의 총 Par가 33이 아닙니다! (현재: ${parSum})\n다시 확인해 주세요.`);
         return;
@@ -175,6 +178,7 @@ export default function TournamentManagementPage() {
     updates[`/tournaments/current/courses`] = coursesObject;
     
     // Using update to only change specified paths and not touch others (like groups)
+    if (!db) return;
     update(ref(db), updates).then(() => {
       toast({
         title: "성공",
@@ -186,6 +190,7 @@ export default function TournamentManagementPage() {
   };
   
   const handleResetData = () => {
+    if (!db) return;
     remove(ref(db, 'tournaments/current')).then(() => {
       // The onValue listener will automatically update the state
       toast({
@@ -233,7 +238,7 @@ export default function TournamentManagementPage() {
               <CardContent className="p-4">
                 <p className="text-sm text-muted-foreground mb-4 flex items-center gap-2">
                   홀별 기준 타수(Par)를 입력하세요.
-                  <span className="ml-2 font-bold text-lg text-primary">총 Par: {course.pars.reduce((a, b) => a + (b || 0), 0)}</span>
+                  <span className="ml-2 font-bold text-lg text-primary">총 Par: {course.pars.reduce((a, b) => (a || 0) + (b || 0), 0)}</span>
                 </p>
                 <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-9 gap-4">
                   {course.pars.map((par, index) => (

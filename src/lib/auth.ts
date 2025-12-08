@@ -1,4 +1,4 @@
-import { firestore } from './firebase';
+import { firestore, getFirestoreDb } from './firebase';
 import { doc, getDoc, updateDoc, collection, addDoc, query, getDocs, where, deleteDoc } from 'firebase/firestore';
 
 export interface CaptainAccount {
@@ -27,7 +27,8 @@ export interface RefereeAccount {
  */
 export const loginWithKoreanId = async (koreanId: string, password: string): Promise<CaptainAccount> => {
   try {
-    const captainsRef = collection(firestore, 'captains');
+    const fs = getFirestoreDb();
+    const captainsRef = collection(fs, 'captains');
     const q = query(captainsRef, where('id', '==', koreanId));
     const querySnapshot = await getDocs(q);
     
@@ -62,6 +63,7 @@ export const loginWithKoreanId = async (koreanId: string, password: string): Pro
  */
 export const createCaptainAccount = async (koreanId: string, password: string, group: string, jo: number): Promise<void> => {
   try {
+    const fs = getFirestoreDb();
     const captainData = {
       id: koreanId,
       password: password,
@@ -73,7 +75,7 @@ export const createCaptainAccount = async (koreanId: string, password: string, g
       isActive: true
     };
     
-    await addDoc(collection(firestore, 'captains'), captainData);
+    await addDoc(collection(fs, 'captains'), captainData);
   } catch (error) {
     throw error;
   }
@@ -84,7 +86,8 @@ export const createCaptainAccount = async (koreanId: string, password: string, g
  */
 export const updateCaptainPassword = async (koreanId: string, newPassword: string): Promise<void> => {
   try {
-    const captainsRef = collection(firestore, 'captains');
+    const fs = getFirestoreDb();
+    const captainsRef = collection(fs, 'captains');
     const q = query(captainsRef, where('id', '==', koreanId));
     const querySnapshot = await getDocs(q);
     
@@ -92,7 +95,7 @@ export const updateCaptainPassword = async (koreanId: string, newPassword: strin
       throw new Error('존재하지 않는 조장 계정입니다.');
     }
     
-    const docRef = doc(firestore, 'captains', querySnapshot.docs[0].id);
+    const docRef = doc(fs, 'captains', querySnapshot.docs[0].id);
     await updateDoc(docRef, {
       password: newPassword
     });
@@ -106,7 +109,8 @@ export const updateCaptainPassword = async (koreanId: string, newPassword: strin
  */
 export const getCaptainAccounts = async (): Promise<CaptainAccount[]> => {
   try {
-    const captainsRef = collection(firestore, 'captains');
+    const fs = getFirestoreDb();
+    const captainsRef = collection(fs, 'captains');
     const querySnapshot = await getDocs(captainsRef);
     
     const captains: CaptainAccount[] = [];
@@ -130,7 +134,8 @@ export const getCaptainAccounts = async (): Promise<CaptainAccount[]> => {
  */
 export const deactivateCaptainAccount = async (koreanId: string): Promise<void> => {
   try {
-    const captainsRef = collection(firestore, 'captains');
+    const fs = getFirestoreDb();
+    const captainsRef = collection(fs, 'captains');
     const q = query(captainsRef, where('id', '==', koreanId));
     const querySnapshot = await getDocs(q);
     
@@ -138,7 +143,7 @@ export const deactivateCaptainAccount = async (koreanId: string): Promise<void> 
       throw new Error('존재하지 않는 조장 계정입니다.');
     }
     
-    const docRef = doc(firestore, 'captains', querySnapshot.docs[0].id);
+    const docRef = doc(fs, 'captains', querySnapshot.docs[0].id);
     await updateDoc(docRef, {
       isActive: false
     });
@@ -152,7 +157,8 @@ export const deactivateCaptainAccount = async (koreanId: string): Promise<void> 
  */
 export const activateCaptainAccount = async (koreanId: string): Promise<void> => {
   try {
-    const captainsRef = collection(firestore, 'captains');
+    const fs = getFirestoreDb();
+    const captainsRef = collection(fs, 'captains');
     const q = query(captainsRef, where('id', '==', koreanId));
     const querySnapshot = await getDocs(q);
     
@@ -160,7 +166,7 @@ export const activateCaptainAccount = async (koreanId: string): Promise<void> =>
       throw new Error('존재하지 않는 조장 계정입니다.');
     }
     
-    const docRef = doc(firestore, 'captains', querySnapshot.docs[0].id);
+    const docRef = doc(fs, 'captains', querySnapshot.docs[0].id);
     await updateDoc(docRef, {
       isActive: true
     });
@@ -174,7 +180,8 @@ export const activateCaptainAccount = async (koreanId: string): Promise<void> =>
  */
 export const changeCaptainPassword = async (koreanId: string, newPassword: string): Promise<void> => {
   try {
-    const captainRef = doc(firestore, 'captains', koreanId);
+    const fs = getFirestoreDb();
+    const captainRef = doc(fs, 'captains', koreanId);
     await updateDoc(captainRef, {
       password: newPassword
     });
@@ -188,7 +195,8 @@ export const changeCaptainPassword = async (koreanId: string, newPassword: strin
  */
 export const createBulkCaptainAccounts = async (replaceExisting: boolean = false, addMore: boolean = false): Promise<void> => {
   try {
-    const captainsRef = collection(firestore, 'captains');
+    const fs = getFirestoreDb();
+    const captainsRef = collection(fs, 'captains');
     
     // 기존 계정 삭제 옵션이 체크된 경우
     if (replaceExisting) {
@@ -239,7 +247,8 @@ export const createBulkCaptainAccounts = async (replaceExisting: boolean = false
  */
 export const loginRefereeWithKoreanId = async (koreanId: string, password: string): Promise<RefereeAccount> => {
   try {
-    const refereesRef = collection(firestore, 'referees');
+    const fs = getFirestoreDb();
+    const refereesRef = collection(fs, 'referees');
     const q = query(refereesRef, where('id', '==', koreanId));
     const querySnapshot = await getDocs(q);
     
@@ -274,6 +283,7 @@ export const loginRefereeWithKoreanId = async (koreanId: string, password: strin
  */
 export const createRefereeAccount = async (koreanId: string, password: string, hole: number): Promise<void> => {
   try {
+    const fs = getFirestoreDb();
     const refereeData = {
       id: koreanId,
       password: password,
@@ -284,7 +294,7 @@ export const createRefereeAccount = async (koreanId: string, password: string, h
       isActive: true
     };
     
-    await addDoc(collection(firestore, 'referees'), refereeData);
+    await addDoc(collection(fs, 'referees'), refereeData);
   } catch (error) {
     throw error;
   }
@@ -295,7 +305,8 @@ export const createRefereeAccount = async (koreanId: string, password: string, h
  */
 export const getRefereeAccounts = async (): Promise<RefereeAccount[]> => {
   try {
-    const refereesRef = collection(firestore, 'referees');
+    const fs = getFirestoreDb();
+    const refereesRef = collection(fs, 'referees');
     // 모든 계정을 가져오도록 필터 제거 (관리자가 모든 계정을 볼 수 있도록)
     const querySnapshot = await getDocs(refereesRef);
     
@@ -320,7 +331,8 @@ export const getRefereeAccounts = async (): Promise<RefereeAccount[]> => {
  */
 export const deactivateRefereeAccount = async (koreanId: string): Promise<void> => {
   try {
-    const refereeRef = doc(firestore, 'referees', koreanId);
+    const fs = getFirestoreDb();
+    const refereeRef = doc(fs, 'referees', koreanId);
     await updateDoc(refereeRef, {
       isActive: false
     });
@@ -334,7 +346,8 @@ export const deactivateRefereeAccount = async (koreanId: string): Promise<void> 
  */
 export const updateRefereePassword = async (koreanId: string, newPassword: string): Promise<void> => {
   try {
-    const refereesRef = collection(firestore, 'referees');
+    const fs = getFirestoreDb();
+    const refereesRef = collection(fs, 'referees');
     const q = query(refereesRef, where('id', '==', koreanId));
     const querySnapshot = await getDocs(q);
     
@@ -342,7 +355,7 @@ export const updateRefereePassword = async (koreanId: string, newPassword: strin
       throw new Error('존재하지 않는 심판 계정입니다.');
     }
     
-    const docRef = doc(firestore, 'referees', querySnapshot.docs[0].id);
+    const docRef = doc(fs, 'referees', querySnapshot.docs[0].id);
     await updateDoc(docRef, {
       password: newPassword
     });
@@ -356,7 +369,8 @@ export const updateRefereePassword = async (koreanId: string, newPassword: strin
  */
 export const createBulkRefereeAccounts = async (replaceExisting: boolean = false, addMore: boolean = false): Promise<void> => {
   try {
-    const refereesRef = collection(firestore, 'referees');
+    const fs = getFirestoreDb();
+    const refereesRef = collection(fs, 'referees');
     
     // 기존 계정 삭제 옵션이 체크된 경우
     if (replaceExisting) {

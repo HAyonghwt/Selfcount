@@ -9,7 +9,7 @@ import { Trophy, Sparkles, Crown, Star } from "lucide-react";
 export default function GiftEventDisplay() {
   const [status, setStatus] = useState("waiting");
   const [winners, setWinners] = useState([]);
-  const [currentWinner, setCurrentWinner] = useState(null);
+  const [currentWinner, setCurrentWinner] = useState<any>(null);
   const [lastWinner, setLastWinner] = useState(null);
   const [showWinners, setShowWinners] = useState(false);
   const [showWinner, setShowWinner] = useState(false);
@@ -115,6 +115,7 @@ export default function GiftEventDisplay() {
     }
     const updatedRemaining = remainingList.filter(id => id !== currentWinner.id);
     
+    if (!db) return;
     await import("firebase/database").then(m => m.update(ref(db, 'giftEvent'), {
       status: updatedRemaining.length === 0 ? 'finished' : 'winner',
       remaining: updatedRemaining,

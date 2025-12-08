@@ -32,9 +32,9 @@ interface ScoreEntry {
 }
 
 export default function ScoreManagementPage() {
-    const [allScores, setAllScores] = useState({});
-    const [allPlayers, setAllPlayers] = useState({});
-    const [allCourses, setAllCourses] = useState({});
+    const [allScores, setAllScores] = useState<Record<string, Record<string, Record<string, number>>>>({});
+    const [allPlayers, setAllPlayers] = useState<Record<string, any>>({});
+    const [allCourses, setAllCourses] = useState<Record<string, any>>({});
     const [flatScores, setFlatScores] = useState<ScoreEntry[]>([]);
     const [unlockPassword, setUnlockPassword] = useState(''); // 초기값을 빈 문자열로 유지 (345678 제거)
     const [showPassword, setShowPassword] = useState(false);
@@ -50,6 +50,7 @@ export default function ScoreManagementPage() {
 
 
     useEffect(() => {
+        if (!db) return;
         const scoresRef = ref(db, 'scores');
         const playersRef = ref(db, 'players');
         const coursesRef = ref(db, 'tournaments/current/courses');
@@ -100,9 +101,9 @@ export default function ScoreManagementPage() {
     const filteredScores = useMemo(() => {
         return flatScores.filter(score => {
             const nameMatch = score.name.toLowerCase().includes(searchTerm.toLowerCase());
-            const groupMatch = filterGroup === 'all' || score.group === groupMatch;
+            const groupMatches = filterGroup === 'all' || score.group === filterGroup;
             const courseMatch = filterCourse === 'all' || score.course === filterCourse;
-            return nameMatch && groupMatch && courseMatch;
+            return nameMatch && groupMatches && courseMatch;
         });
     }, [flatScores, searchTerm, filterGroup, filterCourse]);
 
@@ -118,6 +119,7 @@ export default function ScoreManagementPage() {
     const handleConfirmUpdate = () => {
         if (!scoreToUpdate) return;
         
+        if (!db) return;
         const scoreRef = ref(db, `scores/${scoreToUpdate.playerId}/${scoreToUpdate.courseId}/${scoreToUpdate.hole}`);
         set(scoreRef, scoreToUpdate.score).then(() => {
             toast({
@@ -136,6 +138,7 @@ export default function ScoreManagementPage() {
             toast({ title: '오류', description: '비밀번호를 입력해주세요.', variant: 'destructive' });
             return;
         }
+        if (!db) return;
         set(ref(db, 'config/scoreUnlockPassword'), unlockPassword)
             .then(() => toast({ title: '성공', description: '잠금 해제 비밀번호가 저장되었습니다.' }))
             .catch(err => toast({ title: '저장 실패', description: err.message, variant: 'destructive' }));
