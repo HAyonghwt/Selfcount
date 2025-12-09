@@ -3,11 +3,17 @@ import { db, auth } from '@/lib/firebase';
 import { ref, get } from 'firebase/database';
 import { signInAnonymously } from 'firebase/auth';
 
-export async function GET() {
+export async function GET(request: Request) {
     let appName = '';
-    
-    // Firebase에서 config 읽기 (에러가 발생해도 기본값 사용)
-    if (db) {
+
+    // URL 쿼리 파라미터에서 appName 확인
+    const { searchParams } = new URL(request.url);
+    const queryAppName = searchParams.get('appName');
+
+    if (queryAppName) {
+        appName = queryAppName;
+    } else if (db) {
+        // 쿼리 파라미터가 없을 때만 Firebase에서 config 읽기 (에러가 발생해도 기본값 사용)
         try {
             // 인증 시도 (실패해도 계속 진행)
             if (auth && !auth.currentUser) {
