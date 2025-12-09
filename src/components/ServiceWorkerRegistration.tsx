@@ -11,7 +11,17 @@ export default function ServiceWorkerRegistration() {
         // Service Worker 등록 (재시도 로직 포함)
         const registerServiceWorker = async () => {
             try {
-                // 직접 등록 시도 (getRegistration은 에러를 발생시킬 수 있음)
+                // 기존 등록 확인
+                const existingRegistration = await navigator.serviceWorker.getRegistration();
+                
+                if (existingRegistration) {
+                    // 이미 등록된 경우 업데이트 확인
+                    console.log('Service Worker 이미 등록됨:', existingRegistration.scope);
+                    await existingRegistration.update();
+                    return;
+                }
+
+                // 새로 등록
                 const registration = await navigator.serviceWorker.register('/sw.js', {
                     scope: '/',
                 });
@@ -20,6 +30,8 @@ export default function ServiceWorkerRegistration() {
                 // Service Worker 상태 모니터링
                 navigator.serviceWorker.addEventListener('controllerchange', () => {
                     console.log('Service Worker 컨트롤러 변경됨');
+                    // 컨트롤러 변경 시 페이지 새로고침 (선택적)
+                    // window.location.reload();
                 });
 
                 // 업데이트 확인 (백그라운드)
@@ -35,7 +47,13 @@ export default function ServiceWorkerRegistration() {
                 // 특정 에러는 재시도하지 않음 (invalid state 등)
                 const errorMessage = error.message || '';
                 if (errorMessage.includes('invalid state') || errorMessage.includes('document')) {
-                    console.warn('Service Worker 등록이 현재 상태에서 불가능합니다. 페이지 새로고침 후 다시 시도하세요.');
+                    // invalid state 에러는 잠시 후 재시도
+                    console.warn('Service Worker 등록 재시도 중...');
+                    setTimeout(() => {
+                        registerServiceWorker().catch(() => {
+                            // 재시도 실패는 조용히 처리
+                        });
+                    }, 2000);
                     return;
                 }
                 // 네트워크 에러인 경우에만 재시도
@@ -49,7 +67,7 @@ export default function ServiceWorkerRegistration() {
         // 페이지가 완전히 로드된 후 등록 시도
         const handleLoad = () => {
             // 약간의 지연을 두어 DOM이 완전히 준비되도록 함
-            setTimeout(registerServiceWorker, 100);
+            setTimeout(registerServiceWorker, 500);
         };
 
         if (document.readyState === 'complete') {
