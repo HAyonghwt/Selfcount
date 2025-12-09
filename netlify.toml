@@ -5,10 +5,12 @@
 [functions]
   directory = "netlify/functions"
 
+# manifest API는 Netlify Functions로 처리
 [[redirects]]
-  from = "/api/*"
-  to = "/.netlify/functions/:splat"
+  from = "/api/manifest"
+  to = "/.netlify/functions/manifest"
   status = 200
+  force = true
 
 # Service Worker 및 정적 파일을 위한 헤더 설정
 [[headers]]
