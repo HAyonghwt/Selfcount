@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from 'react';
-import { db } from '@/lib/firebase';
+import { db, auth, onAuthStateChange } from '@/lib/firebase';
 import { ref, onValue, get } from 'firebase/database';
 
 export default function AppNameUpdater() {
@@ -42,39 +42,72 @@ export default function AppNameUpdater() {
             return;
         }
 
-        // 초기 로드 시 즉시 읽기
-        const configRef = ref(db, 'config/appName');
-        get(configRef)
-            .then((snapshot) => {
-                if (snapshot.exists()) {
-                    const name = snapshot.val();
-                    updateAppName(name);
-                } else {
+        // Firebase 인증 완료 후 config 읽기
+        const readConfig = () => {
+            const configRef = ref(db, 'config/appName');
+            
+            // 초기 로드 시 읽기
+            get(configRef)
+                .then((snapshot) => {
+                    if (snapshot.exists()) {
+                        const name = snapshot.val();
+                        updateAppName(name);
+                    } else {
+                        updateAppName('');
+                    }
+                })
+                .catch((error) => {
+                    // 권한 에러는 조용히 처리 (익명 인증이 완료되지 않았을 수 있음)
+                    if (!error.message?.includes('permission')) {
+                        console.warn('Firebase config 읽기 실패:', error);
+                    }
                     updateAppName('');
-                }
-            })
-            .catch((error) => {
-                console.error('Firebase config 읽기 실패:', error);
-                updateAppName('');
-            });
+                });
 
-        // 실시간 업데이트 구독
-        const unsubscribe = onValue(
-            configRef,
-            (snapshot) => {
-                if (snapshot.exists()) {
-                    const name = snapshot.val();
-                    updateAppName(name);
-                } else {
-                    updateAppName('');
+            // 실시간 업데이트 구독
+            const unsubscribe = onValue(
+                configRef,
+                (snapshot) => {
+                    if (snapshot.exists()) {
+                        const name = snapshot.val();
+                        updateAppName(name);
+                    } else {
+                        updateAppName('');
+                    }
+                },
+                (error) => {
+                    // 권한 에러는 조용히 처리
+                    if (!error.message?.includes('permission')) {
+                        console.warn('Firebase 실시간 업데이트 실패:', error);
+                    }
                 }
-            },
-            (error) => {
-                console.error('Firebase 실시간 업데이트 실패:', error);
+            );
+
+            return unsubscribe;
+        };
+
+        // 인증 상태 확인 후 config 읽기
+        let unsubscribeConfig: (() => void) | null = null;
+        const unsubscribeAuth = onAuthStateChange((user) => {
+            if (user) {
+                // 인증 완료 후 config 읽기
+                if (!unsubscribeConfig) {
+                    unsubscribeConfig = readConfig();
+                }
+            } else {
+                // 인증되지 않은 경우에도 시도 (읽기 권한이 있을 수 있음)
+                if (!unsubscribeConfig) {
+                    unsubscribeConfig = readConfig();
+                }
             }
-        );
+        });
 
-        return () => unsubscribe();
+        return () => {
+            unsubscribeAuth();
+            if (unsubscribeConfig) {
+                unsubscribeConfig();
+            }
+        };
     }, []);
 
     return null;
