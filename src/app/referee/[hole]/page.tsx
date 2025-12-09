@@ -1165,13 +1165,13 @@ export default function RefereePage() {
                     <Select 
                         value={selectedType as string} 
                         onValueChange={v => {
-                            const val = (v || '').toString();
-                            if (val === 'individual' || val === 'team') {
-                                setSelectedType(val);
-                            } else {
-                                setSelectedType('');
-                            }
-                            setSelectedGroup(''); setSelectedCourse(''); setSelectedJo('');
+                        const val = (v || '').toString();
+                        if (val === 'individual' || val === 'team') {
+                            setSelectedType(val);
+                        } else {
+                            setSelectedType('');
+                        }
+                        setSelectedGroup(''); setSelectedCourse(''); setSelectedJo('');
                         }}
                         disabled={availableTypes.length === 0 || (availableTypes.length === 1 && selectedType === availableTypes[0])}
                     >

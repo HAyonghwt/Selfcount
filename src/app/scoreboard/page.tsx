@@ -214,6 +214,8 @@ function ExternalScoreboard() {
     const [teamSuddenDeathData, setTeamSuddenDeathData] = useState<any>(null);
     const [individualBackcountApplied, setIndividualBackcountApplied] = useState<boolean>(false);
     const [teamBackcountApplied, setTeamBackcountApplied] = useState<boolean>(false);
+    const [individualNTPData, setIndividualNTPData] = useState<any>(null);
+    const [teamNTPData, setTeamNTPData] = useState<any>(null);
     const [filterGroup, setFilterGroup] = useState('all');
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     
@@ -425,6 +427,8 @@ function ExternalScoreboard() {
         const teamSuddenDeathRef = ref(dbInstance, 'tournaments/current/suddenDeath/team');
         const individualBackcountRef = ref(dbInstance, 'tournaments/current/backcountApplied/individual');
         const teamBackcountRef = ref(dbInstance, 'tournaments/current/backcountApplied/team');
+        const individualNTPRef = ref(dbInstance, 'tournaments/current/nearestToPin/individual');
+        const teamNTPRef = ref(dbInstance, 'tournaments/current/nearestToPin/team');
         
         let unsubIndividualDetails: (() => void) | null = null;
         let unsubTeamDetails: (() => void) | null = null;
@@ -479,11 +483,21 @@ function ExternalScoreboard() {
             setTeamBackcountApplied(snap.val() || false);
         });
         
+        // NTP 상태 구독
+        const unsubIndividualNTP = onValue(individualNTPRef, snap => {
+            setIndividualNTPData(snap.val());
+        });
+        const unsubTeamNTP = onValue(teamNTPRef, snap => {
+            setTeamNTPData(snap.val());
+        });
+        
         return () => {
             unsubIndividualStatus();
             unsubTeamStatus();
             unsubIndividualBackcount();
             unsubTeamBackcount();
+            unsubIndividualNTP();
+            unsubTeamNTP();
             if (unsubIndividualDetails) unsubIndividualDetails();
             if (unsubTeamDetails) unsubTeamDetails();
         };
@@ -731,12 +745,8 @@ function ExternalScoreboard() {
     const processedIndividualSuddenDeathData = useMemo(() => processSuddenDeath(individualSuddenDeathData), [individualSuddenDeathData, players]);
     const processedTeamSuddenDeathData = useMemo(() => processSuddenDeath(teamSuddenDeathData), [teamSuddenDeathData, players]);
 
-    // 백카운트 적용된 1위 동점자들의 순위를 다시 계산하는 함수 (기존 로직 활용)
-    const applyBackcountToTiedPlayers = (data: any) => {
-        if (!individualBackcountApplied && !teamBackcountApplied) {
-            return data;
-        }
-
+    // 백카운트/NTP 적용된 1위 동점자들의 순위를 다시 계산하는 함수 (기존 로직 활용)
+    const applyPlayoffRanking = (data: any) => {
         const finalData = JSON.parse(JSON.stringify(data));
         const allCourses = Object.values(tournament.courses || {}).filter(Boolean);
 
@@ -748,26 +758,118 @@ function ExternalScoreboard() {
             const firstPlacePlayers = groupPlayers.filter((p: any) => p.rank === 1);
             
             if (firstPlacePlayers.length > 1) {
-                // 개인전 또는 팀전에 따라 백카운트 적용 여부 확인
-                const shouldApplyBackcount = (firstPlacePlayers[0].type === 'individual' && individualBackcountApplied) ||
-                                          (firstPlacePlayers[0].type === 'team' && teamBackcountApplied);
+                const playerType = firstPlacePlayers[0].type;
+                const isIndividual = playerType === 'individual';
+                
+                // NTP 순위 적용 확인
+                const ntpData = isIndividual ? individualNTPData : teamNTPData;
+                const shouldApplyNTP = ntpData?.isActive && ntpData?.rankings;
+                
+                // 백카운트 적용 확인
+                const shouldApplyBackcount = (isIndividual && individualBackcountApplied) ||
+                                          (!isIndividual && teamBackcountApplied);
 
-                if (shouldApplyBackcount) {
-                    // 기존 순위 계산 로직과 동일하게 백카운트 적용
+                if (shouldApplyNTP) {
+                    // NTP 순위 적용
+                    const ntpRankings = ntpData.rankings;
+                    firstPlacePlayers.forEach((player: any) => {
+                        if (ntpRankings[player.id]) {
+                            player.rank = ntpRankings[player.id];
+                        }
+                    });
+
+                    // 전체 그룹을 다시 정렬
+                    groupPlayers.sort((a: any, b: any) => {
+                        const rankA = a.rank === null ? Infinity : a.rank;
+                        const rankB = b.rank === null ? Infinity : b.rank;
+                        if (rankA !== rankB) return rankA - rankB;
+
+                        const scoreA = a.hasAnyScore && !a.hasForfeited ? a.totalScore : Infinity;
+                        const scoreB = b.hasAnyScore && !b.hasForfeited ? b.totalScore : Infinity;
+                        return scoreA - scoreB;
+                    });
+                } else if (shouldApplyBackcount) {
+                    // 플레이오프 백카운트: 마지막 코스부터 역순으로 비교
                     const coursesForGroup = firstPlacePlayers[0]?.assignedCourses || allCourses;
-                    firstPlacePlayers.sort((a: any, b: any) => {
-                        if (a.plusMinus !== b.plusMinus) return a.plusMinus - b.plusMinus;
-                        return tieBreak(a, b, coursesForGroup);
+                    // 코스를 역순으로 정렬 (마지막 코스부터)
+                    const sortedCoursesForBackcount = [...coursesForGroup].sort((c1, c2) => {
+                        const name1 = c1?.name || '';
+                        const name2 = c2?.name || '';
+                        return name2.localeCompare(name1); // 역순 정렬
                     });
                     
-                    // 새로운 순위 부여 (기존 로직과 동일)
+                    firstPlacePlayers.sort((a: any, b: any) => {
+                        if (a.plusMinus !== b.plusMinus) return a.plusMinus - b.plusMinus;
+                        // 백카운트: 마지막 코스부터 역순으로 비교
+                        for (const course of sortedCoursesForBackcount) {
+                            if (!course || course.id === undefined || course.id === null) continue;
+                            const courseId = course.id;
+                            const aCourseScore = (a.courseScores || {})[courseId] ?? 0;
+                            const bCourseScore = (b.courseScores || {})[courseId] ?? 0;
+                            if (aCourseScore !== bCourseScore) {
+                                return aCourseScore - bCourseScore; // 작은 타수가 상위
+                            }
+                        }
+                        // 모든 코스 합계가 같으면 마지막 코스의 홀 점수를 역순으로 비교
+                        if (sortedCoursesForBackcount.length > 0) {
+                            const lastCourse = sortedCoursesForBackcount[0];
+                            if (lastCourse && lastCourse.id !== undefined && lastCourse.id !== null) {
+                                const lastCourseId = lastCourse.id;
+                                const aHoleScores = (a.detailedScores || {})[lastCourseId] || {};
+                                const bHoleScores = (b.detailedScores || {})[lastCourseId] || {};
+                                for (let i = 9; i >= 1; i--) {
+                                    const hole = i.toString();
+                                    const aHole = aHoleScores[hole] || 0;
+                                    const bHole = bHoleScores[hole] || 0;
+                                    if (aHole !== bHole) {
+                                        return aHole - bHole; // 작은 타수가 상위
+                                    }
+                                }
+                            }
+                        }
+                        return 0;
+                    });
+                    
+                    // 새로운 순위 부여
                     let rank = 1;
                     firstPlacePlayers[0].rank = rank;
                     for (let i = 1; i < firstPlacePlayers.length; i++) {
                         const prev = firstPlacePlayers[i-1];
                         const curr = firstPlacePlayers[i];
-                        if (curr.plusMinus !== prev.plusMinus || tieBreak(curr, prev, coursesForGroup) !== 0) {
+                        // plusMinus가 다르거나 백카운트 비교 결과가 다르면 순위 증가
+                        if (curr.plusMinus !== prev.plusMinus) {
                             rank = i + 1;
+                        } else {
+                            // 백카운트 비교
+                            let isDifferent = false;
+                            for (const course of sortedCoursesForBackcount) {
+                                if (!course || course.id === undefined || course.id === null) continue;
+                                const courseId = course.id;
+                                const currCourseScore = (curr.courseScores || {})[courseId] ?? 0;
+                                const prevCourseScore = (prev.courseScores || {})[courseId] ?? 0;
+                                if (currCourseScore !== prevCourseScore) {
+                                    isDifferent = true;
+                                    break;
+                                }
+                            }
+                            if (!isDifferent && sortedCoursesForBackcount.length > 0) {
+                                const lastCourse = sortedCoursesForBackcount[0];
+                                if (lastCourse && lastCourse.id !== undefined && lastCourse.id !== null) {
+                                    const lastCourseId = lastCourse.id;
+                                    const currHoleScores = (curr.detailedScores || {})[lastCourseId] || {};
+                                    const prevHoleScores = (prev.detailedScores || {})[lastCourseId] || {};
+                                    for (let i = 9; i >= 1; i--) {
+                                        const hole = i.toString();
+                                        if ((currHoleScores[hole] || 0) !== (prevHoleScores[hole] || 0)) {
+                                            isDifferent = true;
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                            if (isDifferent) {
+                                rank = i + 1;
+                            }
                         }
                         curr.rank = rank;
                     }
@@ -819,11 +921,11 @@ function ExternalScoreboard() {
             }
         }
 
-        // 백카운트 적용
-        finalData = applyBackcountToTiedPlayers(finalData);
+        // 백카운트/NTP 적용
+        finalData = applyPlayoffRanking(finalData);
 
         return finalData;
-    }, [processedDataByGroup, processedIndividualSuddenDeathData, processedTeamSuddenDeathData, individualBackcountApplied, teamBackcountApplied, tournament.courses, filterGroup]);
+    }, [processedDataByGroup, processedIndividualSuddenDeathData, processedTeamSuddenDeathData, individualBackcountApplied, teamBackcountApplied, individualNTPData, teamNTPData, tournament.courses, filterGroup]);
     
     const visibleGroups = Object.keys(finalDataByGroup).filter(groupName => finalDataByGroup[groupName]?.some((player: any) => player.assignedCourses.length > 0));
     

@@ -41,7 +41,7 @@ const mainNavItems = [
 ];
 
 const secondaryNavItems = [
-  { href: "/admin/suddendeath", icon: Flame, label: "서든데스 관리" },
+  { href: "/admin/suddendeath", icon: Flame, label: "플레이오프 관리" },
   { href: "/admin/gift-event", icon: Trophy, label: "경품 행사" },
   { href: "/admin/archive", icon: Trophy, label: "기록 보관함" },
 ];

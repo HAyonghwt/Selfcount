@@ -350,16 +350,16 @@ export default function SelfScoringPage() {
           // 개인전과 팀전 구분하여 이름 설정
           const names: string[] = [];
           list.forEach(p => {
-            if (p.type === 'team') {
+          if (p.type === 'team') {
               // 팀전: p1_name과 p2_name을 각각 names 배열에 추가
               if (p.p1_name) names.push(p.p1_name);
               if (p.p2_name) names.push(p.p2_name);
-            } else {
+          } else {
               // 개인전: name을 names 배열에 추가
               if (p.name) names.push(p.name);
-            }
-          });
-          
+          }
+        });
+        
           // 항상 4개로 채우기 (부족한 부분은 빈 문자열로)
           const filledNames = [...names];
           while (filledNames.length < 4) {

@@ -154,10 +154,10 @@ export default function QRCodeViewer({ group, jo, courseName }: QRCodeViewerProp
                     }
                     
                     if (copied) {
-                        toast({
-                            title: '복사 완료',
-                            description: '링크가 클립보드에 복사되었습니다.',
-                        });
+                    toast({
+                        title: '복사 완료',
+                        description: '링크가 클립보드에 복사되었습니다.',
+                    });
                     } else {
                         // 모든 방법 실패 시 수동 복사 안내
                         toast({

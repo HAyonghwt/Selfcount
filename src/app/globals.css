@@ -238,11 +238,11 @@
     padding-right: 4px !important;
   }
 
-  .gift-mobile-draw .prize-message {
-    font-size: 14px !important;
-    white-space: normal !important;
-    word-break: keep-all !important;
-    text-align: center !important;
+.gift-mobile-draw .prize-message {
+  font-size: 14px !important;
+  white-space: normal !important;
+  word-break: keep-all !important;
+  text-align: center !important;
   }
 }
 
@@ -313,5 +313,5 @@ body {
   }
   body {
     @apply bg-background text-foreground;
-  }
+}
 }

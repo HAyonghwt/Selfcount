@@ -12,7 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { db, auth } from "@/lib/firebase";
 import { ref, set, get, onValue } from "firebase/database";
 import { createUserWithEmailAndPassword, updatePassword } from "firebase/auth";
-import { createBulkCaptainAccounts, getCaptainAccounts, deactivateCaptainAccount, activateCaptainAccount, updateCaptainPassword, createBulkRefereeAccounts, getRefereeAccounts, updateRefereePassword } from "@/lib/auth";
+import { createBulkCaptainAccounts, getCaptainAccounts, deactivateCaptainAccount, activateCaptainAccount, updateCaptainPassword, createBulkRefereeAccounts, getRefereeAccounts, updateRefereePassword, activateRefereeAccount, deactivateRefereeAccount } from "@/lib/auth";
 import { Skeleton } from "@/components/ui/skeleton";
 
 
@@ -276,7 +276,7 @@ export default function SuperAdminPage() {
 
         try {
             const promises = selectedReferees.map(koreanId => 
-                activate ? activateCaptainAccount(koreanId) : deactivateCaptainAccount(koreanId)
+                activate ? activateRefereeAccount(koreanId) : deactivateRefereeAccount(koreanId)
             );
             await Promise.all(promises);
             

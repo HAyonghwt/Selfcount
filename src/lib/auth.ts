@@ -332,9 +332,40 @@ export const getRefereeAccounts = async (): Promise<RefereeAccount[]> => {
 export const deactivateRefereeAccount = async (koreanId: string): Promise<void> => {
   try {
     const fs = getFirestoreDb();
-    const refereeRef = doc(fs, 'referees', koreanId);
-    await updateDoc(refereeRef, {
+    const refereesRef = collection(fs, 'referees');
+    const q = query(refereesRef, where('id', '==', koreanId));
+    const querySnapshot = await getDocs(q);
+    
+    if (querySnapshot.empty) {
+      throw new Error('존재하지 않는 심판 계정입니다.');
+    }
+    
+    const docRef = doc(fs, 'referees', querySnapshot.docs[0].id);
+    await updateDoc(docRef, {
       isActive: false
+    });
+  } catch (error) {
+    throw error;
+  }
+};
+
+/**
+ * 심판 계정 활성화 (슈퍼관리자용)
+ */
+export const activateRefereeAccount = async (koreanId: string): Promise<void> => {
+  try {
+    const fs = getFirestoreDb();
+    const refereesRef = collection(fs, 'referees');
+    const q = query(refereesRef, where('id', '==', koreanId));
+    const querySnapshot = await getDocs(q);
+    
+    if (querySnapshot.empty) {
+      throw new Error('존재하지 않는 심판 계정입니다.');
+    }
+    
+    const docRef = doc(fs, 'referees', querySnapshot.docs[0].id);
+    await updateDoc(docRef, {
+      isActive: true
     });
   } catch (error) {
     throw error;

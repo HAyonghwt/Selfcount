@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { MultiSelect } from '@/components/ui/multi-select';
 import { Input } from '@/components/ui/input';
-import { Flame, Play, RotateCcw, User, Users } from 'lucide-react';
+import { Flame, Play, RotateCcw, User, Users, ArrowUp, ArrowDown, Target } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { db } from '@/lib/firebase';
 import { ref, onValue, set, remove } from 'firebase/database';
@@ -40,6 +40,12 @@ interface SuddenDeathData {
     courseId: string;
     holes: number[];
     scores: { [playerId: string]: { [hole: string]: number } };
+}
+
+interface NTPData {
+    isActive: boolean;
+    players: { [key: string]: boolean };
+    rankings: { [playerId: string]: number }; // playerId -> rank (1, 2, 3...)
 }
 
 export default function SuddenDeathPage() {
@@ -74,6 +80,16 @@ export default function SuddenDeathPage() {
     // Backcount states (separated for individual and team)
     const [individualBackcountApplied, setIndividualBackcountApplied] = useState<boolean>(false);
     const [teamBackcountApplied, setTeamBackcountApplied] = useState<boolean>(false);
+
+    // NTP states (separated for individual and team)
+    const [individualNTPData, setIndividualNTPData] = useState<Partial<NTPData>>({});
+    const [teamNTPData, setTeamNTPData] = useState<Partial<NTPData>>({});
+    
+    // NTP UI states
+    const [selectedIndividualNTPPlayers, setSelectedIndividualNTPPlayers] = useState<{ [key: string]: boolean }>({});
+    const [selectedTeamNTPPlayers, setSelectedTeamNTPPlayers] = useState<{ [key: string]: boolean }>({});
+    const [individualNTPRankings, setIndividualNTPRankings] = useState<{ [key: string]: number }>({});
+    const [teamNTPRankings, setTeamNTPRankings] = useState<{ [key: string]: number }>({});
 
     // Tie-breaking logic from dashboard (needed to find tied players)
     const tieBreak = (a: any, b: any, coursesForGroup: any[]) => {
@@ -158,6 +174,8 @@ export default function SuddenDeathPage() {
         const teamSuddenDeathRef = ref(db, 'tournaments/current/suddenDeath/team');
         const individualBackcountRef = ref(db, 'tournaments/current/backcountApplied/individual');
         const teamBackcountRef = ref(db, 'tournaments/current/backcountApplied/team');
+        const individualNTPRef = ref(db, 'tournaments/current/nearestToPin/individual');
+        const teamNTPRef = ref(db, 'tournaments/current/nearestToPin/team');
 
         const unsubPlayers = onValue(playersRef, snap => setPlayers(snap.val() || {}));
         const unsubScores = onValue(scoresRef, snap => setScores(snap.val() || {}));
@@ -188,6 +206,19 @@ export default function SuddenDeathPage() {
         const unsubTeamSuddenDeath = onValue(teamSuddenDeathRef, setupSuddenDeathListener(setTeamSuddenDeathData, setTeamSuddenDeathScores));
         const unsubIndividualBackcount = onValue(individualBackcountRef, snap => setIndividualBackcountApplied(snap.val() || false));
         const unsubTeamBackcount = onValue(teamBackcountRef, snap => setTeamBackcountApplied(snap.val() || false));
+        
+        const setupNTPListener = (setter: Function, rankingSetter: Function) => (snap: any) => {
+            const data = snap.val();
+            setter(data || { isActive: false });
+            if (data?.rankings) {
+                rankingSetter(data.rankings);
+            } else {
+                rankingSetter({});
+            }
+        };
+        
+        const unsubIndividualNTP = onValue(individualNTPRef, setupNTPListener(setIndividualNTPData, setIndividualNTPRankings));
+        const unsubTeamNTP = onValue(teamNTPRef, setupNTPListener(setTeamNTPData, setTeamNTPRankings));
 
         return () => {
             unsubPlayers();
@@ -197,6 +228,8 @@ export default function SuddenDeathPage() {
             unsubTeamSuddenDeath();
             unsubIndividualBackcount();
             unsubTeamBackcount();
+            unsubIndividualNTP();
+            unsubTeamNTP();
         };
     }, []);
 
@@ -335,7 +368,7 @@ export default function SuddenDeathPage() {
         }
         
         set(ref(db, `tournaments/current/suddenDeath/${type}`), suddenDeathSetup)
-            .then(() => toast({ title: "성공", description: `${isIndividual ? '개인전' : '2인 1팀'} 서든데스 플레이오프가 시작되었습니다.` }))
+            .then(() => toast({ title: "성공", description: `${isIndividual ? '개인전' : '2인 1팀'} 서든데스-플레이오프가 시작되었습니다.` }))
             .catch(err => toast({ title: "오류", description: err.message }));
     };
     
@@ -386,6 +419,114 @@ export default function SuddenDeathPage() {
             remove(ref(db, `tournaments/current/backcountApplied/team`));
             toast({ title: "백카운트 초기화", description: "2인 1팀 1위 동점자가 다시 동점자 상태로 복원되었습니다." });
         }
+    };
+
+    const handleStartNTP = (type: 'individual' | 'team') => {
+        const isIndividual = type === 'individual';
+        const activePlayers = Object.keys(isIndividual ? selectedIndividualNTPPlayers : selectedTeamNTPPlayers).filter(id => (isIndividual ? selectedIndividualNTPPlayers : selectedTeamNTPPlayers)[id]);
+
+        if (activePlayers.length < 2) {
+            toast({ title: "오류", description: "니어리스트 투 더 핀을 진행할 선수를 2명 이상 선택해주세요." });
+            return;
+        }
+
+        // 초기 순위 설정 (선택된 순서대로 1, 2, 3...)
+        const initialRankings: { [key: string]: number } = {};
+        activePlayers.forEach((playerId, index) => {
+            initialRankings[playerId] = index + 1;
+        });
+
+        const ntpSetup: NTPData = {
+            isActive: true,
+            players: isIndividual ? selectedIndividualNTPPlayers : selectedTeamNTPPlayers,
+            rankings: initialRankings,
+        };
+
+        if (!db) {
+            toast({ title: "오류", description: "데이터베이스 연결이 없습니다." });
+            return;
+        }
+        
+        set(ref(db, `tournaments/current/nearestToPin/${type}`), ntpSetup)
+            .then(() => {
+                toast({ title: "성공", description: `${isIndividual ? '개인전' : '2인 1팀'} 니어리스트 투 더 핀이 시작되었습니다.` });
+                if (isIndividual) {
+                    setIndividualNTPRankings(initialRankings);
+                } else {
+                    setTeamNTPRankings(initialRankings);
+                }
+            })
+            .catch(err => toast({ title: "오류", description: err.message }));
+    };
+
+    const handleResetNTP = (type: 'individual' | 'team') => {
+        if (!db) {
+            toast({ title: "오류", description: "데이터베이스 연결이 없습니다." });
+            return;
+        }
+        
+        remove(ref(db, `tournaments/current/nearestToPin/${type}`))
+            .then(() => {
+                toast({ title: "초기화 완료", description: "니어리스트 투 더 핀 정보가 초기화되었습니다." });
+                if (type === 'individual') {
+                    setIndividualNTPRankings({});
+                    setSelectedIndividualNTPPlayers({});
+                } else {
+                    setTeamNTPRankings({});
+                    setSelectedTeamNTPPlayers({});
+                }
+            })
+            .catch(err => toast({ title: "오류", description: err.message }));
+    };
+
+    const handleNTPRankChange = (type: 'individual' | 'team', playerId: string, newRank: number) => {
+        const isIndividual = type === 'individual';
+        const currentRankings = isIndividual ? individualNTPRankings : teamNTPRankings;
+        const setRankings = isIndividual ? setIndividualNTPRankings : setTeamNTPRankings;
+        const ntpData = isIndividual ? individualNTPData : teamNTPData;
+
+        // 같은 순위가 있는지 확인
+        const existingPlayerWithRank = Object.entries(currentRankings).find(([pid, rank]) => pid !== playerId && rank === newRank);
+        
+        if (existingPlayerWithRank) {
+            // 기존 순위를 교환
+            const [otherPlayerId, otherRank] = existingPlayerWithRank;
+            const currentPlayerRank = currentRankings[playerId] || 0;
+            
+            const updatedRankings = { ...currentRankings };
+            updatedRankings[playerId] = newRank;
+            updatedRankings[otherPlayerId] = currentPlayerRank;
+            
+            setRankings(updatedRankings);
+            
+            // Firebase 업데이트
+            if (db && ntpData?.isActive) {
+                set(ref(db, `tournaments/current/nearestToPin/${type}/rankings`), updatedRankings)
+                    .catch(err => toast({ title: "오류", description: err.message }));
+            }
+        } else {
+            // 단순 순위 변경
+            const updatedRankings = { ...currentRankings, [playerId]: newRank };
+            setRankings(updatedRankings);
+            
+            // Firebase 업데이트
+            if (db && ntpData?.isActive) {
+                set(ref(db, `tournaments/current/nearestToPin/${type}/rankings`), updatedRankings)
+                    .catch(err => toast({ title: "오류", description: err.message }));
+            }
+        }
+    };
+
+    const handleMoveNTPRank = (type: 'individual' | 'team', playerId: string, direction: 'up' | 'down') => {
+        const isIndividual = type === 'individual';
+        const currentRankings = isIndividual ? individualNTPRankings : teamNTPRankings;
+        const currentRank = currentRankings[playerId] || 0;
+        
+        if (direction === 'up' && currentRank <= 1) return;
+        if (direction === 'down' && currentRank >= Object.keys(currentRankings).length) return;
+        
+        const newRank = direction === 'up' ? currentRank - 1 : currentRank + 1;
+        handleNTPRankChange(type, playerId, newRank);
     };
 
     const handleSuddenDeathScoreChange = (type: 'individual' | 'team', playerId: string, hole: number, value: string) => {
@@ -531,11 +672,11 @@ export default function SuddenDeathPage() {
             <div className="space-y-6">
                 <Card>
                     <CardHeader>
-                        <CardTitle>플레이오프 설정</CardTitle>
+                        <CardTitle>서든데스 설정</CardTitle>
                         <CardDescription>
                             {backcountApplied 
                                 ? "1위 동점자가 백카운트로 결정되었습니다. 서든데스는 비활성화됩니다." 
-                                : "플레이오프를 진행할 선수, 코스, 홀을 선택하고 시작하세요."
+                                : "서든데스를 진행할 선수, 코스, 홀을 선택하고 시작하세요."
                             }
                         </CardDescription>
                     </CardHeader>
@@ -631,7 +772,7 @@ export default function SuddenDeathPage() {
                                                 <AlertDialogContent>
                                                     <AlertDialogHeader>
                                                         <AlertDialogTitle>정말 초기화하시겠습니까?</AlertDialogTitle>
-                                                        <AlertDialogDescription>진행 중인 서든데스 플레이오프 정보와 점수가 모두 삭제됩니다. 이 작업은 되돌릴 수 없습니다.</AlertDialogDescription>
+                                                        <AlertDialogDescription>진행 중인 서든데스-플레이오프 정보와 점수가 모두 삭제됩니다. 이 작업은 되돌릴 수 없습니다.</AlertDialogDescription>
                                                     </AlertDialogHeader>
                                                     <AlertDialogFooter>
                                                         <AlertDialogCancel>취소</AlertDialogCancel>
@@ -697,6 +838,176 @@ export default function SuddenDeathPage() {
         );
     }
 
+    const renderNTPInterface = (type: 'individual' | 'team') => {
+        const isIndividual = type === 'individual';
+        const tiedPlayers = isIndividual ? tiedIndividualPlayers : tiedTeamPlayers;
+        const selectedPlayers = isIndividual ? selectedIndividualNTPPlayers : selectedTeamNTPPlayers;
+        const setSelectedPlayers = isIndividual ? setSelectedIndividualNTPPlayers : setSelectedTeamNTPPlayers;
+        const ntpData = isIndividual ? individualNTPData : teamNTPData;
+        const ntpRankings = isIndividual ? individualNTPRankings : teamNTPRankings;
+        const backcountApplied = isIndividual ? individualBackcountApplied : teamBackcountApplied;
+
+        const playersGroupedByGroup = tiedPlayers.reduce((acc, player) => {
+            const groupName = player.group || '미지정';
+            if (!acc[groupName]) {
+                acc[groupName] = [];
+            }
+            acc[groupName].push(player);
+            return acc;
+        }, {} as Record<string, Player[]>);
+
+        // NTP 순위가 설정된 선수 목록
+        const rankedPlayers = Object.keys(ntpRankings).map(playerId => {
+            const player = tiedPlayers.find(p => p.id === playerId);
+            if (!player) return null;
+            return {
+                ...player,
+                ntpRank: ntpRankings[playerId]
+            };
+        }).filter(Boolean).sort((a: any, b: any) => a.ntpRank - b.ntpRank);
+
+        return (
+            <div className="space-y-6">
+                <Card>
+                    <CardHeader>
+                        <CardTitle>니어리스트 투 더 핀: Nearest-to-the-Pin (NTP) 설정</CardTitle>
+                        <CardDescription>
+                            {backcountApplied 
+                                ? "1위 동점자가 백카운트로 결정되었습니다. 니어리스트 투 더 핀은 비활성화됩니다." 
+                                : ntpData?.isActive
+                                ? "니어리스트 투 더 핀 순위를 관리하세요. 거리 측정 결과에 따라 순위를 설정할 수 있습니다."
+                                : "니어리스트 투 더 핀을 진행할 선수를 선택하고 순위를 설정하세요."
+                            }
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-6">
+                        {Object.keys(playersGroupedByGroup).length > 0 ? (
+                            <div className="space-y-6">
+                                {!ntpData?.isActive && !backcountApplied && (
+                                    <div>
+                                        <Label className="font-semibold text-base">1. 참가 선수 선택</Label>
+                                        <div className="space-y-4 mt-2">
+                                            {Object.entries(playersGroupedByGroup).map(([groupName, tiedPlayersInGroup]) => (
+                                                <div key={groupName} className="p-4 border rounded-md">
+                                                    <p className="font-bold mb-3">
+                                                        {groupName} 그룹 ({tiedPlayersInGroup.length}명 동점)
+                                                    </p>
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                                        {tiedPlayersInGroup.map(player => (
+                                                            <div key={player.id} className="flex items-center space-x-3">
+                                                                <Checkbox
+                                                                    id={`${type}-ntp-player-${player.id}`}
+                                                                    checked={selectedPlayers[player.id] || false}
+                                                                    onCheckedChange={(checked) => setSelectedPlayers(prev => ({...prev, [player.id]: !!checked}))}
+                                                                />
+                                                                <Label 
+                                                                    htmlFor={`${type}-ntp-player-${player.id}`} 
+                                                                    className="font-medium text-base"
+                                                                >
+                                                                    {player.name} <span className="text-muted-foreground text-sm">({player.affiliation})</span>
+                                                                </Label>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {!backcountApplied && (
+                                    <div className="flex gap-4">
+                                        {!ntpData?.isActive ? (
+                                            <Button onClick={() => handleStartNTP(type)} disabled={Object.keys(selectedPlayers).filter(id => selectedPlayers[id]).length < 2} size="lg">
+                                                <Target className="mr-2 h-4 w-4"/> 니어리스트 투 더 핀 시작
+                                            </Button>
+                                        ) : (
+                                            <AlertDialog>
+                                                <AlertDialogTrigger asChild>
+                                                    <Button variant="destructive" size="lg">
+                                                        <RotateCcw className="mr-2 h-4 w-4"/> 니어리스트 투 더 핀 초기화
+                                                    </Button>
+                                                </AlertDialogTrigger>
+                                                <AlertDialogContent>
+                                                    <AlertDialogHeader>
+                                                        <AlertDialogTitle>정말 초기화하시겠습니까?</AlertDialogTitle>
+                                                        <AlertDialogDescription>설정된 니어리스트 투 더 핀 순위 정보가 모두 삭제됩니다. 이 작업은 되돌릴 수 없습니다.</AlertDialogDescription>
+                                                    </AlertDialogHeader>
+                                                    <AlertDialogFooter>
+                                                        <AlertDialogCancel>취소</AlertDialogCancel>
+                                                        <AlertDialogAction onClick={() => handleResetNTP(type)}>초기화</AlertDialogAction>
+                                                    </AlertDialogFooter>
+                                                </AlertDialogContent>
+                                            </AlertDialog>
+                                        )}
+                                    </div>
+                                )}
+
+                                {ntpData?.isActive && (
+                                    <div>
+                                        <Label className="font-semibold text-base mb-4 block">2. 순위 설정 (거리 측정 결과에 따라 순위를 조정하세요)</Label>
+                                        <div className="space-y-2 border rounded-lg p-4">
+                                            {rankedPlayers.map((player: any, index: number) => (
+                                                <div key={player.id} className="flex items-center justify-between p-3 bg-muted/30 rounded-md border">
+                                                    <div className="flex items-center gap-3 flex-1">
+                                                        <span className="font-bold text-lg text-primary w-12 text-center">
+                                                            {player.ntpRank}위
+                                                        </span>
+                                                        <span className="font-medium text-base">{player.name}</span>
+                                                        <span className="text-muted-foreground text-sm">({player.affiliation})</span>
+                                                    </div>
+                                                    <div className="flex gap-2">
+                                                        <Button
+                                                            variant="outline"
+                                                            size="sm"
+                                                            onClick={() => handleMoveNTPRank(type, player.id, 'up')}
+                                                            disabled={player.ntpRank <= 1}
+                                                        >
+                                                            <ArrowUp className="h-4 w-4" />
+                                                        </Button>
+                                                        <Button
+                                                            variant="outline"
+                                                            size="sm"
+                                                            onClick={() => handleMoveNTPRank(type, player.id, 'down')}
+                                                            disabled={player.ntpRank >= rankedPlayers.length}
+                                                        >
+                                                            <ArrowDown className="h-4 w-4" />
+                                                        </Button>
+                                                        <Input
+                                                            type="number"
+                                                            min={1}
+                                                            max={rankedPlayers.length}
+                                                            value={player.ntpRank}
+                                                            onChange={(e) => {
+                                                                const newRank = parseInt(e.target.value, 10);
+                                                                if (!isNaN(newRank) && newRank >= 1 && newRank <= rankedPlayers.length) {
+                                                                    handleNTPRankChange(type, player.id, newRank);
+                                                                }
+                                                            }}
+                                                            className="w-20 h-9 text-center"
+                                                        />
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                        <p className="text-sm text-muted-foreground mt-2">
+                                            • 위/아래 화살표 버튼으로 순위를 조정하거나, 직접 숫자를 입력하여 순위를 변경할 수 있습니다.
+                                        </p>
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
+                            <div className="text-center py-10 text-muted-foreground">
+                                <p>현재 1위 동점자가 없습니다.</p>
+                                <p className="text-sm">대회가 진행되어 1위 동점자가 발생하면 여기에 표시됩니다.</p>
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
+            </div>
+        );
+    };
+
     return (
         <div className="space-y-6">
             <Card>
@@ -726,15 +1037,15 @@ export default function SuddenDeathPage() {
                     </div>
                     <div className="text-sm text-muted-foreground space-y-1">
                         <p>• 1위 동점자를 그냥 백카운트로 결정하려면 위의 단추를 눌러주세요.</p>
-                        <p>• 1위 동점자를 서든데스로 선정할 경우 여기 단추는 누르지 마시고 아래 서든데스 관리를 이용하세요.</p>
+                        <p>• 1위 동점자를 서든데스 또는 니어리스트 투 더 핀으로 선정할 경우 여기 단추는 누르지 마시고 아래 플레이오프 관리를 이용하세요.</p>
                     </div>
                 </CardContent>
             </Card>
 
             <Card>
                 <CardHeader>
-                    <CardTitle className="text-2xl font-bold font-headline flex items-center gap-2"><Flame className="text-destructive"/>서든데스 관리</CardTitle>
-                    <CardDescription>1위 동점자를 대상으로 서든데스 플레이오프를 설정하고 점수를 관리합니다.</CardDescription>
+                    <CardTitle className="text-2xl font-bold font-headline flex items-center gap-2"><Flame className="text-destructive"/>플레이오프 관리</CardTitle>
+                    <CardDescription>1위 동점자를 대상으로 '서든데스' 혹은 '니어리스트 투 더 핀' 으로 설정하고 점수를 관리합니다.</CardDescription>
                 </CardHeader>
             </Card>
 
@@ -747,11 +1058,13 @@ export default function SuddenDeathPage() {
                         <Users className="mr-2 h-5 w-5" /> 2인 1팀
                     </TabsTrigger>
                 </TabsList>
-                <TabsContent value="individual" className="mt-6">
+                <TabsContent value="individual" className="mt-6 space-y-6">
                     {renderSuddenDeathInterface('individual')}
+                    {renderNTPInterface('individual')}
                 </TabsContent>
-                <TabsContent value="team" className="mt-6">
+                <TabsContent value="team" className="mt-6 space-y-6">
                     {renderSuddenDeathInterface('team')}
+                    {renderNTPInterface('team')}
                 </TabsContent>
             </Tabs>
         </div>
