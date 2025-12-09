@@ -45,6 +45,7 @@ export async function GET(request: Request) {
     const appTitle = appName ? `${appName}대회앱` : '대회앱';
 
     const manifest = {
+        id: "/",  // PWA 앱 고유 ID - 이름 변경 시에도 동일 앱으로 인식
         name: appTitle,
         short_name: appTitle,
         theme_color: "#e85461",

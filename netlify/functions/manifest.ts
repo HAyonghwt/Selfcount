@@ -27,8 +27,8 @@ function getAdminApp(): App | null {
 
     let serviceAccount;
     try {
-      serviceAccount = typeof serviceAccountJson === 'string' 
-        ? JSON.parse(serviceAccountJson) 
+      serviceAccount = typeof serviceAccountJson === 'string'
+        ? JSON.parse(serviceAccountJson)
         : serviceAccountJson;
     } catch (parseError) {
       console.error('FIREBASE_ADMIN_CREDENTIALS JSON 파싱 실패:', parseError);
@@ -64,7 +64,7 @@ export const handler: Handler = async (event, context) => {
   if (!appName && event.queryStringParameters && event.queryStringParameters.appName) {
     appName = decodeURIComponent(event.queryStringParameters.appName).trim();
   }
-  
+
   // 우선순위 3: rawQuery에서 파싱
   if (!appName && event.rawQuery) {
     try {
@@ -77,13 +77,13 @@ export const handler: Handler = async (event, context) => {
       // 파싱 실패는 조용히 처리
     }
   }
-  
+
   // 우선순위 4: rawUrl에서 직접 파싱
   if (!appName && event.rawUrl) {
     try {
       // rawUrl이 상대 경로일 수 있으므로 절대 URL로 변환
-      const baseUrl = event.headers?.host 
-        ? `https://${event.headers.host}` 
+      const baseUrl = event.headers?.host
+        ? `https://${event.headers.host}`
         : 'https://netlify.app';
       const url = new URL(event.rawUrl, baseUrl);
       const clientAppName = url.searchParams.get('appName');
@@ -124,6 +124,7 @@ export const handler: Handler = async (event, context) => {
   const manifestVersion = appName ? `v1-${Buffer.from(appName).toString('base64').substring(0, 8)}` : 'v1-default';
 
   const manifest = {
+    id: "/",  // PWA 앱 고유 ID - 이름 변경 시에도 동일 앱으로 인식
     name: appTitle,
     short_name: appTitle,
     theme_color: "#e85461",
