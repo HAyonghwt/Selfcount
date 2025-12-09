@@ -56,19 +56,42 @@ export const handler: Handler = async (event, context) => {
   let appName = '';
 
   // 쿼리 파라미터에서 appName 읽기 (클라이언트에서 전달)
-  // Netlify Functions는 event.queryStringParameters에 직접 접근 가능
+  // Netlify Functions의 event 구조 확인
+  console.log('Event queryStringParameters:', JSON.stringify(event.queryStringParameters));
+  console.log('Event rawQuery:', event.rawQuery);
+  console.log('Event rawUrl:', event.rawUrl);
+  
+  // 방법 1: queryStringParameters에서 읽기
   if (event.queryStringParameters && event.queryStringParameters.appName) {
     appName = decodeURIComponent(event.queryStringParameters.appName).trim();
-    console.log('클라이언트에서 appName 받음:', appName);
+    console.log('클라이언트에서 appName 받음 (queryStringParameters):', appName);
   }
   
-  // 또는 URL에서 직접 파싱 (대안)
+  // 방법 2: rawQuery에서 파싱
   if (!appName && event.rawQuery) {
-    const urlParams = new URLSearchParams(event.rawQuery);
-    const clientAppName = urlParams.get('appName');
-    if (clientAppName) {
-      appName = decodeURIComponent(clientAppName).trim();
-      console.log('URL에서 appName 파싱:', appName);
+    try {
+      const urlParams = new URLSearchParams(event.rawQuery);
+      const clientAppName = urlParams.get('appName');
+      if (clientAppName) {
+        appName = decodeURIComponent(clientAppName).trim();
+        console.log('URL에서 appName 파싱 (rawQuery):', appName);
+      }
+    } catch (error) {
+      console.warn('rawQuery 파싱 실패:', error);
+    }
+  }
+  
+  // 방법 3: rawUrl에서 직접 파싱
+  if (!appName && event.rawUrl) {
+    try {
+      const url = new URL(event.rawUrl, 'https://ellesports.netlify.app');
+      const clientAppName = url.searchParams.get('appName');
+      if (clientAppName) {
+        appName = decodeURIComponent(clientAppName).trim();
+        console.log('URL에서 appName 파싱 (rawUrl):', appName);
+      }
+    } catch (error) {
+      console.warn('rawUrl 파싱 실패:', error);
     }
   }
 

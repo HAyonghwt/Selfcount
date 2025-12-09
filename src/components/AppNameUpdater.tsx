@@ -29,61 +29,27 @@ export default function AppNameUpdater() {
             }
             metaTag.setAttribute('content', appTitle);
 
-            // manifest 동적 생성 및 업데이트
-            const updateManifest = () => {
-                const appTitle = finalName ? `${finalName}대회앱` : '대회앱';
-                
-                const manifest = {
-                    name: appTitle,
-                    short_name: appTitle,
-                    theme_color: "#e85461",
-                    background_color: "#ffffff",
-                    display: "standalone",
-                    scope: "/",
-                    start_url: "/",
-                    icons: [
-                        {
-                            src: "/icon-192x192.png",
-                            sizes: "192x192",
-                            type: "image/png",
-                            purpose: "any maskable"
-                        },
-                        {
-                            src: "/icon-512x512.png",
-                            sizes: "512x512",
-                            type: "image/png",
-                            purpose: "any maskable"
-                        }
-                    ],
-                    orientation: "portrait",
-                    prefer_related_applications: false
-                };
-
-                // Blob URL로 manifest 생성
-                const manifestBlob = new Blob([JSON.stringify(manifest, null, 2)], {
-                    type: 'application/manifest+json'
-                });
-                const manifestUrl = URL.createObjectURL(manifestBlob);
-
-                // manifest 링크 업데이트
+            // manifest 링크 업데이트 (쿼리 파라미터로 appName 전달)
+            // 브라우저가 PWA 설치 조건을 확인할 때 서버 manifest를 사용하도록 함
+            const updateManifestLink = () => {
                 let manifestLink = document.querySelector('link[rel="manifest"]') as HTMLLinkElement;
                 if (manifestLink) {
-                    // 기존 Blob URL 해제
-                    const oldHref = manifestLink.href;
-                    if (oldHref.startsWith('blob:')) {
-                        URL.revokeObjectURL(oldHref);
+                    // 쿼리 파라미터로 appName 전달
+                    const appNameParam = finalName ? `appName=${encodeURIComponent(finalName)}` : '';
+                    const timestamp = `t=${Date.now()}`;
+                    const newHref = `/api/manifest?${timestamp}${appNameParam ? '&' + appNameParam : ''}`;
+                    
+                    // 현재 href와 비교하여 변경된 경우에만 업데이트
+                    const currentHref = manifestLink.getAttribute('href') || manifestLink.href;
+                    if (!currentHref.includes(appNameParam) || !currentHref.includes('appName=')) {
+                        manifestLink.href = newHref;
+                        console.log('Manifest 링크 업데이트:', newHref);
                     }
-                    manifestLink.href = manifestUrl;
-                } else {
-                    // manifest 링크가 없으면 생성
-                    manifestLink = document.createElement('link');
-                    manifestLink.rel = 'manifest';
-                    manifestLink.href = manifestUrl;
-                    document.head.appendChild(manifestLink);
                 }
             };
 
-            updateManifest();
+            // 약간의 지연을 두고 manifest 링크 업데이트 (Firebase 읽기 완료 후)
+            setTimeout(updateManifestLink, 500);
         };
 
         if (!db) {
@@ -94,6 +60,7 @@ export default function AppNameUpdater() {
 
         // Firebase 인증 완료 후 config 읽기
         const readConfig = () => {
+            if (!db) return () => {}; // null 체크
             const configRef = ref(db, 'config/appName');
             
             // 초기 로드 시 읽기
