@@ -29,12 +29,61 @@ export default function AppNameUpdater() {
             }
             metaTag.setAttribute('content', appTitle);
 
-            // manifest 링크 업데이트 (appName을 쿼리 파라미터로 전달)
-            let manifestLink = document.querySelector('link[rel="manifest"]') as HTMLLinkElement;
-            if (manifestLink) {
-                const appNameParam = finalName ? `&appName=${encodeURIComponent(finalName)}` : '';
-                manifestLink.href = `/api/manifest?t=${Date.now()}${appNameParam}`;
-            }
+            // manifest 동적 생성 및 업데이트
+            const updateManifest = () => {
+                const appTitle = finalName ? `${finalName}대회앱` : '대회앱';
+                
+                const manifest = {
+                    name: appTitle,
+                    short_name: appTitle,
+                    theme_color: "#e85461",
+                    background_color: "#ffffff",
+                    display: "standalone",
+                    scope: "/",
+                    start_url: "/",
+                    icons: [
+                        {
+                            src: "/icon-192x192.png",
+                            sizes: "192x192",
+                            type: "image/png",
+                            purpose: "any maskable"
+                        },
+                        {
+                            src: "/icon-512x512.png",
+                            sizes: "512x512",
+                            type: "image/png",
+                            purpose: "any maskable"
+                        }
+                    ],
+                    orientation: "portrait",
+                    prefer_related_applications: false
+                };
+
+                // Blob URL로 manifest 생성
+                const manifestBlob = new Blob([JSON.stringify(manifest, null, 2)], {
+                    type: 'application/manifest+json'
+                });
+                const manifestUrl = URL.createObjectURL(manifestBlob);
+
+                // manifest 링크 업데이트
+                let manifestLink = document.querySelector('link[rel="manifest"]') as HTMLLinkElement;
+                if (manifestLink) {
+                    // 기존 Blob URL 해제
+                    const oldHref = manifestLink.href;
+                    if (oldHref.startsWith('blob:')) {
+                        URL.revokeObjectURL(oldHref);
+                    }
+                    manifestLink.href = manifestUrl;
+                } else {
+                    // manifest 링크가 없으면 생성
+                    manifestLink = document.createElement('link');
+                    manifestLink.rel = 'manifest';
+                    manifestLink.href = manifestUrl;
+                    document.head.appendChild(manifestLink);
+                }
+            };
+
+            updateManifest();
         };
 
         if (!db) {

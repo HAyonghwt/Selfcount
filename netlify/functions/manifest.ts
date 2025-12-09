@@ -56,11 +56,20 @@ export const handler: Handler = async (event, context) => {
   let appName = '';
 
   // 쿼리 파라미터에서 appName 읽기 (클라이언트에서 전달)
-  const queryParams = new URLSearchParams(event.queryStringParameters || '');
-  const clientAppName = queryParams.get('appName');
-  if (clientAppName) {
-    appName = decodeURIComponent(clientAppName).trim();
+  // Netlify Functions는 event.queryStringParameters에 직접 접근 가능
+  if (event.queryStringParameters && event.queryStringParameters.appName) {
+    appName = decodeURIComponent(event.queryStringParameters.appName).trim();
     console.log('클라이언트에서 appName 받음:', appName);
+  }
+  
+  // 또는 URL에서 직접 파싱 (대안)
+  if (!appName && event.rawQuery) {
+    const urlParams = new URLSearchParams(event.rawQuery);
+    const clientAppName = urlParams.get('appName');
+    if (clientAppName) {
+      appName = decodeURIComponent(clientAppName).trim();
+      console.log('URL에서 appName 파싱:', appName);
+    }
   }
 
   // Firebase Admin에서도 시도 (환경 변수가 설정된 경우)

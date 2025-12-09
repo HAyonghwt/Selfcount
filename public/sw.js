@@ -68,23 +68,41 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  const requestUrl = new URL(event.request.url);
+  
+  // 외부 스킴(chrome-extension://, moz-extension:// 등)은 캐시하지 않음
+  if (requestUrl.protocol !== 'http:' && requestUrl.protocol !== 'https:') {
+    return; // 외부 스킴은 그대로 통과
+  }
+
+  // 같은 origin의 요청만 캐시 처리
+  const isSameOrigin = requestUrl.origin === self.location.origin;
+  
   event.respondWith(
     fetch(event.request)
       .then((response) => {
-        // 유효한 응답만 캐시에 저장
-        if (response && response.status === 200 && response.type === 'basic') {
+        // 같은 origin이고 유효한 응답만 캐시에 저장
+        if (isSameOrigin && response && response.status === 200 && response.type === 'basic') {
           const responseToCache = response.clone();
           caches.open(CACHE_NAME).then((cache) => {
             cache.put(event.request, responseToCache).catch((error) => {
-              console.warn('캐시 저장 실패:', error);
+              // 캐시 저장 실패는 조용히 처리 (외부 리소스 등)
+              if (!error.message?.includes('chrome-extension') && 
+                  !error.message?.includes('moz-extension')) {
+                console.warn('캐시 저장 실패:', error);
+              }
             });
           });
         }
         return response;
       })
       .catch(() => {
-        // 네트워크 실패 시 캐시에서 반환
-        return caches.match(event.request);
+        // 네트워크 실패 시 같은 origin의 요청만 캐시에서 반환
+        if (isSameOrigin) {
+          return caches.match(event.request);
+        }
+        // 외부 요청은 그대로 실패 반환
+        return Promise.reject(new Error('Network request failed'));
       })
   );
 });
