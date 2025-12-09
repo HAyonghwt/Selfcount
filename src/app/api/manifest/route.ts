@@ -24,12 +24,13 @@ export async function GET(request: Request) {
                     console.warn('Firebase 인증 실패 (읽기 권한 확인 중):', authError);
                 }
             }
-            
-            // config 읽기 시도
-            const configRef = ref(db, 'config/appName');
+
+            // config 객체 전체 읽기 (슈퍼관리자가 저장하는 방식과 일치)
+            const configRef = ref(db, 'config');
             const snapshot = await get(configRef);
             if (snapshot.exists()) {
-                const name = snapshot.val();
+                const configData = snapshot.val();
+                const name = configData?.appName;
                 if (name && typeof name === 'string' && name.trim()) {
                     appName = name.trim();
                 }

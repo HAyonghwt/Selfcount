@@ -10,17 +10,17 @@ export default function AppNameUpdater() {
 
     useEffect(() => {
         // PWA 설치 여부 확인 (standalone 모드로 실행 중인지 확인)
-        const isStandalone = window.matchMedia('(display-mode: standalone)').matches || 
-                           (window.navigator as any).standalone === true ||
-                           document.referrer.includes('android-app://');
+        const isStandalone = window.matchMedia('(display-mode: standalone)').matches ||
+            (window.navigator as any).standalone === true ||
+            document.referrer.includes('android-app://');
 
         const updateAppName = (name: string) => {
             // 단체 이름이 있으면 그대로 사용, 없으면 빈 문자열
             const finalName = name && name.trim() ? name.trim() : '';
-            
+
             // 앱 이름 형식: "{단체이름}대회앱" (단체 이름이 없으면 "대회앱"만)
             const appTitle = finalName ? `${finalName}대회앱` : '대회앱';
-            
+
             setAppName(finalName);
 
             // document.title 업데이트
@@ -44,12 +44,12 @@ export default function AppNameUpdater() {
                     const encodedAppName = finalName ? encodeURIComponent(finalName) : '';
                     const appNameParam = finalName ? `appName=${encodedAppName}` : '';
                     const newHref = `/api/manifest${appNameParam ? '?' + appNameParam : ''}`;
-                    
+
                     // appName이 실제로 변경되었을 때만 업데이트
                     if (lastManifestAppName !== encodedAppName) {
                         manifestLink.href = newHref;
                         setLastManifestAppName(encodedAppName);
-                        
+
                         // PWA 설치 상태가 아닐 때만 로그 출력 (설치된 경우 조용히 처리)
                         if (!isStandalone) {
                             console.log('Manifest 링크 업데이트 (appName 변경):', newHref);
@@ -71,14 +71,15 @@ export default function AppNameUpdater() {
 
         // Firebase 인증 완료 후 config 읽기
         const readConfig = () => {
-            if (!db) return () => {}; // null 체크
-            const configRef = ref(db, 'config/appName');
-            
+            if (!db) return () => { }; // null 체크
+            const configRef = ref(db, 'config');
+
             // 초기 로드 시 읽기 (PWA standalone 모드에서는 즉시 읽기)
             const readPromise = get(configRef)
                 .then((snapshot) => {
                     if (snapshot.exists()) {
-                        const name = snapshot.val();
+                        const configData = snapshot.val();
+                        const name = configData?.appName || '';
                         updateAppName(name);
                     } else {
                         updateAppName('');
@@ -91,7 +92,7 @@ export default function AppNameUpdater() {
                     }
                     updateAppName('');
                 });
-            
+
             // PWA standalone 모드에서는 즉시 읽기 완료를 기다림
             if (isStandalone) {
                 readPromise.catch(() => {
@@ -104,7 +105,8 @@ export default function AppNameUpdater() {
                 configRef,
                 (snapshot) => {
                     if (snapshot.exists()) {
-                        const name = snapshot.val();
+                        const configData = snapshot.val();
+                        const name = configData?.appName || '';
                         updateAppName(name);
                     } else {
                         updateAppName('');

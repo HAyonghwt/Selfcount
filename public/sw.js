@@ -1,5 +1,5 @@
 // Service Worker for PWA
-const CACHE_NAME = 'parkscore-v1';
+const CACHE_NAME = 'parkscore-v2';
 const urlsToCache = [
   '/',
   '/icon-192x192.png',
@@ -11,7 +11,7 @@ self.addEventListener('install', (event) => {
   console.log('Service Worker 설치 중...');
   // 즉시 활성화 (skipWaiting)
   self.skipWaiting();
-  
+
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then((cache) => {
@@ -63,7 +63,7 @@ self.addEventListener('activate', (event) => {
 // Fetch event - 네트워크 우선, 캐시 폴백
 self.addEventListener('fetch', (event) => {
   const requestUrl = new URL(event.request.url);
-  
+
   // 외부 스킴(chrome-extension://, moz-extension:// 등)은 처리하지 않음
   if (requestUrl.protocol !== 'http:' && requestUrl.protocol !== 'https:') {
     return; // 외부 스킴은 그대로 통과 (Service Worker가 처리하지 않음)
@@ -74,9 +74,14 @@ self.addEventListener('fetch', (event) => {
     return; // GET이 아닌 요청은 그대로 통과
   }
 
+  // 매니페스트 API는 캐싱하지 않음 (항상 최신 데이터 사용)
+  if (requestUrl.pathname.startsWith('/api/manifest')) {
+    return; // 매니페스트는 캐시 없이 그대로 통과
+  }
+
   // 같은 origin의 요청만 캐시 처리
   const isSameOrigin = requestUrl.origin === self.location.origin;
-  
+
   // 네트워크 우선, 실패 시 캐시 사용
   event.respondWith(
     fetch(event.request)
@@ -88,8 +93,8 @@ self.addEventListener('fetch', (event) => {
           caches.open(CACHE_NAME).then((cache) => {
             cache.put(event.request, responseToCache).catch((error) => {
               // 캐시 저장 실패는 조용히 처리
-              if (!error.message?.includes('chrome-extension') && 
-                  !error.message?.includes('moz-extension')) {
+              if (!error.message?.includes('chrome-extension') &&
+                !error.message?.includes('moz-extension')) {
                 console.warn('캐시 저장 실패:', error);
               }
             });
