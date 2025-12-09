@@ -1,132 +1,10 @@
 import { Handler } from '@netlify/functions';
-import { initializeApp, getApps, cert, type App } from 'firebase-admin/app';
-import { getDatabase } from 'firebase-admin/database';
-
-// Firebase Admin 초기화
-let adminApp: App | null = null;
-
-function getAdminApp(): App | null {
-  if (adminApp) {
-    return adminApp;
-  }
-
-  try {
-    // 환경 변수에서 Firebase Admin 설정 읽기
-    const serviceAccountJson = process.env.FIREBASE_ADMIN_CREDENTIALS;
-    const databaseURL = process.env.FIREBASE_DATABASE_URL || process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL;
-
-    if (!serviceAccountJson) {
-      console.warn('FIREBASE_ADMIN_CREDENTIALS 환경 변수가 설정되지 않았습니다.');
-      return null;
-    }
-
-    if (!databaseURL) {
-      console.warn('FIREBASE_DATABASE_URL 또는 NEXT_PUBLIC_FIREBASE_DATABASE_URL 환경 변수가 설정되지 않았습니다.');
-      return null;
-    }
-
-    let serviceAccount;
-    try {
-      serviceAccount = typeof serviceAccountJson === 'string'
-        ? JSON.parse(serviceAccountJson)
-        : serviceAccountJson;
-    } catch (parseError) {
-      console.error('FIREBASE_ADMIN_CREDENTIALS JSON 파싱 실패:', parseError);
-      return null;
-    }
-
-    if (getApps().length === 0) {
-      adminApp = initializeApp({
-        credential: cert(serviceAccount),
-        databaseURL: databaseURL,
-      }, 'manifest-function');
-      console.log('Firebase Admin 초기화 성공');
-    } else {
-      adminApp = getApps().find(app => app.name === 'manifest-function') || getApps()[0];
-    }
-
-    return adminApp;
-  } catch (error) {
-    console.error('Firebase Admin 초기화 실패:', error);
-    return null;
-  }
-}
 
 export const handler: Handler = async (event, context) => {
-  let appName = '';
-
-  // 우선순위 1: Netlify 환경 변수에서 APP_NAME 읽기 (각 사이트별로 설정 가능)
-  if (process.env.APP_NAME && process.env.APP_NAME.trim()) {
-    appName = process.env.APP_NAME.trim();
-  }
-
-  // 우선순위 2: 쿼리 파라미터에서 appName 읽기 (클라이언트에서 전달)
-  if (!appName && event.queryStringParameters && event.queryStringParameters.appName) {
-    appName = decodeURIComponent(event.queryStringParameters.appName).trim();
-  }
-
-  // 우선순위 3: rawQuery에서 파싱
-  if (!appName && event.rawQuery) {
-    try {
-      const urlParams = new URLSearchParams(event.rawQuery);
-      const clientAppName = urlParams.get('appName');
-      if (clientAppName) {
-        appName = decodeURIComponent(clientAppName).trim();
-      }
-    } catch (error) {
-      // 파싱 실패는 조용히 처리
-    }
-  }
-
-  // 우선순위 4: rawUrl에서 직접 파싱
-  if (!appName && event.rawUrl) {
-    try {
-      // rawUrl이 상대 경로일 수 있으므로 절대 URL로 변환
-      const baseUrl = event.headers?.host
-        ? `https://${event.headers.host}`
-        : 'https://netlify.app';
-      const url = new URL(event.rawUrl, baseUrl);
-      const clientAppName = url.searchParams.get('appName');
-      if (clientAppName) {
-        appName = decodeURIComponent(clientAppName).trim();
-      }
-    } catch (error) {
-      // 파싱 실패는 조용히 처리
-    }
-  }
-
-  // 우선순위 5: Firebase Admin에서 읽기 시도
-  // (PWA가 설치된 상태에서 앱 아이콘으로 열 때 쿼리 파라미터가 없을 수 있음)
-  // 여러 사이트가 같은 Firebase를 사용하는 경우, 각 사이트의 환경 변수에 APP_NAME을 설정하는 것이 더 안전함
-  if (!appName) {
-    try {
-      const app = getAdminApp();
-      if (app) {
-        const db = getDatabase(app);
-        const snapshot = await db.ref('config/appName').once('value');
-        if (snapshot.exists()) {
-          const name = snapshot.val();
-          if (name && typeof name === 'string' && name.trim()) {
-            appName = name.trim();
-            // Firebase에서 appName 읽기 성공
-          }
-        }
-      }
-    } catch (error: any) {
-      // Firebase 읽기 실패는 조용히 처리 (기본값 사용)
-    }
-  }
-
-  // 앱 이름 형식: "{단체이름}대회앱" (단체 이름이 없으면 "대회앱"만)
-  const appTitle = appName ? `${appName}대회앱` : '대회앱';
-
-  // manifest 버전: appName을 기반으로 생성하여 appName이 변경될 때만 manifest가 변경되도록 함
-  const manifestVersion = appName ? `v1-${Buffer.from(appName).toString('base64').substring(0, 8)}` : 'v1-default';
-
   const manifest = {
-    id: "/",  // PWA 앱 고유 ID - 이름 변경 시에도 동일 앱으로 인식
-    name: appTitle,
-    short_name: appTitle,
+    id: "/",
+    name: "대회관리",
+    short_name: "대회관리",
     theme_color: "#e85461",
     background_color: "#ffffff",
     display: "standalone",
@@ -147,9 +25,7 @@ export const handler: Handler = async (event, context) => {
       }
     ],
     orientation: "portrait",
-    prefer_related_applications: false,
-    // manifest 버전 추가 (브라우저가 변경사항을 추적할 수 있도록)
-    version: manifestVersion
+    prefer_related_applications: false
   };
 
   return {
@@ -161,4 +37,3 @@ export const handler: Handler = async (event, context) => {
     body: JSON.stringify(manifest),
   };
 };
-

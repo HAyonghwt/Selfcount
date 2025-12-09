@@ -1,5 +1,5 @@
 // Service Worker for PWA
-const CACHE_NAME = 'parkscore-v3';
+const CACHE_NAME = 'parkscore-v4';
 const urlsToCache = [
   '/',
   '/icon-192x192.png',
