@@ -29,10 +29,11 @@ export default function AppNameUpdater() {
             }
             metaTag.setAttribute('content', appTitle);
 
-            // manifest 링크 업데이트 (캐시 무효화를 위해 타임스탬프 추가)
+            // manifest 링크 업데이트 (appName을 쿼리 파라미터로 전달)
             let manifestLink = document.querySelector('link[rel="manifest"]') as HTMLLinkElement;
             if (manifestLink) {
-                manifestLink.href = `/api/manifest?t=${Date.now()}`;
+                const appNameParam = finalName ? `&appName=${encodeURIComponent(finalName)}` : '';
+                manifestLink.href = `/api/manifest?t=${Date.now()}${appNameParam}`;
             }
         };
 

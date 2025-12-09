@@ -15,18 +15,32 @@ function getAdminApp(): App | null {
     const serviceAccountJson = process.env.FIREBASE_ADMIN_CREDENTIALS;
     const databaseURL = process.env.FIREBASE_DATABASE_URL || process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL;
 
-    if (!serviceAccountJson || !databaseURL) {
-      console.warn('Firebase Admin 설정이 없습니다. 기본 manifest를 반환합니다.');
+    if (!serviceAccountJson) {
+      console.warn('FIREBASE_ADMIN_CREDENTIALS 환경 변수가 설정되지 않았습니다.');
       return null;
     }
 
-    const serviceAccount = JSON.parse(serviceAccountJson);
+    if (!databaseURL) {
+      console.warn('FIREBASE_DATABASE_URL 또는 NEXT_PUBLIC_FIREBASE_DATABASE_URL 환경 변수가 설정되지 않았습니다.');
+      return null;
+    }
+
+    let serviceAccount;
+    try {
+      serviceAccount = typeof serviceAccountJson === 'string' 
+        ? JSON.parse(serviceAccountJson) 
+        : serviceAccountJson;
+    } catch (parseError) {
+      console.error('FIREBASE_ADMIN_CREDENTIALS JSON 파싱 실패:', parseError);
+      return null;
+    }
 
     if (getApps().length === 0) {
       adminApp = initializeApp({
         credential: cert(serviceAccount),
         databaseURL: databaseURL,
       }, 'manifest-function');
+      console.log('Firebase Admin 초기화 성공');
     } else {
       adminApp = getApps().find(app => app.name === 'manifest-function') || getApps()[0];
     }
@@ -41,18 +55,41 @@ function getAdminApp(): App | null {
 export const handler: Handler = async (event, context) => {
   let appName = '';
 
-  try {
-    const app = getAdminApp();
-    if (app) {
-      const db = getDatabase(app);
-      const snapshot = await db.ref('config/appName').once('value');
-      const name = snapshot.val();
-      if (name && typeof name === 'string' && name.trim()) {
-        appName = name.trim();
+  // 쿼리 파라미터에서 appName 읽기 (클라이언트에서 전달)
+  const queryParams = new URLSearchParams(event.queryStringParameters || '');
+  const clientAppName = queryParams.get('appName');
+  if (clientAppName) {
+    appName = decodeURIComponent(clientAppName).trim();
+    console.log('클라이언트에서 appName 받음:', appName);
+  }
+
+  // Firebase Admin에서도 시도 (환경 변수가 설정된 경우)
+  if (!appName) {
+    try {
+      const app = getAdminApp();
+      if (app) {
+        const db = getDatabase(app);
+        const snapshot = await db.ref('config/appName').once('value');
+        if (snapshot.exists()) {
+          const name = snapshot.val();
+          if (name && typeof name === 'string' && name.trim()) {
+            appName = name.trim();
+            console.log('Firebase에서 appName 읽기 성공:', appName);
+          } else {
+            console.log('config/appName이 비어있거나 유효하지 않습니다.');
+          }
+        } else {
+          console.log('config/appName 경로에 데이터가 없습니다.');
+        }
+      } else {
+        console.warn('Firebase Admin 앱이 초기화되지 않았습니다. (환경 변수 확인 필요)');
+      }
+    } catch (error: any) {
+      console.warn('Firebase config 읽기 실패:', error);
+      if (error.message) {
+        console.warn('에러 메시지:', error.message);
       }
     }
-  } catch (error) {
-    console.warn('Firebase config 읽기 실패, 기본값 사용:', error);
   }
 
   // 앱 이름 형식: "{단체이름}대회앱" (단체 이름이 없으면 "대회앱"만)
