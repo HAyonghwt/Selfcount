@@ -1,5 +1,5 @@
 [build]
-  functions = "netlify/functions"
+  command = "npm run build"
   publish = ".next"
 
 [functions]
@@ -9,6 +9,19 @@
   from = "/api/*"
   to = "/.netlify/functions/:splat"
   status = 200
+
+# Service Worker 및 정적 파일을 위한 헤더 설정
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
+    Service-Worker-Allowed = "/"
+
+[[headers]]
+  for = "/api/manifest"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
+    Content-Type = "application/manifest+json"
 
 [build.environment]
   NODE_VERSION = "20"
