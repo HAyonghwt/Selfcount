@@ -6,8 +6,14 @@ import { ref, onValue, get } from 'firebase/database';
 
 export default function AppNameUpdater() {
     const [appName, setAppName] = useState('');
+    const [lastManifestAppName, setLastManifestAppName] = useState<string | null>(null);
 
     useEffect(() => {
+        // PWA 설치 여부 확인 (standalone 모드로 실행 중인지 확인)
+        const isStandalone = window.matchMedia('(display-mode: standalone)').matches || 
+                           (window.navigator as any).standalone === true ||
+                           document.referrer.includes('android-app://');
+
         const updateAppName = (name: string) => {
             // 단체 이름이 있으면 그대로 사용, 없으면 빈 문자열
             const finalName = name && name.trim() ? name.trim() : '';
@@ -30,20 +36,25 @@ export default function AppNameUpdater() {
             metaTag.setAttribute('content', appTitle);
 
             // manifest 링크 업데이트 (쿼리 파라미터로 appName 전달)
-            // 브라우저가 PWA 설치 조건을 확인할 때 서버 manifest를 사용하도록 함
+            // PWA가 설치된 상태에서는 manifest 업데이트를 최소화하여 불필요한 업데이트 모달 방지
             const updateManifestLink = () => {
                 let manifestLink = document.querySelector('link[rel="manifest"]') as HTMLLinkElement;
                 if (manifestLink) {
-                    // 쿼리 파라미터로 appName 전달
-                    const appNameParam = finalName ? `appName=${encodeURIComponent(finalName)}` : '';
-                    const timestamp = `t=${Date.now()}`;
-                    const newHref = `/api/manifest?${timestamp}${appNameParam ? '&' + appNameParam : ''}`;
+                    // 이전 manifest appName과 비교하여 실제로 변경된 경우에만 업데이트
+                    const encodedAppName = finalName ? encodeURIComponent(finalName) : '';
                     
-                    // 현재 href와 비교하여 변경된 경우에만 업데이트
-                    const currentHref = manifestLink.getAttribute('href') || manifestLink.href;
-                    if (!currentHref.includes(appNameParam) || !currentHref.includes('appName=')) {
+                    // appName이 실제로 변경되었을 때만 업데이트
+                    if (lastManifestAppName !== encodedAppName) {
+                        const appNameParam = finalName ? `appName=${encodedAppName}` : '';
+                        const newHref = `/api/manifest${appNameParam ? '?' + appNameParam : ''}`;
+                        
                         manifestLink.href = newHref;
-                        console.log('Manifest 링크 업데이트:', newHref);
+                        setLastManifestAppName(encodedAppName);
+                        
+                        // PWA 설치 상태가 아닐 때만 로그 출력 (설치된 경우 조용히 처리)
+                        if (!isStandalone) {
+                            console.log('Manifest 링크 업데이트 (appName 변경):', newHref);
+                        }
                     }
                 }
             };

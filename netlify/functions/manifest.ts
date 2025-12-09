@@ -114,6 +114,9 @@ export const handler: Handler = async (event, context) => {
   // 앱 이름 형식: "{단체이름}대회앱" (단체 이름이 없으면 "대회앱"만)
   const appTitle = appName ? `${appName}대회앱` : '대회앱';
 
+  // manifest 버전: appName을 기반으로 생성하여 appName이 변경될 때만 manifest가 변경되도록 함
+  const manifestVersion = appName ? `v1-${Buffer.from(appName).toString('base64').substring(0, 8)}` : 'v1-default';
+
   const manifest = {
     name: appTitle,
     short_name: appTitle,
@@ -137,7 +140,9 @@ export const handler: Handler = async (event, context) => {
       }
     ],
     orientation: "portrait",
-    prefer_related_applications: false
+    prefer_related_applications: false,
+    // manifest 버전 추가 (브라우저가 변경사항을 추적할 수 있도록)
+    version: manifestVersion
   };
 
   return {
