@@ -36,18 +36,17 @@ export default function AppNameUpdater() {
             metaTag.setAttribute('content', appTitle);
 
             // manifest 링크 업데이트 (쿼리 파라미터로 appName 전달)
-            // PWA가 설치된 상태에서는 manifest 업데이트를 최소화하여 불필요한 업데이트 모달 방지
+            // PWA가 설치된 상태에서도 manifest가 올바른 appName을 반환하도록 항상 업데이트
             const updateManifestLink = () => {
                 let manifestLink = document.querySelector('link[rel="manifest"]') as HTMLLinkElement;
                 if (manifestLink) {
                     // 이전 manifest appName과 비교하여 실제로 변경된 경우에만 업데이트
                     const encodedAppName = finalName ? encodeURIComponent(finalName) : '';
+                    const appNameParam = finalName ? `appName=${encodedAppName}` : '';
+                    const newHref = `/api/manifest${appNameParam ? '?' + appNameParam : ''}`;
                     
                     // appName이 실제로 변경되었을 때만 업데이트
                     if (lastManifestAppName !== encodedAppName) {
-                        const appNameParam = finalName ? `appName=${encodedAppName}` : '';
-                        const newHref = `/api/manifest${appNameParam ? '?' + appNameParam : ''}`;
-                        
                         manifestLink.href = newHref;
                         setLastManifestAppName(encodedAppName);
                         
@@ -59,8 +58,9 @@ export default function AppNameUpdater() {
                 }
             };
 
-            // 약간의 지연을 두고 manifest 링크 업데이트 (Firebase 읽기 완료 후)
-            setTimeout(updateManifestLink, 500);
+            // Firebase에서 appName을 읽은 후 manifest 링크 업데이트
+            // (PWA standalone 모드에서도 Firebase 읽기를 기다려야 함)
+            setTimeout(updateManifestLink, isStandalone ? 100 : 500);
         };
 
         if (!db) {
@@ -74,8 +74,8 @@ export default function AppNameUpdater() {
             if (!db) return () => {}; // null 체크
             const configRef = ref(db, 'config/appName');
             
-            // 초기 로드 시 읽기
-            get(configRef)
+            // 초기 로드 시 읽기 (PWA standalone 모드에서는 즉시 읽기)
+            const readPromise = get(configRef)
                 .then((snapshot) => {
                     if (snapshot.exists()) {
                         const name = snapshot.val();
@@ -91,6 +91,13 @@ export default function AppNameUpdater() {
                     }
                     updateAppName('');
                 });
+            
+            // PWA standalone 모드에서는 즉시 읽기 완료를 기다림
+            if (isStandalone) {
+                readPromise.catch(() => {
+                    // 에러는 이미 처리됨
+                });
+            }
 
             // 실시간 업데이트 구독
             const unsubscribe = onValue(

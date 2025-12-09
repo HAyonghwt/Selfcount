@@ -55,13 +55,17 @@ function getAdminApp(): App | null {
 export const handler: Handler = async (event, context) => {
   let appName = '';
 
-  // 쿼리 파라미터에서 appName 읽기 (클라이언트에서 전달)
-  // 방법 1: queryStringParameters에서 읽기
-  if (event.queryStringParameters && event.queryStringParameters.appName) {
+  // 우선순위 1: Netlify 환경 변수에서 APP_NAME 읽기 (각 사이트별로 설정 가능)
+  if (process.env.APP_NAME && process.env.APP_NAME.trim()) {
+    appName = process.env.APP_NAME.trim();
+  }
+
+  // 우선순위 2: 쿼리 파라미터에서 appName 읽기 (클라이언트에서 전달)
+  if (!appName && event.queryStringParameters && event.queryStringParameters.appName) {
     appName = decodeURIComponent(event.queryStringParameters.appName).trim();
   }
   
-  // 방법 2: rawQuery에서 파싱
+  // 우선순위 3: rawQuery에서 파싱
   if (!appName && event.rawQuery) {
     try {
       const urlParams = new URLSearchParams(event.rawQuery);
@@ -74,7 +78,7 @@ export const handler: Handler = async (event, context) => {
     }
   }
   
-  // 방법 3: rawUrl에서 직접 파싱
+  // 우선순위 4: rawUrl에서 직접 파싱
   if (!appName && event.rawUrl) {
     try {
       // rawUrl이 상대 경로일 수 있으므로 절대 URL로 변환
@@ -91,7 +95,9 @@ export const handler: Handler = async (event, context) => {
     }
   }
 
-  // Firebase Admin에서도 시도 (환경 변수가 설정된 경우)
+  // 우선순위 5: Firebase Admin에서 읽기 시도
+  // (PWA가 설치된 상태에서 앱 아이콘으로 열 때 쿼리 파라미터가 없을 수 있음)
+  // 여러 사이트가 같은 Firebase를 사용하는 경우, 각 사이트의 환경 변수에 APP_NAME을 설정하는 것이 더 안전함
   if (!appName) {
     try {
       const app = getAdminApp();
