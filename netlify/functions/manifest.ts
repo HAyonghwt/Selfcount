@@ -56,15 +56,9 @@ export const handler: Handler = async (event, context) => {
   let appName = '';
 
   // 쿼리 파라미터에서 appName 읽기 (클라이언트에서 전달)
-  // Netlify Functions의 event 구조 확인
-  console.log('Event queryStringParameters:', JSON.stringify(event.queryStringParameters));
-  console.log('Event rawQuery:', event.rawQuery);
-  console.log('Event rawUrl:', event.rawUrl);
-  
   // 방법 1: queryStringParameters에서 읽기
   if (event.queryStringParameters && event.queryStringParameters.appName) {
     appName = decodeURIComponent(event.queryStringParameters.appName).trim();
-    console.log('클라이언트에서 appName 받음 (queryStringParameters):', appName);
   }
   
   // 방법 2: rawQuery에서 파싱
@@ -74,24 +68,26 @@ export const handler: Handler = async (event, context) => {
       const clientAppName = urlParams.get('appName');
       if (clientAppName) {
         appName = decodeURIComponent(clientAppName).trim();
-        console.log('URL에서 appName 파싱 (rawQuery):', appName);
       }
     } catch (error) {
-      console.warn('rawQuery 파싱 실패:', error);
+      // 파싱 실패는 조용히 처리
     }
   }
   
   // 방법 3: rawUrl에서 직접 파싱
   if (!appName && event.rawUrl) {
     try {
-      const url = new URL(event.rawUrl, 'https://ellesports.netlify.app');
+      // rawUrl이 상대 경로일 수 있으므로 절대 URL로 변환
+      const baseUrl = event.headers?.host 
+        ? `https://${event.headers.host}` 
+        : 'https://netlify.app';
+      const url = new URL(event.rawUrl, baseUrl);
       const clientAppName = url.searchParams.get('appName');
       if (clientAppName) {
         appName = decodeURIComponent(clientAppName).trim();
-        console.log('URL에서 appName 파싱 (rawUrl):', appName);
       }
     } catch (error) {
-      console.warn('rawUrl 파싱 실패:', error);
+      // 파싱 실패는 조용히 처리
     }
   }
 
@@ -106,21 +102,12 @@ export const handler: Handler = async (event, context) => {
           const name = snapshot.val();
           if (name && typeof name === 'string' && name.trim()) {
             appName = name.trim();
-            console.log('Firebase에서 appName 읽기 성공:', appName);
-          } else {
-            console.log('config/appName이 비어있거나 유효하지 않습니다.');
+            // Firebase에서 appName 읽기 성공
           }
-        } else {
-          console.log('config/appName 경로에 데이터가 없습니다.');
         }
-      } else {
-        console.warn('Firebase Admin 앱이 초기화되지 않았습니다. (환경 변수 확인 필요)');
       }
     } catch (error: any) {
-      console.warn('Firebase config 읽기 실패:', error);
-      if (error.message) {
-        console.warn('에러 메시지:', error.message);
-      }
+      // Firebase 읽기 실패는 조용히 처리 (기본값 사용)
     }
   }
 
