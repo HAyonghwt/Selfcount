@@ -27,7 +27,7 @@ interface Player {
     p1_name?: string;
     p2_name?: string;
 }
-interface Course { id: number; name:string; isActive: boolean; }
+interface Course { id: number; name: string; isActive: boolean; }
 interface ScoreData {
     score: number;
     status: 'editing' | 'locked';
@@ -78,7 +78,7 @@ export default function RefereePage() {
 
     // 임시: 뒤로가기 경고 다이얼로그 상태
     const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
-    const [pendingBackType, setPendingBackType] = useState<'button'|'popstate'|null>(null);
+    const [pendingBackType, setPendingBackType] = useState<'button' | 'popstate' | null>(null);
 
     // leave confirm용 함수 (JSX에서 참조)
     const confirmLeave = () => {
@@ -97,7 +97,7 @@ export default function RefereePage() {
     // Local state for scoring UI
     const [scores, setScores] = useState<{ [key: string]: ScoreData }>({});
     const [playerToSave, setPlayerToSave] = useState<Player | null>(null);
-    
+
     // scores 상태를 참조하기 위한 ref (무한 렌더링 방지)
     const scoresRef = useRef(scores);
     scoresRef.current = scores;
@@ -106,7 +106,7 @@ export default function RefereePage() {
     const [isUnlockModalOpen, setIsUnlockModalOpen] = useState(false);
     const [unlockPasswordInput, setUnlockPasswordInput] = useState('');
     const [playerToUnlock, setPlayerToUnlock] = useState<Player | null>(null);
-    
+
     // 1. 추가: 저장 안된 선수 체크 및 이동 시도 카운트 상태
     const [unsavedMoveCount, setUnsavedMoveCount] = useState<{ [playerId: string]: number }>({});
     const [showUnsavedModal, setShowUnsavedModal] = useState(false);
@@ -114,7 +114,7 @@ export default function RefereePage() {
 
     // 안내 모달 상태 추가
     const [showAllJosCompleteModal, setShowAllJosCompleteModal] = useState(false);
-    
+
     // completedJos를 별도 상태로 관리
     const [completedJosState, setCompletedJosState] = useState<Set<string>>(new Set());
 
@@ -146,13 +146,13 @@ export default function RefereePage() {
         try {
             const referee = JSON.parse(loggedInReferee);
             setRefereeData(referee);
-            
+
             // 로그인한 심판의 홀과 현재 페이지 홀이 다르면 리다이렉트
             if (referee.hole !== parseInt(hole)) {
                 router.push(`/referee/${referee.hole}`);
                 return;
             }
-            
+
             // Firebase 인증 수행
             ensureAuthenticated().then(success => {
                 if (!success) {
@@ -170,7 +170,7 @@ export default function RefereePage() {
     useEffect(() => {
         if (!db) return;
         const tournamentRef = ref(db, 'tournaments/current');
-        
+
         const unsubTournament = onValue(tournamentRef, (snapshot) => {
             const data = snapshot.val();
             if (data?.courses) {
@@ -192,13 +192,13 @@ export default function RefereePage() {
     useEffect(() => {
         setLoading(true);
         const dbInstance = db as import('firebase/database').Database;
-        
+
         // 토너먼트 설정은 한 번만 로드 (캐시 확인)
         const loadTournamentData = async () => {
             const cacheKey = 'tournament';
             const now = Date.now();
             const cacheAge = now - (dataCache.current.lastUpdated[cacheKey] || 0);
-            
+
             // 캐시가 30분 이내면 캐시 사용 (토너먼트 설정은 거의 바뀌지 않음)
             if (dataCache.current.tournament && cacheAge < 30 * 60 * 1000) {
                 const cached = dataCache.current.tournament;
@@ -219,10 +219,10 @@ export default function RefereePage() {
                         get(tournamentRef),
                         get(passwordRef)
                     ]);
-                    
+
                     const data = tournamentSnapshot.val() || {};
                     const password = passwordSnapshot.val() || '';
-                    
+
                     dataCache.current.tournament = data;
                     dataCache.current.lastUpdated[cacheKey] = Date.now();
                     setCourses(data.courses ? Object.values(data.courses) : []);
@@ -238,8 +238,8 @@ export default function RefereePage() {
             loadTournamentOnce();
 
             // 구독 해제 함수는 빈 함수로 설정 (한 번만 로드하므로)
-            subscriptions.current['tournament'] = () => {};
-            subscriptions.current['password'] = () => {};
+            subscriptions.current['tournament'] = () => { };
+            subscriptions.current['password'] = () => { };
         };
 
         loadTournamentData();
@@ -260,10 +260,11 @@ export default function RefereePage() {
         const cacheKey = `players_${selectedGroup}`;
         const now = Date.now();
         const cacheAge = now - (dataCache.current.lastUpdated[cacheKey] || 0);
-        
+
         // 캐시가 5분 이내면 캐시 사용 (선수 정보는 자주 바뀌지 않음)
         if (dataCache.current.players[selectedGroup] && cacheAge < 5 * 60 * 1000) {
-            setAllPlayers(dataCache.current.players[selectedGroup]);
+            // 새 배열을 생성하여 React가 상태 변경을 감지하도록 함
+            setAllPlayers([...dataCache.current.players[selectedGroup]]);
             return;
         }
 
@@ -275,7 +276,7 @@ export default function RefereePage() {
         const loadPlayersOnce = async () => {
             try {
                 let groupPlayers: Player[] = [];
-                
+
                 // 방법 1: 특정 그룹 경로로 직접 조회 시도 (데이터 최소화)
                 try {
                     const groupPlayersRef = ref(dbInstance, `playersByGroup/${selectedGroup}`);
@@ -286,18 +287,18 @@ export default function RefereePage() {
                 } catch (groupError) {
                     // 그룹별 인덱스가 없는 경우 무시하고 다음 방법 시도
                 }
-                
+
                 // 방법 2: 그룹별 인덱스가 없으면 전체에서 필터링 (최소한의 fallback)
                 if (groupPlayers.length === 0) {
                     const snapshot = await get(playersRef);
                     const allPlayersData = Object.entries(snapshot.val() || {}).map(([id, player]) => ({ id, ...player as object } as Player));
                     groupPlayers = allPlayersData.filter(p => p.group === selectedGroup);
                 }
-                
+
                 // 캐시 업데이트
                 dataCache.current.players[selectedGroup] = groupPlayers;
                 dataCache.current.lastUpdated[cacheKey] = Date.now();
-                
+
                 setAllPlayers(groupPlayers);
             } catch (error) {
                 console.error('선수 데이터 로드 실패:', error);
@@ -308,7 +309,7 @@ export default function RefereePage() {
         loadPlayersOnce();
 
         // 구독 해제 함수는 빈 함수로 설정 (한 번만 로드하므로)
-        subscriptions.current['players'] = () => {};
+        subscriptions.current['players'] = () => { };
 
         return () => {
             unsubscribeFrom('players');
@@ -325,7 +326,7 @@ export default function RefereePage() {
         const cacheKey = `scores_${selectedCourse}`;
         const now = Date.now();
         const cacheAge = now - (dataCache.current.lastUpdated[cacheKey] || 0);
-        
+
         // 캐시가 30초 이내면 캐시 사용
         if (dataCache.current.scores[selectedCourse] && cacheAge < 30 * 1000) {
             setAllScores(dataCache.current.scores[selectedCourse]);
@@ -334,12 +335,12 @@ export default function RefereePage() {
 
         const dbInstance = db as import('firebase/database').Database;
         const filteredPlayers = allPlayers.filter(p => p.group === selectedGroup && p.jo.toString() === selectedJo);
-        
+
 
 
         // 현재 선수들의 현재 코스만 개별 구독 (최소 데이터)
         const courseScores: any = {};
-        
+
         filteredPlayers.forEach(player => {
             const playerCourseRef = ref(dbInstance, `scores/${player.id}/${selectedCourse}`);
             const unsubscribe = onValue(playerCourseRef, (snapshot) => {
@@ -350,13 +351,13 @@ export default function RefereePage() {
                     // 점수가 없는 경우 빈 객체로 설정
                     courseScores[player.id] = { [selectedCourse]: {} };
                 }
-                
+
                 // 전체 상태 업데이트
                 setAllScores({ ...courseScores });
-                
+
 
             });
-            
+
             subscriptions.current[`score_${player.id}`] = unsubscribe;
         });
 
@@ -399,12 +400,12 @@ export default function RefereePage() {
                         const hStr = h.toString();
                         if (!allScores[p.id]?.[(selectedCourse || '')]?.[hStr]) {
                             await set(ref(db as import('firebase/database').Database, `/scores/${p.id}/${selectedCourse || ''}/${hStr}`), 0);
-                                            }
-                }
-                const playerName = getPlayerName(p);
-                if (playerName) {
-                    autoForfeitPlayers.push(playerName);
-                }
+                        }
+                    }
+                    const playerName = getPlayerName(p);
+                    if (playerName) {
+                        autoForfeitPlayers.push(playerName);
+                    }
                 }
                 unsavedMoveCount[p.id] = count;
             }
@@ -479,7 +480,7 @@ export default function RefereePage() {
             localStorage.removeItem(`refereeState_${hole}`);
         }
     }, [hole]);
-    
+
     // Save view state to localStorage
     useEffect(() => {
         if (view === 'scoring' && selectedGroup && selectedCourse && selectedJo) {
@@ -499,34 +500,34 @@ export default function RefereePage() {
     // 심판이 담당하는 코스 찾기
     const assignedCourse = useMemo(() => {
         if (!refereeData?.id || tournamentCourses.length === 0) return null;
-        
+
         // 심판 아이디에서 번호 추출 (예: "1번홀심판3" -> 3)
         const match = refereeData.id.match(/(\d+)번홀심판(\d*)/);
         if (!match) return null;
-        
+
         const suffixNumber = match[2] ? parseInt(match[2]) : 0;
-        
+
         // 코스 인덱스에 따라 코스 찾기
         if (suffixNumber < tournamentCourses.length) {
             const course = tournamentCourses[suffixNumber];
             // courses 배열에서 해당 코스 찾기
             return courses.find(c => c.id === course.id) || course;
         }
-        
+
         return null;
     }, [refereeData, tournamentCourses, courses]);
 
     // 해당 코스가 배정된 경기 형태 찾기
     const availableTypes = useMemo(() => {
         if (!assignedCourse) return [];
-        
+
         const types = new Set<'individual' | 'team'>();
         Object.values(groupsData).forEach((group: any) => {
             if (group.courses && group.courses[assignedCourse.id]) {
                 types.add(group.type);
             }
         });
-        
+
         return Array.from(types);
     }, [assignedCourse, groupsData]);
 
@@ -542,7 +543,7 @@ export default function RefereePage() {
             .filter(Boolean)
             .sort();
     }, [groupsData, selectedType, assignedCourse]);
-    
+
     const availableCoursesForGroup = useMemo(() => {
         // 심판이 담당하는 코스만 반환
         if (!assignedCourse) return [];
@@ -552,12 +553,12 @@ export default function RefereePage() {
     // 코스 자동 선택
     useEffect(() => {
         if (!assignedCourse) return;
-        
+
         // 코스 자동 선택
         const courseIdStr = String(assignedCourse.id);
         setSelectedCourse(courseIdStr);
     }, [assignedCourse?.id]);
-    
+
     // 경기 형태 자동 선택 (1개만 있을 때)
     useEffect(() => {
         if (availableTypes.length === 1 && selectedType !== availableTypes[0]) {
@@ -579,19 +580,19 @@ export default function RefereePage() {
         });
         return orderedJos;
     }, [allPlayers, selectedGroup]);
-    
+
     const currentPlayers = useMemo(() => {
         if (!selectedJo) return [];
         return allPlayers.filter(p => p.group === selectedGroup && p.jo.toString() === selectedJo);
     }, [allPlayers, selectedGroup, selectedJo]);
-    
+
     // 완료된 조들을 확인하는 함수 (재사용 가능하도록 분리)
     const checkCompletedJos = useCallback(async () => {
         if (!selectedGroup || !selectedCourse || !hole || !allPlayers.length) {
             setCompletedJosState(new Set());
             return;
         }
-    
+
         const groupPlayers = allPlayers.filter(p => p.group === selectedGroup);
         const josInGroup = [...new Set(groupPlayers.map(p => p.jo.toString()))];
         const completed = new Set<string>();
@@ -603,14 +604,14 @@ export default function RefereePage() {
             if (playersInThisJo.length === 0) continue;
 
             let allInJoAreScored = true;
-            
+
             for (const player of playersInThisJo) {
                 try {
                     // Firebase에서 직접 확인 (더 정확한 데이터를 위해)
                     const playerHoleRef = ref(dbInstance, `scores/${player.id}/${selectedCourse}/${hole}`);
                     const snapshot = await get(playerHoleRef);
                     const hasScore = snapshot.val() !== undefined && snapshot.val() !== null;
-                    
+
                     if (!hasScore) {
                         allInJoAreScored = false;
                         break;
@@ -621,19 +622,19 @@ export default function RefereePage() {
                     break;
                 }
             }
-            
+
             if (allInJoAreScored) {
                 completed.add(joNum);
             }
         }
-        
+
         setCompletedJosState(completed);
     }, [selectedGroup, selectedCourse, hole, allPlayers]);
 
     // 완료된 조들을 확인하는 useEffect
     useEffect(() => {
         checkCompletedJos();
-    }, [checkCompletedJos]);
+    }, [checkCompletedJos, availableJos.length]);
 
     // completedJos는 이제 단순히 상태를 반환
     const completedJos = completedJosState;
@@ -646,7 +647,7 @@ export default function RefereePage() {
         // 현재 그룹의 모든 조가 완료되었는지 확인
         const groupPlayers = allPlayers.filter(p => p.group === selectedGroup);
         const josInGroup = [...new Set(groupPlayers.map(p => p.jo.toString()))];
-        
+
         // 모든 조가 완료되었으면 코스 완료
         return josInGroup.length > 0 && josInGroup.every(jo => completedJosState.has(jo));
 
@@ -686,7 +687,7 @@ export default function RefereePage() {
                     acc[playerId] = data;
                 }
                 return acc;
-            }, {} as {[key: string]: ScoreData});
+            }, {} as { [key: string]: ScoreData });
             if (Object.keys(scoresToSave).length > 0) {
                 localStorage.setItem(key, JSON.stringify(scoresToSave));
             } else {
@@ -707,11 +708,11 @@ export default function RefereePage() {
 
         const initializeScores = async () => {
             const newScoresState: { [key: string]: ScoreData } = {};
-            
+
             for (const player of currentPlayers) {
                 // 먼저 Firebase에서 직접 확인 (allScores가 불완전할 수 있음)
                 let existingScoreFromDb = allScores[player.id]?.[selectedCourse as string]?.[hole as string];
-                
+
                 // allScores에 없으면 Firebase에서 직접 확인
                 if (existingScoreFromDb === undefined) {
                     try {
@@ -723,16 +724,16 @@ export default function RefereePage() {
                         console.warn(`선수 ${player.id} 점수 직접 확인 실패:`, error);
                     }
                 }
-                
+
                 if (existingScoreFromDb !== undefined && existingScoreFromDb !== null) {
                     // 저장된 점수가 있으면 잠금 상태로 설정
                     let forfeitType: 'absent' | 'disqualified' | 'forfeit' | null = null;
                     if (Number(existingScoreFromDb) === 0) {
                         forfeitType = await getForfeitTypeFromLogs(player.id, selectedCourse as string, hole as string);
                     }
-                    
-                    newScoresState[player.id] = { 
-                        score: Number(existingScoreFromDb), 
+
+                    newScoresState[player.id] = {
+                        score: Number(existingScoreFromDb),
                         status: 'locked',
                         forfeitType: forfeitType
                     };
@@ -740,8 +741,8 @@ export default function RefereePage() {
                     // 저장된 점수가 없으면 편집 상태로 설정
                     const interimScore = savedInterimScores[player.id];
                     if (interimScore && interimScore.status === 'editing') {
-                        newScoresState[player.id] = { 
-                            score: Number(interimScore.score), 
+                        newScoresState[player.id] = {
+                            score: Number(interimScore.score),
                             status: 'editing',
                             forfeitType: interimScore.forfeitType || null
                         };
@@ -750,12 +751,12 @@ export default function RefereePage() {
                     }
                 }
             }
-            
+
             setScores(newScoresState);
         };
-        
+
         initializeScores();
-        
+
     }, [view, selectedJo, selectedCourse, hole, allScores, currentPlayers]);
 
     // allScores 변경 시 실격 복구를 위한 scores 상태 업데이트
@@ -765,20 +766,20 @@ export default function RefereePage() {
         }
 
 
-        
+
         // 현재 선수들의 실격 복구 체크
         currentPlayers.forEach(player => {
             const currentScoreState = scores[player.id];
             const firebaseScore = allScores[player.id]?.[selectedCourse as string]?.[hole as string];
-            
-            // 실격 복구 감지: scores에서는 0점이지만 Firebase에서는 0이 아닌 점수
-            if (currentScoreState && 
-                currentScoreState.score === 0 && 
-                firebaseScore !== undefined && 
-                Number(firebaseScore) > 0) {
-                
 
-                
+            // 실격 복구 감지: scores에서는 0점이지만 Firebase에서는 0이 아닌 점수
+            if (currentScoreState &&
+                currentScoreState.score === 0 &&
+                firebaseScore !== undefined &&
+                Number(firebaseScore) > 0) {
+
+
+
                 setScores(prev => ({
                     ...prev,
                     [player.id]: {
@@ -796,7 +797,7 @@ export default function RefereePage() {
     const handleStartScoring = () => {
         // 코스는 자동 선택되므로 assignedCourse가 있으면 코스는 선택된 것으로 간주
         const isCourseSelected = selectedCourse || (assignedCourse && String(assignedCourse.id));
-        
+
         if (selectedGroup && isCourseSelected && selectedJo && currentPlayers.length > 0) {
             // 코스가 자동 선택되었지만 selectedCourse가 설정되지 않은 경우 설정
             if (!selectedCourse && assignedCourse) {
@@ -811,7 +812,7 @@ export default function RefereePage() {
             });
         }
     };
-    
+
     const handleBackToSelectionClick = () => {
         setView('selection');
         setSelectedGroup('');
@@ -823,7 +824,7 @@ export default function RefereePage() {
         if (scores[id]?.status === 'editing') {
             const currentScore = scores[id].score;
             const newScore = Math.max(0, currentScore + delta);
-            
+
             // 0점이 되었을 때 기권 타입 순환 처리
             let newForfeitType = scores[id].forfeitType;
             if (newScore === 0 && currentScore > 0) {
@@ -844,11 +845,11 @@ export default function RefereePage() {
                 // 점수가 0보다 크면 기권 타입 초기화
                 newForfeitType = null;
             }
-            
+
             setScores(prev => ({
                 ...prev,
-                [id]: { 
-                    ...prev[id], 
+                [id]: {
+                    ...prev[id],
                     score: newScore,
                     forfeitType: newForfeitType
                 }
@@ -866,37 +867,37 @@ export default function RefereePage() {
         if (!playerToSave) return;
         const scoreData = scores[playerToSave.id];
         if (!scoreData || scoreData.status !== 'editing') return;
-        
+
         try {
             // Firebase 인증 확인
             const isAuthenticated = await ensureAuthenticated();
             if (!isAuthenticated) {
-                toast({ 
-                    title: "인증 실패", 
+                toast({
+                    title: "인증 실패",
                     description: "Firebase 인증에 실패했습니다. 페이지를 새로고침하고 다시 시도해주세요.",
-                    variant: "destructive" 
+                    variant: "destructive"
                 });
                 return;
             }
-            
+
             // 모바일 환경 감지 및 Firebase 인증 재시도 로직
             const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
             const maxRetries = isMobile ? 3 : 1;
             let attempt = 0;
-            
+
             while (attempt < maxRetries) {
                 try {
                     const dbInstance = db as import('firebase/database').Database;
                     const scoreRef = ref(dbInstance, `/scores/${playerToSave.id}/${selectedCourse}/${hole}`);
                     const prevScore = allScores[playerToSave.id]?.[selectedCourse as string]?.[hole as string] ?? null;
-                    
+
                     // 모바일에서는 잠시 대기 후 재시도
                     if (isMobile && attempt > 0) {
                         await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
                     }
-                    
+
                     await set(scoreRef, scoreData.score);
-                    
+
                     // 점수 변경 로그 기록
                     if (prevScore !== scoreData.score) {
                         const refereeId = (refereeData && refereeData.id) ? refereeData.id : `${hole}번홀심판`;
@@ -913,7 +914,7 @@ export default function RefereePage() {
                             courseId: selectedCourse
                         });
                     }
-                    
+
                     // 0점 입력 시, 소속 그룹의 모든 코스/홀에 0점 처리
                     if (scoreData.score === 0) {
                         // 대량 0 입력 전에 선수 점수 백업 저장(1회성)
@@ -975,80 +976,80 @@ export default function RefereePage() {
                             }
                         }
                     }
-                    
+
                     // 0점 처리 후에는 refreshScoresData()가 호출되므로 별도 캐시 무효화 불필요
-                    
+
                     // 성공하면 루프 종료
                     break;
-                    
+
                 } catch (e: any) {
                     attempt++;
-                    
+
                     // Permission denied 오류이고 재시도 가능한 경우 (다양한 오류 형태 대응)
-                    const isPermissionError = e?.code === 'PERMISSION_DENIED' || 
-                                             e?.message?.includes('permission_denied') ||
-                                             e?.message?.includes('Permission denied');
-                    
+                    const isPermissionError = e?.code === 'PERMISSION_DENIED' ||
+                        e?.message?.includes('permission_denied') ||
+                        e?.message?.includes('Permission denied');
+
                     if (isPermissionError && attempt < maxRetries && isMobile) {
                         continue;
                     }
-                    
+
                     // 최종 실패 또는 다른 오류
-                    const errorMsg = e?.code === 'PERMISSION_DENIED' 
-                      ? '점수 저장 권한이 없습니다. 페이지를 새로고침하고 다시 로그인해주세요.'
-                      : (e?.message || "점수 저장에 실패했습니다.");
-                    
-                    toast({ 
-                      title: "저장 실패", 
-                      description: errorMsg,
-                      variant: "destructive" 
+                    const errorMsg = e?.code === 'PERMISSION_DENIED'
+                        ? '점수 저장 권한이 없습니다. 페이지를 새로고침하고 다시 로그인해주세요.'
+                        : (e?.message || "점수 저장에 실패했습니다.");
+
+                    toast({
+                        title: "저장 실패",
+                        description: errorMsg,
+                        variant: "destructive"
                     });
                     return;
                 }
             }
-            
-                                // 성공 토스트 메시지
-                    toast({ 
-                        title: '저장 완료', 
-                        description: '',
-                        duration: 500
-                    });
-                    
-                    // 성공 후 상태 업데이트
-                    setScores(prev => ({
-                        ...prev,
-                        [playerToSave.id]: { ...prev[playerToSave.id], status: 'locked' }
-                    }));
-                    
-                    // 캐시 업데이트 - 점수 데이터 갱신
-                    if (dataCache.current.scores[selectedCourse]) {
-                        if (!dataCache.current.scores[selectedCourse][playerToSave.id]) {
-                            dataCache.current.scores[selectedCourse][playerToSave.id] = {};
-                        }
-                        dataCache.current.scores[selectedCourse][playerToSave.id][selectedCourse] = {
-                            ...dataCache.current.scores[selectedCourse][playerToSave.id][selectedCourse],
-                            [hole]: scoreData.score
-                        };
-                        dataCache.current.lastUpdated[`scores_${selectedCourse}`] = Date.now();
-                    }
 
-                    // 점수 저장 후 완료된 조 상태 즉시 업데이트
-                    setTimeout(() => {
-                        checkCompletedJos();
-                    }, 500); // Firebase 동기화를 위한 약간의 지연
-            
+            // 성공 토스트 메시지
+            toast({
+                title: '저장 완료',
+                description: '',
+                duration: 500
+            });
+
+            // 성공 후 상태 업데이트
+            setScores(prev => ({
+                ...prev,
+                [playerToSave.id]: { ...prev[playerToSave.id], status: 'locked' }
+            }));
+
+            // 캐시 업데이트 - 점수 데이터 갱신
+            if (dataCache.current.scores[selectedCourse]) {
+                if (!dataCache.current.scores[selectedCourse][playerToSave.id]) {
+                    dataCache.current.scores[selectedCourse][playerToSave.id] = {};
+                }
+                dataCache.current.scores[selectedCourse][playerToSave.id][selectedCourse] = {
+                    ...dataCache.current.scores[selectedCourse][playerToSave.id][selectedCourse],
+                    [hole]: scoreData.score
+                };
+                dataCache.current.lastUpdated[`scores_${selectedCourse}`] = Date.now();
+            }
+
+            // 점수 저장 후 완료된 조 상태 즉시 업데이트
+            setTimeout(() => {
+                checkCompletedJos();
+            }, 500); // Firebase 동기화를 위한 약간의 지연
+
         } catch (error) {
             console.error('점수 저장 중 오류:', error);
-            toast({ 
-                title: '저장 실패', 
+            toast({
+                title: '저장 실패',
                 description: '점수 저장 중 오류가 발생했습니다.',
-                variant: 'destructive' 
+                variant: 'destructive'
             });
         } finally {
             setPlayerToSave(null);
         }
     };
-    
+
     const handleUnlockRequest = (player: Player) => {
         if (scores[player.id]?.status === 'locked') {
             setPlayerToUnlock(player);
@@ -1080,20 +1081,20 @@ export default function RefereePage() {
 
     const getPlayerName = (player: Player) => player.type === 'team' ? `${player.p1_name}/${player.p2_name}` : player.name;
     const selectedCourseName = useMemo(() => courses.find(c => c.id.toString() === selectedCourse)?.name || '', [courses, selectedCourse]);
-    
+
     // 심판 아이디를 코스명과 함께 표시하는 함수
     const getRefereeDisplayName = () => {
         if (!refereeData?.id || tournamentCourses.length === 0) {
             return refereeData?.id || `${hole}번홀 심판`;
         }
-        
+
         // 심판 아이디에서 번호 추출 (예: "1번홀심판3" -> 3)
         const match = refereeData.id.match(/(\d+)번홀심판(\d*)/);
         if (!match) return refereeData.id;
-        
+
         const holeNumber = match[1];
         const suffixNumber = match[2] ? parseInt(match[2]) : 0;
-        
+
         // 코스 인덱스에 따라 코스명 결정
         if (suffixNumber < tournamentCourses.length) {
             const courseName = tournamentCourses[suffixNumber]?.name;
@@ -1101,10 +1102,10 @@ export default function RefereePage() {
                 return `${courseName} ${holeNumber}번홀심판`;
             }
         }
-        
+
         return refereeData.id;
     };
-    
+
     // 기권 타입에 따른 표시 텍스트 반환 함수
     const getForfeitDisplayText = (forfeitType: string | null | undefined) => {
         switch (forfeitType) {
@@ -1114,19 +1115,19 @@ export default function RefereePage() {
             default: return '기권';
         }
     };
-    
+
     // 로그에서 기권 타입을 추출하는 함수
     const getForfeitTypeFromLogs = async (playerId: string, courseId: string, holeNumber: string) => {
         try {
             const { getPlayerScoreLogs } = await import('@/lib/scoreLogs');
             const logs = await getPlayerScoreLogs(playerId);
-            
+
             // 해당 홀의 기권 처리 로그 찾기
             const forfeitLogs = logs
                 .filter(l => l.newValue === 0 && l.modifiedByType === 'judge' && l.comment)
                 .filter(l => l.comment?.includes(`코스: ${courseId}`) || l.comment?.includes(`홀: ${holeNumber}`))
                 .sort((a, b) => b.modifiedAt - a.modifiedAt); // 최신순 정렬
-            
+
             if (forfeitLogs.length > 0) {
                 const latestLog = forfeitLogs[0];
                 if (latestLog.comment?.includes('불참')) return 'absent';
@@ -1139,10 +1140,10 @@ export default function RefereePage() {
             return null;
         }
     };
-    
+
     if (loading) {
         return (
-             <div className="bg-slate-50 min-h-screen p-2 sm:p-4 flex flex-col font-body">
+            <div className="bg-slate-50 min-h-screen p-2 sm:p-4 flex flex-col font-body">
                 <header className="text-center mb-4">
                     <h1 className="text-3xl font-extrabold text-primary break-keep leading-tight">{hole}번홀 심판</h1>
                 </header>
@@ -1162,16 +1163,16 @@ export default function RefereePage() {
                     <CardDescription className="text-sm">점수를 기록할 경기 형태, 그룹, 코스, 조를 선택하세요.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                    <Select 
-                        value={selectedType as string} 
+                    <Select
+                        value={selectedType as string}
                         onValueChange={v => {
-                        const val = (v || '').toString();
-                        if (val === 'individual' || val === 'team') {
-                            setSelectedType(val);
-                        } else {
-                            setSelectedType('');
-                        }
-                        setSelectedGroup(''); setSelectedCourse(''); setSelectedJo('');
+                            const val = (v || '').toString();
+                            if (val === 'individual' || val === 'team') {
+                                setSelectedType(val);
+                            } else {
+                                setSelectedType('');
+                            }
+                            setSelectedGroup(''); setSelectedJo('');
                         }}
                         disabled={availableTypes.length === 0 || (availableTypes.length === 1 && selectedType === availableTypes[0])}
                     >
@@ -1187,13 +1188,12 @@ export default function RefereePage() {
                         </SelectContent>
                     </Select>
                     <Select
-                      value={selectedGroup}
-                      onValueChange={v => {
-                        setSelectedGroup((v ?? '') as string);
-                        setSelectedCourse('');
-                        setSelectedJo('');
-                      }}
-                      disabled={!selectedType || availableGroups.length === 0}
+                        value={selectedGroup}
+                        onValueChange={v => {
+                            setSelectedGroup((v ?? '') as string);
+                            setSelectedJo('');
+                        }}
+                        disabled={!selectedType || availableGroups.length === 0}
                     >
                         <SelectTrigger className="h-12 text-base">
                             <SelectValue placeholder={selectedType === '' ? "경기 형태 먼저 선택" : availableGroups.length === 0 ? "배정된 그룹 없음" : "2. 그룹 선택"} />
@@ -1202,15 +1202,15 @@ export default function RefereePage() {
                             {availableGroups.map(g => <SelectItem key={g} value={g.toString()} className="text-base">{g}</SelectItem>)}
                         </SelectContent>
                     </Select>
-                    <Select 
-                        value={selectedCourse || ''} 
-                        onValueChange={v => {setSelectedCourse((v || '').toString()); setSelectedJo('');}} 
+                    <Select
+                        value={selectedCourse || ''}
+                        onValueChange={v => { setSelectedCourse((v || '').toString()); setSelectedJo(''); }}
                         disabled={true}
                     >
                         <SelectTrigger className="h-12 text-base bg-muted">
                             <SelectValue placeholder={
-                                assignedCourse 
-                                    ? `${assignedCourse.name} (${hole}번홀심판)` 
+                                assignedCourse
+                                    ? `${assignedCourse.name} (${hole}번홀심판)`
                                     : "코스 정보 없음"
                             } />
                         </SelectTrigger>
@@ -1228,11 +1228,8 @@ export default function RefereePage() {
                             {availableJos.map(jo => {
                                 const isCompleted = completedJosState.has(jo);
                                 return (
-                                    <SelectItem key={jo} value={jo}>
-                                        <div className="flex items-center justify-between w-full">
-                                            <span>{jo}조</span>
-                                            {isCompleted && <Lock className="h-4 w-4 text-muted-foreground" />}
-                                        </div>
+                                    <SelectItem key={jo} value={jo} className={isCompleted ? "text-muted-foreground" : ""}>
+                                        {isCompleted ? `${jo}조 ✓` : `${jo}조`}
                                     </SelectItem>
                                 );
                             })}
@@ -1244,7 +1241,7 @@ export default function RefereePage() {
 
                 </CardContent>
                 <CardFooter className="flex-col gap-2">
-                     <Button className="w-full h-14 text-xl font-bold" onClick={handleStartScoring} disabled={!selectedJo || currentPlayers.length === 0}>점수기록 시작</Button>
+                    <Button className="w-full h-14 text-xl font-bold" onClick={handleStartScoring} disabled={!selectedJo || currentPlayers.length === 0}>점수기록 시작</Button>
                 </CardFooter>
             </Card>
         );
@@ -1345,43 +1342,43 @@ export default function RefereePage() {
     return (
         <>
             <div className="bg-slate-50 min-h-screen p-2 sm:p-4 flex flex-col font-body">
-                 <header className="flex justify-between items-center mb-4">
-                     <h1 className="text-2xl sm:text-3xl font-extrabold text-primary break-keep leading-tight">
-                         {getRefereeDisplayName()}
-                     </h1>
-                     <div className="flex gap-2 items-center">
-                         {view === 'scoring' && (
-                             <Button variant="outline" onClick={handleBackToSelectionClick} className="h-9 text-base sm:text-lg font-bold flex-shrink-0">
-                                 <ArrowLeft className="mr-1 sm:mr-2 h-4 w-4" />
-                                 그룹/코스 변경
-                             </Button>
-                         )}
-                         {view === 'selection' && (
-                             <Button variant="destructive" onClick={() => {
-                                 // 세션/로컬스토리지 정리 및 심판 로그인 페이지로 이동
-                                 if (typeof window !== 'undefined') {
-                                     localStorage.clear();
-                                     sessionStorage.clear();
-                                     router.replace('/referee/login');
-                                 }
-                             }} className="h-9 text-base sm:text-lg font-bold flex-shrink-0 ml-2">로그아웃</Button>
-                         )}
-                     </div>
-                 </header>
+                <header className="flex justify-between items-center mb-4">
+                    <h1 className="text-2xl sm:text-3xl font-extrabold text-primary break-keep leading-tight">
+                        {getRefereeDisplayName()}
+                    </h1>
+                    <div className="flex gap-2 items-center">
+                        {view === 'scoring' && (
+                            <Button variant="outline" onClick={handleBackToSelectionClick} className="h-9 text-base sm:text-lg font-bold flex-shrink-0">
+                                <ArrowLeft className="mr-1 sm:mr-2 h-4 w-4" />
+                                그룹/코스 변경
+                            </Button>
+                        )}
+                        {view === 'selection' && (
+                            <Button variant="destructive" onClick={() => {
+                                // 세션/로컬스토리지 정리 및 심판 로그인 페이지로 이동
+                                if (typeof window !== 'undefined') {
+                                    localStorage.clear();
+                                    sessionStorage.clear();
+                                    router.replace('/referee/login');
+                                }
+                            }} className="h-9 text-base sm:text-lg font-bold flex-shrink-0 ml-2">로그아웃</Button>
+                        )}
+                    </div>
+                </header>
 
                 <div className="flex-1 flex flex-col space-y-4">
                     {view === 'scoring' && (
-                       <Card>
+                        <Card>
                             <CardHeader className="p-3 space-y-2">
                                 <div className="text-xl sm:text-2xl font-extrabold text-center text-foreground break-words flex items-center justify-center gap-3">
                                     <div>
                                         <span>{selectedGroup}</span>
                                     </div>
 
-                                    <QRCodeViewer 
-                                        group={selectedGroup} 
-                                        jo={selectedJo} 
-                                        courseName={selectedCourseName} 
+                                    <QRCodeViewer
+                                        group={selectedGroup}
+                                        jo={selectedJo}
+                                        courseName={selectedCourseName}
                                     />
                                 </div>
                                 <Select value={selectedJo} onValueChange={setSelectedJo}>
@@ -1409,7 +1406,7 @@ export default function RefereePage() {
                     {view === 'selection' ? renderSelectionScreen() : renderScoringScreen()}
                 </div>
             </div>
-            
+
             <AlertDialog open={!!playerToSave} onOpenChange={(open) => !open && setPlayerToSave(null)}>
                 <AlertDialogContent>
                     <AlertDialogHeader>
@@ -1419,14 +1416,14 @@ export default function RefereePage() {
                     </AlertDialogHeader>
                     <div className="flex flex-col items-center justify-center p-0 text-center">
                         {playerToSave && scores[playerToSave.id] && (
-                             <div className="flex items-baseline my-6">
+                            <div className="flex items-baseline my-6">
                                 <span className="font-extrabold text-destructive leading-none" style={{ fontSize: '7rem', lineHeight: '1' }}>
-                                  {scores[playerToSave.id].score === 0 ? getForfeitDisplayText(scores[playerToSave.id].forfeitType || null) : scores[playerToSave.id].score}
+                                    {scores[playerToSave.id].score === 0 ? getForfeitDisplayText(scores[playerToSave.id].forfeitType || null) : scores[playerToSave.id].score}
                                 </span>
                                 <span className="font-bold ml-4 text-4xl">{scores[playerToSave.id].score === 0 ? "" : "점"}</span>
                             </div>
                         )}
-                        
+
                         <AlertDialogDescription className="text-xs font-semibold mt-2 text-muted-foreground">
                             저장하시겠습니까?
                         </AlertDialogDescription>
@@ -1437,7 +1434,7 @@ export default function RefereePage() {
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
-            
+
             <AlertDialog open={isUnlockModalOpen} onOpenChange={setIsUnlockModalOpen}>
                 <AlertDialogContent>
                     <AlertDialogHeader>
@@ -1465,63 +1462,63 @@ export default function RefereePage() {
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
-        {/* 나가기 경고 다이얼로그 */}
-        <AlertDialog open={showLeaveConfirm} onOpenChange={(open) => { if (!open) cancelLeave(); }}>
-            <AlertDialogContent>
-                <AlertDialogHeader>
-                    <AlertDialogTitle>심판중인 페이지에서 나가겠습니까?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                        입력 중인 점수가 저장되지 않을 수 있습니다.<br />정말 나가시겠습니까?
-                    </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                    <AlertDialogCancel onClick={cancelLeave}>취소</AlertDialogCancel>
-                    <AlertDialogAction onClick={confirmLeave}>확인</AlertDialogAction>
-                </AlertDialogFooter>
-            </AlertDialogContent>
-        </AlertDialog>
-        {showUnsavedModal && (
-    <AlertDialog open={showUnsavedModal} onOpenChange={setShowUnsavedModal}>
-        <AlertDialogContent>
-            <AlertDialogHeader>
-                <AlertDialogTitle className="text-xl font-bold text-destructive flex items-center gap-2">
-                    <span>⚠️</span> 점수 저장이 안된 선수가 있습니다
-                </AlertDialogTitle>
-            </AlertDialogHeader>
-            <div className="py-2">
-                {unsavedPlayers.map(p => (
-                    <div key={p.id} className="font-bold text-red-600 text-lg mb-1 break-words leading-tight">
-                      {getPlayerName(p)}<span className="ml-1 text-gray-700">의 점수를 저장하고 이동하세요</span>
-                    </div>
-                ))}
-                <div className="mt-2 text-base text-yellow-700 font-semibold">
-                    만약 기권자가 있으면 기권(점수0)으로 저장해 주세요
-                </div>
-            </div>
-            <AlertDialogFooter>
-                <AlertDialogAction onClick={() => setShowUnsavedModal(false)} className="bg-blue-600 hover:bg-blue-700 text-white">확인</AlertDialogAction>
-            </AlertDialogFooter>
-        </AlertDialogContent>
-    </AlertDialog>
-)}
-        {/* 모든 조 입력 완료 안내 모달 */}
-        {showAllJosCompleteModal && (
-    <AlertDialog open={showAllJosCompleteModal} onOpenChange={setShowAllJosCompleteModal}>
-        <AlertDialogContent>
-            <AlertDialogHeader>
-                <AlertDialogTitle className="text-xl font-bold text-green-700 flex items-center gap-2">
-                    <span>🎉</span> 이 그룹의 모든 조의 점수가 입력되었습니다
-                </AlertDialogTitle>
-            </AlertDialogHeader>
-            <div className="py-2 text-lg text-center text-green-800 font-semibold">
-                수고하셨습니다!
-            </div>
-            <AlertDialogFooter>
-                <AlertDialogAction onClick={() => setShowAllJosCompleteModal(false)} className="bg-green-600 hover:bg-green-700 text-white">확인</AlertDialogAction>
-            </AlertDialogFooter>
-        </AlertDialogContent>
-    </AlertDialog>
-)}
+            {/* 나가기 경고 다이얼로그 */}
+            <AlertDialog open={showLeaveConfirm} onOpenChange={(open) => { if (!open) cancelLeave(); }}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>심판중인 페이지에서 나가겠습니까?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            입력 중인 점수가 저장되지 않을 수 있습니다.<br />정말 나가시겠습니까?
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel onClick={cancelLeave}>취소</AlertDialogCancel>
+                        <AlertDialogAction onClick={confirmLeave}>확인</AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+            {showUnsavedModal && (
+                <AlertDialog open={showUnsavedModal} onOpenChange={setShowUnsavedModal}>
+                    <AlertDialogContent>
+                        <AlertDialogHeader>
+                            <AlertDialogTitle className="text-xl font-bold text-destructive flex items-center gap-2">
+                                <span>⚠️</span> 점수 저장이 안된 선수가 있습니다
+                            </AlertDialogTitle>
+                        </AlertDialogHeader>
+                        <div className="py-2">
+                            {unsavedPlayers.map(p => (
+                                <div key={p.id} className="font-bold text-red-600 text-lg mb-1 break-words leading-tight">
+                                    {getPlayerName(p)}<span className="ml-1 text-gray-700">의 점수를 저장하고 이동하세요</span>
+                                </div>
+                            ))}
+                            <div className="mt-2 text-base text-yellow-700 font-semibold">
+                                만약 기권자가 있으면 기권(점수0)으로 저장해 주세요
+                            </div>
+                        </div>
+                        <AlertDialogFooter>
+                            <AlertDialogAction onClick={() => setShowUnsavedModal(false)} className="bg-blue-600 hover:bg-blue-700 text-white">확인</AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+            )}
+            {/* 모든 조 입력 완료 안내 모달 */}
+            {showAllJosCompleteModal && (
+                <AlertDialog open={showAllJosCompleteModal} onOpenChange={setShowAllJosCompleteModal}>
+                    <AlertDialogContent>
+                        <AlertDialogHeader>
+                            <AlertDialogTitle className="text-xl font-bold text-green-700 flex items-center gap-2">
+                                <span>🎉</span> 이 그룹의 모든 조의 점수가 입력되었습니다
+                            </AlertDialogTitle>
+                        </AlertDialogHeader>
+                        <div className="py-2 text-lg text-center text-green-800 font-semibold">
+                            수고하셨습니다!
+                        </div>
+                        <AlertDialogFooter>
+                            <AlertDialogAction onClick={() => setShowAllJosCompleteModal(false)} className="bg-green-600 hover:bg-green-700 text-white">확인</AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+            )}
         </>
     );
 }

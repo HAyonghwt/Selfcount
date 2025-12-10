@@ -8,11 +8,6 @@ export default function ServiceWorkerRegistration() {
             return;
         }
 
-        // Service Worker 상태 모니터링 핸들러
-        const handleControllerChange = () => {
-            console.log('Service Worker 컨트롤러 변경됨');
-        };
-
         // Service Worker 등록 (재시도 로직 포함)
         const registerServiceWorker = async () => {
             try {
@@ -22,22 +17,7 @@ export default function ServiceWorkerRegistration() {
                 if (existingRegistration) {
                     // 이미 등록된 경우 업데이트 확인
                     console.log('Service Worker 이미 등록됨:', existingRegistration.scope);
-                    
-                    // 활성화된 Service Worker 확인
-                    if (existingRegistration.active) {
-                        console.log('Service Worker 활성화됨');
-                    } else if (existingRegistration.installing) {
-                        console.log('Service Worker 설치 중...');
-                    } else if (existingRegistration.waiting) {
-                        console.log('Service Worker 대기 중...');
-                    }
-                    
-                    // 업데이트 확인
-                    try {
-                        await existingRegistration.update();
-                    } catch (updateError) {
-                        console.warn('Service Worker 업데이트 실패:', updateError);
-                    }
+                    await existingRegistration.update();
                     return;
                 }
 
@@ -48,7 +28,11 @@ export default function ServiceWorkerRegistration() {
                 console.log('Service Worker 등록 성공:', registration.scope);
 
                 // Service Worker 상태 모니터링
-                navigator.serviceWorker.addEventListener('controllerchange', handleControllerChange);
+                navigator.serviceWorker.addEventListener('controllerchange', () => {
+                    console.log('Service Worker 컨트롤러 변경됨');
+                    // 컨트롤러 변경 시 페이지 새로고침 (선택적)
+                    // window.location.reload();
+                });
 
                 // 업데이트 확인 (백그라운드)
                 registration.update().catch(() => {
@@ -94,8 +78,6 @@ export default function ServiceWorkerRegistration() {
 
         return () => {
             window.removeEventListener('load', handleLoad);
-            // Service Worker 이벤트 리스너 제거
-            navigator.serviceWorker.removeEventListener('controllerchange', handleControllerChange);
         };
     }, []);
 
