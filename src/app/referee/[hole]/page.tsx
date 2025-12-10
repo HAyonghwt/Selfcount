@@ -81,12 +81,12 @@ export default function RefereePage() {
     const [pendingBackType, setPendingBackType] = useState<'button' | 'popstate' | null>(null);
 
     // leave confirm용 함수 (JSX에서 참조)
+    // 조 선택 화면으로 돌아갈 때 그룹과 코스는 유지하고 조만 리셋
     const confirmLeave = () => {
         setShowLeaveConfirm(false);
         setPendingBackType(null);
         setView('selection');
-        setSelectedGroup('');
-        setSelectedCourse('');
+        // 그룹과 코스는 유지하여 완료된 조 체크 표시가 보이도록 함
         setSelectedJo('');
     };
     const cancelLeave = () => {
@@ -815,8 +815,7 @@ export default function RefereePage() {
 
     const handleBackToSelectionClick = () => {
         setView('selection');
-        setSelectedGroup('');
-        setSelectedCourse('');
+        // 그룹과 코스는 유지하여 완료된 조 체크 표시가 보이도록 함
         setSelectedJo('');
     };
 
