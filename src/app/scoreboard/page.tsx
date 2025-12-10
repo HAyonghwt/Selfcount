@@ -1,8 +1,8 @@
 "use client"
-import React, { useEffect, useState, useMemo, useRef } from 'react';
+import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { db, ensureAuthenticated } from '@/lib/firebase';
 import { ref, onValue, onChildChanged, off, query, orderByKey, limitToLast } from 'firebase/database';
-import { Flame, ChevronUp, ChevronDown } from 'lucide-react';
+import { Flame, ChevronUp, ChevronDown, Globe } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
@@ -10,6 +10,80 @@ import GiftEventDisplay from '@/components/gift-event/GiftEventDisplay';
 import GiftEventStandby from '@/components/gift-event/GiftEventStandby';
 import { getPlayerScoreLogs, getPlayerScoreLogsOptimized, ScoreLog, invalidatePlayerLogCache } from '@/lib/scoreLogs';
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip';
+
+// 다국어 번역 객체
+const translations = {
+    ko: {
+        progress: '진행',
+        total: '전체',
+        group: '조',
+        playerName: '선수명(팀명)',
+        club: '소속',
+        course: '코스',
+        sum: '합계',
+        totalScore: '총타수',
+        rank: '순위',
+        rankSuffix: '위',
+        selectGroup: '그룹 선택',
+        viewAllGroups: '모든 그룹 보기',
+        language: '언어',
+        korean: '한글',
+        english: 'English',
+        cycle: '순환',
+        noData: '표시할 선수 데이터가 없습니다. 선수를 먼저 등록해주세요.',
+        noCourse: '그룹에 배정된 코스가 없거나, 표시하도록 설정된 코스가 없습니다.',
+        noGroupData: '그룹에 표시할 데이터가 없습니다.',
+        loading: '전광판 데이터를 불러오는 중입니다...',
+        suddenDeathIndividual: '개인전 서든데스 플레이오프',
+        suddenDeathTeam: '2인 1팀 서든데스 플레이오프',
+        hole: '홀',
+        forfeit: '기권',
+        absent: '불참',
+        disqualified: '실격',
+        noCourseDisplay: '표시하도록 설정된 코스가 없습니다.',
+    },
+    en: {
+        progress: 'Progress',
+        total: 'Total',
+        group: 'Group',
+        playerName: 'Player (Team)',
+        club: 'Club',
+        course: 'Course',
+        sum: 'Sum',
+        totalScore: 'Total',
+        rank: 'Rank',
+        rankSuffix: '',
+        selectGroup: 'Select Group',
+        viewAllGroups: 'View All Groups',
+        language: 'Language',
+        korean: '한글',
+        english: 'English',
+        cycle: 'Cycle',
+        noData: 'No player data available. Please register players first.',
+        noCourse: 'No courses assigned to the group or no courses set to display.',
+        noGroupData: 'No data available for the selected group.',
+        loading: 'Loading scoreboard data...',
+        suddenDeathIndividual: 'Individual Sudden Death Playoff',
+        suddenDeathTeam: 'Team Sudden Death Playoff',
+        hole: 'Hole',
+        forfeit: 'Forfeit',
+        absent: 'Absent',
+        disqualified: 'DQ',
+        noCourseDisplay: 'No courses set to display.',
+    }
+};
+
+// 순위 표시 함수 (영어: 1st, 2nd, 3rd... / 한글: 1위, 2위, 3위...)
+const formatRank = (rank: number, lang: 'ko' | 'en'): string => {
+    if (lang === 'ko') {
+        return `${rank}위`;
+    }
+    // 영어 서수 표현
+    if (rank === 1) return '1st';
+    if (rank === 2) return '2nd';
+    if (rank === 3) return '3rd';
+    return `${rank}th`;
+};
 
 
 
@@ -218,6 +292,28 @@ function ExternalScoreboard() {
     const [teamNTPData, setTeamNTPData] = useState<any>(null);
     const [filterGroup, setFilterGroup] = useState('all');
     const scrollContainerRef = useRef<HTMLDivElement>(null);
+    
+    // 다국어 지원 상태
+    const [languageMode, setLanguageMode] = useState<'korean' | 'english' | 'cycle'>('korean');
+    const [currentLang, setCurrentLang] = useState<'ko' | 'en'>('ko');
+    
+    // 번역 함수
+    const t = useCallback((key: keyof typeof translations.ko) => {
+        return translations[currentLang][key];
+    }, [currentLang]);
+    
+    // 순환 모드일 때 5초마다 언어 전환
+    useEffect(() => {
+        if (languageMode === 'cycle') {
+            const interval = setInterval(() => {
+                setCurrentLang(prev => prev === 'ko' ? 'en' : 'ko');
+            }, 10000);
+            return () => clearInterval(interval);
+        } else {
+            // 순환 모드가 아니면 선택한 언어로 고정
+            setCurrentLang(languageMode === 'korean' ? 'ko' : 'en');
+        }
+    }, [languageMode]);
     
     // 캐싱을 위한 상태 추가
     const [lastScoresHash, setLastScoresHash] = useState('');
@@ -1062,7 +1158,7 @@ function ExternalScoreboard() {
     if (loading) {
         return (
             <div className="bg-black min-h-screen text-white p-8 flex items-center justify-center">
-                <p className="text-2xl font-bold">전광판 데이터를 불러오는 중입니다...</p>
+                <p className="text-2xl font-bold">{t('loading')}</p>
             </div>
         );
     }
@@ -1070,11 +1166,11 @@ function ExternalScoreboard() {
     const NoDataContent = () => (
         <div className="bg-black min-h-screen text-white p-8">
             <div className="text-center py-20">
-                <h1 className="text-4xl font-bold">{tournament.name || '파크골프 토너먼트'}</h1>
+                <h1 className="text-4xl font-bold">{tournament.name || (currentLang === 'ko' ? '파크골프 토너먼트' : 'Park Golf Tournament')}</h1>
                 <p className="mt-4 text-2xl text-gray-400">
                     {Object.keys(players).length === 0 
-                        ? "표시할 선수 데이터가 없습니다. 선수를 먼저 등록해주세요."
-                        : (groupsToDisplay.length === 0 && filterGroup !== 'all' ? `선택한 '${filterGroup}' 그룹에 표시할 데이터가 없습니다.` : "그룹에 배정된 코스가 없거나, 표시하도록 설정된 코스가 없습니다.")
+                        ? t('noData')
+                        : (groupsToDisplay.length === 0 && filterGroup !== 'all' ? t('noGroupData') : t('noCourse'))
                     }
                 </p>
             </div>
@@ -1082,7 +1178,7 @@ function ExternalScoreboard() {
     );
 
     const SuddenDeathTable = ({ type, data, processedData }: { type: 'individual' | 'team', data: any, processedData: any[] }) => {
-        const title = type === 'individual' ? '개인전 서든데스 플레이오프' : '2인 1팀 서든데스 플레이오프';
+        const title = type === 'individual' ? t('suddenDeathIndividual') : t('suddenDeathTeam');
         const courseName = data?.courseId && tournament?.courses?.[data.courseId]?.name;
         
         return (
@@ -1103,11 +1199,11 @@ function ExternalScoreboard() {
                     <table className="w-full text-center border-collapse">
                         <thead className="text-red-300 text-base">
                             <tr className="border-b-2 border-red-600/70">
-                                <th className="py-2 px-2 w-48 text-center align-middle font-bold border-r border-red-800/50">선수명(팀명)</th>
-                                <th className="py-2 px-2 w-48 text-center align-middle font-bold border-r border-red-800/50">소속</th>
-                                {data.holes?.sort((a:number,b:number) => a-b).map((hole:number) => <th key={hole} className="py-2 px-2 w-16 text-center align-middle font-bold border-r border-red-800/50">{hole}홀</th>)}
-                                <th className="py-2 px-2 min-w-[5rem] text-center align-middle font-bold border-r border-red-800/50">합계</th>
-                                <th className="py-2 px-2 min-w-[5rem] text-center align-middle font-bold">순위</th>
+                                <th className="py-2 px-2 w-48 text-center align-middle font-bold border-r border-red-800/50">{t('playerName')}</th>
+                                <th className="py-2 px-2 w-48 text-center align-middle font-bold border-r border-red-800/50">{t('club')}</th>
+                                {data.holes?.sort((a:number,b:number) => a-b).map((hole:number) => <th key={hole} className="py-2 px-2 w-16 text-center align-middle font-bold border-r border-red-800/50">{hole}{currentLang === 'ko' ? '홀' : ''}</th>)}
+                                <th className="py-2 px-2 min-w-[5rem] text-center align-middle font-bold border-r border-red-800/50">{t('sum')}</th>
+                                <th className="py-2 px-2 min-w-[5rem] text-center align-middle font-bold">{t('rank')}</th>
                             </tr>
                         </thead>
                         <tbody className="text-xl">
@@ -1117,7 +1213,7 @@ function ExternalScoreboard() {
                                     <td className="py-1 px-2 text-center align-middle text-gray-400 border-r border-red-800/50">{player.club}</td>
                                     {data.holes.map((hole:number) => <td key={hole} className="py-1 px-2 align-middle font-mono font-bold text-2xl border-r border-red-800/50">{player.scoresPerHole[hole] ?? '-'}</td>)}
                                     <td className="py-1 px-2 align-middle font-bold text-2xl border-r border-red-800/50">{player.totalScore}</td>
-                                    <td className="py-1 px-2 align-middle font-bold text-yellow-300 text-2xl">{player.rank}위</td>
+                                    <td className="py-1 px-2 align-middle font-bold text-yellow-300 text-2xl">{formatRank(player.rank, currentLang)}</td>
                                 </tr>
                             ))}
                         </tbody>
@@ -1200,9 +1296,9 @@ function ExternalScoreboard() {
                                     {(() => {
                                         const { courseName, progress } = getCurrentCourseAndProgress(groupName);
                                         if (courseName && progress !== null) {
-                                            return <span>{courseName}: {progress}% 진행&nbsp;|&nbsp;전체: {groupProgress[groupName]}% 진행</span>;
+                                            return <span>{courseName}: {progress}% {t('progress')}&nbsp;|&nbsp;{t('total')}: {groupProgress[groupName]}% {t('progress')}</span>;
                                         } else {
-                                            return <span>전체: {groupProgress[groupName]}% 진행</span>;
+                                            return <span>{t('total')}: {groupProgress[groupName]}% {t('progress')}</span>;
                                         }
                                     })()}
                                 </div>
@@ -1211,14 +1307,14 @@ function ExternalScoreboard() {
                                 <table className="w-full text-center border-collapse border-l border-r border-gray-800">
                                     <thead className="text-gray-400 text-sm">
                                         <tr className="border-b-2 border-gray-600">
-                                            <th rowSpan={2} className="py-1 px-1 text-center align-middle font-bold border-r border-gray-800 w-12">조</th>
-                                            <th rowSpan={2} className="py-1 px-1 text-center align-middle font-bold border-r border-gray-800 w-28 md:w-32 lg:w-36">선수명(팀명)</th>
-                                            <th rowSpan={2} className="py-1 px-1 text-center align-middle font-bold border-r border-gray-800 w-20 md:w-24 lg:w-28">소속</th>
-                                            <th rowSpan={2} className="py-1 px-1 text-center align-middle font-bold border-r border-gray-800 w-16 md:w-20 lg:w-24">코스</th>
+                                            <th rowSpan={2} className="py-1 px-1 text-center align-middle font-bold border-r border-gray-800 w-12">{t('group')}</th>
+                                            <th rowSpan={2} className="py-1 px-1 text-center align-middle font-bold border-r border-gray-800 w-28 md:w-32 lg:w-36">{t('playerName')}</th>
+                                            <th rowSpan={2} className="py-1 px-1 text-center align-middle font-bold border-r border-gray-800 w-20 md:w-24 lg:w-28">{t('club')}</th>
+                                            <th rowSpan={2} className="py-1 px-1 text-center align-middle font-bold border-r border-gray-800 w-16 md:w-20 lg:w-24">{t('course')}</th>
                                             <th colSpan={9} className="py-1 px-1 text-center align-middle font-bold border-r border-gray-800 w-auto">HOLE</th>
-                                            <th rowSpan={2} className="py-1 px-1 min-w-[4rem] text-center align-middle font-bold border-r border-gray-800">합계</th>
-                                            <th rowSpan={2} className="py-1 px-1 min-w-[4rem] text-center align-middle font-bold text-yellow-400 border-r border-gray-800">총타수</th>
-                                            <th rowSpan={2} className="py-1 px-1 min-w-[4rem] text-center align-middle font-bold">순위</th>
+                                            <th rowSpan={2} className="py-1 px-1 min-w-[4rem] text-center align-middle font-bold border-r border-gray-800">{t('sum')}</th>
+                                            <th rowSpan={2} className="py-1 px-1 min-w-[4rem] text-center align-middle font-bold text-yellow-400 border-r border-gray-800">{t('totalScore')}</th>
+                                            <th rowSpan={2} className="py-1 px-1 min-w-[4rem] text-center align-middle font-bold">{t('rank')}</th>
                                         </tr>
                                         <tr className="border-b border-gray-600">
                                             {Array.from({length: 9}).map((_, i) => <th key={i} className={`py-1 px-1 font-bold text-base align-middle border-r border-gray-800 min-w-[2.5rem] ${i % 2 !== 0 ? 'bg-gray-800/50' : ''}`}>{i + 1}</th>)}
@@ -1396,11 +1492,11 @@ function ExternalScoreboard() {
     const logs = playerScoreLogs[player.id] || [];
     const forfeitType = getForfeitTypeFromLogs(logs);
     if (forfeitType === 'absent') {
-      courseSumElem = '불참';
+      courseSumElem = t('absent');
     } else if (forfeitType === 'disqualified') {
-      courseSumElem = '실격';
+      courseSumElem = t('disqualified');
     } else {
-      courseSumElem = '기권';
+      courseSumElem = t('forfeit');
     }
   }
   return <td className={cn("py-0.5 px-1 align-middle font-bold text-gray-300 border-r border-gray-800", player.hasForfeited ? 'text-xs' : 'text-xl')}>{courseSumElem}</td>;
@@ -1412,9 +1508,9 @@ function ExternalScoreboard() {
     // 기권 타입을 로그에서 추출
     const logs = playerScoreLogs[player.id] || [];
     const forfeitType = getForfeitTypeFromLogs(logs);
-    if (forfeitType === 'absent') return '불참';
-    if (forfeitType === 'disqualified') return '실격';
-    return '기권';
+    if (forfeitType === 'absent') return t('absent');
+    if (forfeitType === 'disqualified') return t('disqualified');
+    return t('forfeit');
   })() : (player.hasAnyScore ? (
     <span>
       {isValidNumber(player.totalScore) ? player.totalScore : '-'}
@@ -1436,13 +1532,13 @@ function ExternalScoreboard() {
     </span>
   ) : '-')}
 </td>
-                                                                <td rowSpan={player.assignedCourses.length || 1} className={cn("py-0.5 px-1 align-middle font-bold", player.hasForfeited ? "text-xs" : "text-xl")}>{player.rank !== null ? `${player.rank}위` : (player.hasForfeited ? (() => {
+                                                                <td rowSpan={player.assignedCourses.length || 1} className={cn("py-0.5 px-1 align-middle font-bold", player.hasForfeited ? "text-xs" : "text-xl")}>{player.rank !== null ? formatRank(player.rank, currentLang) : (player.hasForfeited ? (() => {
     // 기권 타입을 로그에서 추출
     const logs = playerScoreLogs[player.id] || [];
     const forfeitType = getForfeitTypeFromLogs(logs);
-    if (forfeitType === 'absent') return '불참';
-    if (forfeitType === 'disqualified') return '실격';
-    return '기권';
+    if (forfeitType === 'absent') return t('absent');
+    if (forfeitType === 'disqualified') return t('disqualified');
+    return t('forfeit');
   })() : '')}</td>
                                                             </>
                                                         )}
@@ -1452,22 +1548,22 @@ function ExternalScoreboard() {
                                                         <td className="py-0.5 px-1 align-middle font-bold border-r border-gray-800 w-12 truncate">{player.jo}</td>
                                                         <td className="py-0.5 px-1 text-center align-middle font-semibold border-r border-gray-800 w-28 md:w-32 lg:w-36 truncate">{player.name}</td>
                                                         <td className="py-0.5 px-1 text-center align-middle text-gray-400 border-r border-gray-800 w-20 md:w-24 lg:w-28 truncate">{player.club}</td>
-                                                        <td colSpan={11} className="py-0.5 px-1 align-middle text-center text-gray-500 border-r border-gray-800">표시하도록 설정된 코스가 없습니다.</td>
+                                                        <td colSpan={11} className="py-0.5 px-1 align-middle text-center text-gray-500 border-r border-gray-800">{t('noCourseDisplay')}</td>
                                                         <td className={cn("py-0.5 px-1 align-middle font-bold text-yellow-400 border-r border-gray-800", player.hasForfeited ? "text-xs" : "text-xl")}>{player.hasForfeited ? (() => {
     // 기권 타입을 로그에서 추출
     const logs = playerScoreLogs[player.id] || [];
     const forfeitType = getForfeitTypeFromLogs(logs);
-    if (forfeitType === 'absent') return '불참';
-    if (forfeitType === 'disqualified') return '실격';
-    return '기권';
+    if (forfeitType === 'absent') return t('absent');
+    if (forfeitType === 'disqualified') return t('disqualified');
+    return t('forfeit');
   })() : (player.hasAnyScore ? player.totalScore : '-')}</td>
-                                                        <td className={cn("py-0.5 px-1 align-middle font-bold", player.hasForfeited ? "text-xs" : "text-xl")}>{player.rank !== null ? `${player.rank}위` : (player.hasForfeited ? (() => {
+                                                        <td className={cn("py-0.5 px-1 align-middle font-bold", player.hasForfeited ? "text-xs" : "text-xl")}>{player.rank !== null ? formatRank(player.rank, currentLang) : (player.hasForfeited ? (() => {
     // 기권 타입을 로그에서 추출
     const logs = playerScoreLogs[player.id] || [];
     const forfeitType = getForfeitTypeFromLogs(logs);
-    if (forfeitType === 'absent') return '불참';
-    if (forfeitType === 'disqualified') return '실격';
-    return '기권';
+    if (forfeitType === 'absent') return t('absent');
+    if (forfeitType === 'disqualified') return t('disqualified');
+    return t('forfeit');
   })() : '')}</td>
                                                     </tr>
                                                 )}
@@ -1481,15 +1577,40 @@ function ExternalScoreboard() {
                 })}
             </div>
             
-            <div className="fixed top-4 right-4 flex items-center gap-4 z-50 group">
-                <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                    <Label htmlFor="group-filter" className="font-bold text-sm text-gray-300">그룹 선택</Label>
-                    <Select value={filterGroup} onValueChange={setFilterGroup}>
-                        <SelectTrigger id="group-filter" className="w-[200px] h-9 bg-gray-800/80 backdrop-blur-sm border-gray-600 text-white focus:ring-yellow-400">
-                            <SelectValue placeholder="그룹을 선택하세요" />
+            {/* 왼쪽 위: 언어 선택 */}
+            <div className="fixed top-4 left-4 flex items-center gap-4 z-50 group/lang">
+                <div className="flex items-center gap-2 opacity-0 group-hover/lang:opacity-100 transition-opacity duration-300">
+                    <Globe className="h-5 w-5 text-gray-400" />
+                    <Label htmlFor="language-select" className="font-bold text-sm text-gray-300">{t('language')}</Label>
+                    <Select value={languageMode} onValueChange={(v) => setLanguageMode(v as 'korean' | 'english' | 'cycle')}>
+                        <SelectTrigger id="language-select" className="w-[120px] h-9 bg-gray-800/80 backdrop-blur-sm border-gray-600 text-white focus:ring-yellow-400">
+                            <SelectValue />
                         </SelectTrigger>
                         <SelectContent className="bg-gray-900 text-white border-gray-700">
-                            <SelectItem value="all">모든 그룹 보기</SelectItem>
+                            <SelectItem value="korean">{t('korean')}</SelectItem>
+                            <SelectItem value="english">{t('english')}</SelectItem>
+                            <SelectItem value="cycle">{t('cycle')} (10s)</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
+                {/* 순환 모드 표시 */}
+                {languageMode === 'cycle' && (
+                    <div className="text-xs text-yellow-400 animate-pulse">
+                        {currentLang === 'ko' ? '🇰🇷' : '🇺🇸'}
+                    </div>
+                )}
+            </div>
+
+            {/* 오른쪽 위: 그룹 선택 */}
+            <div className="fixed top-4 right-4 flex items-center gap-4 z-50 group">
+                <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                    <Label htmlFor="group-filter" className="font-bold text-sm text-gray-300">{t('selectGroup')}</Label>
+                    <Select value={filterGroup} onValueChange={setFilterGroup}>
+                        <SelectTrigger id="group-filter" className="w-[200px] h-9 bg-gray-800/80 backdrop-blur-sm border-gray-600 text-white focus:ring-yellow-400">
+                            <SelectValue placeholder={t('selectGroup')} />
+                        </SelectTrigger>
+                        <SelectContent className="bg-gray-900 text-white border-gray-700">
+                            <SelectItem value="all">{t('viewAllGroups')}</SelectItem>
                             {allGroupsList.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}
                         </SelectContent>
                     </Select>
