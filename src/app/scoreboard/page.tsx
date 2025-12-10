@@ -227,6 +227,7 @@ function ExternalScoreboard() {
     // 최적화된 데이터 구독을 위한 상태
     const [initialDataLoaded, setInitialDataLoaded] = useState(false);
     const [lastUpdateTime, setLastUpdateTime] = useState<number>(Date.now());
+    const [changedPlayerIds, setChangedPlayerIds] = useState<string[]>([]); // 변경된 선수 ID 추적
     // 탭 비활성화 최적화: 현재 활성 구독 언서브 보관 및 재시작 트리거
     const activeUnsubsRef = useRef<(() => void)[]>([]);
     const [resumeSeq, setResumeSeq] = useState(0);
@@ -337,18 +338,23 @@ function ExternalScoreboard() {
                             setLastScoresHash(newHash);
                             setLastUpdateTime(Date.now());
                             
-                            // 점수 변경 감지 시 해당 선수들의 로그 캐시 무효화
+                            // 점수 변경 감지 시 해당 선수들의 로그 캐시 무효화 및 ID 저장
                             if (prev && Object.keys(prev).length > 0) {
-                                const changedPlayerIds = Object.keys(data).filter(playerId => {
+                                const changedIds = Object.keys(data).filter(playerId => {
                                     const prevScores = prev[playerId] || {};
                                     const newScores = data[playerId] || {};
                                     return JSON.stringify(prevScores) !== JSON.stringify(newScores);
                                 });
                                 
                                 // 변경된 선수들의 로그 캐시 무효화
-                                changedPlayerIds.forEach(playerId => {
+                                changedIds.forEach(playerId => {
                                     invalidatePlayerLogCache(playerId);
                                 });
+                                
+                                // 변경된 선수 ID 저장 (로그 업데이트용)
+                                if (changedIds.length > 0) {
+                                    setChangedPlayerIds(changedIds);
+                                }
                             }
                             
                             return data;
@@ -992,17 +998,15 @@ function ExternalScoreboard() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [finalDataByGroup, lastUpdateTime]);
 
-    // 실시간 업데이트를 위한 점수 변경 감지 (최적화됨)
+    // 실시간 업데이트를 위한 점수 변경 감지 (Firebase 호출 최소화)
     useEffect(() => {
-        if (Object.keys(scores).length === 0) return;
+        if (changedPlayerIds.length === 0) return;
         
         const updateLogsForChangedScores = async () => {
-            // 점수가 변경된 선수들의 로그를 즉시 업데이트
-            const playersWithChangedScores = Object.keys(scores);
-            
-            for (const playerId of playersWithChangedScores) {
+            // 변경된 선수들의 로그만 업데이트 (Firebase 호출 최소화)
+            for (const playerId of changedPlayerIds) {
                 try {
-                    // 최적화된 함수로 로그 가져오기 (캐시 적용)
+                    // 최적화된 함수로 로그 가져오기 (캐시 무효화 후 새로 로딩)
                     const logs = await getPlayerScoreLogsOptimized(playerId);
                     
                     setPlayerScoreLogs((prev: any) => ({
@@ -1018,10 +1022,13 @@ function ExternalScoreboard() {
                     }));
                 }
             }
+            
+            // 처리 완료 후 변경된 선수 ID 초기화
+            setChangedPlayerIds([]);
         };
         
         updateLogsForChangedScores();
-    }, [scores]); // scores 변경 시에만 실행
+    }, [lastUpdateTime, changedPlayerIds]); // lastUpdateTime과 changedPlayerIds 변경 시 실행
 
     // 모바일 툴팁 상태 관리 (셀별로 open)
     const [openTooltip, setOpenTooltip] = useState<{ playerId: string; courseId: string; holeIndex: number } | null>(null);
