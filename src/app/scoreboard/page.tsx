@@ -1578,8 +1578,8 @@ function ExternalScoreboard() {
             </div>
             
             {/* 왼쪽 위: 언어 선택 */}
-            <div className="fixed top-4 left-4 flex items-center gap-4 z-50 group/lang">
-                <div className="flex items-center gap-2 opacity-0 group-hover/lang:opacity-100 transition-opacity duration-300">
+            <div className="fixed left-4 flex items-center gap-4 z-50 group/lang" style={{ height: '36px', top: '3rem' }}>
+                <div className="flex items-center gap-2 opacity-0 group-hover/lang:opacity-100 transition-opacity duration-300 h-full">
                     <Globe className="h-5 w-5 text-gray-400" />
                     <Label htmlFor="language-select" className="font-bold text-sm text-gray-300">{t('language')}</Label>
                     <Select value={languageMode} onValueChange={(v) => setLanguageMode(v as 'korean' | 'english' | 'cycle')}>
@@ -1595,7 +1595,7 @@ function ExternalScoreboard() {
                 </div>
                 {/* 순환 모드 표시 */}
                 {languageMode === 'cycle' && (
-                    <div className="text-xs text-yellow-400 animate-pulse">
+                    <div className="text-xs text-yellow-400 animate-pulse flex items-center h-full">
                         {currentLang === 'ko' ? '🇰🇷' : '🇺🇸'}
                     </div>
                 )}
