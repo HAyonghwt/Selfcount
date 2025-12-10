@@ -123,7 +123,7 @@ export default function SelfScoringPage() {
 
   // 렌더링할 열 구성: 개인전은 4열, 2인1팀은 실제 데이터 위치에 맞게 설정
   const renderColumns: number[][] = useMemo(() => {
-    return gameMode === 'team' ? [[0],[1]] : [[0],[1],[2],[3]];
+    return gameMode === 'team' ? [[0], [1]] : [[0], [1], [2], [3]];
   }, [gameMode]);
   const renderNames: string[] = useMemo(() => {
     if (gameMode === 'team') {
@@ -142,7 +142,7 @@ export default function SelfScoringPage() {
   }, [gameMode, renderColumns, playerNames]);
   // 서명 표시 인덱스: 개인전은 4명, 팀전은 각 팀의 대표(각 묶음의 첫 인덱스)
   const signatureIndexes: number[] = useMemo(() => {
-    return gameMode === 'team' ? renderColumns.map(arr => arr[0]) : [0,1,2,3];
+    return gameMode === 'team' ? renderColumns.map(arr => arr[0]) : [0, 1, 2, 3];
   }, [gameMode, renderColumns]);
 
   // 점수 상태: courseId -> [4명][9홀]
@@ -181,7 +181,7 @@ export default function SelfScoringPage() {
   const [signaturePlayerIdx, setSignaturePlayerIdx] = useState<number | null>(null);
   const signatureCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const isDrawingRef = useRef(false);
-  const lastPointRef = useRef<{x: number; y: number}>({ x: 0, y: 0 });
+  const lastPointRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   // 서명 완료 후 연습 모드 잠금 (관리자 초기화 전까지 DB 반영 차단)
   const [postSignLock, setPostSignLock] = useState<boolean>(false);
   // 현재 코스의 DB 점수 존재 여부(관리자 초기화 감지)
@@ -216,7 +216,7 @@ export default function SelfScoringPage() {
   // 로그 데이터 lazy loading을 위한 함수 - 필요할 때만 로드
   const loadPlayerLogs = useCallback(async (playerId: string) => {
     if (playerScoreLogs[playerId]) return; // 이미 로드된 경우 스킵
-    
+
     try {
       const logs = await getPlayerScoreLogs(playerId);
       setPlayerScoreLogs(prev => ({ ...prev, [playerId]: logs }));
@@ -229,6 +229,36 @@ export default function SelfScoringPage() {
   const listenersRef = useRef<{ players?: () => void; scores?: () => void; tournament?: () => void }>({});
   // 점수 리스너(선수별/코스별) 해제를 저장하기 위한 맵
   const scoreUnsubsRef = useRef<Record<string, () => void>>({});
+  // 화면 가시성 상태 관리 (백그라운드 최적화)
+  const [isPageVisible, setIsPageVisible] = useState(true);
+  const wasVisibleRef = useRef(true);
+
+  // Page Visibility API: 화면이 숨겨지면 리스너 해제, 다시 보이면 재연결
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+
+    const handleVisibilityChange = () => {
+      const visible = !document.hidden;
+      setIsPageVisible(visible);
+
+      if (!visible && wasVisibleRef.current) {
+        // 화면이 숨겨짐 - 리스너 해제하여 데이터 소비 감소
+        if (listenersRef.current.scores) {
+          listenersRef.current.scores();
+          listenersRef.current.scores = undefined;
+        }
+        if (listenersRef.current.tournament) {
+          listenersRef.current.tournament();
+          listenersRef.current.tournament = undefined;
+        }
+        // 선수 리스너는 유지 (변경 빈도 낮음)
+      }
+      wasVisibleRef.current = visible;
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, []);
 
   // 브라우저 뒤로가기(popstate) 확인 (referee 페이지 방식 참조)
   useEffect(() => {
@@ -272,7 +302,7 @@ export default function SelfScoringPage() {
     // 관전용 모드에서는 쿼리 파라미터 사용, 일반 모드에서는 세션 스토리지 사용
     const groupToUse = isReadOnlyMode ? (queryGroup || "") : (savedGroup || "");
     const joToUse = isReadOnlyMode ? (queryJo || "") : (savedJo || "");
-    
+
     if (loggedInCaptain && loggedInCaptain !== "관전자") {
       try {
         const captain = JSON.parse(loggedInCaptain);
@@ -310,8 +340,8 @@ export default function SelfScoringPage() {
           setActiveCourseId(String(sessionStorage.getItem("selfScoringActiveCourseId") || (tabs[0]?.id || "")));
         }
       }
-    } catch {}
-    
+    } catch { }
+
     // Firebase 인증 수행 (관전/일반 공통)
     ensureAuthenticated().then(success => {
       if (!success) {
@@ -336,36 +366,36 @@ export default function SelfScoringPage() {
       orderByChild("group"),
       equalTo(selectedGroup)
     );
-    
+
     const unsubPlayers = onValue(playersQuery, (snap) => {
       const data = snap.val() || {};
       const list: PlayerDb[] = Object.entries<any>(data)
         .map(([id, v]) => ({ id, ...v }))
         .filter((p) => String(p.jo) === String(selectedJo)); // 그룹은 이미 쿼리로 필터링됨
       setPlayersInGroupJo(list as any);
-      
+
       // 관전 모드에서는 플레이어 이름을 실시간으로 설정
       if (isReadOnlyMode) {
         if (list.length > 0) {
           // 개인전과 팀전 구분하여 이름 설정
           const names: string[] = [];
           list.forEach(p => {
-          if (p.type === 'team') {
+            if (p.type === 'team') {
               // 팀전: p1_name과 p2_name을 각각 names 배열에 추가
               if (p.p1_name) names.push(p.p1_name);
               if (p.p2_name) names.push(p.p2_name);
-          } else {
+            } else {
               // 개인전: name을 names 배열에 추가
               if (p.name) names.push(p.name);
-          }
-        });
-        
+            }
+          });
+
           // 항상 4개로 채우기 (부족한 부분은 빈 문자열로)
           const filledNames = [...names];
           while (filledNames.length < 4) {
             filledNames.push('');
           }
-          
+
           setPlayerNames(filledNames.slice(0, 4));
         } else {
           // 선수가 없을 때는 기본값 유지
@@ -385,12 +415,15 @@ export default function SelfScoringPage() {
 
   // 점수 DB 로딩 (읽기) - 선수별/코스별 분할 구독
   useEffect(() => {
+    // 화면이 숨겨진 상태면 리스너 연결하지 않음 (백그라운드 최적화)
+    if (!isPageVisible) return;
+
     if (!db || !activeCourseId) return;
     const hasPlayers = playersInGroupJo && playersInGroupJo.length > 0;
     if (!hasPlayers) {
       // 선수 없으면 기존 점수 리스너 전부 해제
       if (listenersRef.current.scores) listenersRef.current.scores();
-      Object.values(scoreUnsubsRef.current).forEach(u => { try { u(); } catch {} });
+      Object.values(scoreUnsubsRef.current).forEach(u => { try { u(); } catch { } });
       scoreUnsubsRef.current = {};
       return;
     }
@@ -399,7 +432,7 @@ export default function SelfScoringPage() {
 
     // 기존 점수 리스너 정리
     if (listenersRef.current.scores) listenersRef.current.scores();
-    Object.values(scoreUnsubsRef.current).forEach(u => { try { u(); } catch {} });
+    Object.values(scoreUnsubsRef.current).forEach(u => { try { u(); } catch { } });
     scoreUnsubsRef.current = {};
 
     // pid -> index 매핑 생성 (원래 순서 유지)
@@ -435,14 +468,14 @@ export default function SelfScoringPage() {
 
     // 일괄 해제 함수 보관
     listenersRef.current.scores = () => {
-      Object.values(scoreUnsubsRef.current).forEach(u => { try { u(); } catch {} });
+      Object.values(scoreUnsubsRef.current).forEach(u => { try { u(); } catch { } });
       scoreUnsubsRef.current = {};
     };
 
     return () => {
       if (listenersRef.current.scores) listenersRef.current.scores();
     };
-  }, [db, playersInGroupJo, activeCourseId, localCleared, gameMode]);
+  }, [db, playersInGroupJo, activeCourseId, localCleared, gameMode, isPageVisible]);
 
   // 현재 코스 점수 존재 여부 재계산
   useEffect(() => {
@@ -459,14 +492,17 @@ export default function SelfScoringPage() {
 
   // 대회 설정(tournaments/current)과 그룹-코스 연동을 읽어 탭/파/이름 동기화
   useEffect(() => {
+    // 화면이 숨겨진 상태면 리스너 연결하지 않음 (백그라운드 최적화)
+    if (!isPageVisible) return;
+
     if (!db || !selectedGroup) return;
     const dbInstance = db as any;
-    
+
     // 기존 리스너 정리
     if (listenersRef.current.tournament) {
       listenersRef.current.tournament();
     }
-    
+
     // 최적화: 필요한 데이터만 쿼리 - 전체 대회 설정이 아닌 필요한 부분만
     const unsubTournament = onValue(ref(dbInstance, 'tournaments/current'), (snap) => {
       const data = snap.val() || {};
@@ -488,7 +524,7 @@ export default function SelfScoringPage() {
           return {
             id: String(course.id ?? cid),
             name: String(course.name ?? cid),
-            pars: Array.isArray(course.pars) ? course.pars : [3,4,4,4,4,3,5,3,3],
+            pars: Array.isArray(course.pars) ? course.pars : [3, 4, 4, 4, 4, 3, 5, 3, 3],
           } as CourseTab;
         })
         .filter(Boolean) as CourseTab[];
@@ -504,7 +540,7 @@ export default function SelfScoringPage() {
           }
         }
       }
-      
+
       // 관전 모드에서는 게임 모드도 실시간으로 설정 - 필요한 데이터만
       if (isReadOnlyMode && data.gameMode) {
         setGameMode(data.gameMode);
@@ -513,9 +549,9 @@ export default function SelfScoringPage() {
 
     // 리스너 참조 저장 및 정리
     listenersRef.current.tournament = unsubTournament;
-    
+
     return () => unsubTournament();
-  }, [db, selectedGroup, activeCourseId]);
+  }, [db, selectedGroup, activeCourseId, isPageVisible]);
 
   // 디바운싱된 점수 업데이트 (과도한 리렌더링 방지)
   useEffect(() => {
@@ -533,7 +569,7 @@ export default function SelfScoringPage() {
   // 표시용 점수 매트릭스: 팀 모드일 때는 같은 팀 구성원 중 첫 인덱스의 값을 사용(입력과 저장은 첫 인덱스에만 기록)
   const tableScores = useMemo(() => {
     if (gameMode !== 'team') return rawTableScores;
-    const view: (number|null)[][] = Array.from({ length: renderColumns.length }, () => Array(9).fill(null));
+    const view: (number | null)[][] = Array.from({ length: renderColumns.length }, () => Array(9).fill(null));
     renderColumns.forEach((idxs, col) => {
       const primary = idxs[0];
       for (let h = 0; h < 9; h++) view[col][h] = rawTableScores[primary]?.[h] ?? null;
@@ -611,15 +647,15 @@ export default function SelfScoringPage() {
   // 대시보드 초기화 감지 및 홀 활성화 상태 초기화
   useEffect(() => {
     if (!scoresByCourse || !activeCourseId) return;
-    
+
     const currentScores = scoresByCourse[activeCourseId];
     if (!currentScores) return;
-    
+
     // 현재 코스의 모든 점수가 null이면 초기화된 것으로 판단
-    const allScoresNull = currentScores.every(row => 
+    const allScoresNull = currentScores.every(row =>
       row.every(score => score === null || score === undefined)
     );
-    
+
     if (allScoresNull) {
       // 홀 활성화 상태 초기화 (코스별로 관리)
       setGroupStartHole(null);
@@ -632,7 +668,7 @@ export default function SelfScoringPage() {
         ...prev,
         [activeCourseId]: null
       }));
-      
+
       // localStorage의 start, current도 초기화
       try {
         const key = `selfScoringDraft_${activeCourseId}_${selectedGroup || 'g'}_${selectedJo || 'j'}`;
@@ -646,21 +682,21 @@ export default function SelfScoringPage() {
       } catch (error) {
         console.error('localStorage 홀 활성화 상태 초기화 실패:', error);
       }
-      
+
       // 사인 데이터도 초기화
       try {
         // 개인 사인 삭제
         const signKey = `selfScoringSign_${activeCourseId}_${selectedGroup || 'g'}_${selectedJo || 'j'}`;
         localStorage.removeItem(signKey);
-        
+
         // 팀 사인 삭제
         const teamSignKey = `selfScoringSignTeam_${activeCourseId}_${selectedGroup || 'g'}_${selectedJo || 'j'}`;
         localStorage.removeItem(teamSignKey);
-        
+
         // 사인 후 잠금 상태 삭제
         const postSignLockKey = `selfScoringPostSignLock_${activeCourseId}_${selectedGroup || 'g'}_${selectedJo || 'j'}`;
         localStorage.removeItem(postSignLockKey);
-        
+
         // 사인 상태 초기화
         setSignatures(['', '', '', '']);
         setPostSignLock(false);
@@ -676,12 +712,12 @@ export default function SelfScoringPage() {
       const playerName = playerNames[playerIndex];
       const playerId = nameToPlayerId[playerName];
       if (!playerId) return;
-      
+
       // 로그 데이터가 없으면 lazy loading
       if (!playerScoreLogs[playerId]) {
         await loadPlayerLogs(playerId);
       }
-      
+
       const logs = playerScoreLogs[playerId] || [];
       const courseId = String(activeCourse?.id || activeCourseId);
       const cellLog = logs.find(l => String(l.courseId) === courseId && Number(l.holeNumber) === holeIndex + 1);
@@ -699,19 +735,19 @@ export default function SelfScoringPage() {
       setTimeout(() => {
         setOpenTooltip(prev => (prev && prev.playerIdx === playerIndex && prev.holeIdx === holeIndex ? null : prev));
       }, 3000);
-    } catch {}
+    } catch { }
   }, [playerNames, nameToPlayerId, playerScoreLogs, loadPlayerLogs, activeCourse, activeCourseId]);
 
   const handleOpenPad = useCallback((playerIndex: number, holeIndex: number) => {
     if (isReadOnlyMode) return; // 관전용 모드에서는 입력 불가
-    
+
     // 로그 데이터 lazy loading
     const playerName = playerNames[playerIndex];
     const playerId = nameToPlayerId[playerName];
     if (playerId && !playerScoreLogs[playerId]) {
       loadPlayerLogs(playerId);
     }
-    
+
     // 활성 셀만 입력 허용
     const state = getCellState(playerIndex, holeIndex);
     if (state !== 'active') {
@@ -719,8 +755,8 @@ export default function SelfScoringPage() {
       const isLocked = tableScores[playerIndex]?.[holeIndex] != null;
       if (isLocked) {
         void showCellLogTooltip(playerIndex, holeIndex);
-         }
-         return;
+      }
+      return;
     }
     setPadPosition(holeIndex >= 7 ? 'top' : 'bottom');
     setPadPlayerIdx(playerIndex);
@@ -740,21 +776,21 @@ export default function SelfScoringPage() {
           setOpenTooltip({ playerIdx: playerIndex, holeIdx: holeIndex, content: msg });
           setTimeout(() => setOpenTooltip(null), 2000);
         }
-      } catch {}
+      } catch { }
     }
   }, [isReadOnlyMode, playerNames, nameToPlayerId, playerScoreLogs, loadPlayerLogs, getCellState, tableScores, draftScores]);
 
   // 저장된 셀(locked) 더블클릭 시에도 수정 가능하도록 별도 핸들러
   const handleOpenPadForEdit = useCallback((playerIndex: number, holeIndex: number) => {
     if (isReadOnlyMode) return; // 관전용 모드에서는 수정 불가
-    
+
     // 로그 데이터 lazy loading
     const playerName = playerNames[playerIndex];
     const playerId = nameToPlayerId[playerName];
     if (playerId && !playerScoreLogs[playerId]) {
       loadPlayerLogs(playerId);
     }
-    
+
     setPadPosition(holeIndex >= 7 ? 'top' : 'bottom');
     setPadPlayerIdx(playerIndex);
     setPadHoleIdx(holeIndex);
@@ -773,7 +809,7 @@ export default function SelfScoringPage() {
         setOpenTooltip({ playerIdx: playerIndex, holeIdx: holeIndex, content: msg });
         setTimeout(() => setOpenTooltip(null), 2000);
       }
-    } catch {}
+    } catch { }
   }, [isReadOnlyMode, playerNames, nameToPlayerId, playerScoreLogs, loadPlayerLogs, tableScores, draftScores]);
 
 
@@ -798,7 +834,7 @@ export default function SelfScoringPage() {
           parsed.current = parsed.current ?? groupCurrentHole;
           localStorage.setItem(key, JSON.stringify(parsed));
         }
-      } catch {}
+      } catch { }
       setDraftScores((prev) => {
         const next = prev.map((row) => [...row]);
         let targetPlayer = padPlayerIdx!;
@@ -837,27 +873,27 @@ export default function SelfScoringPage() {
   const saveToFirebase = async (playerIndex: number, holeIndex: number, score: number) => {
     if (!db) return;
     if (!activeCourse) return;
-    
+
     // 서명 완료 이후에는 관리자 초기화 전까지 외부 DB 반영 차단
     if (postSignLock && dbHasAnyScore) {
       toast({ title: '저장 차단', description: '서명 완료 후에는 관리자 초기화 전까지 점수 수정이 제한됩니다.', variant: 'destructive' });
       return;
     }
-    
+
     // Firebase 인증 확인
     const isAuthenticated = await ensureAuthenticated();
     if (!isAuthenticated) {
-      toast({ 
-        title: "인증 실패", 
+      toast({
+        title: "인증 실패",
         description: "Firebase 인증에 실패했습니다. 페이지를 새로고침하고 다시 시도해주세요.",
-        variant: "destructive" 
+        variant: "destructive"
       });
       return;
     }
-    
+
     // 팀 모드에서 올바른 playerId 매핑
     let playerId: string | undefined;
-    
+
     if (gameMode === 'team') {
       // 팀 모드에서는 renderColumns를 사용해서 올바른 팀의 playerId를 가져옴
       const teamColumnIndexes = renderColumns[playerIndex];
@@ -869,33 +905,33 @@ export default function SelfScoringPage() {
     } else {
       // 개인전에서는 기존 방식
       const displayName = playerNames[playerIndex];
-      playerId = nameToPlayerId[displayName] || nameToPlayerId[(displayName||'').split('/')[0]];
+      playerId = nameToPlayerId[displayName] || nameToPlayerId[(displayName || '').split('/')[0]];
     }
-    
+
     if (!playerId) {
       toast({ title: "선수 식별 실패", description: `선수를 찾을 수 없습니다.`, variant: "destructive" });
       return;
     }
-    
+
     // 모바일 환경 감지 및 Firebase 인증 재시도 로직
     const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     const maxRetries = isMobile ? 5 : 1; // 모바일에서 더 많은 재시도
     let attempt = 0;
-    
+
     while (attempt < maxRetries) {
       try {
         const dbInstance = db as any;
         const holeNum = holeIndex + 1;
         const scoreRef = ref(dbInstance, `/scores/${playerId}/${activeCourse.id}/${holeNum}`);
-        
+
         // 팀 모드에서는 원본 매트릭스에서 대표 인덱스의 기존 값을 사용해야 올바른 oldValue가 기록됨
         const prev = (rawTableScores?.[playerIndex]?.[holeIndex] ?? 0) as number;
-        
+
         // 모바일에서는 잠시 대기 후 재시도 (대기 시간 증가)
         if (isMobile && attempt > 0) {
           await new Promise(resolve => setTimeout(resolve, 1500 * attempt));
         }
-        
+
         await set(scoreRef, score);
         await logScoreChange({
           matchId: "tournaments/current",
@@ -909,41 +945,41 @@ export default function SelfScoringPage() {
           comment: `자율 채점 - 코스: ${activeCourse.id}, 그룹: ${selectedGroup || ''}, 조: ${selectedJo || ''}`,
           courseId: String(activeCourse.id),
         });
-        
+
         // 실시간 업데이트를 위한 로그 캐시 무효화
         invalidatePlayerLogCache(playerId);
-        
+
         // 성공하면 루프 종료
         break;
-        
+
       } catch (e: any) {
         attempt++;
-        
+
         // Permission denied 오류이고 재시도 가능한 경우 (다양한 오류 형태 대응)
-        const isPermissionError = e?.code === 'PERMISSION_DENIED' || 
-                                 e?.message?.includes('permission_denied') ||
-                                 e?.message?.includes('Permission denied') ||
-                                 e?.message?.includes('auth') ||
-                                 e?.message?.includes('authentication');
-        
+        const isPermissionError = e?.code === 'PERMISSION_DENIED' ||
+          e?.message?.includes('permission_denied') ||
+          e?.message?.includes('Permission denied') ||
+          e?.message?.includes('auth') ||
+          e?.message?.includes('authentication');
+
         if (isPermissionError && attempt < maxRetries && isMobile) {
           continue;
         }
-        
+
         // 최종 실패 또는 다른 오류
-        const errorMsg = e?.code === 'PERMISSION_DENIED' 
+        const errorMsg = e?.code === 'PERMISSION_DENIED'
           ? '점수 저장 권한이 없습니다. 페이지를 새로고침하고 다시 로그인해주세요.'
           : (e?.message || "점수 저장에 실패했습니다.");
-        
-        toast({ 
-          title: "저장 실패", 
+
+        toast({
+          title: "저장 실패",
           description: errorMsg,
-          variant: "destructive" 
+          variant: "destructive"
         });
         return;
       }
     }
-    
+
     // 외부 전광판에 갱신 신호 전달 (선택 사항)
     try {
       if (typeof window !== 'undefined') {
@@ -951,7 +987,7 @@ export default function SelfScoringPage() {
         const evt = new CustomEvent('scoreUpdated', { detail: { playerId, courseId: String(activeCourse.id), hole: holeNum, by: 'captain' } });
         window.dispatchEvent(evt);
       }
-    } catch {}
+    } catch { }
   };
 
   const handleSavePad = async () => {
@@ -967,25 +1003,25 @@ export default function SelfScoringPage() {
         next[targetPlayer][targetHole] = targetVal;
         return next;
       });
-              try {
-          if (typeof window !== 'undefined') {
-            const key = `selfScoringDraft_${activeCourseId}_${selectedGroup || 'g'}_${selectedJo || 'j'}`;
-            const saved = localStorage.getItem(key);
-            const parsed = saved ? JSON.parse(saved) : { draft: Array.from({ length: 4 }, () => Array(9).fill(null)) };
-            parsed.draft[targetPlayer][targetHole] = Number(targetVal);
-            parsed.start = (parsed.start ?? courseStartHoles[activeCourseId] ?? groupStartHole);
-            parsed.current = (parsed.current ?? courseCurrentHoles[activeCourseId] ?? groupCurrentHole);
-            localStorage.setItem(key, JSON.stringify(parsed));
-          }
-        } catch {}
+      try {
+        if (typeof window !== 'undefined') {
+          const key = `selfScoringDraft_${activeCourseId}_${selectedGroup || 'g'}_${selectedJo || 'j'}`;
+          const saved = localStorage.getItem(key);
+          const parsed = saved ? JSON.parse(saved) : { draft: Array.from({ length: 4 }, () => Array(9).fill(null)) };
+          parsed.draft[targetPlayer][targetHole] = Number(targetVal);
+          parsed.start = (parsed.start ?? courseStartHoles[activeCourseId] ?? groupStartHole);
+          parsed.current = (parsed.current ?? courseCurrentHoles[activeCourseId] ?? groupCurrentHole);
+          localStorage.setItem(key, JSON.stringify(parsed));
+        }
+      } catch { }
     }
     // 첫 저장이면 시작/현재홀 지정 (코스별로 관리)
     const newStartHole = groupStartHole === null ? targetHole : groupStartHole;
     const newCurrentHole = groupCurrentHole === null ? targetHole : groupCurrentHole;
-    
+
     setGroupStartHole(newStartHole);
     setGroupCurrentHole(newCurrentHole);
-    
+
     // 코스별 상태도 업데이트
     setCourseStartHoles(prev => ({
       ...prev,
@@ -998,17 +1034,17 @@ export default function SelfScoringPage() {
 
     // 초안이 들어있는 모든 선수의 해당 홀 점수를 저장
     const maxPlayers = gameMode === 'team' ? 2 : 4; // 팀전은 2명, 개인전은 4명
-    
+
     for (let pi = 0; pi < maxPlayers; pi++) {
       const val = draftScores?.[pi]?.[targetHole] ?? (pi === targetPlayer ? targetVal : null);
-      
+
       if (typeof val === 'number') {
         // 팀전에서는 대표 선수(팀의 첫 번째 선수)에 대해서만 수정 여부 판단
         const displayCol = (gameMode === 'team') ? pi : pi; // 팀전에서는 pi가 그대로 displayCol
         const isTeamPrimary = true; // 실제 존재하는 선수들만 순회하므로 모두 primary
-        
+
         await saveToFirebase(pi, targetHole, val);
-        
+
         // 수정 표시 처리
         if (isTeamPrimary) {
           const prevVal = tableScores?.[displayCol]?.[targetHole];
@@ -1048,7 +1084,7 @@ export default function SelfScoringPage() {
         parsed.current = (courseCurrentHoles[activeCourseId] ?? groupCurrentHole ?? targetHole);
         localStorage.setItem(key, JSON.stringify(parsed));
       }
-    } catch {}
+    } catch { }
     setDraftScores(prev => {
       const next = prev.map(row => [...row]);
       for (let pi = 0; pi < maxPlayers; pi++) next[pi][targetHole] = null;
@@ -1064,7 +1100,7 @@ export default function SelfScoringPage() {
     return tableScores.map((row) => {
       let sum = 0;
       let parSum = 0;
-  for (let i = 0; i < 9; i++) {
+      for (let i = 0; i < 9; i++) {
         const sc = row[i];
         const par = activePars[i] ?? null;
         if (typeof sc === "number" && typeof par === "number") {
@@ -1081,23 +1117,23 @@ export default function SelfScoringPage() {
   function getCellState(playerIndex: number, holeIndex: number): 'locked' | 'active' | 'disabled' {
     const committed = tableScores[playerIndex]?.[holeIndex];
     if (typeof committed === 'number') return 'locked';
-    
+
     // 현재 코스의 시작홀과 현재홀 가져오기
     const courseStartHole = courseStartHoles[activeCourseId] ?? groupStartHole;
     const courseCurrentHole = courseCurrentHoles[activeCourseId] ?? groupCurrentHole;
-    
+
     // 시작 전에는 전체 활성화
     if (courseCurrentHole === null) return 'active';
     const cur = courseCurrentHole;
     const row = tableScores[playerIndex] || [];
-    
+
     // 9홀 제한: 각 선수별로 9홀 완료 체크
     if (courseStartHole !== null) {
       // 현재 선수가 9홀을 완료했는지 체크
       const committedCount = row.filter((v) => typeof v === 'number').length;
       if (committedCount >= 9) return 'disabled';
     }
-    
+
     // 현재홀부터 시계방향으로 비어있는 가장 앞 홀을 찾는다
     let candidate: number | null = null;
     for (let step = 0; step < 9; step++) {
@@ -1135,7 +1171,7 @@ export default function SelfScoringPage() {
     if (!activeCourseId || !selectedGroup || !selectedJo) return;
     try {
       let arr: any = null;
-      
+
       // 1. 팀 모드인 경우 팀 전용 키에서 먼저 찾기
       if (gameMode === 'team') {
         const savedTeam = localStorage.getItem(teamSignatureKey);
@@ -1150,7 +1186,7 @@ export default function SelfScoringPage() {
           }
         }
       }
-      
+
       // 2. 팀 키에서 찾지 못했거나 개인전인 경우 공용 키에서 찾기
       if (!arr) {
         const saved = localStorage.getItem(signatureKey);
@@ -1165,7 +1201,7 @@ export default function SelfScoringPage() {
           }
         }
       }
-      
+
       if (Array.isArray(arr) && arr.length === 4) {
         setSignatures(arr);
       } else {
@@ -1183,18 +1219,18 @@ export default function SelfScoringPage() {
     try {
       const v = localStorage.getItem(postSignLockKey);
       setPostSignLock(v === '1');
-    } catch {}
+    } catch { }
   }, [postSignLockKey]);
 
   // 페이지 로드 시 서명 데이터 강제 복원 (추가 안전장치)
   useEffect(() => {
     if (typeof window === 'undefined') return;
     if (!activeCourseId || !selectedGroup || !selectedJo) return;
-    
+
     const restoreSignatures = () => {
       try {
         let arr: any = null;
-        
+
         // localStorage에서 먼저 찾기
         if (gameMode === 'team') {
           const savedTeam = localStorage.getItem(teamSignatureKey);
@@ -1208,7 +1244,7 @@ export default function SelfScoringPage() {
             arr = JSON.parse(saved);
           }
         }
-        
+
         // sessionStorage에서 찾기
         if (!arr) {
           if (gameMode === 'team') {
@@ -1224,7 +1260,7 @@ export default function SelfScoringPage() {
             }
           }
         }
-        
+
         if (Array.isArray(arr) && arr.length === 4) {
           setSignatures(arr);
         }
@@ -1232,13 +1268,13 @@ export default function SelfScoringPage() {
         console.error('서명 강제 복원 실패:', error);
       }
     };
-    
+
     // 페이지 로드 시 즉시 복원
     restoreSignatures();
-    
+
     // 추가로 1초 후에도 한 번 더 복원 시도
     const timer = setTimeout(restoreSignatures, 1000);
-    
+
     return () => clearTimeout(timer);
   }, [activeCourseId, selectedGroup, selectedJo, gameMode, signatureKey, teamSignatureKey]);
 
@@ -1248,7 +1284,7 @@ export default function SelfScoringPage() {
     try {
       const v = localStorage.getItem(localClearedKey) === '1';
       setLocalCleared(prev => ({ ...prev, [activeCourseId]: v }));
-    } catch {}
+    } catch { }
   }, [localClearedKey, activeCourseId]);
 
   // 로그 초기화 기준 시각 복원
@@ -1257,7 +1293,7 @@ export default function SelfScoringPage() {
     try {
       const ts = localStorage.getItem(logsResetKey);
       setLogsResetAfter(ts ? Number(ts) : null);
-    } catch {}
+    } catch { }
   }, [logsResetKey]);
 
   const persistSignatures = (next: string[]) => {
@@ -1312,10 +1348,10 @@ export default function SelfScoringPage() {
             localStorage.removeItem(tKey);
           }
           setSignatures(['', '', '', '']);
-        } catch {}
+        } catch { }
       }
       prevDbHasAnyScoreRef.current = dbHasAnyScore;
-    } catch {}
+    } catch { }
   }, [allSigned, dbHasAnyScore, postSignLockKey, localClearedKey, logsResetKey, activeCourseId, courseTabs, selectedGroup, selectedJo]);
 
   const openSignatureModal = (playerIdx: number) => {
@@ -1325,17 +1361,17 @@ export default function SelfScoringPage() {
     setTimeout(() => {
       const canvas = signatureCanvasRef.current;
       if (!canvas) return;
-  const rect = canvas.getBoundingClientRect();
-  canvas.width = rect.width;
-  canvas.height = rect.height;
+      const rect = canvas.getBoundingClientRect();
+      canvas.width = rect.width;
+      canvas.height = rect.height;
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
       ctx.fillStyle = '#ffffff';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.strokeStyle = '#000000';
-  ctx.lineWidth = 2;
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
+      ctx.lineWidth = 2;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
     }, 0);
   };
 
@@ -1346,9 +1382,9 @@ export default function SelfScoringPage() {
   };
 
   const getCanvasPoint = (canvas: HTMLCanvasElement, clientX: number, clientY: number) => {
-  const rect = canvas.getBoundingClientRect();
-  const scaleX = canvas.width / rect.width;
-  const scaleY = canvas.height / rect.height;
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
     return { x: (clientX - rect.left) * scaleX, y: (clientY - rect.top) * scaleY };
   };
 
@@ -1361,7 +1397,7 @@ export default function SelfScoringPage() {
     if ('touches' in e) {
       const t = e.touches[0];
       point = getCanvasPoint(canvas, t.clientX, t.clientY);
-  e.preventDefault();
+      e.preventDefault();
     } else {
       point = getCanvasPoint(canvas, (e as React.MouseEvent).clientX, (e as React.MouseEvent).clientY);
     }
@@ -1379,15 +1415,15 @@ export default function SelfScoringPage() {
     if ('touches' in e) {
       const t = e.touches[0];
       point = getCanvasPoint(canvas, t.clientX, t.clientY);
-  e.preventDefault();
+      e.preventDefault();
     } else {
       point = getCanvasPoint(canvas, (e as React.MouseEvent).clientX, (e as React.MouseEvent).clientY);
     }
     const { x: lastX, y: lastY } = lastPointRef.current;
-  ctx.beginPath();
-  ctx.moveTo(lastX, lastY);
+    ctx.beginPath();
+    ctx.moveTo(lastX, lastY);
     ctx.lineTo(point.x, point.y);
-  ctx.stroke();
+    ctx.stroke();
     lastPointRef.current = point;
   };
 
@@ -1401,16 +1437,16 @@ export default function SelfScoringPage() {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     ctx.fillStyle = '#ffffff';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
   };
 
   // 점수 공유 기능 - 개선된 캡처 방식
   const handleShareScores = async () => {
     if (!navigator.share) {
-      toast({ 
-        title: '공유 불가', 
-        description: '이 브라우저에서는 공유 기능을 지원하지 않습니다.', 
-        variant: 'destructive' 
+      toast({
+        title: '공유 불가',
+        description: '이 브라우저에서는 공유 기능을 지원하지 않습니다.',
+        variant: 'destructive'
       });
       return;
     }
@@ -1426,25 +1462,25 @@ export default function SelfScoringPage() {
       for (const course of courseTabs) {
         try {
           // 코스 전환
-        setActiveCourseId(String(course.id));
-        
+          setActiveCourseId(String(course.id));
+
           // 상태 변경이 완료될 때까지 대기
           await new Promise(resolve => setTimeout(resolve, 300));
 
           // 현재 코스의 점수 데이터 가져오기
           const currentScores = scoresByCourse[course.id] || Array.from({ length: 4 }, () => Array(9).fill(null));
           const coursePars = course.pars || [3, 4, 4, 4, 4, 3, 5, 3, 3];
-          
+
           // 팀 모드 고려한 표시용 점수
           let displayScores = currentScores;
           let displayNames = playerNames;
-          
+
           if (gameMode === 'team') {
             displayScores = renderColumns.map(idxs => {
               const primary = idxs[0];
               return currentScores[primary] || Array(9).fill(null);
             });
-            displayNames = renderColumns.map(idxs => 
+            displayNames = renderColumns.map(idxs =>
               idxs.map(i => playerNames[i] || '').filter(Boolean).join('/')
             );
           }
@@ -1495,38 +1531,38 @@ export default function SelfScoringPage() {
           const playerCellWidth = Math.floor((canvas.width - 40 - holeCellWidth * 2) / displayNames.length); // 나머지 공간을 플레이어 칸이 나눠가짐
           const cellHeight = 84; // 점수칸 높이 증가
           const headerHeight = 76; // 헤더 높이 유지
-          
+
           // 테이블 그림자 효과
           ctx.shadowColor = 'rgba(0, 0, 0, 0.15)';
           ctx.shadowBlur = 10;
           ctx.shadowOffsetX = 0;
           ctx.shadowOffsetY = 4;
-          
+
           const startX = 20;
           const tableWidth = holeCellWidth * 2 + playerCellWidth * displayNames.length;
-          
+
           // 테이블 전체 배경 (둥근 모서리 효과)
           ctx.fillStyle = '#ffffff';
           ctx.fillRect(startX - 5, tableStartY - 5, tableWidth + 10, headerHeight + (9 * cellHeight) + cellHeight + 10);
-          
+
           // 그림자 효과 제거
           ctx.shadowColor = 'transparent';
           ctx.shadowBlur = 0;
           ctx.shadowOffsetX = 0;
           ctx.shadowOffsetY = 0;
-          
+
           // 헤더 배경 - 홀/파는 기존 그라데이션
           const tableHeaderGradient = ctx.createLinearGradient(0, tableStartY, 0, tableStartY + headerHeight);
           tableHeaderGradient.addColorStop(0, '#3b82f6');
           tableHeaderGradient.addColorStop(1, '#1d4ed8');
           ctx.fillStyle = tableHeaderGradient;
           ctx.fillRect(startX, tableStartY, holeCellWidth * 2, headerHeight); // 홀/파 부분만
-          
+
           // 플레이어별 점수 확인 후 헤더 배경 설정
           displayScores.forEach((playerScores, playerIdx) => {
             const x = startX + holeCellWidth * 2 + playerIdx * playerCellWidth;
             let hasAnyScore = playerScores.some(score => typeof score === 'number');
-            
+
             if (hasAnyScore) {
               // 점수가 있는 플레이어는 블루 배경
               ctx.fillStyle = '#6387F2';
@@ -1536,41 +1572,41 @@ export default function SelfScoringPage() {
             }
             ctx.fillRect(x, tableStartY, playerCellWidth, headerHeight);
           });
-          
+
           // 헤더 테두리 (통일된 색상)
           ctx.strokeStyle = '#cbd5e1';
           ctx.lineWidth = 2;
           ctx.strokeRect(startX, tableStartY, tableWidth, headerHeight);
-          
+
           // 헤더 텍스트 (큰 글씨로)
           ctx.fillStyle = '#ffffff';
           ctx.font = 'bold 26px Arial, sans-serif';
           ctx.textAlign = 'center';
-          
+
           // "홀" 헤더
           ctx.fillText('홀', startX + holeCellWidth / 2, tableStartY + headerHeight / 2 + 10);
           ctx.strokeStyle = '#cbd5e1';
           ctx.lineWidth = 1;
           ctx.strokeRect(startX, tableStartY, holeCellWidth, headerHeight);
-          
+
           // "파" 헤더
           ctx.fillText('파', startX + holeCellWidth + holeCellWidth / 2, tableStartY + headerHeight / 2 + 10);
           ctx.strokeRect(startX + holeCellWidth, tableStartY, holeCellWidth, headerHeight);
-          
+
           // 플레이어 이름 헤더
           displayNames.forEach((name, i) => {
             const x = startX + holeCellWidth * 2 + i * playerCellWidth;
             const displayName = name.length > 10 ? name.substring(0, 8) + '..' : name; // 더 긴 이름 허용
-            
+
             // 점수 유무에 따라 텍스트 색상 결정
             let hasAnyScore = displayScores[i].some(score => typeof score === 'number');
-            
+
             if (hasAnyScore) {
               ctx.fillStyle = '#ffffff'; // 점수가 있으면 흰색 텍스트
             } else {
               ctx.fillStyle = '#0D0D0D'; // 점수가 없으면 검정 텍스트
             }
-            
+
             ctx.font = 'bold 24px Arial, sans-serif'; // 이름 크기 조정
             ctx.fillText(displayName, x + playerCellWidth / 2, tableStartY + headerHeight / 2 + 10);
             ctx.strokeStyle = '#cbd5e1';
@@ -1581,17 +1617,17 @@ export default function SelfScoringPage() {
           for (let hole = 0; hole < 9; hole++) {
             const y = tableStartY + headerHeight + (hole * cellHeight);
             const isEvenRow = hole % 2 === 0;
-            
+
             // 교대로 행 배경색 (zebra striping)
             if (isEvenRow) {
               ctx.fillStyle = '#f8fafc';
               ctx.fillRect(startX, y, tableWidth, cellHeight);
             }
-            
+
             // 홀 번호 배경
             ctx.fillStyle = '#e2e8f0';
             ctx.fillRect(startX, y, holeCellWidth, cellHeight);
-            
+
             // 홀 번호 텍스트 (크게)
             ctx.fillStyle = '#1e293b';
             ctx.font = 'bold 28px Arial, sans-serif';
@@ -1599,26 +1635,26 @@ export default function SelfScoringPage() {
             ctx.strokeStyle = '#cbd5e1';
             ctx.lineWidth = 1;
             ctx.strokeRect(startX, y, holeCellWidth, cellHeight);
-            
+
             // 파 수 배경
             ctx.fillStyle = '#e2e8f0';
             ctx.fillRect(startX + holeCellWidth, y, holeCellWidth, cellHeight);
-            
+
             // 파 수 텍스트 (크게)
             ctx.fillStyle = '#1e293b';
             ctx.font = 'bold 28px Arial, sans-serif';
             ctx.fillText(String(coursePars[hole]), startX + holeCellWidth + holeCellWidth / 2, y + cellHeight / 2 + 10);
             ctx.strokeRect(startX + holeCellWidth, y, holeCellWidth, cellHeight);
-            
+
             // 각 플레이어 점수
             displayScores.forEach((playerScores, playerIdx) => {
               const x = startX + holeCellWidth * 2 + playerIdx * playerCellWidth;
               const score = playerScores[hole];
-              
+
               if (typeof score === 'number') {
                 const par = coursePars[hole];
                 const diff = score - par;
-                
+
                 // 점수에 따른 배경색과 텍스트 색상
                 if (diff < 0) {
                   // 버디 이하 - 흰색 배경
@@ -1636,7 +1672,7 @@ export default function SelfScoringPage() {
                   ctx.fillRect(x + 1, y + 1, playerCellWidth - 2, cellHeight - 2);
                   ctx.fillStyle = '#dc2626'; // 빨강 텍스트
                 }
-                
+
                 ctx.font = 'bold 38px Arial, sans-serif'; // 점수 글자 크기 증가
                 ctx.fillText(String(score), x + playerCellWidth / 2, y + cellHeight / 2 + 14);
               } else {
@@ -1644,7 +1680,7 @@ export default function SelfScoringPage() {
                 ctx.fillStyle = '#f1f5f9';
                 ctx.fillRect(x + 1, y + 1, playerCellWidth - 2, cellHeight - 2);
               }
-              
+
               ctx.strokeStyle = '#cbd5e1';
               ctx.strokeRect(x, y, playerCellWidth, cellHeight);
             });
@@ -1653,16 +1689,16 @@ export default function SelfScoringPage() {
           // 합계 행 - 깔끔한 단색 적용
           const totalY = tableStartY + headerHeight + (9 * cellHeight);
           const totalCellHeight = 86; // 합계 셀 높이 증가
-          
+
           // 합계 라벨 배경 (빨강)
           ctx.fillStyle = '#F23054';
           ctx.fillRect(startX, totalY, holeCellWidth * 2, totalCellHeight);
-          
+
           // 합계 라벨 텍스트 (크게)
           ctx.fillStyle = '#ffffff'; // 흰색
           ctx.font = 'bold 32px Arial, sans-serif';
           ctx.fillText('합계', startX + holeCellWidth, totalY + totalCellHeight / 2 + 12);
-          
+
           // 합계 라벨 테두리 (통일된 색상)
           ctx.strokeStyle = '#cbd5e1';
           ctx.lineWidth = 1;
@@ -1673,19 +1709,19 @@ export default function SelfScoringPage() {
             const x = startX + holeCellWidth * 2 + playerIdx * playerCellWidth;
             let total = 0;
             let validScores = 0;
-            
+
             playerScores.forEach(score => {
               if (typeof score === 'number') {
                 total += score;
                 validScores++;
               }
             });
-            
+
             if (validScores > 0) {
               // 합계 셀 배경 (연한 빨강으로 변경)
               ctx.fillStyle = '#fee2e2';
               ctx.fillRect(x + 1, totalY + 1, playerCellWidth - 2, totalCellHeight - 2);
-              
+
               // 합계 텍스트 (가장 크게)
               ctx.fillStyle = '#0D0D0D'; // 진한 검정
               ctx.font = 'bold 42px Arial, sans-serif';
@@ -1695,7 +1731,7 @@ export default function SelfScoringPage() {
               ctx.fillStyle = '#F2F2F2';
               ctx.fillRect(x + 1, totalY + 1, playerCellWidth - 2, totalCellHeight - 2);
             }
-            
+
             // 합계 셀 테두리 (통일된 색상)
             ctx.strokeStyle = '#cbd5e1';
             ctx.lineWidth = 1;
@@ -1704,35 +1740,35 @@ export default function SelfScoringPage() {
 
           // 점수 색상 설명 추가 (원래 배경에 바로 표시)
           const legendY = totalY + totalCellHeight + 40; // 합계 아래 40px 여백
-          
+
           // 설명 내용 (배경 없이 바로 표시)
           ctx.font = 'bold 18px Arial, sans-serif';
           ctx.textAlign = 'left';
-          
+
           const legendStartX = startX + 20;
           const legendTextY = legendY + 20; // 적절한 위치에 배치
-          
+
           // 오버파 (빨간색)
           ctx.fillStyle = '#dc2626';
           ctx.fillText('오버파(+): 빨간색', legendStartX, legendTextY);
-          
+
           // 이븐파 (검정색)
           ctx.fillStyle = '#111827';
           ctx.fillText('이븐파(E): 검정색', legendStartX + 180, legendTextY);
-          
+
           // 언더파 (파란색)
           ctx.fillStyle = '#1d4ed8';
           ctx.fillText('언더파(-): 파란색', legendStartX + 360, legendTextY);
 
           // 캔버스를 Blob으로 변환
           await new Promise<void>((resolve) => {
-          canvas.toBlob((blob) => {
-            if (blob) {
-              const file = new File([blob], `${selectedGroup}_${course.name}_${currentDate}.png`, {
-                type: 'image/png'
-              });
-              shareImages.push(file);
-            }
+            canvas.toBlob((blob) => {
+              if (blob) {
+                const file = new File([blob], `${selectedGroup}_${course.name}_${currentDate}.png`, {
+                  type: 'image/png'
+                });
+                shareImages.push(file);
+              }
               resolve();
             }, 'image/png', 0.9);
           });
@@ -1746,29 +1782,29 @@ export default function SelfScoringPage() {
       setActiveCourseId(originalActiveCourse);
 
       if (shareImages.length === 0) {
-        toast({ 
-          title: '캡처 실패', 
-          description: '점수표 생성에 실패했습니다.', 
-          variant: 'destructive' 
+        toast({
+          title: '캡처 실패',
+          description: '점수표 생성에 실패했습니다.',
+          variant: 'destructive'
         });
         return;
       }
 
       // Web Share API로 공유
-        await navigator.share({
-          title: `${selectedGroup} 점수표`,
+      await navigator.share({
+        title: `${selectedGroup} 점수표`,
         text: `${selectedGroup} 점수표 - ${currentDate}`,
-          files: shareImages
-        });
+        files: shareImages
+      });
 
       toast({ title: '공유 완료', description: '점수표가 공유되었습니다.' });
 
     } catch (error) {
       console.error('공유 오류:', error);
-      toast({ 
-        title: '공유 실패', 
-        description: '공유 중 오류가 발생했습니다.', 
-        variant: 'destructive' 
+      toast({
+        title: '공유 실패',
+        description: '공유 중 오류가 발생했습니다.',
+        variant: 'destructive'
       });
     }
   };
@@ -1777,33 +1813,33 @@ export default function SelfScoringPage() {
     if (signaturePlayerIdx === null) return;
     const canvas = signatureCanvasRef.current;
     if (!canvas) return;
-    
+
     // 원본 캔버스 크기
     const originalWidth = canvas.width;
     const originalHeight = canvas.height;
-    
+
     // 크롭할 영역 계산 (양 옆 30%씩 자르고 가운데 40%만)
     const cropWidth = originalWidth * 0.4; // 가운데 40%
     const cropX = originalWidth * 0.3; // 왼쪽 30% 지점부터 시작
-    
+
     // 새로운 캔버스 생성하여 크롭된 이미지 생성
     const croppedCanvas = document.createElement('canvas');
     const croppedCtx = croppedCanvas.getContext('2d');
-    
+
     if (croppedCtx) {
       croppedCanvas.width = cropWidth;
       croppedCanvas.height = originalHeight;
-      
+
       // 원본 캔버스에서 크롭된 영역만 그리기
       croppedCtx.drawImage(
         canvas,
         cropX, 0, cropWidth, originalHeight, // 원본에서 가져올 영역
         0, 0, cropWidth, originalHeight // 새 캔버스에 그릴 영역
       );
-      
+
       // 크롭된 이미지를 데이터 URL로 변환
       const croppedDataUrl = croppedCanvas.toDataURL('image/png');
-      
+
       setSignatures((prev) => {
         const next = [...prev];
         next[signaturePlayerIdx] = croppedDataUrl;
@@ -1822,10 +1858,10 @@ export default function SelfScoringPage() {
         return next;
       });
     }
-    
+
     // 저장 완료 토스트 메시지
     toast({ title: '서명 저장됨', description: '서명이 저장되었습니다.' });
-    
+
     closeSignatureModal();
   };
 
@@ -1880,7 +1916,7 @@ export default function SelfScoringPage() {
                     const committedVal = tableScores[pi]?.[hi];
                     // 로그 기준으로 수정 여부 판단(대시보드/전광판과 동일)
                     const displayName = renderNames[pi];
-                    const playerIdForCell = nameToPlayerId[displayName] || nameToPlayerId[(displayName||'').split('/')[0]];
+                    const playerIdForCell = nameToPlayerId[displayName] || nameToPlayerId[(displayName || '').split('/')[0]];
                     const logsForPlayer = playerScoreLogs[playerIdForCell] || [];
                     const courseIdForCell = String(activeCourse?.id || activeCourseId);
                     let logForCell = logsForPlayer.find(l => String(l.courseId) === courseIdForCell && Number(l.holeNumber) === hi + 1);
@@ -1909,9 +1945,9 @@ export default function SelfScoringPage() {
                             'score-input',
                             isLocked ? 'locked' : isDisabled ? 'disabled' : isActive ? 'active' : '',
                             (editingCell && editingCell.playerIdx === pi && editingCell.holeIdx === hi) ? 'editing' : '',
-                        (isModifiedLog ? 'modified' : ((modifiedMap[activeCourseId]?.[pi]?.[hi]) ? 'modified' : '')),
-                        (savedFlashMap[activeCourseId]?.[pi]?.[hi] ? 'saved-flash' : ''),
-                        isReadOnlyMode ? 'readonly' : ''
+                            (isModifiedLog ? 'modified' : ((modifiedMap[activeCourseId]?.[pi]?.[hi]) ? 'modified' : '')),
+                            (savedFlashMap[activeCourseId]?.[pi]?.[hi] ? 'saved-flash' : ''),
+                            isReadOnlyMode ? 'readonly' : ''
                           ].filter(Boolean).join(' ')}
                           onClick={() => handleOpenPad(pi, hi)}
                           onDoubleClick={() => handleOpenPadForEdit(pi, hi)}
@@ -1940,13 +1976,13 @@ export default function SelfScoringPage() {
               </tr>
               <tr>
                 <td colSpan={2} className="total-label">서명</td>
-                  {signatureIndexes.map((pi, idx) => (
-                    <td key={idx} className={`signature-cell ${isReadOnlyMode ? 'readonly' : ''}`} onClick={() => openSignatureModal(pi)}>
-                      {signatures[pi]
-                        ? (<img src={signatures[pi]} alt="signature" className="signature-image" />)
-                        : (<div className="signature-placeholder">{isReadOnlyMode ? '보기용' : '싸인'}</div>)}
-                    </td>
-                  ))}
+                {signatureIndexes.map((pi, idx) => (
+                  <td key={idx} className={`signature-cell ${isReadOnlyMode ? 'readonly' : ''}`} onClick={() => openSignatureModal(pi)}>
+                    {signatures[pi]
+                      ? (<img src={signatures[pi]} alt="signature" className="signature-image" />)
+                      : (<div className="signature-placeholder">{isReadOnlyMode ? '보기용' : '싸인'}</div>)}
+                  </td>
+                ))}
               </tr>
             </tbody>
           </table>
@@ -1956,20 +1992,20 @@ export default function SelfScoringPage() {
           <button className="action-button reset-button" onClick={async () => {
             // 서명 완료 후에는 초기화 차단
             console.log('초기화 시도 - postSignLock:', postSignLock, 'dbHasAnyScore:', dbHasAnyScore, 'allSigned:', allSigned);
-            
+
             // 서명이 하나라도 있으면 초기화 차단 (DB 점수 여부와 관계없이)
             const hasAnySignature = signatures.some(sig => sig && sig.length > 0);
             if (hasAnySignature) {
-              toast({ 
-                title: '초기화 차단', 
-                description: '서명이 있는 상태에서는 관리자 초기화 전까지 점수 초기화가 제한됩니다.', 
-                variant: 'destructive' 
+              toast({
+                title: '초기화 차단',
+                description: '서명이 있는 상태에서는 관리자 초기화 전까지 점수 초기화가 제한됩니다.',
+                variant: 'destructive'
               });
               return;
             }
-            
+
             if (!confirm(`${activeCourse?.name || '현재 코스'}의 점수가 초기화 됩니다. 초기화 하시겠습니까?`)) return;
-            
+
             // 현재 코스의 점수만 초기화
             setScoresByCourse(prev => {
               const next = { ...prev };
@@ -1977,13 +2013,13 @@ export default function SelfScoringPage() {
               next[activeCourseId] = Array.from({ length: 4 }, () => Array(9).fill(null));
               return next;
             });
-            
+
             // 로컬 상태 초기화 (현재 코스만)
             // draftScores는 현재 코스의 초안이므로 초기화해도 다른 코스에 영향 없음
             setDraftScores(Array.from({ length: 4 }, () => Array(9).fill(null)));
             setGroupStartHole(null);
             setGroupCurrentHole(null);
-            
+
             // 코스별 상태도 초기화
             setCourseStartHoles(prev => ({
               ...prev,
@@ -1995,73 +2031,73 @@ export default function SelfScoringPage() {
             }));
             // 사인은 현재 코스의 사인만 초기화 (signatureKey가 코스별로 관리됨)
             setSignatures(['', '', '', '']);
-            
+
             // 수정 기록 초기화 (현재 코스만)
             setModifiedMap(prev => {
               const next = { ...prev };
               delete next[activeCourseId];
               return next;
             });
-            
+
             // localStorage 정리 (현재 코스의 초안 데이터만 제거)
             try {
               const draftKey = `selfScoringDraft_${activeCourseId}_${selectedGroup || 'g'}_${selectedJo || 'j'}`;
               localStorage.removeItem(draftKey);
-              
+
               // 서명 데이터도 제거 (현재 코스만)
               const signatureKey = `selfScoringSign_${activeCourseId}_${selectedGroup || 'g'}_${selectedJo || 'j'}`;
               const teamSignatureKey = `selfScoringSignTeam_${activeCourseId}_${selectedGroup || 'g'}_${selectedJo || 'j'}`;
               localStorage.removeItem(signatureKey);
               localStorage.removeItem(teamSignatureKey);
-              
+
               // sessionStorage에서도 제거
               sessionStorage.removeItem(signatureKey);
               sessionStorage.removeItem(teamSignatureKey);
-            } catch {}
-            
+            } catch { }
+
             // 수정 로그도 완전히 제거 (Firebase에서) - 현재 그룹/조의 현재 코스만
             try {
               if (!db) return;
               const dbInstance = db as any;
-              
+
               // 현재 그룹/조의 모든 수정 로그를 찾아서 제거
               const logsRef = ref(dbInstance, 'scoreLogs');
               const snapshot = await get(logsRef);
-              
+
               if (snapshot.exists()) {
                 const deleteTasks: Promise<any>[] = [];
-                
+
                 snapshot.forEach((childSnapshot) => {
                   const logData = childSnapshot.val();
                   // 현재 그룹/조의 현재 코스 로그만 삭제
-                  if (logData && 
-                      logData.comment && 
-                      logData.comment.includes(`그룹: ${selectedGroup}`) &&
-                      logData.comment.includes(`조: ${selectedJo}`) &&
-                      logData.courseId === activeCourseId) {
+                  if (logData &&
+                    logData.comment &&
+                    logData.comment.includes(`그룹: ${selectedGroup}`) &&
+                    logData.comment.includes(`조: ${selectedJo}`) &&
+                    logData.courseId === activeCourseId) {
                     const logRef = ref(dbInstance, `scoreLogs/${childSnapshot.key}`);
                     deleteTasks.push(set(logRef, null));
                   }
                 });
-                
+
                 if (deleteTasks.length > 0) {
                   await Promise.all(deleteTasks);
                 }
               }
-            } catch {}
-            
+            } catch { }
+
             // Firebase DB에서 현재 코스의 점수만 제거
             try {
               if (!db) return;
               const dbInstance = db as any;
               const tasks: Promise<any>[] = [];
-              
+
               // 모든 플레이어의 현재 코스 점수만 제거
               for (let pi = 0; pi < 4; pi++) {
                 const playerName = playerNames[pi];
                 const playerId = nameToPlayerId[playerName];
                 if (!playerId) continue;
-                
+
                 // 현재 코스에 대해서만 점수 제거
                 for (let h = 1; h <= 9; h++) {
                   const scoreRef = ref(dbInstance, `/scores/${playerId}/${activeCourseId}/${h}`);
@@ -2069,8 +2105,8 @@ export default function SelfScoringPage() {
                 }
               }
               await Promise.all(tasks);
-            } catch {}
-            
+            } catch { }
+
             toast({ title: '초기화 완료', description: `${activeCourse?.name || '현재 코스'}가 초기화되었습니다.` });
           }} disabled={isReadOnlyMode || signatures.some(sig => sig && sig.length > 0)}>초기화</button>
           <button className="action-button kakao-button" onClick={handleShareScores}>공유</button>
@@ -2108,7 +2144,7 @@ export default function SelfScoringPage() {
               qr.style.alignItems = 'center';
               // 동적으로 qrcode.react를 import하여 렌더링
               // 간단히 이미지 API 사용 (data URL) 대신 라이브러리 구성: DOM에 리액트 마운트
-                            // 간단한 QR 코드 생성 (외부 API 사용)
+              // 간단한 QR 코드 생성 (외부 API 사용)
               const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(url)}`;
               const img = document.createElement('img');
               img.src = qrApiUrl;
@@ -2130,9 +2166,9 @@ export default function SelfScoringPage() {
                 try {
                   await navigator.clipboard.writeText(url);
                   copy.textContent = '복사됨';
-                } catch {}
+                } catch { }
               });
-              
+
               const close = document.createElement('button');
               close.textContent = '닫기';
               close.style.marginTop = '8px';
@@ -2143,29 +2179,29 @@ export default function SelfScoringPage() {
               close.addEventListener('click', () => {
                 document.body.removeChild(modal);
               });
-              
+
               const buttonContainer = document.createElement('div');
               buttonContainer.style.display = 'flex';
               buttonContainer.style.justifyContent = 'center';
               buttonContainer.style.gap = '8px';
               buttonContainer.appendChild(copy);
               buttonContainer.appendChild(close);
-              
+
               box.appendChild(title);
               box.appendChild(qr);
               box.appendChild(urlDiv);
               box.appendChild(buttonContainer);
               modal.appendChild(box);
               document.body.appendChild(modal);
-            } catch {}
+            } catch { }
           }}>QR</button>
         </div>
       </div>
 
       {/* 숫자패드 */}
       {padOpen && (
-        <div className={`number-pad ${padHoleIdx !== null && padHoleIdx >= 7 ? 'top-fixed' : 'bottom-fixed'}`} role="dialog" aria-modal="true" style={{display:'grid'}}>
-          {[1,2,3,4,5,6,7,8,9,10].map((n) => (
+        <div className={`number-pad ${padHoleIdx !== null && padHoleIdx >= 7 ? 'top-fixed' : 'bottom-fixed'}`} role="dialog" aria-modal="true" style={{ display: 'grid' }}>
+          {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
             <button key={n} className={`number-button ${padTemp === n ? 'control-button' : ''}`} onClick={() => handleSetPadValue(n)}>{n}</button>
           ))}
           <button className="number-button cancel-button" onClick={handleCancelPad}>취소</button>
