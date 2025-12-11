@@ -3,8 +3,8 @@ import { Handler } from '@netlify/functions';
 export const handler: Handler = async (event, context) => {
   const manifest = {
     id: "/",
-    name: "대회관리",
-    short_name: "대회관리",
+    name: "파크골프대회",
+    short_name: "파크골프대회",
     theme_color: "#e85461",
     background_color: "#ffffff",
     display: "standalone",
