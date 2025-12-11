@@ -37,7 +37,7 @@ import { db } from "@/lib/firebase"
 const mainNavItems = [
   { href: "/admin/dashboard", icon: BarChart2, label: "홈 전광판" },
   { href: "/admin/tournaments", icon: Trophy, label: "대회 및 코스 관리" },
-  { href: "/admin/players", icon: Users, label: "선수 관리" },
+  { href: "/admin/players", icon: Users, label: "그룹 및 선수관리" },
 ];
 
 const secondaryNavItems = [
