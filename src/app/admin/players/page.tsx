@@ -751,7 +751,27 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                                                     <TableCell className="font-medium">{group.name}</TableCell>
                                                     <TableCell className="text-muted-foreground text-xs">
                                                         {group.courses ? 
-                                                            Object.keys(group.courses).filter(cid => group.courses[cid]).map(cid => courses.find(c => c.id.toString() === cid)?.name).join(', ')
+                                                            (() => {
+                                                                // 코스 순서 정보 가져오기 (기존 호환성: boolean → number 변환)
+                                                                const coursesOrder = group.courses || {};
+                                                                const assignedCourseIds = Object.keys(coursesOrder).filter((cid: string) => {
+                                                                    const order = coursesOrder[cid];
+                                                                    return typeof order === 'boolean' ? order : (typeof order === 'number' && order > 0);
+                                                                });
+                                                                // 코스 순서대로 정렬
+                                                                const sortedCourses = assignedCourseIds
+                                                                    .map(cid => {
+                                                                        const course = courses.find(c => c.id.toString() === cid);
+                                                                        const order = coursesOrder[cid];
+                                                                        const numOrder = typeof order === 'boolean' ? (order ? 1 : 0) : (typeof order === 'number' ? order : 0);
+                                                                        return { course, order: numOrder };
+                                                                    })
+                                                                    .filter(item => item.course)
+                                                                    .sort((a, b) => a.order - b.order)
+                                                                    .map(item => item.course?.name)
+                                                                    .filter(Boolean);
+                                                                return sortedCourses.length > 0 ? sortedCourses.join(', ') : '없음';
+                                                            })()
                                                             : '없음'
                                                         }
                                                     </TableCell>
@@ -1002,7 +1022,27 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                                                     <TableCell className="font-medium">{group.name}</TableCell>
                                                     <TableCell className="text-muted-foreground text-xs">
                                                         {group.courses ? 
-                                                            Object.keys(group.courses).filter(cid => group.courses[cid]).map(cid => courses.find(c => c.id.toString() === cid)?.name).join(', ')
+                                                            (() => {
+                                                                // 코스 순서 정보 가져오기 (기존 호환성: boolean → number 변환)
+                                                                const coursesOrder = group.courses || {};
+                                                                const assignedCourseIds = Object.keys(coursesOrder).filter((cid: string) => {
+                                                                    const order = coursesOrder[cid];
+                                                                    return typeof order === 'boolean' ? order : (typeof order === 'number' && order > 0);
+                                                                });
+                                                                // 코스 순서대로 정렬
+                                                                const sortedCourses = assignedCourseIds
+                                                                    .map(cid => {
+                                                                        const course = courses.find(c => c.id.toString() === cid);
+                                                                        const order = coursesOrder[cid];
+                                                                        const numOrder = typeof order === 'boolean' ? (order ? 1 : 0) : (typeof order === 'number' ? order : 0);
+                                                                        return { course, order: numOrder };
+                                                                    })
+                                                                    .filter(item => item.course)
+                                                                    .sort((a, b) => a.order - b.order)
+                                                                    .map(item => item.course?.name)
+                                                                    .filter(Boolean);
+                                                                return sortedCourses.length > 0 ? sortedCourses.join(', ') : '없음';
+                                                            })()
                                                             : '없음'
                                                         }
                                                     </TableCell>
@@ -1219,11 +1259,9 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                 <div className="py-4 space-y-4">
                     {courses.length > 0 ? courses.map(course => {
                         const currentOrder = assignedCourses[course.id] || 0;
-                        // 사용 중인 순서들 찾기
-                        const usedOrders = Object.values(assignedCourses).filter((order: any) => order > 0) as number[];
-                        const maxOrder = usedOrders.length > 0 ? Math.max(...usedOrders) : 0;
-                        // 다음 사용 가능한 순서 계산
-                        const availableOrders = Array.from({ length: maxOrder + 2 }, (_, i) => i + 1);
+                        // 코스 수만큼 순서 선택 옵션 제공 (최대 코스 수만큼)
+                        const maxAvailableOrder = courses.length;
+                        const availableOrders = Array.from({ length: maxAvailableOrder }, (_, i) => i + 1);
                         
                         return (
                             <div key={course.id} className="flex items-center justify-between space-x-3">
