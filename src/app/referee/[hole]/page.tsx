@@ -166,7 +166,9 @@ export default function RefereePage() {
         }
     }, [hole, router]);
 
-    // 대회 코스 정보 불러오기
+    // 대회 코스 정보 불러오기 (정렬 순서 보존을 위해 원본 데이터도 저장)
+    const [coursesById, setCoursesById] = useState<{ [id: string]: any }>({});
+    
     useEffect(() => {
         if (!db) return;
         const tournamentRef = ref(db, 'tournaments/current');
@@ -174,11 +176,23 @@ export default function RefereePage() {
         const unsubTournament = onValue(tournamentRef, (snapshot) => {
             const data = snapshot.val();
             if (data?.courses) {
+                // 코스 ID를 키로 하는 맵 생성 (정렬 순서와 무관하게 접근 가능)
+                const coursesMap: { [id: string]: any } = {};
                 const selectedCourses = Object.values(data.courses)
                     .filter((course: any) => course.isActive)
                     .sort((a: any, b: any) => a.name.localeCompare(b.name));
+                
+                // 코스 맵 생성 (ID로 빠른 접근)
+                selectedCourses.forEach((course: any) => {
+                    if (course.id !== undefined) {
+                        coursesMap[String(course.id)] = course;
+                    }
+                });
+                
+                setCoursesById(coursesMap);
                 setTournamentCourses(selectedCourses);
             } else {
+                setCoursesById({});
                 setTournamentCourses([]);
             }
         });
@@ -499,29 +513,53 @@ export default function RefereePage() {
 
     // 심판이 담당하는 코스 찾기
     const assignedCourse = useMemo(() => {
-        if (!refereeData?.id || tournamentCourses.length === 0 || courses.length === 0) return null;
+        if (!refereeData?.id || tournamentCourses.length === 0 || courses.length === 0) {
+            console.log('[코스 매핑] 조건 불만족:', {
+                hasRefereeId: !!refereeData?.id,
+                tournamentCoursesLength: tournamentCourses.length,
+                coursesLength: courses.length
+            });
+            return null;
+        }
 
         // 심판 아이디에서 번호 추출 (예: "8번홀심판" -> suffixNumber=0, "8번홀심판1" -> suffixNumber=1)
         const match = refereeData.id.match(/(\d+)번홀심판(\d*)/);
-        if (!match) return null;
+        if (!match) {
+            console.log('[코스 매핑] 심판 아이디 패턴 매칭 실패:', refereeData.id);
+            return null;
+        }
 
         const suffixNumber = match[2] ? parseInt(match[2]) : 0;
 
+        // 관리자 페이지와 동일한 로직: courseIndex를 사용하여 tournamentCourses에서 코스 찾기
         // tournamentCourses는 이름순으로 정렬되어 있으므로, 
-        // suffixNumber를 인덱스로 사용하여 코스 찾기
-        // courseIndex === 0이면 심판 아이디는 "X번홀심판" (suffix 없음)
-        // courseIndex > 0이면 심판 아이디는 "X번홀심판{courseIndex}"
+        // courseIndex === 0이면 심판 아이디는 "X번홀심판" (suffix 없음) → tournamentCourses[0]
+        // courseIndex > 0이면 심판 아이디는 "X번홀심판{courseIndex}" → tournamentCourses[courseIndex]
+        console.log('[코스 매핑] 심판 아이디:', refereeData.id, 'suffixNumber:', suffixNumber, 'tournamentCourses:', tournamentCourses.map(c => `${c.name}(id:${c.id})`));
+        
         if (suffixNumber < tournamentCourses.length) {
-            const course = tournamentCourses[suffixNumber];
-            // courses 배열에서 해당 코스 찾기 (id로 매칭)
-            const foundCourse = courses.find(c => c.id === course.id);
+            const courseFromTournament = tournamentCourses[suffixNumber];
+            console.log('[코스 매핑] tournamentCourses에서 찾은 코스:', courseFromTournament.name, 'id:', courseFromTournament.id);
+            
+            // courses 배열에서 해당 코스 찾기 (id로 매칭하여 정확성 보장)
+            const foundCourse = courses.find(c => {
+                // 코스 ID 비교 (숫자와 문자열 모두 처리)
+                const match = String(c.id) === String(courseFromTournament.id) || 
+                             c.id === courseFromTournament.id;
+                return match;
+            });
+            
             if (foundCourse) {
+                console.log('[코스 매핑] 최종 할당된 코스:', foundCourse.name, 'id:', foundCourse.id);
                 return foundCourse;
             }
-            // courses에 없으면 tournamentCourses에서 직접 사용
-            return course;
+            
+            console.log('[코스 매핑] courses에서 찾지 못함, tournamentCourses 사용:', courseFromTournament.name);
+            // courses에 없으면 tournamentCourses에서 직접 사용 (fallback)
+            return courseFromTournament;
         }
 
+        console.log('[코스 매핑] suffixNumber가 tournamentCourses.length를 초과:', suffixNumber, '>=', tournamentCourses.length);
         return null;
     }, [refereeData, tournamentCourses, courses]);
 
