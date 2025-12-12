@@ -1,5 +1,5 @@
 import { db } from './firebase';
-import { ref, push, set, get, query, orderByChild, equalTo } from 'firebase/database';
+import { ref, push, set, get, query, orderByChild, equalTo, remove } from 'firebase/database';
 
 export interface ScoreLog {
   id?: string;
@@ -416,4 +416,92 @@ export const setupRealTimeScoreUpdate = (onScoreChange: (playerId: string) => vo
   
   // 클린업 함수 반환 (사용하지 않음 - 전역 이벤트이므로)
   console.log(`[실시간 업데이트] 점수 변경 이벤트 리스너 설정 완료`);
+};
+
+/**
+ * 오래된 점수 로그를 삭제하는 함수
+ * @param daysToKeep 보관할 일수 (기본값: 30일)
+ * @returns 삭제된 로그 개수
+ */
+export const cleanupOldScoreLogs = async (daysToKeep: number = 30): Promise<number> => {
+  if (!db) throw new Error('Firebase DB 연결 오류');
+  
+  try {
+    const logsRef = ref(db, 'scoreLogs');
+    const cutoffTime = Date.now() - (daysToKeep * 24 * 60 * 60 * 1000);
+    
+    // 모든 로그를 가져와서 오래된 것만 필터링
+    const snapshot = await get(logsRef);
+    if (!snapshot.exists()) {
+      return 0;
+    }
+    
+    let deletedCount = 0;
+    const deletePromises: Promise<void>[] = [];
+    
+    snapshot.forEach((childSnapshot) => {
+      const logData = childSnapshot.val();
+      if (logData.modifiedAt && logData.modifiedAt < cutoffTime) {
+        const logRef = ref(db, `scoreLogs/${childSnapshot.key}`);
+        deletePromises.push(remove(logRef).then(() => {
+          deletedCount++;
+        }));
+      }
+    });
+    
+    await Promise.all(deletePromises);
+    console.log(`[로그 정리] ${deletedCount}개의 오래된 로그가 삭제되었습니다. (${daysToKeep}일 이상)`);
+    
+    return deletedCount;
+  } catch (error) {
+    console.error('로그 정리 중 오류 발생:', error);
+    throw error;
+  }
+};
+
+/**
+ * 특정 경기의 오래된 로그만 삭제하는 함수
+ * @param matchId 경기 ID
+ * @param daysToKeep 보관할 일수 (기본값: 30일)
+ * @returns 삭제된 로그 개수
+ */
+export const cleanupOldScoreLogsByMatch = async (matchId: string, daysToKeep: number = 30): Promise<number> => {
+  if (!db) throw new Error('Firebase DB 연결 오류');
+  
+  try {
+    const logsRef = ref(db, 'scoreLogs');
+    const matchLogsQuery = query(
+      logsRef,
+      orderByChild('matchId'),
+      equalTo(matchId)
+    );
+    
+    const cutoffTime = Date.now() - (daysToKeep * 24 * 60 * 60 * 1000);
+    
+    const snapshot = await get(matchLogsQuery);
+    if (!snapshot.exists()) {
+      return 0;
+    }
+    
+    let deletedCount = 0;
+    const deletePromises: Promise<void>[] = [];
+    
+    snapshot.forEach((childSnapshot) => {
+      const logData = childSnapshot.val();
+      if (logData.modifiedAt && logData.modifiedAt < cutoffTime) {
+        const logRef = ref(db, `scoreLogs/${childSnapshot.key}`);
+        deletePromises.push(remove(logRef).then(() => {
+          deletedCount++;
+        }));
+      }
+    });
+    
+    await Promise.all(deletePromises);
+    console.log(`[로그 정리] 경기 ${matchId}의 ${deletedCount}개의 오래된 로그가 삭제되었습니다. (${daysToKeep}일 이상)`);
+    
+    return deletedCount;
+  } catch (error) {
+    console.error('로그 정리 중 오류 발생:', error);
+    throw error;
+  }
 };

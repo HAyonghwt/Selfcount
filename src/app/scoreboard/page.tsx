@@ -423,44 +423,41 @@ function ExternalScoreboard() {
                     }
                 });
                 
-                // 점수 데이터: 실시간 반영을 위해 onValue 유지 (가장 중요!)
+                // 점수 데이터: 최적화된 실시간 업데이트 (선수별 변경만 감지)
                 const scoresRef = ref(dbInstance, 'scores');
-                const unsubScores = onValue(scoresRef, snap => {
-                    const data = snap.val() || {};
-                    setScores((prev: any) => {
-                        // 해시 비교로 중복 데이터만 차단
-                        const newHash = JSON.stringify(data);
-                        if (newHash !== lastScoresHash) {
-                            setLastScoresHash(newHash);
-                            setLastUpdateTime(Date.now());
+                // 선수별 변경 감지 (onChildChanged는 초기 데이터 로딩 후에만 작동)
+                // 초기 로딩이 완료된 후에는 onChildChanged로 변경된 선수만 감지하여 네트워크 트래픽 최소화
+                const unsubScores = onChildChanged(scoresRef, snap => {
+                    const playerId = snap.key;
+                    const playerScores = snap.val();
+                    
+                    if (playerId && playerScores) {
+                        setScores((prev: any) => {
+                            // 해당 선수의 점수만 업데이트
+                            const newScores = { ...prev, [playerId]: playerScores };
                             
-                            // 점수 변경 감지 시 해당 선수들의 로그 캐시 무효화 및 ID 저장
-                            if (prev && Object.keys(prev).length > 0) {
-                                const changedIds = Object.keys(data).filter(playerId => {
-                                    const prevScores = prev[playerId] || {};
-                                    const newScores = data[playerId] || {};
-                                    return JSON.stringify(prevScores) !== JSON.stringify(newScores);
-                                });
+                            // 해시 비교로 중복 데이터 차단
+                            const newHash = JSON.stringify(newScores);
+                            if (newHash !== lastScoresHash) {
+                                setLastScoresHash(newHash);
+                                setLastUpdateTime(Date.now());
                                 
-                                // 변경된 선수들의 로그 캐시 무효화
-                                changedIds.forEach(playerId => {
-                                    invalidatePlayerLogCache(playerId);
-                                });
+                                // 변경된 선수의 로그 캐시 무효화
+                                invalidatePlayerLogCache(playerId);
                                 
                                 // 변경된 선수 ID 저장 (로그 업데이트용)
-                                // 이전 변경사항과 병합하여 누락 방지
-                                if (changedIds.length > 0) {
-                                    setChangedPlayerIds((prev: string[]) => {
-                                        const merged = [...new Set([...prev, ...changedIds])];
-                                        return merged;
-                                    });
-                                }
+                                setChangedPlayerIds((prevIds: string[]) => {
+                                    if (!prevIds.includes(playerId)) {
+                                        return [...prevIds, playerId];
+                                    }
+                                    return prevIds;
+                                });
+                                
+                                return newScores;
                             }
-                            
-                            return data;
-                        }
-                        return prev;
-                    });
+                            return prev;
+                        });
+                    }
                 });
                 
                 // 토너먼트 설정: 변경사항만 감지
