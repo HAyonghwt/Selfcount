@@ -1099,6 +1099,7 @@ function ExternalScoreboard() {
     }, [finalDataByGroup, lastUpdateTime]);
 
     // 실시간 업데이트를 위한 점수 변경 감지 (Firebase 호출 최소화)
+    // 심판 수정과 관리자 수정 모두 동일하게 작동 (처음 작동했던 간단한 버전)
     useEffect(() => {
         if (changedPlayerIds.length === 0) return;
         
@@ -1139,7 +1140,8 @@ function ExternalScoreboard() {
         };
         
         updateLogsForChangedScores();
-    }, [lastUpdateTime, changedPlayerIds]); // lastUpdateTime과 changedPlayerIds 변경 시 실행
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [lastUpdateTime]); // lastUpdateTime 변경 시 실행 (심판/관리자 모두 동일)
 
     // 모바일 툴팁 상태 관리 (셀별로 open)
     const [openTooltip, setOpenTooltip] = useState<{ playerId: string; courseId: string; holeIndex: number } | null>(null);
@@ -1459,9 +1461,9 @@ function ExternalScoreboard() {
               {score === null ?
                 '-' :
                 score === 0 ?
-                  <span className="text-xs">0</span> :
+                  <span className={cn("text-xs", isModified ? "text-red-600" : "")}>0</span> :
                   <>
-                    {String(score)}
+                    <span className={cn(isModified ? "text-red-600" : "")}>{String(score)}</span>
                     {pm !== null && (
                       <span
                         className={cn(
