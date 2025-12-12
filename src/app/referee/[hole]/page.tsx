@@ -499,19 +499,27 @@ export default function RefereePage() {
 
     // 심판이 담당하는 코스 찾기
     const assignedCourse = useMemo(() => {
-        if (!refereeData?.id || tournamentCourses.length === 0) return null;
+        if (!refereeData?.id || tournamentCourses.length === 0 || courses.length === 0) return null;
 
-        // 심판 아이디에서 번호 추출 (예: "1번홀심판3" -> 3)
+        // 심판 아이디에서 번호 추출 (예: "8번홀심판" -> suffixNumber=0, "8번홀심판1" -> suffixNumber=1)
         const match = refereeData.id.match(/(\d+)번홀심판(\d*)/);
         if (!match) return null;
 
         const suffixNumber = match[2] ? parseInt(match[2]) : 0;
 
-        // 코스 인덱스에 따라 코스 찾기
+        // tournamentCourses는 이름순으로 정렬되어 있으므로, 
+        // suffixNumber를 인덱스로 사용하여 코스 찾기
+        // courseIndex === 0이면 심판 아이디는 "X번홀심판" (suffix 없음)
+        // courseIndex > 0이면 심판 아이디는 "X번홀심판{courseIndex}"
         if (suffixNumber < tournamentCourses.length) {
             const course = tournamentCourses[suffixNumber];
-            // courses 배열에서 해당 코스 찾기
-            return courses.find(c => c.id === course.id) || course;
+            // courses 배열에서 해당 코스 찾기 (id로 매칭)
+            const foundCourse = courses.find(c => c.id === course.id);
+            if (foundCourse) {
+                return foundCourse;
+            }
+            // courses에 없으면 tournamentCourses에서 직접 사용
+            return course;
         }
 
         return null;
@@ -519,11 +527,17 @@ export default function RefereePage() {
 
     // 해당 코스가 배정된 경기 형태 찾기
     const availableTypes = useMemo(() => {
-        if (!assignedCourse) return [];
+        // groupsData가 아직 로드되지 않았거나, assignedCourse가 없으면 빈 배열 반환
+        if (!groupsData || Object.keys(groupsData).length === 0 || !assignedCourse) {
+            return [];
+        }
 
         const types = new Set<'individual' | 'team'>();
+        const courseIdStr = String(assignedCourse.id);
+        
         Object.values(groupsData).forEach((group: any) => {
-            if (group.courses && group.courses[assignedCourse.id]) {
+            // assignedCourse.id를 문자열로 변환하여 비교 (코스 ID는 숫자일 수 있음)
+            if (group.courses && group.courses[courseIdStr] === true) {
                 types.add(group.type);
             }
         });
@@ -533,11 +547,19 @@ export default function RefereePage() {
 
     // Derived data
     const availableGroups = useMemo(() => {
-        if (!selectedType || !assignedCourse) return [];
+        // groupsData가 아직 로드되지 않았거나, selectedType이나 assignedCourse가 없으면 빈 배열 반환
+        if (!groupsData || Object.keys(groupsData).length === 0 || !selectedType || !assignedCourse) {
+            return [];
+        }
+        
         return Object.values(groupsData)
             .filter((g: any) => {
                 // 선택된 경기 형태와 일치하고, 해당 코스가 배정된 그룹만
-                return g.type === selectedType && g.courses && g.courses[assignedCourse.id];
+                // assignedCourse.id를 문자열로 변환하여 비교 (코스 ID는 숫자일 수 있음)
+                const courseIdStr = String(assignedCourse.id);
+                return g.type === selectedType && 
+                       g.courses && 
+                       g.courses[courseIdStr] === true;
             })
             .map((g: any) => g.name)
             .filter(Boolean)
