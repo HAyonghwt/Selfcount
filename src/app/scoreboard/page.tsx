@@ -620,11 +620,24 @@ function ExternalScoreboard() {
 
         const allProcessedPlayers: any[] = playersToProcess.map(([playerId, player]: [string, any]) => {
             const playerGroupData = groupsData[player.group];
-            const assignedCourseIds = playerGroupData?.courses 
-                ? Object.keys(playerGroupData.courses).filter((id: string) => playerGroupData.courses[id]) 
-                : [];
+            // 코스 순서 정보 가져오기 (기존 호환성: boolean → number 변환)
+            const coursesOrder = playerGroupData?.courses || {};
+            const assignedCourseIds = Object.keys(coursesOrder).filter((id: string) => {
+                const order = coursesOrder[id];
+                // boolean이면 true인 것만, number면 0보다 큰 것만
+                return typeof order === 'boolean' ? order : (typeof order === 'number' && order > 0);
+            });
             
             const allAssignedCoursesForPlayer = allCourses.filter((c: any) => assignedCourseIds.includes(c.id.toString()));
+            // 코스 순서대로 정렬 (order가 큰 것이 마지막 = 백카운트 기준)
+            allAssignedCoursesForPlayer.sort((a: any, b: any) => {
+                const orderA = coursesOrder[a.id] || 0;
+                const orderB = coursesOrder[b.id] || 0;
+                const numA = typeof orderA === 'boolean' ? (orderA ? 1 : 0) : (typeof orderA === 'number' ? orderA : 0);
+                const numB = typeof orderB === 'boolean' ? (orderB ? 1 : 0) : (typeof orderB === 'number' ? orderB : 0);
+                return numA - numB; // 작은 순서가 먼저 (첫번째 코스가 위)
+            });
+            
             const activeCoursesForPlayer = allAssignedCoursesForPlayer.filter((c: any) => c.isActive !== false);
 
             const playerScoresData = (scores as any)[playerId] || {};
@@ -707,8 +720,22 @@ function ExternalScoreboard() {
         // 순위 정렬: 이븐 대비 ±타수 기준(작은 순)
         const rankedData: { [key: string]: ProcessedPlayer[] } = {};
         for (const groupName in groupedData) {
-            // 코스 추가 역순으로 백카운트
-            const coursesForGroup = [...(groupedData[groupName][0]?.assignedCourses || [])].filter(c => c && c.id !== undefined).reverse();
+            // 코스 순서 기반으로 정렬 (order가 큰 것이 마지막 = 백카운트 기준)
+            const groupPlayers = groupedData[groupName];
+            const groupData = groupsData[groupName];
+            const coursesOrder = groupData?.courses || {};
+            const allCoursesForGroup = [...(groupPlayers[0]?.allAssignedCourses || [])].filter(c => c && c.id !== undefined);
+            // 코스 순서대로 정렬 (order가 큰 것이 마지막)
+            const coursesForGroup = [...allCoursesForGroup].sort((a: any, b: any) => {
+                const orderA = coursesOrder[a.id] || 0;
+                const orderB = coursesOrder[b.id] || 0;
+                const numA = typeof orderA === 'boolean' ? (orderA ? 1 : 0) : (typeof orderA === 'number' ? orderA : 0);
+                const numB = typeof orderB === 'boolean' ? (orderB ? 1 : 0) : (typeof orderB === 'number' ? orderB : 0);
+                return numA - numB; // 작은 순서가 먼저
+            });
+            // 백카운트는 마지막 코스부터 역순이므로 reverse
+            const coursesForBackcount = [...coursesForGroup].reverse();
+            
             const playersToSort = groupedData[groupName].filter((p: any) => p.hasAnyScore && !p.hasForfeited);
             const otherPlayers = groupedData[groupName].filter((p: any) => !p.hasAnyScore || p.hasForfeited);
             // 1위 동점자 모두 1위, 그 다음 등수부터 백카운트로 순위 부여
@@ -718,7 +745,7 @@ function ExternalScoreboard() {
                     const aPM = getPlayerTotalAndPlusMinusAllCourses(tournament, a, a.allAssignedCourses).pm ?? 0;
                     const bPM = getPlayerTotalAndPlusMinusAllCourses(tournament, b, b.allAssignedCourses).pm ?? 0;
                     if (aPM !== bPM) return aPM - bPM;
-                    return tieBreak(a, b, coursesForGroup);
+                    return tieBreak(a, b, coursesForBackcount);
                 });
                 // 1위 동점자 처리: 최소 pm만 1위
                 const minPM = getPlayerTotalAndPlusMinusAllCourses(tournament, playersToSort[0], playersToSort[0].allAssignedCourses).pm;
@@ -742,7 +769,7 @@ function ExternalScoreboard() {
                     const currPM = getPlayerTotalAndPlusMinusAllCourses(tournament, curr, curr.allAssignedCourses).pm;
                     if (
                         currPM === prevPM &&
-                        tieBreak(curr, prev, coursesForGroup) === 0
+                        tieBreak(curr, prev, coursesForBackcount) === 0
                     ) {
                         curr.rank = playersToSort[i - 1].rank;
                     } else {
@@ -895,14 +922,21 @@ function ExternalScoreboard() {
                         return scoreA - scoreB;
                     });
                 } else if (shouldApplyBackcount) {
-                    // 플레이오프 백카운트: 마지막 코스부터 역순으로 비교
-                    const coursesForGroup = firstPlacePlayers[0]?.assignedCourses || allCourses;
-                    // 코스를 역순으로 정렬 (마지막 코스부터)
-                    const sortedCoursesForBackcount = [...coursesForGroup].sort((c1, c2) => {
-                        const name1 = c1?.name || '';
-                        const name2 = c2?.name || '';
-                        return name2.localeCompare(name1); // 역순 정렬
+                    // 플레이오프 백카운트: 코스 순서 기반으로 마지막 코스부터 역순으로 비교
+                    const groupName = firstPlacePlayers[0]?.group;
+                    const groupData = groupsData[groupName];
+                    const coursesOrder = groupData?.courses || {};
+                    const allCoursesForGroup = firstPlacePlayers[0]?.allAssignedCourses || allCourses;
+                    // 코스 순서대로 정렬 (order가 큰 것이 마지막)
+                    const coursesForGroup = [...allCoursesForGroup].sort((a: any, b: any) => {
+                        const orderA = coursesOrder[a.id] || 0;
+                        const orderB = coursesOrder[b.id] || 0;
+                        const numA = typeof orderA === 'boolean' ? (orderA ? 1 : 0) : (typeof orderA === 'number' ? orderA : 0);
+                        const numB = typeof orderB === 'boolean' ? (orderB ? 1 : 0) : (typeof orderB === 'number' ? orderB : 0);
+                        return numA - numB; // 작은 순서가 먼저
                     });
+                    // 백카운트는 마지막 코스부터 역순이므로 reverse
+                    const sortedCoursesForBackcount = [...coursesForGroup].reverse();
                     
                     firstPlacePlayers.sort((a: any, b: any) => {
                         if (a.plusMinus !== b.plusMinus) return a.plusMinus - b.plusMinus;

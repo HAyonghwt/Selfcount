@@ -52,7 +52,7 @@ export default function PlayerManagementPage() {
     // Course assignment modal states
     const [isGroupCourseModalOpen, setGroupCourseModalOpen] = useState(false);
     const [currentEditingGroup, setCurrentEditingGroup] = useState<any>(null);
-    const [assignedCourses, setAssignedCourses] = useState<{[key: string]: boolean}>({});
+    const [assignedCourses, setAssignedCourses] = useState<{[key: string]: number}>({}); // 0 = 선택 안함, 1 = 첫번째, 2 = 두번째, ...
 
 
     // Editing states
@@ -667,7 +667,19 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
 
     const handleOpenCourseModal = (group: any) => {
         setCurrentEditingGroup(group);
-        setAssignedCourses(group.courses || {});
+        // 기존 데이터 호환성: boolean → number 변환 (true → 1, false → 0)
+        const courses = group.courses || {};
+        const convertedCourses: {[key: string]: number} = {};
+        Object.keys(courses).forEach(courseId => {
+            if (typeof courses[courseId] === 'boolean') {
+                convertedCourses[courseId] = courses[courseId] ? 1 : 0;
+            } else if (typeof courses[courseId] === 'number') {
+                convertedCourses[courseId] = courses[courseId];
+            } else {
+                convertedCourses[courseId] = 0;
+            }
+        });
+        setAssignedCourses(convertedCourses);
         setGroupCourseModalOpen(true);
     };
 
@@ -1205,20 +1217,53 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                     <DialogDescription>이 그룹이 경기할 코스를 선택하세요. 코스 목록은 대회/코스 관리 페이지에서 관리할 수 있습니다.</DialogDescription>
                 </DialogHeader>
                 <div className="py-4 space-y-4">
-                    {courses.length > 0 ? courses.map(course => (
-                        <div key={course.id} className="flex items-center space-x-3">
-                            <Checkbox 
-                                id={`course-${course.id}`}
-                                checked={!!assignedCourses[course.id]}
-                                onCheckedChange={(checked) => {
-                                    setAssignedCourses(prev => ({...prev, [course.id]: !!checked}))
-                                }}
-                            />
-                            <Label htmlFor={`course-${course.id}`} className="text-base font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                                {course.name}
-                            </Label>
-                        </div>
-                    )) : (
+                    {courses.length > 0 ? courses.map(course => {
+                        const currentOrder = assignedCourses[course.id] || 0;
+                        // 사용 중인 순서들 찾기
+                        const usedOrders = Object.values(assignedCourses).filter((order: any) => order > 0) as number[];
+                        const maxOrder = usedOrders.length > 0 ? Math.max(...usedOrders) : 0;
+                        // 다음 사용 가능한 순서 계산
+                        const availableOrders = Array.from({ length: maxOrder + 2 }, (_, i) => i + 1);
+                        
+                        return (
+                            <div key={course.id} className="flex items-center justify-between space-x-3">
+                                <Label htmlFor={`course-${course.id}`} className="text-base font-medium flex-1">
+                                    {course.name}
+                                </Label>
+                                <Select
+                                    value={currentOrder.toString()}
+                                    onValueChange={(value) => {
+                                        const newOrder = parseInt(value, 10);
+                                        setAssignedCourses(prev => {
+                                            const updated = { ...prev };
+                                            
+                                            // 같은 순서를 가진 다른 코스가 있으면 0으로 변경
+                                            Object.keys(updated).forEach(cid => {
+                                                if (cid !== course.id && updated[cid] === newOrder) {
+                                                    updated[cid] = 0;
+                                                }
+                                            });
+                                            
+                                            updated[course.id] = newOrder;
+                                            return updated;
+                                        });
+                                    }}
+                                >
+                                    <SelectTrigger className="w-[180px]">
+                                        <SelectValue placeholder="순서 선택" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="0">선택 안함</SelectItem>
+                                        {availableOrders.map(order => (
+                                            <SelectItem key={order} value={order.toString()}>
+                                                {order === 1 ? '첫번째 코스' : order === 2 ? '두번째 코스' : order === 3 ? '세번째 코스' : `${order}번째 코스`}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        );
+                    }) : (
                         <p className="text-sm text-center text-muted-foreground py-8">설정 가능한 코스가 없습니다.<br/>코스 관리 페이지에서 코스를 먼저 추가하고 활성화해주세요.</p>
                     )}
                 </div>
