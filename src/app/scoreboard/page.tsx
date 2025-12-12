@@ -448,8 +448,12 @@ function ExternalScoreboard() {
                                 });
                                 
                                 // 변경된 선수 ID 저장 (로그 업데이트용)
+                                // 이전 변경사항과 병합하여 누락 방지
                                 if (changedIds.length > 0) {
-                                    setChangedPlayerIds(changedIds);
+                                    setChangedPlayerIds((prev: string[]) => {
+                                        const merged = [...new Set([...prev, ...changedIds])];
+                                        return merged;
+                                    });
                                 }
                             }
                             
@@ -1099,10 +1103,19 @@ function ExternalScoreboard() {
         if (changedPlayerIds.length === 0) return;
         
         const updateLogsForChangedScores = async () => {
+            // 변경된 선수 ID를 복사 (비동기 처리 중 변경 방지)
+            const playerIdsToUpdate = [...changedPlayerIds];
+            
+            if (playerIdsToUpdate.length === 0) return;
+            
+            // 로그가 Firebase에 저장되는 시간을 고려하여 약간의 지연 추가
+            // 점수 변경과 로그 저장이 거의 동시에 일어나므로, 로그 저장 완료를 기다림
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
             // 변경된 선수들의 로그만 업데이트 (Firebase 호출 최소화)
-            for (const playerId of changedPlayerIds) {
+            for (const playerId of playerIdsToUpdate) {
                 try {
-                    // 최적화된 함수로 로그 가져오기 (캐시 무효화 후 새로 로딩)
+                    // 캐시가 이미 무효화되었으므로, Firebase에서 최신 로그를 가져옴
                     const logs = await getPlayerScoreLogsOptimized(playerId);
                     
                     setPlayerScoreLogs((prev: any) => ({
@@ -1119,8 +1132,10 @@ function ExternalScoreboard() {
                 }
             }
             
-            // 처리 완료 후 변경된 선수 ID 초기화
-            setChangedPlayerIds([]);
+            // 처리 완료된 선수들만 제거 (새로운 변경사항은 유지)
+            setChangedPlayerIds((prev: string[]) => {
+                return prev.filter(id => !playerIdsToUpdate.includes(id));
+            });
         };
         
         updateLogsForChangedScores();
