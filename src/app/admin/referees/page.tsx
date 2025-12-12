@@ -53,7 +53,11 @@ export default function RefereeManagementPage() {
             if (data?.courses) {
                 const selectedCourses = Object.values(data.courses)
                     .filter((course: any) => course.isActive)
-                    .sort((a: any, b: any) => a.name.localeCompare(b.name));
+                    .map((course: any) => ({
+                        ...course,
+                        order: course.order !== undefined ? course.order : 999 // order가 없으면 뒤로
+                    }))
+                    .sort((a: any, b: any) => (a.order || 999) - (b.order || 999)); // order 기준으로 정렬
                 setTournamentCourses(selectedCourses);
             } else {
                 setTournamentCourses([]);
@@ -84,12 +88,17 @@ export default function RefereeManagementPage() {
         
         tournamentCourses.forEach((course, courseIndex) => {
             const courseReferees: any[] = [];
+            // 코스 order를 사용하여 심판 ID 생성 (order가 1이면 첫번째 코스, 2이면 두번째 코스...)
+            const courseOrder = course.order || (courseIndex + 1);
             
             for (let hole = 1; hole <= 9; hole++) {
                 // 코스별로 다른 심판 ID 패턴 사용
-                const refereeId = courseIndex === 0 
+                // 첫번째 코스(order === 1): 1번홀심판, 2번홀심판, ...
+                // 두번째 코스(order === 2): 1번홀심판1, 2번홀심판1, ...
+                // 세번째 코스(order === 3): 1번홀심판2, 2번홀심판2, ...
+                const refereeId = courseOrder === 1 
                     ? `${hole}번홀심판` 
-                    : `${hole}번홀심판${courseIndex}`;
+                    : `${hole}번홀심판${courseOrder - 1}`;
                 
                 const referee = refereeAccounts.find(acc => acc.id === refereeId);
                 if (referee) {

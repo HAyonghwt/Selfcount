@@ -667,18 +667,25 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
 
     const handleOpenCourseModal = (group: any) => {
         setCurrentEditingGroup(group);
-        // 기존 데이터 호환성: boolean → number 변환 (true → 1, false → 0)
-        const courses = group.courses || {};
+        // 모든 코스를 먼저 0으로 초기화 (선택 안함)
+        const allCourseIds = courses.map(c => String(c.id));
         const convertedCourses: {[key: string]: number} = {};
-        Object.keys(courses).forEach(courseId => {
-            if (typeof courses[courseId] === 'boolean') {
-                convertedCourses[courseId] = courses[courseId] ? 1 : 0;
-            } else if (typeof courses[courseId] === 'number') {
-                convertedCourses[courseId] = courses[courseId];
-            } else {
-                convertedCourses[courseId] = 0;
-            }
+        allCourseIds.forEach(courseId => {
+            convertedCourses[courseId] = 0; // 기본값: 선택 안함
         });
+        
+        // 기존 설정된 코스만 값 적용 (number 타입이고 0보다 큰 값만)
+        // boolean true는 무시 (기존 호환성을 위해 boolean은 더 이상 사용하지 않음)
+        const existingCourses = group.courses || {};
+        Object.keys(existingCourses).forEach(courseId => {
+            const courseIdStr = String(courseId);
+            // number 타입이고 0보다 큰 경우만 적용
+            if (typeof existingCourses[courseId] === 'number' && existingCourses[courseId] > 0) {
+                convertedCourses[courseIdStr] = existingCourses[courseId];
+            }
+            // boolean 타입은 무시 (기본값 0 유지)
+        });
+        
         setAssignedCourses(convertedCourses);
         setGroupCourseModalOpen(true);
     };
@@ -1258,7 +1265,8 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                 </DialogHeader>
                 <div className="py-4 space-y-4">
                     {courses.length > 0 ? courses.map(course => {
-                        const currentOrder = assignedCourses[course.id] || 0;
+                        const courseIdStr = String(course.id);
+                        const currentOrder = assignedCourses[courseIdStr] || 0;
                         // 코스 수만큼 순서 선택 옵션 제공 (최대 코스 수만큼)
                         const maxAvailableOrder = courses.length;
                         const availableOrders = Array.from({ length: maxAvailableOrder }, (_, i) => i + 1);
@@ -1277,12 +1285,12 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                                             
                                             // 같은 순서를 가진 다른 코스가 있으면 0으로 변경
                                             Object.keys(updated).forEach(cid => {
-                                                if (cid !== course.id && updated[cid] === newOrder) {
+                                                if (cid !== courseIdStr && updated[cid] === newOrder) {
                                                     updated[cid] = 0;
                                                 }
                                             });
                                             
-                                            updated[course.id] = newOrder;
+                                            updated[courseIdStr] = newOrder;
                                             return updated;
                                         });
                                     }}

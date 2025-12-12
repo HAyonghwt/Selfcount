@@ -176,7 +176,11 @@ export default function RefereePage() {
             if (data?.courses) {
                 const selectedCourses = Object.values(data.courses)
                     .filter((course: any) => course.isActive)
-                    .sort((a: any, b: any) => a.name.localeCompare(b.name));
+                    .map((course: any) => ({
+                        ...course,
+                        order: course.order !== undefined ? course.order : 999 // order가 없으면 뒤로
+                    }))
+                    .sort((a: any, b: any) => (a.order || 999) - (b.order || 999)); // order 기준으로 정렬
                 setTournamentCourses(selectedCourses);
             } else {
                 setTournamentCourses([]);
@@ -511,13 +515,26 @@ export default function RefereePage() {
 
         const suffixNumber = match[2] ? parseInt(match[2]) : 0;
 
-        // 관리자 페이지와 동일한 로직: courseIndex를 사용하여 tournamentCourses에서 코스 찾기
-        // tournamentCourses는 이름순으로 정렬되어 있으므로, 
-        // courseIndex === 0이면 심판 아이디는 "X번홀심판" (suffix 없음) → tournamentCourses[0]
-        // courseIndex > 0이면 심판 아이디는 "X번홀심판{courseIndex}" → tournamentCourses[courseIndex]
-        if (suffixNumber < tournamentCourses.length) {
-            const courseFromTournament = tournamentCourses[suffixNumber];
-            
+        // 코스 order 기준으로 코스 찾기
+        // suffixNumber가 0이면 첫번째 코스(order === 1), 1이면 두번째 코스(order === 2), ...
+        const targetOrder = suffixNumber === 0 ? 1 : suffixNumber + 1;
+        
+        // 먼저 order 기준으로 찾기
+        let courseFromTournament = tournamentCourses.find((course: any) => {
+            const courseOrder = course.order;
+            // order가 명시적으로 설정된 경우만 사용
+            if (courseOrder !== undefined && courseOrder !== null && typeof courseOrder === 'number') {
+                return courseOrder === targetOrder;
+            }
+            return false;
+        });
+        
+        // order 기준으로 못 찾았으면 인덱스 방식으로 fallback
+        if (!courseFromTournament && suffixNumber < tournamentCourses.length) {
+            courseFromTournament = tournamentCourses[suffixNumber];
+        }
+        
+        if (courseFromTournament) {
             // courses 배열에서 해당 코스 찾기 (id로 매칭하여 정확성 보장)
             const foundCourse = courses.find(c => {
                 // 코스 ID 비교 (숫자와 문자열 모두 처리)
@@ -548,7 +565,9 @@ export default function RefereePage() {
         
         Object.values(groupsData).forEach((group: any) => {
             // assignedCourse.id를 문자열로 변환하여 비교 (코스 ID는 숫자일 수 있음)
-            if (group.courses && group.courses[courseIdStr] === true) {
+            // 코스 배정은 boolean true 또는 number > 0으로 저장됨
+            const courseAssignment = group.courses && group.courses[courseIdStr];
+            if (courseAssignment === true || (typeof courseAssignment === 'number' && courseAssignment > 0)) {
                 types.add(group.type);
             }
         });
@@ -568,9 +587,10 @@ export default function RefereePage() {
                 // 선택된 경기 형태와 일치하고, 해당 코스가 배정된 그룹만
                 // assignedCourse.id를 문자열로 변환하여 비교 (코스 ID는 숫자일 수 있음)
                 const courseIdStr = String(assignedCourse.id);
+                const courseAssignment = g.courses && g.courses[courseIdStr];
+                // 코스 배정은 boolean true 또는 number > 0으로 저장됨
                 return g.type === selectedType && 
-                       g.courses && 
-                       g.courses[courseIdStr] === true;
+                       (courseAssignment === true || (typeof courseAssignment === 'number' && courseAssignment > 0));
             })
             .map((g: any) => g.name)
             .filter(Boolean)
@@ -1127,12 +1147,27 @@ export default function RefereePage() {
         const holeNumber = match[1];
         const suffixNumber = match[2] ? parseInt(match[2]) : 0;
 
-        // 코스 인덱스에 따라 코스명 결정
-        if (suffixNumber < tournamentCourses.length) {
-            const courseName = tournamentCourses[suffixNumber]?.name;
-            if (courseName) {
-                return `${courseName} ${holeNumber}번홀심판`;
+        // 코스 order 기준으로 코스명 결정
+        // suffixNumber가 0이면 첫번째 코스(order === 1), 1이면 두번째 코스(order === 2), ...
+        const targetOrder = suffixNumber === 0 ? 1 : suffixNumber + 1;
+        
+        // 먼저 order 기준으로 찾기
+        let targetCourse = tournamentCourses.find((course: any) => {
+            const courseOrder = course.order;
+            // order가 명시적으로 설정된 경우만 사용
+            if (courseOrder !== undefined && courseOrder !== null && typeof courseOrder === 'number') {
+                return courseOrder === targetOrder;
             }
+            return false;
+        });
+        
+        // order 기준으로 못 찾았으면 인덱스 방식으로 fallback
+        if (!targetCourse && suffixNumber < tournamentCourses.length) {
+            targetCourse = tournamentCourses[suffixNumber];
+        }
+        
+        if (targetCourse) {
+            return `${targetCourse.name} ${holeNumber}번홀심판`;
         }
 
         return refereeData.id;

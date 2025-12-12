@@ -17,14 +17,15 @@ interface Course {
   name: string;
   pars: (number | null)[];
   isActive: boolean;
+  order?: number; // 코스 순서 (심판 배정 순서에 사용)
 }
 
 const defaultPars: number[] = [3, 4, 3, 4, 5, 3, 4, 3, 4]; // Total Par: 33
 const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
 const initialCourses: Course[] = [
-  { id: 1, name: 'A코스', pars: [...defaultPars], isActive: true },
-  { id: 2, name: 'B코스', pars: [...defaultPars], isActive: true },
+  { id: 1, name: 'A코스', pars: [...defaultPars], isActive: true, order: 1 },
+  { id: 2, name: 'B코스', pars: [...defaultPars], isActive: true, order: 2 },
 ];
 
 interface EditingPar {
@@ -51,11 +52,14 @@ export default function TournamentManagementPage() {
       if (data) {
         setTournamentName(data.name || '새로운 대회');
         if (data.courses) {
-            const loadedCourses = Object.values(data.courses).map((course: any) => ({
+            const loadedCourses = Object.values(data.courses).map((course: any, index: number) => ({
                 ...course,
                 pars: course.pars || defaultPars,
                 isActive: course.isActive !== false,
+                order: course.order !== undefined ? course.order : (index + 1), // order가 없으면 인덱스 기반으로 설정
             }));
+            // order 기준으로 정렬
+            loadedCourses.sort((a: any, b: any) => (a.order || 0) - (b.order || 0));
             setCourses(loadedCourses);
         } else {
             setCourses([]);
@@ -100,6 +104,7 @@ export default function TournamentManagementPage() {
       name: newCourseName,
       pars: [...defaultPars],
       isActive: true,
+      order: courses.length > 0 ? Math.max(...courses.map(c => c.order || 0)) + 1 : 1,
     };
     setCourses([...courses, newCourse]);
   };
