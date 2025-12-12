@@ -25,6 +25,7 @@ export default function RefereeManagementPage() {
     const [refereeAccounts, setRefereeAccounts] = useState<any[]>([]);
     const [showPasswords, setShowPasswords] = useState<{ [key: string]: boolean }>({});
     const [tournamentCourses, setTournamentCourses] = useState<any[]>([]);
+    const [groupsData, setGroupsData] = useState<{ [key: string]: any }>({});
 
     useEffect(() => {
         if (!db) return;
@@ -43,7 +44,7 @@ export default function RefereeManagementPage() {
         };
     }, []);
 
-    // 대회 코스 정보 불러오기
+    // 대회 코스 정보 및 그룹 정보 불러오기
     useEffect(() => {
         if (!db) return;
         const tournamentRef = ref(db, 'tournaments/current');
@@ -61,6 +62,13 @@ export default function RefereeManagementPage() {
                 setTournamentCourses(selectedCourses);
             } else {
                 setTournamentCourses([]);
+            }
+            
+            // 그룹 데이터도 함께 로드
+            if (data?.groups) {
+                setGroupsData(data.groups);
+            } else {
+                setGroupsData({});
             }
         });
 
@@ -81,6 +89,23 @@ export default function RefereeManagementPage() {
         };
         loadRefereeAccounts();
     }, []);
+
+    // 코스에 배정된 그룹 목록을 가져오는 함수
+    const getAssignedGroupsForCourse = (courseId: string) => {
+        const assignedGroups: string[] = [];
+        
+        Object.entries(groupsData).forEach(([groupName, groupData]: [string, any]) => {
+            if (groupData?.courses) {
+                const courseAssignment = groupData.courses[courseId];
+                // courseAssignment가 true이거나 number > 0이면 배정된 것
+                if (courseAssignment === true || (typeof courseAssignment === 'number' && courseAssignment > 0)) {
+                    assignedGroups.push(groupName);
+                }
+            }
+        });
+        
+        return assignedGroups.sort(); // 알파벳 순으로 정렬
+    };
 
     // 심판 계정을 코스별로 그룹화하는 함수
     const getRefereesByCourse = () => {
@@ -302,9 +327,34 @@ export default function RefereeManagementPage() {
                                 <p className="text-sm mt-2">대회 및 코스 관리에서 코스를 먼저 선택해주세요.</p>
                             </div>
                         ) : (
-                            Object.entries(getRefereesByCourse()).map(([courseName, referees]) => (
+                            Object.entries(getRefereesByCourse()).map(([courseName, referees]) => {
+                                // 코스 ID 찾기
+                                const course = tournamentCourses.find(c => c.name === courseName);
+                                const courseId = course?.id || '';
+                                const assignedGroups = getAssignedGroupsForCourse(courseId);
+                                
+                                return (
                                 <div key={courseName} className="space-y-3">
-                                    <h3 className="text-lg font-semibold text-primary border-b pb-2 text-center">{courseName}</h3>
+                                    <div className="flex flex-col items-center gap-2 border-b pb-3">
+                                        <h3 className="text-lg font-semibold text-primary">{courseName}</h3>
+                                        {assignedGroups.length > 0 ? (
+                                            <div className="flex flex-wrap items-center gap-2 justify-center">
+                                                <span className="text-sm font-medium text-muted-foreground">할당 그룹:</span>
+                                                <div className="flex flex-wrap gap-1.5">
+                                                    {assignedGroups.map((groupName) => (
+                                                        <span 
+                                                            key={groupName}
+                                                            className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 border border-blue-200"
+                                                        >
+                                                            {groupName}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <span className="text-sm text-muted-foreground">할당된 그룹 없음</span>
+                                        )}
+                                    </div>
                                     <div className="overflow-x-auto">
                                         <Table>
                                             <TableHeader>
@@ -362,7 +412,8 @@ export default function RefereeManagementPage() {
                                         </Table>
                                     </div>
                                 </div>
-                            ))
+                                );
+                            })
                         )}
                     </div>
                 </CardContent>
