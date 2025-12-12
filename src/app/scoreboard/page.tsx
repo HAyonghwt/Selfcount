@@ -286,6 +286,9 @@ function ExternalScoreboard() {
     const [groupsData, setGroupsData] = useState<any>({});
     const [individualSuddenDeathData, setIndividualSuddenDeathData] = useState<any>(null);
     const [teamSuddenDeathData, setTeamSuddenDeathData] = useState<any>(null);
+    // 그룹별 서든데스 데이터 (모든 그룹의 서든데스 상태 관리)
+    const [allIndividualSuddenDeathData, setAllIndividualSuddenDeathData] = useState<{ [groupName: string]: any }>({});
+    const [allTeamSuddenDeathData, setAllTeamSuddenDeathData] = useState<{ [groupName: string]: any }>({});
     const [individualBackcountApplied, setIndividualBackcountApplied] = useState<boolean>(false);
     const [teamBackcountApplied, setTeamBackcountApplied] = useState<boolean>(false);
     const [individualNTPData, setIndividualNTPData] = useState<any>(null);
@@ -536,20 +539,84 @@ function ExternalScoreboard() {
         let unsubIndividualDetails: (() => void) | null = null;
         let unsubTeamDetails: (() => void) | null = null;
         
-        // 개인전 서든데스 상태 확인 후 구독
+        // 개인전 서든데스 상태 확인 후 구독 (그룹별 구조 지원)
         const unsubIndividualStatus = onValue(individualSuddenDeathRef, snap => {
             const data = snap.val();
-            if (data?.isActive) {
-                setIndividualSuddenDeathData(data);
-                // 활성화된 경우에만 상세 데이터 구독
+            if (!data) {
+                setAllIndividualSuddenDeathData({});
+                setIndividualSuddenDeathData(null);
+                if (unsubIndividualDetails) {
+                    unsubIndividualDetails();
+                    unsubIndividualDetails = null;
+                }
+                return;
+            }
+            
+            // 그룹별 구조: { groupName: { isActive, players, ... } }
+            // 또는 레거시 구조: { isActive, players, ... }
+            if (data.isActive && !data.groupName) {
+                // 레거시 구조 (단일 서든데스) - 모든 그룹에 적용된 것으로 간주
+                setAllIndividualSuddenDeathData({ '*': data });
+                if (filterGroup === 'all' || filterGroup === '*') {
+                    setIndividualSuddenDeathData(data);
+                } else {
+                    setIndividualSuddenDeathData(null);
+                }
                 if (!unsubIndividualDetails) {
                     unsubIndividualDetails = onValue(individualSuddenDeathRef, snap => {
-                        setIndividualSuddenDeathData(snap.val());
+                        const updatedData = snap.val();
+                        if (updatedData?.isActive && !updatedData.groupName) {
+                            setAllIndividualSuddenDeathData({ '*': updatedData });
+                            if (filterGroup === 'all' || filterGroup === '*') {
+                                setIndividualSuddenDeathData(updatedData);
+                            } else {
+                                setIndividualSuddenDeathData(null);
+                            }
+                        } else {
+                            setAllIndividualSuddenDeathData({});
+                            setIndividualSuddenDeathData(null);
+                        }
+                    });
+                }
+            } else if (typeof data === 'object' && !data.isActive) {
+                // 그룹별 구조: 모든 그룹의 서든데스 데이터 저장
+                setAllIndividualSuddenDeathData(data);
+                
+                // 선택된 그룹의 서든데스 찾기
+                const selectedGroupData = filterGroup !== 'all' ? data[filterGroup] : null;
+                if (selectedGroupData?.isActive) {
+                    setIndividualSuddenDeathData(selectedGroupData);
+                } else {
+                    setIndividualSuddenDeathData(null);
+                }
+                
+                if (!unsubIndividualDetails) {
+                    unsubIndividualDetails = onValue(individualSuddenDeathRef, snap => {
+                        const updatedData = snap.val();
+                        if (updatedData && typeof updatedData === 'object' && !updatedData.isActive) {
+                            setAllIndividualSuddenDeathData(updatedData);
+                            const selectedGroupData = filterGroup !== 'all' ? updatedData[filterGroup] : null;
+                            if (selectedGroupData?.isActive) {
+                                setIndividualSuddenDeathData(selectedGroupData);
+                            } else {
+                                setIndividualSuddenDeathData(null);
+                            }
+                        } else if (updatedData?.isActive && !updatedData.groupName) {
+                            setAllIndividualSuddenDeathData({ '*': updatedData });
+                            if (filterGroup === 'all' || filterGroup === '*') {
+                                setIndividualSuddenDeathData(updatedData);
+                            } else {
+                                setIndividualSuddenDeathData(null);
+                            }
+                        } else {
+                            setAllIndividualSuddenDeathData({});
+                            setIndividualSuddenDeathData(null);
+                        }
                     });
                 }
             } else {
+                setAllIndividualSuddenDeathData({});
                 setIndividualSuddenDeathData(null);
-                // 비활성화된 경우 구독 해제
                 if (unsubIndividualDetails) {
                     unsubIndividualDetails();
                     unsubIndividualDetails = null;
@@ -557,20 +624,84 @@ function ExternalScoreboard() {
             }
         });
         
-        // 팀 서든데스 상태 확인 후 구독
+        // 팀 서든데스 상태 확인 후 구독 (그룹별 구조 지원)
         const unsubTeamStatus = onValue(teamSuddenDeathRef, snap => {
             const data = snap.val();
-            if (data?.isActive) {
-                setTeamSuddenDeathData(data);
-                // 활성화된 경우에만 상세 데이터 구독
+            if (!data) {
+                setAllTeamSuddenDeathData({});
+                setTeamSuddenDeathData(null);
+                if (unsubTeamDetails) {
+                    unsubTeamDetails();
+                    unsubTeamDetails = null;
+                }
+                return;
+            }
+            
+            // 그룹별 구조: { groupName: { isActive, players, ... } }
+            // 또는 레거시 구조: { isActive, players, ... }
+            if (data.isActive && !data.groupName) {
+                // 레거시 구조 (단일 서든데스) - 모든 그룹에 적용된 것으로 간주
+                setAllTeamSuddenDeathData({ '*': data });
+                if (filterGroup === 'all' || filterGroup === '*') {
+                    setTeamSuddenDeathData(data);
+                } else {
+                    setTeamSuddenDeathData(null);
+                }
                 if (!unsubTeamDetails) {
                     unsubTeamDetails = onValue(teamSuddenDeathRef, snap => {
-                        setTeamSuddenDeathData(snap.val());
+                        const updatedData = snap.val();
+                        if (updatedData?.isActive && !updatedData.groupName) {
+                            setAllTeamSuddenDeathData({ '*': updatedData });
+                            if (filterGroup === 'all' || filterGroup === '*') {
+                                setTeamSuddenDeathData(updatedData);
+                            } else {
+                                setTeamSuddenDeathData(null);
+                            }
+                        } else {
+                            setAllTeamSuddenDeathData({});
+                            setTeamSuddenDeathData(null);
+                        }
+                    });
+                }
+            } else if (typeof data === 'object' && !data.isActive) {
+                // 그룹별 구조: 모든 그룹의 서든데스 데이터 저장
+                setAllTeamSuddenDeathData(data);
+                
+                // 선택된 그룹의 서든데스 찾기
+                const selectedGroupData = filterGroup !== 'all' ? data[filterGroup] : null;
+                if (selectedGroupData?.isActive) {
+                    setTeamSuddenDeathData(selectedGroupData);
+                } else {
+                    setTeamSuddenDeathData(null);
+                }
+                
+                if (!unsubTeamDetails) {
+                    unsubTeamDetails = onValue(teamSuddenDeathRef, snap => {
+                        const updatedData = snap.val();
+                        if (updatedData && typeof updatedData === 'object' && !updatedData.isActive) {
+                            setAllTeamSuddenDeathData(updatedData);
+                            const selectedGroupData = filterGroup !== 'all' ? updatedData[filterGroup] : null;
+                            if (selectedGroupData?.isActive) {
+                                setTeamSuddenDeathData(selectedGroupData);
+                            } else {
+                                setTeamSuddenDeathData(null);
+                            }
+                        } else if (updatedData?.isActive && !updatedData.groupName) {
+                            setAllTeamSuddenDeathData({ '*': updatedData });
+                            if (filterGroup === 'all' || filterGroup === '*') {
+                                setTeamSuddenDeathData(updatedData);
+                            } else {
+                                setTeamSuddenDeathData(null);
+                            }
+                        } else {
+                            setAllTeamSuddenDeathData({});
+                            setTeamSuddenDeathData(null);
+                        }
                     });
                 }
             } else {
+                setAllTeamSuddenDeathData({});
                 setTeamSuddenDeathData(null);
-                // 비활성화된 경우 구독 해제
                 if (unsubTeamDetails) {
                     unsubTeamDetails();
                     unsubTeamDetails = null;
@@ -578,20 +709,112 @@ function ExternalScoreboard() {
             }
         });
         
-        // 백카운트 상태 구독
+        // 백카운트 상태 구독 (그룹별 구조 지원)
         const unsubIndividualBackcount = onValue(individualBackcountRef, snap => {
-            setIndividualBackcountApplied(snap.val() || false);
+            const data = snap.val();
+            if (!data) {
+                setIndividualBackcountApplied(false);
+                return;
+            }
+            
+            // 그룹별 구조: { groupName: boolean }
+            // 또는 레거시 구조: boolean
+            if (typeof data === 'boolean') {
+                // 레거시 구조
+                setIndividualBackcountApplied(data);
+            } else if (typeof data === 'object') {
+                // 그룹별 구조: 선택된 그룹의 백카운트 확인
+                if (filterGroup !== 'all') {
+                    setIndividualBackcountApplied(data[filterGroup] || false);
+                } else {
+                    // 'all'일 때는 첫 번째 활성화된 그룹의 백카운트 확인
+                    const activeGroup = Object.entries(data).find(([_, value]) => value === true);
+                    setIndividualBackcountApplied(!!activeGroup);
+                }
+            } else {
+                setIndividualBackcountApplied(false);
+            }
         });
         const unsubTeamBackcount = onValue(teamBackcountRef, snap => {
-            setTeamBackcountApplied(snap.val() || false);
+            const data = snap.val();
+            if (!data) {
+                setTeamBackcountApplied(false);
+                return;
+            }
+            
+            // 그룹별 구조: { groupName: boolean }
+            // 또는 레거시 구조: boolean
+            if (typeof data === 'boolean') {
+                // 레거시 구조
+                setTeamBackcountApplied(data);
+            } else if (typeof data === 'object') {
+                // 그룹별 구조: 선택된 그룹의 백카운트 확인
+                if (filterGroup !== 'all') {
+                    setTeamBackcountApplied(data[filterGroup] || false);
+                } else {
+                    // 'all'일 때는 첫 번째 활성화된 그룹의 백카운트 확인
+                    const activeGroup = Object.entries(data).find(([_, value]) => value === true);
+                    setTeamBackcountApplied(!!activeGroup);
+                }
+            } else {
+                setTeamBackcountApplied(false);
+            }
         });
         
-        // NTP 상태 구독
+        // NTP 상태 구독 (그룹별 구조 지원)
         const unsubIndividualNTP = onValue(individualNTPRef, snap => {
-            setIndividualNTPData(snap.val());
+            const data = snap.val();
+            if (!data) {
+                setIndividualNTPData(null);
+                return;
+            }
+            
+            // 그룹별 구조: { groupName: { isActive, players, rankings } }
+            // 또는 레거시 구조: { isActive, players, rankings }
+            if (data.isActive && !data.groupName) {
+                // 레거시 구조 (단일 NTP)
+                setIndividualNTPData(data);
+            } else if (typeof data === 'object' && !data.isActive) {
+                // 그룹별 구조: 선택된 그룹 또는 첫 번째 활성화된 그룹의 NTP 찾기
+                let activeGroupData: any = null;
+                if (filterGroup !== 'all') {
+                    // 선택된 그룹의 NTP 찾기
+                    activeGroupData = data[filterGroup];
+                } else {
+                    // 모든 그룹 중 첫 번째 활성화된 그룹 찾기
+                    activeGroupData = Object.values(data).find((groupData: any) => groupData?.isActive);
+                }
+                setIndividualNTPData(activeGroupData?.isActive ? activeGroupData : null);
+            } else {
+                setIndividualNTPData(null);
+            }
         });
         const unsubTeamNTP = onValue(teamNTPRef, snap => {
-            setTeamNTPData(snap.val());
+            const data = snap.val();
+            if (!data) {
+                setTeamNTPData(null);
+                return;
+            }
+            
+            // 그룹별 구조: { groupName: { isActive, players, rankings } }
+            // 또는 레거시 구조: { isActive, players, rankings }
+            if (data.isActive && !data.groupName) {
+                // 레거시 구조 (단일 NTP)
+                setTeamNTPData(data);
+            } else if (typeof data === 'object' && !data.isActive) {
+                // 그룹별 구조: 선택된 그룹 또는 첫 번째 활성화된 그룹의 NTP 찾기
+                let activeGroupData: any = null;
+                if (filterGroup !== 'all') {
+                    // 선택된 그룹의 NTP 찾기
+                    activeGroupData = data[filterGroup];
+                } else {
+                    // 모든 그룹 중 첫 번째 활성화된 그룹 찾기
+                    activeGroupData = Object.values(data).find((groupData: any) => groupData?.isActive);
+                }
+                setTeamNTPData(activeGroupData?.isActive ? activeGroupData : null);
+            } else {
+                setTeamNTPData(null);
+            }
         });
         
         return () => {
@@ -604,7 +827,32 @@ function ExternalScoreboard() {
             if (unsubIndividualDetails) unsubIndividualDetails();
             if (unsubTeamDetails) unsubTeamDetails();
         };
-    }, [initialDataLoaded]);
+    }, [initialDataLoaded, filterGroup]);
+    
+    // filterGroup 변경 시 선택된 그룹의 서든데스 데이터 업데이트
+    useEffect(() => {
+        // 개인전 서든데스
+        if (filterGroup === 'all') {
+            // 'all'일 때는 첫 번째 활성화된 그룹의 서든데스 표시
+            const activeGroup = Object.entries(allIndividualSuddenDeathData).find(([_, data]: [string, any]) => data?.isActive);
+            setIndividualSuddenDeathData(activeGroup ? activeGroup[1] : null);
+        } else {
+            // 선택된 그룹의 서든데스 표시
+            const groupData = allIndividualSuddenDeathData[filterGroup];
+            setIndividualSuddenDeathData(groupData?.isActive ? groupData : null);
+        }
+        
+        // 팀 서든데스
+        if (filterGroup === 'all') {
+            // 'all'일 때는 첫 번째 활성화된 그룹의 서든데스 표시
+            const activeGroup = Object.entries(allTeamSuddenDeathData).find(([_, data]: [string, any]) => data?.isActive);
+            setTeamSuddenDeathData(activeGroup ? activeGroup[1] : null);
+        } else {
+            // 선택된 그룹의 서든데스 표시
+            const groupData = allTeamSuddenDeathData[filterGroup];
+            setTeamSuddenDeathData(groupData?.isActive ? groupData : null);
+        }
+    }, [filterGroup, allIndividualSuddenDeathData, allTeamSuddenDeathData]);
 
     const processedDataByGroup = useMemo(() => {
         const allCourses = Object.values(tournament.courses || {}).filter(Boolean);
@@ -782,7 +1030,14 @@ function ExternalScoreboard() {
         return rankedData;
     }, [players, scores, tournament, groupsData, individualSuddenDeathData, teamSuddenDeathData]);
     
-    const allGroupsList = Object.keys(processedDataByGroup).sort();
+    // 모든 그룹 목록 (groupsData에서 가져오기 - 서든데스 진행 여부와 관계없이 모든 그룹 표시)
+    const allGroupsList = useMemo(() => {
+        const groups = Object.keys(groupsData).filter(groupName => {
+            const groupData = (groupsData as any)[groupName];
+            return groupData && (groupData.type === 'individual' || groupData.type === 'team');
+        });
+        return groups.sort();
+    }, [groupsData]);
     
     const groupProgress = useMemo(() => {
         const progressByGroup: { [key: string]: number } = {};
@@ -895,9 +1150,11 @@ function ExternalScoreboard() {
                 const ntpData = isIndividual ? individualNTPData : teamNTPData;
                 const shouldApplyNTP = ntpData?.isActive && ntpData?.rankings;
                 
-                // 백카운트 적용 확인
-                const shouldApplyBackcount = (isIndividual && individualBackcountApplied) ||
-                                          (!isIndividual && teamBackcountApplied);
+                // 백카운트 적용 확인 (그룹별 구조 지원)
+                const backcountState = isIndividual ? individualBackcountApplied : teamBackcountApplied;
+                const shouldApplyBackcount = typeof backcountState === 'boolean' 
+                    ? backcountState 
+                    : (backcountState && (backcountState[groupName] || (filterGroup === 'all' && Object.values(backcountState).some(v => v === true))));
 
                 if (shouldApplyNTP) {
                     // NTP 순위 적용

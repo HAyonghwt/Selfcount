@@ -1631,6 +1631,8 @@ export default function AdminDashboard() {
     useEffect(() => {
         if (!groupProgress || !finalDataByGroup) return;
 
+        // 모든 플레이오프가 필요한 그룹을 먼저 찾기
+        const groupsNeedingPlayoff: string[] = [];
         Object.keys(groupProgress).forEach(groupName => {
             // Check if group is 100% complete and not yet notified
             if (groupProgress[groupName] === 100 && !notifiedSuddenDeathGroups.has(groupName)) {
@@ -1640,27 +1642,40 @@ export default function AdminDashboard() {
                     
                     // Check if there are 2 or more players tied for first
                     if (tiedFirstPlace.length > 1) {
-                        toast({
-                            title: `🚨 플레이오프 관리 필요: ${groupName}`,
-                            description: `${groupName} 그룹의 경기가 완료되었으며, 1위 동점자가 발생했습니다. 플레이오프 관리가 필요합니다.`,
-                            action: (
-                                <ToastAction altText="관리하기" onClick={() => router.push('/admin/suddendeath')}>
-                                    관리하기
-                                </ToastAction>
-                            ),
-                            duration: 30000 // Keep the toast on screen longer
-                        });
-                        // Add to notified set to prevent re-triggering
-                        setNotifiedSuddenDeathGroups(prev => {
-                            const newSet = new Set(prev);
-                            newSet.add(groupName);
-                            return newSet;
-                        });
+                        groupsNeedingPlayoff.push(groupName);
                     }
                 }
             }
         });
-    }, [groupProgress, finalDataByGroup, notifiedSuddenDeathGroups]);
+
+        // 모든 그룹을 하나의 안내창에 표시
+        if (groupsNeedingPlayoff.length > 0) {
+            const updatedNotifiedGroups = new Set(notifiedSuddenDeathGroups);
+            
+            // 하나의 토스트에 모든 그룹 나열
+            const groupsList = groupsNeedingPlayoff.join(', ');
+            const description = groupsNeedingPlayoff.length === 1
+                ? `${groupsNeedingPlayoff[0]} 그룹의 경기가 완료되었으며, 1위 동점자가 발생했습니다. 플레이오프 관리가 필요합니다.`
+                : `${groupsList} 그룹의 경기가 완료되었으며, 1위 동점자가 발생했습니다. 플레이오프 관리가 필요합니다.`;
+            
+            toast({
+                title: `🚨 플레이오프 관리 필요 (${groupsNeedingPlayoff.length}개 그룹)`,
+                description: description,
+                action: (
+                    <ToastAction altText="관리하기" onClick={() => router.push('/admin/suddendeath')}>
+                        관리하기
+                    </ToastAction>
+                ),
+                duration: 30000 // Keep the toast on screen longer
+            });
+            
+            // 모든 그룹을 notified set에 추가
+            groupsNeedingPlayoff.forEach(groupName => {
+                updatedNotifiedGroups.add(groupName);
+            });
+            setNotifiedSuddenDeathGroups(updatedNotifiedGroups);
+        }
+    }, [groupProgress, finalDataByGroup, notifiedSuddenDeathGroups, router]);
 
     const handleExportToExcel = async () => {
         const XLSX = await import('xlsx-js-style');
