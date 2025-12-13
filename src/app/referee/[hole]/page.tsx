@@ -1076,7 +1076,8 @@ export default function RefereePage() {
                 editingScores: currentPlayers.filter(p => currentScores[p.id]?.status === 'editing').map(p => ({
                     id: p.id,
                     name: p.name,
-                    score: currentScores[p.id]
+                    score: currentScores[p.id],
+                    forfeitType: currentScores[p.id]?.forfeitType
                 }))
             });
             return;
@@ -1160,36 +1161,42 @@ export default function RefereePage() {
 
     // allScores 변경 시 실격 복구를 위한 scores 상태 업데이트
     useEffect(() => {
-        if (view !== 'scoring' || !selectedJo || !currentPlayers.length || Object.keys(scores).length === 0) {
+        if (view !== 'scoring' || !selectedJo || !selectedGroup || Object.keys(scores).length === 0) {
             return;
         }
 
-
+        // currentPlayers를 직접 계산 (dependency에서 제거하여 배열 크기 변경 문제 방지)
+        const playersToCheck = allPlayers.filter(p => p.group === selectedGroup && p.jo.toString() === selectedJo);
+        
+        if (playersToCheck.length === 0) {
+            return;
+        }
 
         // 현재 선수들의 실격 복구 체크
-        currentPlayers.forEach(player => {
-            const currentScoreState = scores[player.id];
+        playersToCheck.forEach(player => {
+            const currentScoreState = scoresRef.current[player.id];
             const firebaseScore = allScores[player.id]?.[selectedCourse as string]?.[hole as string];
 
             // 실격 복구 감지: scores에서는 0점이지만 Firebase에서는 0이 아닌 점수
+            // 단, editing 상태인 점수는 보호 (사용자가 수정 중인 점수)
             if (currentScoreState &&
+                currentScoreState.status === 'editing' &&
                 currentScoreState.score === 0 &&
                 firebaseScore !== undefined &&
                 Number(firebaseScore) > 0) {
-
-
-
+                // editing 상태이지만 실격 복구가 필요한 경우에만 업데이트
+                // 하지만 forfeitType은 보존하지 않음 (Firebase에서 복구된 점수이므로)
                 setScores(prev => ({
                     ...prev,
                     [player.id]: {
+                        ...prev[player.id],
                         score: Number(firebaseScore),
-                        status: 'editing',
                         forfeitType: null
                     }
                 }));
             }
         });
-    }, [allScores, view, selectedJo, selectedCourse, hole, currentPlayers, scores]);
+    }, [allScores, view, selectedJo, selectedCourse, selectedGroup, hole, allPlayers]);
 
 
     // ---- Handlers ----
@@ -1227,74 +1234,90 @@ export default function RefereePage() {
         setSelectedJo('');
     };
 
-    const updateScore = (id: string, delta: number) => {
-        // scoresRef.current를 사용하여 최신 상태 참조
-        const currentScoreData = scoresRef.current[id] || scores[id];
-        
-        if (currentScoreData?.status === 'editing') {
-            const currentScore = currentScoreData.score;
-            
-            // 점수는 0 이하로 내려가지 않음 (0점은 실격/기권으로 표시)
-            let newScore: number;
-            let newForfeitType = currentScoreData.forfeitType;
-            
-            if (delta < 0 && currentScore > 0) {
-                // 점수 감소
-                newScore = Math.max(1, currentScore + delta); // 최소 1점까지
-                
-                // 1점에서 -를 누르면 0점이 되고 불참으로 표시 (처음 입력처럼)
-                if (currentScore === 1 && delta < 0) {
-                    newScore = 0;
-                    // 수정 시에도 처음 입력처럼 불참으로 시작
-                    newForfeitType = 'absent';
-                } else if (newScore > 0) {
-                    // 점수가 0보다 크면 기권 타입 초기화
-                    newForfeitType = null;
-                }
-            } else if (delta < 0 && currentScore === 0) {
-                // 0점 상태에서 -버튼 누르면 불참 -> 실격 -> 기권 -> 불참 순환 (처음 입력처럼)
-                newScore = 0;
-                const currentForfeitType = currentScoreData.forfeitType || null;
-                if (currentForfeitType === 'absent') {
-                    newForfeitType = 'disqualified';
-                } else if (currentForfeitType === 'disqualified') {
-                    newForfeitType = 'forfeit';
-                } else if (currentForfeitType === 'forfeit') {
-                    newForfeitType = 'absent'; // 다시 불참으로 순환
-                } else {
-                    // forfeitType이 null이거나 undefined이면 불참으로 시작
-                    newForfeitType = 'absent';
-                }
-            } else if (delta > 0) {
-                // 점수 증가
-                if (currentScore === 0) {
-                    // 0점(실격/기권)에서 +를 누르면 1점으로
-                    newScore = 1;
-                    newForfeitType = null;
-                } else {
-                    newScore = currentScore + delta;
-                    newForfeitType = null;
-                }
-            } else {
-                // delta === 0 (변경 없음)
-                newScore = currentScore;
+    const updateScore = useCallback((id: string, delta: number) => {
+        setScores(prev => {
+            const currentScoreData = prev[id];
+            if (!currentScoreData || currentScoreData.status !== 'editing') {
+                return prev;
             }
 
-            setScores(prev => {
-                const updated = {
-                    ...prev,
-                    [id]: {
-                        ...prev[id],
-                        score: newScore,
-                        forfeitType: newForfeitType
+            const currentScore = currentScoreData.score;
+            const newScore = Math.max(0, currentScore + delta);
+            const wasLocked = currentScoreData.wasLocked || false; // 원래 잠금 상태였는지 확인
+
+            // 0점이 되었을 때 기권 타입 순환 처리
+            let newForfeitType = currentScoreData.forfeitType;
+            
+            if (newScore === 0 && currentScore > 0) {
+                // 처음 0점이 되면
+                if (wasLocked) {
+                    // 수정 시에는 실격으로 시작 (불참 제외)
+                    newForfeitType = 'disqualified';
+                } else {
+                    // 처음 입력 시에는 불참으로 시작
+                    newForfeitType = 'absent';
+                }
+            } else if (newScore === 0 && currentScore === 0 && delta < 0) {
+                // 0점 상태에서 -버튼 누르면 순환
+                if (wasLocked) {
+                    // 수정 시에는 실격 <-> 기권만 순환
+                    const currentForfeitType = currentScoreData.forfeitType;
+                    if (currentForfeitType === 'disqualified') {
+                        newForfeitType = 'forfeit';
+                    } else if (currentForfeitType === 'forfeit') {
+                        newForfeitType = 'disqualified'; // 다시 실격으로 순환
+                    } else {
+                        // forfeitType이 없거나 null이면 실격으로 시작
+                        newForfeitType = 'disqualified';
                     }
-                };
-                // scoresRef를 즉시 업데이트하여 initializeScores가 최신 상태를 참조하도록 함
-                scoresRef.current = updated;
-                return updated;
+                } else {
+                    // 처음 입력 시에는 불참 -> 실격 -> 기권 -> 불참 순환
+                    const currentForfeitType = currentScoreData.forfeitType;
+                    if (currentForfeitType === 'absent') {
+                        newForfeitType = 'disqualified';
+                    } else if (currentForfeitType === 'disqualified') {
+                        newForfeitType = 'forfeit';
+                    } else if (currentForfeitType === 'forfeit') {
+                        newForfeitType = 'absent'; // 다시 불참으로 순환
+                    } else {
+                        newForfeitType = 'absent'; // 기본값은 불참
+                    }
+                }
+            } else if (newScore > 0) {
+                // 점수가 0보다 크면 기권 타입 초기화
+                newForfeitType = null;
+            }
+
+            console.log('updateScore:', { 
+                id, 
+                delta, 
+                currentScore, 
+                newScore, 
+                wasLocked, 
+                currentForfeitType: currentScoreData.forfeitType, 
+                newForfeitType,
+                'newScore === 0 && currentScore > 0': newScore === 0 && currentScore > 0,
+                'newScore === 0 && currentScore === 0 && delta < 0': newScore === 0 && currentScore === 0 && delta < 0,
+                'newScore > 0': newScore > 0
             });
-        }
-    };
+            console.log('updateScore newForfeitType:', newForfeitType);
+
+            const updated = {
+                ...prev,
+                [id]: {
+                    ...prev[id],
+                    score: newScore,
+                    forfeitType: newForfeitType,
+                    status: 'editing', // 상태 유지
+                    wasLocked: currentScoreData.wasLocked // wasLocked 유지
+                }
+            };
+            // scoresRef를 즉시 업데이트하여 initializeScores가 최신 상태를 참조하도록 함
+            scoresRef.current = updated;
+            console.log('updateScore scoresRef.current updated:', updated[id]);
+            return updated;
+        });
+    }, []);
 
     const handleSavePress = (player: Player) => {
         const scoreData = scores[player.id];
@@ -1508,7 +1531,8 @@ export default function RefereePage() {
                 [playerToUnlock.id]: { 
                     ...prev[playerToUnlock.id], 
                     status: 'editing',
-                    wasLocked: true // 잠금 해제 시 수정 모드임을 표시
+                    wasLocked: true, // 잠금 해제 시 수정 모드임을 표시
+                    forfeitType: prev[playerToUnlock.id]?.forfeitType || null // forfeitType 보존
                 }
             }));
             toast({ title: '성공', description: '잠금이 해제되었습니다. 점수를 수정하세요.' });
@@ -1749,6 +1773,7 @@ export default function RefereePage() {
                 )}
 
                 {currentPlayers.map(player => {
+                    // scores 상태에서 직접 가져오기 (최신 상태 보장)
                     const scoreData = scores[player.id];
                     if (!scoreData) return null;
 
@@ -1766,8 +1791,24 @@ export default function RefereePage() {
                     }
 
                     const isLocked = scoreData.status === 'locked' || isForfeited;
-                    const isZeroScore = scoreData.score === 0;
+                    // scoreData.score를 직접 사용하여 최신 값 보장
+                    const currentScore = scoreData.score;
+                    const isZeroScore = currentScore === 0;
                     const forfeitText = isZeroScore ? getForfeitDisplayText(scoreData.forfeitType || null) : '';
+                    
+                    // 디버깅: UI 렌더링 시점의 scoreData 상태 확인
+                    console.log('UI 렌더링 - 선수 상태:', {
+                        playerId: player.id,
+                        playerName: player.name,
+                        score: currentScore,
+                        forfeitType: scoreData.forfeitType,
+                        isZeroScore,
+                        forfeitText,
+                        isLocked,
+                        scoresState: scoreData,
+                        'scores[player.id]': scores[player.id],
+                        'scoreData === scores[player.id]': scoreData === scores[player.id]
+                    });
 
                     return (
                         <Card key={player.id} className="overflow-hidden">
@@ -1791,8 +1832,12 @@ export default function RefereePage() {
                                             onClick={(e) => {
                                                 e.preventDefault();
                                                 e.stopPropagation();
+                                                console.log('Minus button clicked:', { playerId: player.id, isLocked, scoreData, scoreDataStatus: scoreData?.status });
                                                 if (!isLocked && scoreData) {
+                                                    console.log('Calling updateScore');
                                                     updateScore(player.id, -1);
+                                                } else {
+                                                    console.log('updateScore not called:', { isLocked, hasScoreData: !!scoreData });
                                                 }
                                             }} 
                                             disabled={isLocked}
@@ -1800,7 +1845,7 @@ export default function RefereePage() {
                                             <Minus className="h-5 w-5" />
                                         </Button>
                                         <span className={isZeroScore ? "text-xs font-bold w-12 text-center text-red-600" : "text-3xl font-bold tabular-nums w-12 text-center"}>
-                                            {isZeroScore ? forfeitText : scoreData.score}
+                                            {isZeroScore ? forfeitText : currentScore}
                                         </span>
                                         <Button 
                                             variant="outline" 
