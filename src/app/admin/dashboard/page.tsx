@@ -566,23 +566,23 @@ export default function AdminDashboard() {
                 // localStorage의 모든 홀 활성화 상태도 초기화
                 try {
                     if (typeof window !== 'undefined' && window.localStorage) {
-                        const keys = Object.keys(localStorage);
-                        keys.forEach(key => {
-                            if (key.startsWith('selfScoringDraft_')) {
+                    const keys = Object.keys(localStorage);
+                    keys.forEach(key => {
+                        if (key.startsWith('selfScoringDraft_')) {
                                 const savedDraft = safeLocalStorageGetItem(key);
-                                if (savedDraft) {
-                                    try {
-                                        const parsed = JSON.parse(savedDraft);
-                                        // start와 current를 null로 초기화
-                                        parsed.start = null;
-                                        parsed.current = null;
+                            if (savedDraft) {
+                                try {
+                                    const parsed = JSON.parse(savedDraft);
+                                    // start와 current를 null로 초기화
+                                    parsed.start = null;
+                                    parsed.current = null;
                                         safeLocalStorageSetItem(key, JSON.stringify(parsed));
-                                    } catch (error) {
-                                        console.error('localStorage 홀 활성화 상태 초기화 실패:', error);
-                                    }
+                                } catch (error) {
+                                    console.error('localStorage 홀 활성화 상태 초기화 실패:', error);
                                 }
                             }
-                        });
+                        }
+                    });
                     }
                 } catch (error) {
                     console.error('localStorage 홀 활성화 상태 초기화 실패:', error);
@@ -591,14 +591,14 @@ export default function AdminDashboard() {
                 // localStorage의 모든 사인 데이터도 초기화
                 try {
                     if (typeof window !== 'undefined' && window.localStorage) {
-                        const keys = Object.keys(localStorage);
-                        keys.forEach(key => {
-                            if (key.startsWith('selfScoringSign_') || 
-                                key.startsWith('selfScoringSignTeam_') || 
-                                key.startsWith('selfScoringPostSignLock_')) {
+                    const keys = Object.keys(localStorage);
+                    keys.forEach(key => {
+                        if (key.startsWith('selfScoringSign_') || 
+                            key.startsWith('selfScoringSignTeam_') || 
+                            key.startsWith('selfScoringPostSignLock_')) {
                                 safeLocalStorageRemoveItem(key);
-                            }
-                        });
+                        }
+                    });
                     }
                 } catch (error) {
                     console.error('사인 데이터 초기화 실패:', error);
@@ -816,7 +816,6 @@ export default function AdminDashboard() {
                                 
                                 // 실시간 업데이트를 위한 로그 캐시 무효화
                                 invalidatePlayerLogCache(playerId);
-                                console.log(`[실시간 업데이트] 관리자 기권 처리 - 선수 ${playerId} 로그 캐시 무효화`);
                             }
                         }
                     }
@@ -826,7 +825,6 @@ export default function AdminDashboard() {
                 try {
                     const logs = await getPlayerScoreLogsOptimized(playerId);
                     setPlayerScoreLogs((prev: any) => ({ ...prev, [playerId]: logs }));
-                    console.log(`[실시간 업데이트] 기권 처리 후 선수 ${playerId} 로그 즉시 갱신 완료`);
                 } catch {}
                 return;
             }
@@ -851,7 +849,6 @@ export default function AdminDashboard() {
                     
                     // 실시간 업데이트를 위한 로그 캐시 무효화
                     invalidatePlayerLogCache(playerId);
-                    console.log(`[실시간 업데이트] 관리자 점수 수정 - 선수 ${playerId} 로그 캐시 무효화`);
                     // 점수 로그 저장 후 해당 선수 로그 즉시 갱신 (최적화됨)
                     try {
                         const logs = await getPlayerScoreLogsOptimized(playerId);
@@ -859,12 +856,11 @@ export default function AdminDashboard() {
                             ...prev,
                             [playerId]: logs
                         }));
-                        console.log(`[실시간 업데이트] 선수 ${playerId} 로그 즉시 갱신 완료`);
                     } catch (e) {
-                        console.log("점수 로그 재조회 에러", e);
+                        console.error("점수 로그 재조회 에러", e);
                     }
                 } catch (e) {
-                    console.log("로그 기록 에러", e);
+                    console.error("로그 기록 에러", e);
                 }
             }
             setScoreEditModal({ ...scoreEditModal, open: false });
@@ -895,7 +891,7 @@ export default function AdminDashboard() {
     const [teamBackcountApplied, setTeamBackcountApplied] = useState<boolean>(false);
     const [individualNTPData, setIndividualNTPData] = useState<any>(null);
     const [teamNTPData, setTeamNTPData] = useState<any>(null);
-    const [notifiedSuddenDeathGroups, setNotifiedSuddenDeathGroups] = useState<Set<string>>(new Set());
+    const [notifiedSuddenDeathGroups, setNotifiedSuddenDeathGroups] = useState<string[]>([]);
     const [scoreCheckModal, setScoreCheckModal] = useState<{ open: boolean, groupName: string, missingScores: any[], resultMsg?: string }>({ open: false, groupName: '', missingScores: [] });
     const [autoFilling, setAutoFilling] = useState(false);
 
@@ -980,9 +976,10 @@ export default function AdminDashboard() {
                     
                     // 이미 알림을 보냈으므로 notifiedSuddenDeathGroups에 추가하여 중복 방지
                     setNotifiedSuddenDeathGroups(prev => {
-                        const newSet = new Set(prev);
-                        newSet.add(groupName);
-                        return newSet;
+                        if (!prev.includes(groupName)) {
+                            return [...prev, groupName];
+                        }
+                        return prev;
                     });
                 }
             }
@@ -1017,14 +1014,11 @@ export default function AdminDashboard() {
         
         // 🛡️ 외부 전광판과 동일한 초기 데이터 로딩 방식
         if (!initialDataLoaded) {
-            console.log('🚀 초기 데이터 로딩 시작...');
-            
             let loadedCount = 0;
             const checkAllLoaded = () => {
                 loadedCount++;
                 if (loadedCount >= 3) { // Players, Scores, Tournament 모두 로드되면
                     setInitialDataLoaded(true);
-                    console.log('✅ 초기 데이터 로딩 완료');
                 }
             };
             
@@ -1032,7 +1026,6 @@ export default function AdminDashboard() {
             const unsubInitialPlayers = onValue(playersRef, snap => {
                 const data = snap.val() || {};
                 setPlayers(data);
-                console.log('🔄 Players 초기 로드:', Object.keys(data).length, '명');
                 checkAllLoaded();
             });
             
@@ -1040,7 +1033,6 @@ export default function AdminDashboard() {
             const unsubInitialScores = onValue(scoresRef, snap => {
                 const data = snap.val() || {};
                 setScores(data);
-                console.log('🔄 Scores 초기 로드:', Object.keys(data).length, '개');
                 checkAllLoaded();
             });
             
@@ -1049,7 +1041,6 @@ export default function AdminDashboard() {
             const data = snap.val() || {};
             setCourses(data.courses || {});
             setGroupsData(data.groups || {});
-                console.log('🔄 Tournament 초기 로드');
                 checkAllLoaded();
             });
             
@@ -1057,7 +1048,6 @@ export default function AdminDashboard() {
             const fallbackTimer = setTimeout(() => {
                 if (!initialDataLoaded) {
                     setInitialDataLoaded(true);
-                    console.log('⏰ 강제 로딩 완료 (3초 타임아웃)');
                 }
             }, 3000);
             
@@ -1070,7 +1060,6 @@ export default function AdminDashboard() {
         
         // 🛡️ 초기 데이터 로딩 후 실시간 업데이트 (외부 전광판과 동일)
         if (initialDataLoaded) {
-            console.log('🔄 실시간 업데이트 모드 시작');
             
             // Players: 변경된 선수만 감지 (외부 전광판과 완전히 동일)
             let lastPlayersHash = '';
@@ -1083,7 +1072,6 @@ export default function AdminDashboard() {
                         const newHash = JSON.stringify(newPlayers);
                         if (newHash !== lastPlayersHash) {
                             lastPlayersHash = newHash;
-                            console.log('🔄 Player 변경:', playerId);
                             return newPlayers;
                         }
                         return prev;
@@ -1100,7 +1088,6 @@ export default function AdminDashboard() {
                     const newHash = JSON.stringify(data);
                     if (newHash !== lastScoresHash) {
                         lastScoresHash = newHash;
-                        console.log('🔄 Scores 실시간 업데이트:', Object.keys(data).length, '개');
                         
                         // 🟢 점수 변경 감지 시 해당 선수들의 로그 캐시 무효화 (외부 전광판 방식)
                         if (prev && Object.keys(prev).length > 0) {
@@ -1138,10 +1125,8 @@ export default function AdminDashboard() {
                     lastTournamentHash = currentHash;
                     if (key === 'courses') {
                         setCourses(value);
-                        console.log('🔄 Courses 변경');
                     } else if (key === 'groups') {
                         setGroupsData(value);
-                        console.log('🔄 Groups 변경');
                     }
                 }
             }
@@ -1207,8 +1192,6 @@ export default function AdminDashboard() {
                 const numB = typeof orderB === 'boolean' ? (orderB ? 1 : 0) : (typeof orderB === 'number' ? orderB : 0);
                 return numA - numB; // 작은 순서가 먼저 (첫번째 코스가 위)
             });
-            // 디버깅용 콘솔 출력
-            console.log('playerId:', playerId, 'group:', player.group, 'assignedCourseIds:', assignedCourseIds, 'coursesForPlayer:', coursesForPlayer.map(c => c && c.id));
             const playerScoresData = scores[playerId] || {};
             const coursesData: any = {};
             // 백카운트 계산을 위한 데이터 추가
@@ -1640,7 +1623,7 @@ export default function AdminDashboard() {
         const groupsNeedingPlayoff: string[] = [];
         Object.keys(groupProgress).forEach(groupName => {
             // Check if group is 100% complete and not yet notified
-            if (groupProgress[groupName] === 100 && !notifiedSuddenDeathGroups.has(groupName)) {
+            if (groupProgress[groupName] === 100 && !notifiedSuddenDeathGroups.includes(groupName)) {
                 const playersInGroup = finalDataByGroup[groupName];
                 if (playersInGroup) {
                     const tiedFirstPlace = playersInGroup.filter(p => p.rank === 1);
@@ -1655,8 +1638,6 @@ export default function AdminDashboard() {
 
         // 모든 그룹을 하나의 안내창에 표시
         if (groupsNeedingPlayoff.length > 0) {
-            const updatedNotifiedGroups = new Set(notifiedSuddenDeathGroups);
-            
             // 하나의 토스트에 모든 그룹 나열
             const groupsList = groupsNeedingPlayoff.join(', ');
             const description = groupsNeedingPlayoff.length === 1
@@ -1674,11 +1655,16 @@ export default function AdminDashboard() {
                 duration: 30000 // Keep the toast on screen longer
             });
             
-            // 모든 그룹을 notified set에 추가
-            groupsNeedingPlayoff.forEach(groupName => {
-                updatedNotifiedGroups.add(groupName);
+            // 모든 그룹을 notified 배열에 추가
+            setNotifiedSuddenDeathGroups(prev => {
+                const newGroups = [...prev];
+                groupsNeedingPlayoff.forEach(groupName => {
+                    if (!newGroups.includes(groupName)) {
+                        newGroups.push(groupName);
+                    }
+                });
+                return newGroups;
             });
-            setNotifiedSuddenDeathGroups(updatedNotifiedGroups);
         }
     }, [groupProgress, finalDataByGroup, notifiedSuddenDeathGroups, router]);
 
@@ -1896,7 +1882,6 @@ export default function AdminDashboard() {
     
     // 🛡️ 안전한 구독 중단 함수 (외부 전광판과 동일)
     const stopSubscriptions = () => {
-        console.log('🔴 모든 구독 중단 (데이터 절약)');
         activeUnsubsRef.current.forEach(unsub => {
             try {
                 unsub();
@@ -1976,7 +1961,6 @@ export default function AdminDashboard() {
         const fetchLogs = async () => {
             if (Object.keys(finalDataByGroup).length === 0) return;
             
-            console.log('🔄 ScoreLogs 기본 로딩 시작 - finalDataByGroup 변경 감지');
             
             // 점수가 있는 선수들만 로그 로딩 대상
             const allPlayersWithScores = Object.values(finalDataByGroup)
@@ -1990,7 +1974,6 @@ export default function AdminDashboard() {
             const existingPlayerIds = Object.keys(playerScoreLogs);
             const newPlayerIds = allPlayersWithScores.filter(pid => !existingPlayerIds.includes(pid));
             
-            console.log('🔄 새로 로딩할 선수들:', newPlayerIds);
             
             // 새로운 선수만 로그 로딩 (병렬 처리로 성능 향상)
             if (newPlayerIds.length > 0) {
@@ -1998,7 +1981,6 @@ export default function AdminDashboard() {
                     try {
                         const logs = await getPlayerScoreLogsOptimized(pid);
                         logsMap[pid] = logs;
-                        console.log(`✅ ScoreLogs 기본 로딩 완료 - 선수 ${pid}:`, logs.length, '개');
                     } catch (error) {
                         console.error(`❌ ScoreLogs 기본 로딩 실패 - 선수 ${pid}:`, error);
                         logsMap[pid] = [];
@@ -2053,10 +2035,8 @@ export default function AdminDashboard() {
         const onVisibilityChange = () => {
             if (typeof document === 'undefined') return;
             if (document.hidden) {
-                console.log('🔴 탭 비활성화 - 데이터 다운로드 중단');
                 stopSubscriptions();
             } else {
-                console.log('🟢 탭 활성화 - 데이터 구독 재개');
                 setResumeSeq((s) => s + 1);
             }
         };
@@ -2069,7 +2049,6 @@ export default function AdminDashboard() {
         try {
             const logs = await getPlayerScoreLogsOptimized(playerId);
             setPlayerScoreLogs(prev => ({ ...prev, [playerId]: logs }));
-            console.log('⚡ 즉시 로그 업데이트:', playerId);
         } catch (error) {
             console.error('로그 업데이트 실패:', playerId, error);
         }
