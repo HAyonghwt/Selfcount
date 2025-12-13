@@ -6,6 +6,7 @@ import { Flame, ChevronUp, ChevronDown, Globe } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import GiftEventDisplay from '@/components/gift-event/GiftEventDisplay';
 import GiftEventStandby from '@/components/gift-event/GiftEventStandby';
 import { getPlayerScoreLogs, getPlayerScoreLogsOptimized, ScoreLog, invalidatePlayerLogCache } from '@/lib/scoreLogs';
@@ -296,6 +297,12 @@ function ExternalScoreboard() {
     const [filterGroup, setFilterGroup] = useState('all');
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     
+    // 그룹 순환 기능 상태
+    const [rotationGroups, setRotationGroups] = useState<string[]>([]);
+    const [rotationInterval, setRotationInterval] = useState<number>(30); // 기본 30초
+    const [isRotationActive, setIsRotationActive] = useState<boolean>(false);
+    const currentRotationIndexRef = useRef<number>(0);
+    
     // 다국어 지원 상태
     const [languageMode, setLanguageMode] = useState<'korean' | 'english' | 'cycle'>('korean');
     const [currentLang, setCurrentLang] = useState<'ko' | 'en'>('ko');
@@ -317,6 +324,20 @@ function ExternalScoreboard() {
             setCurrentLang(languageMode === 'korean' ? 'ko' : 'en');
         }
     }, [languageMode]);
+
+    // 그룹 순환 로직
+    useEffect(() => {
+        if (!isRotationActive || rotationGroups.length === 0) {
+            return;
+        }
+
+        const interval = setInterval(() => {
+            currentRotationIndexRef.current = (currentRotationIndexRef.current + 1) % rotationGroups.length;
+            setFilterGroup(rotationGroups[currentRotationIndexRef.current]);
+        }, rotationInterval * 1000);
+
+        return () => clearInterval(interval);
+    }, [isRotationActive, rotationGroups, rotationInterval]);
     
     // 캐싱을 위한 상태 추가
     const [lastScoresHash, setLastScoresHash] = useState('');
@@ -1907,35 +1928,125 @@ function ExternalScoreboard() {
             </div>
 
             {/* 오른쪽 위: 그룹 선택 */}
-            <div className="fixed top-4 right-4 flex items-center gap-4 z-50 group">
-                <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                    <Label htmlFor="group-filter" className="font-bold text-sm text-gray-300">{t('selectGroup')}</Label>
-                    <Select value={filterGroup} onValueChange={setFilterGroup}>
-                        <SelectTrigger id="group-filter" className="w-[200px] h-9 bg-gray-800/80 backdrop-blur-sm border-gray-600 text-white focus:ring-yellow-400">
-                            <SelectValue placeholder={t('selectGroup')} />
-                        </SelectTrigger>
-                        <SelectContent className="bg-gray-900 text-white border-gray-700">
-                            <SelectItem value="all">{t('viewAllGroups')}</SelectItem>
-                            {allGroupsList.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}
-                        </SelectContent>
-                    </Select>
+            <div className="fixed top-4 right-4 flex flex-col items-end gap-2 z-50 group">
+                <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                        <Label htmlFor="group-filter" className="font-bold text-sm text-gray-300">{t('selectGroup')}</Label>
+                        <div className="relative">
+                            <Select value={filterGroup} onValueChange={(value) => {
+                                setFilterGroup(value);
+                                // 순환이 활성화되어 있으면 수동 변경 시 순환 중지
+                                if (isRotationActive) {
+                                    setIsRotationActive(false);
+                                }
+                            }}>
+                                <SelectTrigger id="group-filter" className="w-[200px] h-9 bg-gray-800/80 backdrop-blur-sm border-gray-600 text-white focus:ring-yellow-400">
+                                    <SelectValue placeholder={t('selectGroup')} />
+                                </SelectTrigger>
+                                <SelectContent className="bg-gray-900 text-white border-gray-700">
+                                    <SelectItem value="all">{t('viewAllGroups')}</SelectItem>
+                                    {allGroupsList.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}
+                                </SelectContent>
+                            </Select>
+                            {/* 순환 중 표시 */}
+                            {isRotationActive && rotationGroups.length > 0 && (
+                                <div className="absolute -top-1 -right-1 w-3 h-3 bg-yellow-400 rounded-full animate-pulse" />
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="flex flex-col gap-2">
+                        <button
+                            onClick={() => handleScroll(-50)}
+                            aria-label="Scroll Up"
+                            className="bg-gray-800/70 text-white p-2 rounded-full hover:bg-gray-700 transition-opacity opacity-0 group-hover:opacity-100 duration-300"
+                        >
+                            <ChevronUp className="h-6 w-6" />
+                        </button>
+                        <button
+                            onClick={() => handleScroll(50)}
+                            aria-label="Scroll Down"
+                            className="bg-gray-800/70 text-white p-2 rounded-full hover:bg-gray-700 transition-opacity opacity-0 group-hover:opacity-100 duration-300"
+                        >
+                            <ChevronDown className="h-6 w-6" />
+                        </button>
+                    </div>
                 </div>
 
-                <div className="flex flex-col gap-2">
-                    <button
-                        onClick={() => handleScroll(-50)}
-                        aria-label="Scroll Up"
-                        className="bg-gray-800/70 text-white p-2 rounded-full hover:bg-gray-700 transition-opacity opacity-0 group-hover:opacity-100 duration-300"
-                    >
-                        <ChevronUp className="h-6 w-6" />
-                    </button>
-                    <button
-                        onClick={() => handleScroll(50)}
-                        aria-label="Scroll Down"
-                        className="bg-gray-800/70 text-white p-2 rounded-full hover:bg-gray-700 transition-opacity opacity-0 group-hover:opacity-100 duration-300"
-                    >
-                        <ChevronDown className="h-6 w-6" />
-                    </button>
+                {/* 그룹 순환 설정 (마우스 오버 시 표시) */}
+                <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-gray-900/95 backdrop-blur-sm border border-gray-700 rounded-lg p-4 min-w-[280px]">
+                    <div className="flex flex-col gap-3">
+                        <div className="flex items-center justify-between">
+                            <Label className="font-bold text-sm text-gray-300">그룹 순환</Label>
+                            <div className="flex items-center gap-2">
+                                <Checkbox
+                                    id="rotation-active"
+                                    checked={isRotationActive}
+                                    onCheckedChange={(checked) => {
+                                        setIsRotationActive(checked === true);
+                                        if (checked === true && rotationGroups.length > 0) {
+                                            // 순환 시작 시 첫 번째 그룹으로 설정
+                                            currentRotationIndexRef.current = 0;
+                                            setFilterGroup(rotationGroups[0]);
+                                        }
+                                    }}
+                                    className="border-gray-600"
+                                />
+                                <Label htmlFor="rotation-active" className="text-xs text-gray-400 cursor-pointer">
+                                    활성화
+                                </Label>
+                            </div>
+                        </div>
+
+                        {isRotationActive && (
+                            <>
+                                <div className="flex flex-col gap-2">
+                                    <Label className="text-xs text-gray-400">순환할 그룹 선택</Label>
+                                    <div className="flex flex-col gap-1.5 max-h-32 overflow-y-auto">
+                                        {allGroupsList.map(group => (
+                                            <div key={group} className="flex items-center gap-2">
+                                                <Checkbox
+                                                    id={`rotation-group-${group}`}
+                                                    checked={rotationGroups.includes(group)}
+                                                    onCheckedChange={(checked) => {
+                                                        if (checked === true) {
+                                                            setRotationGroups(prev => [...prev, group]);
+                                                        } else {
+                                                            setRotationGroups(prev => prev.filter(g => g !== group));
+                                                        }
+                                                    }}
+                                                    className="border-gray-600"
+                                                />
+                                                <Label htmlFor={`rotation-group-${group}`} className="text-xs text-gray-300 cursor-pointer">
+                                                    {group}
+                                                </Label>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div className="flex flex-col gap-2">
+                                    <Label className="text-xs text-gray-400">순환 시간</Label>
+                                    <Select 
+                                        value={rotationInterval.toString()} 
+                                        onValueChange={(value) => setRotationInterval(parseInt(value))}
+                                    >
+                                        <SelectTrigger className="w-full h-8 bg-gray-800/80 border-gray-600 text-white text-xs">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent className="bg-gray-900 text-white border-gray-700">
+                                            <SelectItem value="30">30초</SelectItem>
+                                            <SelectItem value="60">1분</SelectItem>
+                                            <SelectItem value="120">2분</SelectItem>
+                                            <SelectItem value="180">3분</SelectItem>
+                                            <SelectItem value="240">4분</SelectItem>
+                                            <SelectItem value="300">5분</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            </>
+                        )}
+                    </div>
                 </div>
             </div>
         </>
