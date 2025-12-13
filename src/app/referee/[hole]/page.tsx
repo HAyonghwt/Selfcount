@@ -809,22 +809,15 @@ export default function RefereePage() {
     const availableGroups = useMemo(() => {
         // assignedCourse가 없으면 빈 배열 반환 (fallback 제거 - 잘못된 그룹 선택 방지)
         if (!assignedCourse) {
-            console.log('availableGroups: assignedCourse 없음 - 빈 배열 반환');
             return [];
         }
 
         // groupsData가 아직 로드되지 않았거나, selectedType이 없으면 빈 배열 반환
         if (!groupsData || Object.keys(groupsData).length === 0 || !selectedType) {
-            console.log('availableGroups: groupsData 또는 selectedType 없음', {
-                hasGroupsData: !!groupsData,
-                groupsDataKeys: groupsData ? Object.keys(groupsData).length : 0,
-                selectedType
-            });
             return [];
         }
         
         const courseIdStr = String(assignedCourse.id);
-        console.log('availableGroups: 코스 ID로 찾기', courseIdStr);
         
         const result = Object.values(groupsData)
             .filter((g: any) => {
@@ -838,7 +831,6 @@ export default function RefereePage() {
             .filter(Boolean)
             .sort();
         
-        console.log('✅ availableGroups: 결과', result);
         return result;
     }, [groupsData, selectedType, assignedCourse]);
 
@@ -854,7 +846,6 @@ export default function RefereePage() {
         if (!assignedCourse) {
             // assignedCourse가 없는데 selectedCourse가 있으면 초기화 (할당 코스 변경 대비)
             if (selectedCourse) {
-                console.warn('⚠️ 코스 자동 선택: assignedCourse 없음 - selectedCourse 초기화');
                 setSelectedCourse('');
             }
             return;
@@ -864,27 +855,16 @@ export default function RefereePage() {
         
         // 이미 선택된 코스가 있고, 그것이 assignedCourse와 일치하면 유지
         if (selectedCourse && selectedCourse === courseIdStr) {
-            console.log('✅ 코스 자동 선택: 이미 올바른 코스 선택됨', selectedCourse);
             return;
         }
 
-        // selectedCourse가 assignedCourse와 일치하지 않으면 자동으로 수정 (할당 코스 변경 대비)
-        if (selectedCourse && selectedCourse !== courseIdStr) {
-            console.warn('⚠️ 코스 자동 선택: selectedCourse가 assignedCourse와 불일치 - 자동 수정', {
-                selectedCourse,
-                assignedCourse: courseIdStr
-            });
-        }
-
         // assignedCourse가 있으면 자동 선택
-        console.log('✅ 코스 자동 선택: assignedCourse 사용', courseIdStr, assignedCourse);
         setSelectedCourse(courseIdStr);
     }, [assignedCourse?.id, selectedCourse]);
 
     // 경기 형태 자동 선택 (1개만 있을 때)
     useEffect(() => {
         if (availableTypes.length === 1 && selectedType !== availableTypes[0]) {
-            console.log('경기 형태 자동 선택:', availableTypes[0]);
             setSelectedType(availableTypes[0]);
         }
     }, [availableTypes.length]);
@@ -927,23 +907,6 @@ export default function RefereePage() {
         }
     }, [loading, refereeData, assignedCourse, tournamentCourses, courses, toast]);
 
-    // 디버깅: 전체 상태 로그
-    useEffect(() => {
-        console.log('=== 심판 페이지 상태 ===', {
-            refereeData: refereeData ? { id: refereeData.id, hole: refereeData.hole } : null,
-            assignedCourse: assignedCourse ? { id: assignedCourse.id, name: assignedCourse.name, order: assignedCourse.order } : null,
-            selectedCourse,
-            tournamentCoursesCount: tournamentCourses.length,
-            coursesCount: courses.length,
-            groupsDataCount: Object.keys(groupsData).length,
-            availableTypes,
-            selectedType,
-            availableGroups,
-            selectedGroup,
-            availableJos,
-            selectedJo
-        });
-    }, [refereeData, assignedCourse, selectedCourse, tournamentCourses.length, courses.length, groupsData, availableTypes, selectedType, availableGroups, selectedGroup, availableJos, selectedJo]);
 
     // 완료된 조들을 확인하는 함수 (재사용 가능하도록 분리)
     const checkCompletedJos = useCallback(async () => {
@@ -1070,16 +1033,6 @@ export default function RefereePage() {
         });
         
         if (hasEditingScores && Object.keys(currentScores).length > 0) {
-            console.log('initializeScores - editing 상태인 점수가 있으므로 초기화 건너뜀', {
-                hasEditingScores,
-                currentScoresKeys: Object.keys(currentScores),
-                editingScores: currentPlayers.filter(p => currentScores[p.id]?.status === 'editing').map(p => ({
-                    id: p.id,
-                    name: p.name,
-                    score: currentScores[p.id],
-                    forfeitType: currentScores[p.id]?.forfeitType
-                }))
-            });
             return;
         }
 
@@ -1093,12 +1046,6 @@ export default function RefereePage() {
                 // 이미 editing 상태인 점수는 절대 덮어쓰지 않음 (사용자가 수정 중인 점수 보호)
                 const existingEditingScore = scoresRef.current[player.id];
                 if (existingEditingScore && existingEditingScore.status === 'editing') {
-                    console.log('initializeScores - editing 상태 유지 (덮어쓰기 방지):', { 
-                        playerId: player.id, 
-                        playerName: player.name,
-                        existingScore: existingEditingScore,
-                        allScoresValue: allScores[player.id]?.[selectedCourse as string]?.[hole as string]
-                    });
                     newScoresState[player.id] = existingEditingScore;
                     continue;
                 }
@@ -1288,20 +1235,6 @@ export default function RefereePage() {
                 newForfeitType = null;
             }
 
-            console.log('updateScore:', { 
-                id, 
-                delta, 
-                currentScore, 
-                newScore, 
-                wasLocked, 
-                currentForfeitType: currentScoreData.forfeitType, 
-                newForfeitType,
-                'newScore === 0 && currentScore > 0': newScore === 0 && currentScore > 0,
-                'newScore === 0 && currentScore === 0 && delta < 0': newScore === 0 && currentScore === 0 && delta < 0,
-                'newScore > 0': newScore > 0
-            });
-            console.log('updateScore newForfeitType:', newForfeitType);
-
             const updated = {
                 ...prev,
                 [id]: {
@@ -1314,7 +1247,6 @@ export default function RefereePage() {
             };
             // scoresRef를 즉시 업데이트하여 initializeScores가 최신 상태를 참조하도록 함
             scoresRef.current = updated;
-            console.log('updateScore scoresRef.current updated:', updated[id]);
             return updated;
         });
     }, []);
@@ -1702,10 +1634,6 @@ export default function RefereePage() {
                             // assignedCourse와 일치하는지 확인 (비활성화되어 있지만 안전장치)
                             const newCourse = (v || '').toString();
                             if (assignedCourse && String(assignedCourse.id) !== newCourse) {
-                                console.warn('⚠️ 코스 변경 시도 무시: assignedCourse와 불일치', {
-                                    attempted: newCourse,
-                                    assigned: String(assignedCourse.id)
-                                });
                                 // assignedCourse로 강제 설정
                                 setSelectedCourse(String(assignedCourse.id));
                             } else {
@@ -1795,20 +1723,6 @@ export default function RefereePage() {
                     const currentScore = scoreData.score;
                     const isZeroScore = currentScore === 0;
                     const forfeitText = isZeroScore ? getForfeitDisplayText(scoreData.forfeitType || null) : '';
-                    
-                    // 디버깅: UI 렌더링 시점의 scoreData 상태 확인
-                    console.log('UI 렌더링 - 선수 상태:', {
-                        playerId: player.id,
-                        playerName: player.name,
-                        score: currentScore,
-                        forfeitType: scoreData.forfeitType,
-                        isZeroScore,
-                        forfeitText,
-                        isLocked,
-                        scoresState: scoreData,
-                        'scores[player.id]': scores[player.id],
-                        'scoreData === scores[player.id]': scoreData === scores[player.id]
-                    });
 
                     return (
                         <Card key={player.id} className="overflow-hidden">
@@ -1832,12 +1746,8 @@ export default function RefereePage() {
                                             onClick={(e) => {
                                                 e.preventDefault();
                                                 e.stopPropagation();
-                                                console.log('Minus button clicked:', { playerId: player.id, isLocked, scoreData, scoreDataStatus: scoreData?.status });
                                                 if (!isLocked && scoreData) {
-                                                    console.log('Calling updateScore');
                                                     updateScore(player.id, -1);
-                                                } else {
-                                                    console.log('updateScore not called:', { isLocked, hasScoreData: !!scoreData });
                                                 }
                                             }} 
                                             disabled={isLocked}
