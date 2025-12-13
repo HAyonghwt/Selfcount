@@ -15,6 +15,7 @@ import { ref, onValue, set, get, query, limitToLast, onChildChanged, off } from 
 import { useToast } from '@/hooks/use-toast';
 import { ToastAction } from '@/components/ui/toast';
 import ExternalScoreboardInfo from '@/components/ExternalScoreboardInfo';
+import { safeLocalStorageGetItem, safeLocalStorageSetItem, safeLocalStorageRemoveItem } from '@/lib/utils';
 
 interface ProcessedPlayer {
     id: string;
@@ -564,37 +565,41 @@ export default function AdminDashboard() {
                 
                 // localStorage의 모든 홀 활성화 상태도 초기화
                 try {
-                    const keys = Object.keys(localStorage);
-                    keys.forEach(key => {
-                        if (key.startsWith('selfScoringDraft_')) {
-                            const savedDraft = localStorage.getItem(key);
-                            if (savedDraft) {
-                                try {
-                                    const parsed = JSON.parse(savedDraft);
-                                    // start와 current를 null로 초기화
-                                    parsed.start = null;
-                                    parsed.current = null;
-                                    localStorage.setItem(key, JSON.stringify(parsed));
-                                } catch (error) {
-                                    console.error('localStorage 홀 활성화 상태 초기화 실패:', error);
+                    if (typeof window !== 'undefined' && window.localStorage) {
+                        const keys = Object.keys(localStorage);
+                        keys.forEach(key => {
+                            if (key.startsWith('selfScoringDraft_')) {
+                                const savedDraft = safeLocalStorageGetItem(key);
+                                if (savedDraft) {
+                                    try {
+                                        const parsed = JSON.parse(savedDraft);
+                                        // start와 current를 null로 초기화
+                                        parsed.start = null;
+                                        parsed.current = null;
+                                        safeLocalStorageSetItem(key, JSON.stringify(parsed));
+                                    } catch (error) {
+                                        console.error('localStorage 홀 활성화 상태 초기화 실패:', error);
+                                    }
                                 }
                             }
-                        }
-                    });
+                        });
+                    }
                 } catch (error) {
                     console.error('localStorage 홀 활성화 상태 초기화 실패:', error);
                 }
                 
                 // localStorage의 모든 사인 데이터도 초기화
                 try {
-                    const keys = Object.keys(localStorage);
-                    keys.forEach(key => {
-                        if (key.startsWith('selfScoringSign_') || 
-                            key.startsWith('selfScoringSignTeam_') || 
-                            key.startsWith('selfScoringPostSignLock_')) {
-                            localStorage.removeItem(key);
-                        }
-                    });
+                    if (typeof window !== 'undefined' && window.localStorage) {
+                        const keys = Object.keys(localStorage);
+                        keys.forEach(key => {
+                            if (key.startsWith('selfScoringSign_') || 
+                                key.startsWith('selfScoringSignTeam_') || 
+                                key.startsWith('selfScoringPostSignLock_')) {
+                                safeLocalStorageRemoveItem(key);
+                            }
+                        });
+                    }
                 } catch (error) {
                     console.error('사인 데이터 초기화 실패:', error);
                 }
@@ -687,14 +692,14 @@ export default function AdminDashboard() {
                         const courses = Object.keys(groupsData[filterGroup]?.courses || {});
                         courses.forEach(courseId => {
                             const draftKey = `selfScoringDraft_${courseId}_${filterGroup}_1`;
-                            const savedDraft = localStorage.getItem(draftKey);
+                            const savedDraft = safeLocalStorageGetItem(draftKey);
                             if (savedDraft) {
                                 try {
                                     const parsed = JSON.parse(savedDraft);
                                     // start와 current를 null로 초기화
                                     parsed.start = null;
                                     parsed.current = null;
-                                    localStorage.setItem(draftKey, JSON.stringify(parsed));
+                                    safeLocalStorageSetItem(draftKey, JSON.stringify(parsed));
                                 } catch (error) {
                                     console.error('localStorage 홀 활성화 상태 초기화 실패:', error);
                                 }
@@ -710,15 +715,15 @@ export default function AdminDashboard() {
                         courses.forEach(courseId => {
                             // 개인 사인 삭제
                             const signKey = `selfScoringSign_${courseId}_${filterGroup}_1`;
-                            localStorage.removeItem(signKey);
+                            safeLocalStorageRemoveItem(signKey);
                             
                             // 팀 사인 삭제
                             const teamSignKey = `selfScoringSignTeam_${courseId}_${filterGroup}_1`;
-                            localStorage.removeItem(teamSignKey);
+                            safeLocalStorageRemoveItem(teamSignKey);
                             
                             // 사인 후 잠금 상태 삭제
                             const postSignLockKey = `selfScoringPostSignLock_${courseId}_${filterGroup}_1`;
-                            localStorage.removeItem(postSignLockKey);
+                            safeLocalStorageRemoveItem(postSignLockKey);
                         });
                     } catch (error) {
                         console.error('사인 데이터 초기화 실패:', error);

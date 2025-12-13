@@ -273,8 +273,21 @@ export const loginRefereeWithKoreanId = async (koreanId: string, password: strin
     // });
     
     return refereeData;
-  } catch (error) {
-    throw error;
+  } catch (error: any) {
+    // Firestore 권한 오류를 명확하게 처리
+    if (error.code === 'permission-denied' || 
+        error.message?.includes('Missing or insufficient permissions') ||
+        error.message?.includes('permission denied')) {
+      throw new Error('Firestore 접근 권한이 없습니다. 관리자에게 문의하세요.');
+    }
+    
+    // 기존 오류 메시지가 있으면 그대로 사용
+    if (error.message) {
+      throw error;
+    }
+    
+    // 알 수 없는 오류
+    throw new Error('로그인 중 오류가 발생했습니다. 다시 시도해주세요.');
   }
 };
 

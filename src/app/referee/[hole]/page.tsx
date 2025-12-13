@@ -14,7 +14,7 @@ import { ref, onValue, set, get } from 'firebase/database';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription } from "@/components/ui/alert-dialog";
 import { useToast } from '@/hooks/use-toast';
-import { cn } from '@/lib/utils';
+import { cn, safeSessionStorageGetItem, safeSessionStorageSetItem, safeSessionStorageClear, safeLocalStorageGetItem, safeLocalStorageSetItem, safeLocalStorageRemoveItem, safeLocalStorageClear } from '@/lib/utils';
 import { logScoreChange } from '@/lib/scoreLogs';
 import QRCodeViewer from '@/components/QRCodeViewer';
 
@@ -32,6 +32,7 @@ interface ScoreData {
     score: number;
     status: 'editing' | 'locked';
     forfeitType?: 'absent' | 'disqualified' | 'forfeit' | null; // 추가: 기권 타입
+    wasLocked?: boolean; // 원래 잠금 상태였는지 추적 (수정 시 불참 제외용)
 }
 
 // 캐시 인터페이스 추가
@@ -135,35 +136,133 @@ export default function RefereePage() {
 
 
 
-    // 로그인 상태 확인 및 Firebase 인증
+    // 로그인 상태 확인 및 Firebase 인증 (강화된 로직)
     useEffect(() => {
-        const loggedInReferee = sessionStorage.getItem('refereeData');
-        if (!loggedInReferee) {
-            router.push('/referee/login');
-            return;
-        }
+        let mounted = true;
+        let retryCount = 0;
+        const maxRetries = 5;
 
-        try {
-            const referee = JSON.parse(loggedInReferee);
-            setRefereeData(referee);
+        const loadRefereeData = () => {
+            // 1. URL 파라미터에서 데이터 확인 (최우선)
+            const urlParams = new URLSearchParams(window.location.search);
+            const refereeDataFromUrl = urlParams.get('refereeData');
+            
+            if (refereeDataFromUrl) {
+                try {
+                    const referee = JSON.parse(decodeURIComponent(refereeDataFromUrl));
+                    console.log('✅ URL에서 refereeData 로드:', referee);
+                    
+                    // sessionStorage에 저장 시도 (여러 번 재시도)
+                    let saved = false;
+                    for (let i = 0; i < maxRetries; i++) {
+                        try {
+                            safeSessionStorageSetItem('refereeData', JSON.stringify(referee));
+                            saved = true;
+                            break;
+                        } catch (e) {
+                            console.warn(`sessionStorage 저장 시도 ${i + 1}/${maxRetries} 실패, 재시도...`);
+                            if (i < maxRetries - 1) {
+                                setTimeout(() => {}, 100 * (i + 1));
+                            }
+                        }
+                    }
+                    
+                    if (!saved) {
+                        console.warn('⚠️ sessionStorage 저장 실패, URL 파라미터로만 사용');
+                    }
+                    
+                    // URL에서 파라미터 제거
+                    window.history.replaceState({}, '', window.location.pathname);
+                    
+                    if (mounted) {
+                        setRefereeData(referee);
+                        
+                        // 로그인한 심판의 홀과 현재 페이지 홀이 다르면 리다이렉트
+                        if (referee.hole !== parseInt(hole)) {
+                            router.push(`/referee/${referee.hole}`);
+                            return;
+                        }
 
-            // 로그인한 심판의 홀과 현재 페이지 홀이 다르면 리다이렉트
-            if (referee.hole !== parseInt(hole)) {
-                router.push(`/referee/${referee.hole}`);
-                return;
+                        // Firebase 인증 수행
+                        ensureAuthenticated().then(success => {
+                            if (!success) {
+                                console.warn('Firebase 인증 실패 - 점수 저장 시 재시도됩니다.');
+                            }
+                        });
+                    }
+                    return;
+                } catch (error) {
+                    console.error('❌ URL 파라미터 데이터 파싱 오류:', error);
+                }
             }
 
-            // Firebase 인증 수행
-            ensureAuthenticated().then(success => {
-                if (!success) {
-                    console.warn('Firebase 인증 실패 - 점수 저장 시 재시도됩니다.');
+            // refereeData 처리 함수 (공통)
+            const processRefereeData = (data: string) => {
+                try {
+                    const referee = JSON.parse(data);
+                    console.log('✅ refereeData 파싱 성공:', referee);
+                    
+                    if (mounted) {
+                        setRefereeData(referee);
+
+                        // 로그인한 심판의 홀과 현재 페이지 홀이 다르면 리다이렉트
+                        if (referee.hole !== parseInt(hole)) {
+                            router.push(`/referee/${referee.hole}`);
+                            return;
+                        }
+
+                        // Firebase 인증 수행
+                        ensureAuthenticated().then(success => {
+                            if (!success) {
+                                console.warn('Firebase 인증 실패 - 점수 저장 시 재시도됩니다.');
+                            }
+                        });
+                    }
+                } catch (error) {
+                    console.error('❌ 심판 데이터 파싱 오류:', error);
+                    if (mounted) {
+                        router.push('/referee/login');
+                    }
                 }
-            });
-        } catch (error) {
-            console.error('심판 데이터 파싱 오류:', error);
-            router.push('/referee/login');
-            return;
-        }
+            };
+
+            // 2. sessionStorage에서 데이터 확인 (여러 번 재시도)
+            const tryLoadFromStorage = (attempt: number): void => {
+                if (attempt >= maxRetries) {
+                    console.error('❌ refereeData를 찾을 수 없음 (최대 재시도 횟수 초과) - 로그인 페이지로 이동');
+                    if (mounted) {
+                        router.push('/referee/login');
+                    }
+                    return;
+                }
+
+                try {
+                    const loggedInReferee = safeSessionStorageGetItem('refereeData');
+                    if (loggedInReferee) {
+                        console.log(`✅ sessionStorage에서 refereeData 로드 (시도 ${attempt + 1})`);
+                        processRefereeData(loggedInReferee);
+                        return;
+                    }
+                } catch (e) {
+                    console.warn(`sessionStorage 읽기 시도 ${attempt + 1}/${maxRetries} 실패`);
+                }
+                
+                // 다음 시도 전 대기
+                setTimeout(() => {
+                    if (mounted) {
+                        tryLoadFromStorage(attempt + 1);
+                    }
+                }, 100 * (attempt + 1));
+            };
+
+            tryLoadFromStorage(0);
+        };
+
+        loadRefereeData();
+
+        return () => {
+            mounted = false;
+        };
     }, [hole, router]);
 
     // 대회 코스 정보 불러오기
@@ -182,8 +281,16 @@ export default function RefereePage() {
                     }))
                     .sort((a: any, b: any) => (a.order || 999) - (b.order || 999)); // order 기준으로 정렬
                 setTournamentCourses(selectedCourses);
+                // 초기 로드 완료 시 loading 상태 업데이트
+                if (loading) {
+                    setLoading(false);
+                }
             } else {
                 setTournamentCourses([]);
+                // 데이터가 없어도 로딩 완료로 처리
+                if (loading) {
+                    setLoading(false);
+                }
             }
         });
 
@@ -199,6 +306,13 @@ export default function RefereePage() {
 
         // 토너먼트 설정은 한 번만 로드 (캐시 확인)
         const loadTournamentData = async () => {
+            // Firebase 익명 인증 먼저 수행
+            try {
+                await ensureAuthenticated();
+            } catch (error) {
+                console.warn('Firebase 익명 인증 실패 (계속 진행):', error);
+            }
+
             const cacheKey = 'tournament';
             const now = Date.now();
             const cacheAge = now - (dataCache.current.lastUpdated[cacheKey] || 0);
@@ -206,7 +320,23 @@ export default function RefereePage() {
             // 캐시가 30분 이내면 캐시 사용 (토너먼트 설정은 거의 바뀌지 않음)
             if (dataCache.current.tournament && cacheAge < 30 * 60 * 1000) {
                 const cached = dataCache.current.tournament;
-                setCourses(cached.courses ? Object.values(cached.courses) : []);
+                const coursesArray = cached.courses ? Object.values(cached.courses) : [];
+                setCourses(coursesArray);
+                
+                // tournamentCourses도 함께 업데이트
+                if (cached.courses) {
+                    const selectedCourses = Object.values(cached.courses)
+                        .filter((course: any) => course.isActive)
+                        .map((course: any) => ({
+                            ...course,
+                            order: course.order !== undefined ? course.order : 999
+                        }))
+                        .sort((a: any, b: any) => (a.order || 999) - (b.order || 999));
+                    setTournamentCourses(selectedCourses);
+                } else {
+                    setTournamentCourses([]);
+                }
+                
                 setGroupsData(cached.groups || {});
                 setLoading(false);
                 return;
@@ -219,22 +349,67 @@ export default function RefereePage() {
             // 최적화: 한 번만 로드하여 캐시에 저장
             const loadTournamentOnce = async () => {
                 try {
-                    const [tournamentSnapshot, passwordSnapshot] = await Promise.all([
-                        get(tournamentRef),
-                        get(passwordRef)
-                    ]);
+                    // 각 요청을 개별적으로 처리하여 하나가 실패해도 다른 것은 계속 진행
+                    let tournamentData = {};
+                    let password = '';
 
-                    const data = tournamentSnapshot.val() || {};
-                    const password = passwordSnapshot.val() || '';
+                    // 토너먼트 데이터 로드
+                    try {
+                        const tournamentSnapshot = await get(tournamentRef);
+                        tournamentData = tournamentSnapshot.val() || {};
+                    } catch (error: any) {
+                        console.error('토너먼트 데이터 로드 실패:', error);
+                        // 권한 오류인 경우에도 계속 진행 (기본값 사용)
+                        if (error.code === 'PERMISSION_DENIED' || error.message?.includes('Permission denied')) {
+                            console.warn('토너먼트 데이터 접근 권한이 없습니다. 기본값을 사용합니다.');
+                            // 권한 오류 시 재인증 시도
+                            try {
+                                await ensureAuthenticated();
+                                // 재인증 후 재시도
+                                const retrySnapshot = await get(tournamentRef);
+                                tournamentData = retrySnapshot.val() || {};
+                            } catch (retryError) {
+                                console.warn('재인증 후 재시도 실패:', retryError);
+                            }
+                        }
+                    }
 
-                    dataCache.current.tournament = data;
+                    // 비밀번호 데이터 로드 (실패해도 계속 진행)
+                    try {
+                        const passwordSnapshot = await get(passwordRef);
+                        password = passwordSnapshot.val() || '';
+                    } catch (error: any) {
+                        console.warn('비밀번호 데이터 로드 실패 (무시):', error);
+                        // 비밀번호는 선택적이므로 실패해도 계속 진행
+                        password = '';
+                    }
+
+                    dataCache.current.tournament = tournamentData;
                     dataCache.current.lastUpdated[cacheKey] = Date.now();
-                    setCourses(data.courses ? Object.values(data.courses) : []);
-                    setGroupsData(data.groups || {});
+                    
+                    // courses 설정
+                    const coursesArray = tournamentData.courses ? Object.values(tournamentData.courses) : [];
+                    setCourses(coursesArray);
+                    
+                    // tournamentCourses도 함께 업데이트 (assignedCourse 찾기용)
+                    if (tournamentData.courses) {
+                        const selectedCourses = Object.values(tournamentData.courses)
+                            .filter((course: any) => course.isActive)
+                            .map((course: any) => ({
+                                ...course,
+                                order: course.order !== undefined ? course.order : 999
+                            }))
+                            .sort((a: any, b: any) => (a.order || 999) - (b.order || 999));
+                        setTournamentCourses(selectedCourses);
+                    } else {
+                        setTournamentCourses([]);
+                    }
+                    
+                    setGroupsData(tournamentData.groups || {});
                     setUnlockPasswordFromDb(password);
                     setLoading(false);
                 } catch (error) {
-                    console.error('토너먼트 데이터 로드 실패:', error);
+                    console.error('토너먼트 데이터 로드 중 예상치 못한 오류:', error);
                     setLoading(false);
                 }
             };
@@ -461,13 +636,121 @@ export default function RefereePage() {
         };
     }, [view]);
 
-    // Restore state from localStorage on initial load
+    // 심판이 담당하는 코스 찾기 (명확하고 확실한 로직)
+    const assignedCourse = useMemo(() => {
+        // 1. 기본 조건 확인 (refereeData가 아직 로드 중일 수 있으므로 경고만 출력)
+        if (!refereeData) {
+            // refereeData가 아직 로드되지 않았을 수 있으므로 오류 대신 조용히 null 반환
+            return null;
+        }
+        
+        if (!refereeData.id) {
+            console.warn('⚠️ assignedCourse: refereeData.id 없음', refereeData);
+            return null;
+        }
+
+        // 2. tournamentCourses 우선 사용 (실시간 구독으로 항상 최신)
+        const coursesToSearch = tournamentCourses.length > 0 ? tournamentCourses : courses;
+        
+        // 3. 코스 데이터가 아직 로드되지 않았을 수 있으므로 로딩 중일 때는 조용히 null 반환
+        if (coursesToSearch.length === 0) {
+            // 로딩 중이면 조용히 null 반환 (데이터가 아직 로드 중일 수 있음)
+            if (loading) {
+                return null;
+            }
+            // 로딩이 완료되었는데도 코스가 없으면 경고 출력
+            console.warn('⚠️ assignedCourse: 사용 가능한 코스가 없음 (로딩 완료 후)', {
+                tournamentCourses: tournamentCourses.length,
+                courses: courses.length,
+                loading
+            });
+            return null;
+        }
+
+        // 3. 심판 아이디에서 코스 번호 추출
+        // 예: "1번홀심판" -> suffixNumber=0 (첫번째 코스, order=1)
+        //     "1번홀심판1" -> suffixNumber=1 (두번째 코스, order=2)
+        //     "1번홀심판2" -> suffixNumber=2 (세번째 코스, order=3)
+        const match = refereeData.id.match(/(\d+)번홀심판(\d*)/);
+        if (!match) {
+            console.error('❌ assignedCourse: 심판 아이디 패턴 매칭 실패', refereeData.id);
+            return null;
+        }
+
+        const suffixNumber = match[2] ? parseInt(match[2]) : 0;
+        const targetOrder = suffixNumber === 0 ? 1 : suffixNumber + 1;
+
+        console.log('🔍 assignedCourse 찾기:', {
+            refereeId: refereeData.id,
+            suffixNumber,
+            targetOrder,
+            coursesToSearch: coursesToSearch.map((c: any) => ({ id: c.id, name: c.name, order: c.order }))
+        });
+        
+        // 4. order 기준으로 정확히 찾기 (가장 확실한 방법)
+        let foundCourse = coursesToSearch.find((course: any) => {
+            const courseOrder = course.order;
+            if (courseOrder !== undefined && courseOrder !== null && typeof courseOrder === 'number' && courseOrder > 0) {
+                return courseOrder === targetOrder;
+            }
+            return false;
+        });
+        
+        if (foundCourse) {
+            console.log('✅ assignedCourse: order 기준으로 찾음', { id: foundCourse.id, name: foundCourse.name, order: foundCourse.order });
+            return foundCourse;
+        }
+        
+        // 5. order가 없는 경우 인덱스 방식 (fallback, 하지만 정확도 낮음)
+        if (suffixNumber < coursesToSearch.length) {
+            foundCourse = coursesToSearch[suffixNumber];
+            console.warn('⚠️ assignedCourse: order 없어서 인덱스 방식 사용', { 
+                id: foundCourse.id, 
+                name: foundCourse.name,
+                index: suffixNumber 
+            });
+            return foundCourse;
+        }
+
+        // 6. 찾지 못함 (fallback 제거 - 잘못된 코스 선택 방지)
+        console.error('❌ assignedCourse: 코스를 찾지 못함', {
+            refereeId: refereeData.id,
+            suffixNumber,
+            targetOrder,
+            availableCourses: coursesToSearch.length
+        });
+        return null;
+    }, [refereeData, tournamentCourses, courses, loading]);
+
+    // Restore state from localStorage on initial load (assignedCourse와 일치할 때만)
     useEffect(() => {
+        // assignedCourse가 로드되지 않았거나 없으면 복원하지 않음
+        if (!assignedCourse || loading) {
+            return;
+        }
+
         try {
-            const savedStateJSON = localStorage.getItem(`refereeState_${hole}`);
+            const savedStateJSON = safeLocalStorageGetItem(`refereeState_${hole}`);
             if (savedStateJSON) {
                 const savedState = JSON.parse(savedStateJSON);
+                
+                // 저장된 코스가 assignedCourse와 일치하는지 확인
+                const savedCourseId = String(savedState.course || '');
+                const assignedCourseId = String(assignedCourse.id);
+                
+                if (savedCourseId !== assignedCourseId) {
+                    console.log('⚠️ 로컬스토리지 상태 무시: 할당된 코스와 불일치', {
+                        savedCourse: savedCourseId,
+                        assignedCourse: assignedCourseId
+                    });
+                    // 할당된 코스와 다르면 로컬스토리지 상태 삭제
+                    safeLocalStorageRemoveItem(`refereeState_${hole}`);
+                    return;
+                }
+                
+                // 코스가 일치하고 모든 필수 필드가 있으면 복원
                 if (savedState.group && savedState.course && savedState.jo && savedState.view === 'scoring') {
+                    console.log('✅ 로컬스토리지 상태 복원:', savedState);
                     setSelectedGroup(savedState.group);
                     setSelectedCourse(savedState.course);
                     setSelectedJo(savedState.jo);
@@ -476,117 +759,108 @@ export default function RefereePage() {
                         setSelectedType(savedState.selectedType);
                     }
                 } else {
-                    localStorage.removeItem(`refereeState_${hole}`);
+                    // 필수 필드가 없으면 삭제
+                    safeLocalStorageRemoveItem(`refereeState_${hole}`);
                 }
             }
         } catch (error) {
             console.error("Failed to restore referee state from localStorage", error);
-            localStorage.removeItem(`refereeState_${hole}`);
+            safeLocalStorageRemoveItem(`refereeState_${hole}`);
         }
-    }, [hole]);
+    }, [hole, assignedCourse, loading]);
 
-    // Save view state to localStorage
+    // Save view state to localStorage (assignedCourse와 일치할 때만)
     useEffect(() => {
+        // assignedCourse가 없으면 저장하지 않음
+        if (!assignedCourse) {
+            return;
+        }
+
+        // selectedCourse가 assignedCourse와 일치하는지 확인
+        const selectedCourseId = String(selectedCourse || '');
+        const assignedCourseId = String(assignedCourse.id);
+        
         if (view === 'scoring' && selectedGroup && selectedCourse && selectedJo) {
-            const stateToSave = {
-                group: selectedGroup,
-                course: selectedCourse,
-                jo: selectedJo,
-                view: 'scoring',
-                selectedType
-            };
-            localStorage.setItem(`refereeState_${hole}`, JSON.stringify(stateToSave));
+            // 코스가 일치할 때만 저장
+            if (selectedCourseId === assignedCourseId) {
+                const stateToSave = {
+                    group: selectedGroup,
+                    course: selectedCourse,
+                    jo: selectedJo,
+                    view: 'scoring',
+                    selectedType
+                };
+                safeLocalStorageSetItem(`refereeState_${hole}`, JSON.stringify(stateToSave));
+                console.log('✅ 로컬스토리지 상태 저장:', stateToSave);
+            } else {
+                // 코스가 불일치하면 저장하지 않음 (할당 코스 변경 대비)
+                console.warn('⚠️ 로컬스토리지 상태 저장 안함: assignedCourse와 불일치', {
+                    selectedCourse: selectedCourseId,
+                    assignedCourse: assignedCourseId
+                });
+                safeLocalStorageRemoveItem(`refereeState_${hole}`);
+            }
         } else if (view === 'selection') {
-            localStorage.removeItem(`refereeState_${hole}`);
+            safeLocalStorageRemoveItem(`refereeState_${hole}`);
         }
-    }, [view, selectedGroup, selectedCourse, selectedJo, selectedType, hole]);
+    }, [view, selectedGroup, selectedCourse, selectedJo, selectedType, hole, assignedCourse]);
 
-    // 심판이 담당하는 코스 찾기
-    const assignedCourse = useMemo(() => {
-        if (!refereeData?.id || tournamentCourses.length === 0 || courses.length === 0) {
-            return null;
-        }
-
-        // 심판 아이디에서 번호 추출 (예: "8번홀심판" -> suffixNumber=0, "8번홀심판1" -> suffixNumber=1)
-        const match = refereeData.id.match(/(\d+)번홀심판(\d*)/);
-        if (!match) {
-            return null;
-        }
-
-        const suffixNumber = match[2] ? parseInt(match[2]) : 0;
-
-        // 코스 order 기준으로 코스 찾기
-        // suffixNumber가 0이면 첫번째 코스(order === 1), 1이면 두번째 코스(order === 2), ...
-        const targetOrder = suffixNumber === 0 ? 1 : suffixNumber + 1;
-        
-        // 먼저 order 기준으로 찾기
-        let courseFromTournament = tournamentCourses.find((course: any) => {
-            const courseOrder = course.order;
-            // order가 명시적으로 설정된 경우만 사용
-            if (courseOrder !== undefined && courseOrder !== null && typeof courseOrder === 'number') {
-                return courseOrder === targetOrder;
-            }
-            return false;
-        });
-        
-        // order 기준으로 못 찾았으면 인덱스 방식으로 fallback
-        if (!courseFromTournament && suffixNumber < tournamentCourses.length) {
-            courseFromTournament = tournamentCourses[suffixNumber];
-        }
-        
-        if (courseFromTournament) {
-            // courses 배열에서 해당 코스 찾기 (id로 매칭하여 정확성 보장)
-            const foundCourse = courses.find(c => {
-                // 코스 ID 비교 (숫자와 문자열 모두 처리)
-                return String(c.id) === String(courseFromTournament.id) || 
-                       c.id === courseFromTournament.id;
-            });
-            
-            if (foundCourse) {
-                return foundCourse;
-            }
-            
-            // courses에 없으면 tournamentCourses에서 직접 사용 (fallback)
-            return courseFromTournament;
-        }
-
-        return null;
-    }, [refereeData, tournamentCourses, courses]);
-
-    // 해당 코스가 배정된 경기 형태 찾기
+    // 해당 코스가 배정된 경기 형태 찾기 (assignedCourse가 있을 때만)
     const availableTypes = useMemo(() => {
-        // groupsData가 아직 로드되지 않았거나, assignedCourse가 없으면 빈 배열 반환
-        if (!groupsData || Object.keys(groupsData).length === 0 || !assignedCourse) {
+        // assignedCourse가 없으면 빈 배열 반환 (fallback 제거 - 잘못된 타입 선택 방지)
+        if (!assignedCourse) {
+            console.log('availableTypes: assignedCourse 없음 - 빈 배열 반환');
+            return [];
+        }
+
+        // groupsData가 아직 로드되지 않았으면 빈 배열 반환
+        if (!groupsData || Object.keys(groupsData).length === 0) {
+            console.log('availableTypes: groupsData 없음');
             return [];
         }
 
         const types = new Set<'individual' | 'team'>();
         const courseIdStr = String(assignedCourse.id);
         
+        console.log('availableTypes: 코스 ID로 찾기', courseIdStr);
+        
         Object.values(groupsData).forEach((group: any) => {
-            // assignedCourse.id를 문자열로 변환하여 비교 (코스 ID는 숫자일 수 있음)
-            // 코스 배정은 boolean true 또는 number > 0으로 저장됨
+            // 코스 배정 확인: boolean true 또는 number > 0
             const courseAssignment = group.courses && group.courses[courseIdStr];
             if (courseAssignment === true || (typeof courseAssignment === 'number' && courseAssignment > 0)) {
                 types.add(group.type);
             }
         });
 
-        return Array.from(types);
+        const result = Array.from(types);
+        console.log('✅ availableTypes: 결과', result);
+        return result;
     }, [assignedCourse, groupsData]);
 
-    // Derived data
+    // 해당 코스가 배정된 그룹 찾기 (assignedCourse가 있을 때만)
     const availableGroups = useMemo(() => {
-        // groupsData가 아직 로드되지 않았거나, selectedType이나 assignedCourse가 없으면 빈 배열 반환
-        if (!groupsData || Object.keys(groupsData).length === 0 || !selectedType || !assignedCourse) {
+        // assignedCourse가 없으면 빈 배열 반환 (fallback 제거 - 잘못된 그룹 선택 방지)
+        if (!assignedCourse) {
+            console.log('availableGroups: assignedCourse 없음 - 빈 배열 반환');
+            return [];
+        }
+
+        // groupsData가 아직 로드되지 않았거나, selectedType이 없으면 빈 배열 반환
+        if (!groupsData || Object.keys(groupsData).length === 0 || !selectedType) {
+            console.log('availableGroups: groupsData 또는 selectedType 없음', {
+                hasGroupsData: !!groupsData,
+                groupsDataKeys: groupsData ? Object.keys(groupsData).length : 0,
+                selectedType
+            });
             return [];
         }
         
-        return Object.values(groupsData)
+        const courseIdStr = String(assignedCourse.id);
+        console.log('availableGroups: 코스 ID로 찾기', courseIdStr);
+        
+        const result = Object.values(groupsData)
             .filter((g: any) => {
                 // 선택된 경기 형태와 일치하고, 해당 코스가 배정된 그룹만
-                // assignedCourse.id를 문자열로 변환하여 비교 (코스 ID는 숫자일 수 있음)
-                const courseIdStr = String(assignedCourse.id);
                 const courseAssignment = g.courses && g.courses[courseIdStr];
                 // 코스 배정은 boolean true 또는 number > 0으로 저장됨
                 return g.type === selectedType && 
@@ -595,6 +869,9 @@ export default function RefereePage() {
             .map((g: any) => g.name)
             .filter(Boolean)
             .sort();
+        
+        console.log('✅ availableGroups: 결과', result);
+        return result;
     }, [groupsData, selectedType, assignedCourse]);
 
     const availableCoursesForGroup = useMemo(() => {
@@ -603,18 +880,43 @@ export default function RefereePage() {
         return [assignedCourse];
     }, [assignedCourse]);
 
-    // 코스 자동 선택
+    // 코스 자동 선택 (assignedCourse가 있을 때만)
     useEffect(() => {
-        if (!assignedCourse) return;
+        // assignedCourse가 없으면 선택하지 않음 (fallback 제거)
+        if (!assignedCourse) {
+            // assignedCourse가 없는데 selectedCourse가 있으면 초기화 (할당 코스 변경 대비)
+            if (selectedCourse) {
+                console.warn('⚠️ 코스 자동 선택: assignedCourse 없음 - selectedCourse 초기화');
+                setSelectedCourse('');
+            }
+            return;
+        }
 
-        // 코스 자동 선택
         const courseIdStr = String(assignedCourse.id);
+        
+        // 이미 선택된 코스가 있고, 그것이 assignedCourse와 일치하면 유지
+        if (selectedCourse && selectedCourse === courseIdStr) {
+            console.log('✅ 코스 자동 선택: 이미 올바른 코스 선택됨', selectedCourse);
+            return;
+        }
+
+        // selectedCourse가 assignedCourse와 일치하지 않으면 자동으로 수정 (할당 코스 변경 대비)
+        if (selectedCourse && selectedCourse !== courseIdStr) {
+            console.warn('⚠️ 코스 자동 선택: selectedCourse가 assignedCourse와 불일치 - 자동 수정', {
+                selectedCourse,
+                assignedCourse: courseIdStr
+            });
+        }
+
+        // assignedCourse가 있으면 자동 선택
+        console.log('✅ 코스 자동 선택: assignedCourse 사용', courseIdStr, assignedCourse);
         setSelectedCourse(courseIdStr);
-    }, [assignedCourse?.id]);
+    }, [assignedCourse?.id, selectedCourse]);
 
     // 경기 형태 자동 선택 (1개만 있을 때)
     useEffect(() => {
         if (availableTypes.length === 1 && selectedType !== availableTypes[0]) {
+            console.log('경기 형태 자동 선택:', availableTypes[0]);
             setSelectedType(availableTypes[0]);
         }
     }, [availableTypes.length]);
@@ -638,6 +940,42 @@ export default function RefereePage() {
         if (!selectedJo) return [];
         return allPlayers.filter(p => p.group === selectedGroup && p.jo.toString() === selectedJo);
     }, [allPlayers, selectedGroup, selectedJo]);
+
+    // assignedCourse가 없을 때 오류 메시지 표시
+    useEffect(() => {
+        if (!loading && refereeData && !assignedCourse) {
+            console.error('❌ 치명적 오류: assignedCourse를 찾을 수 없음', {
+                refereeId: refereeData.id,
+                tournamentCourses: tournamentCourses.map((c: any) => ({ id: c.id, name: c.name, order: c.order })),
+                courses: courses.map((c: any) => ({ id: c.id, name: c.name }))
+            });
+            
+            toast({
+                title: '❌ 코스를 찾을 수 없습니다',
+                description: `심판 ID "${refereeData.id}"에 해당하는 코스를 찾을 수 없습니다. 관리자에게 문의하세요.`,
+                variant: 'destructive',
+                duration: 10000,
+            });
+        }
+    }, [loading, refereeData, assignedCourse, tournamentCourses, courses, toast]);
+
+    // 디버깅: 전체 상태 로그
+    useEffect(() => {
+        console.log('=== 심판 페이지 상태 ===', {
+            refereeData: refereeData ? { id: refereeData.id, hole: refereeData.hole } : null,
+            assignedCourse: assignedCourse ? { id: assignedCourse.id, name: assignedCourse.name, order: assignedCourse.order } : null,
+            selectedCourse,
+            tournamentCoursesCount: tournamentCourses.length,
+            coursesCount: courses.length,
+            groupsDataCount: Object.keys(groupsData).length,
+            availableTypes,
+            selectedType,
+            availableGroups,
+            selectedGroup,
+            availableJos,
+            selectedJo
+        });
+    }, [refereeData, assignedCourse, selectedCourse, tournamentCourses.length, courses.length, groupsData, availableTypes, selectedType, availableGroups, selectedGroup, availableJos, selectedJo]);
 
     // 완료된 조들을 확인하는 함수 (재사용 가능하도록 분리)
     const checkCompletedJos = useCallback(async () => {
@@ -742,9 +1080,9 @@ export default function RefereePage() {
                 return acc;
             }, {} as { [key: string]: ScoreData });
             if (Object.keys(scoresToSave).length > 0) {
-                localStorage.setItem(key, JSON.stringify(scoresToSave));
+                safeLocalStorageSetItem(key, JSON.stringify(scoresToSave));
             } else {
-                localStorage.removeItem(key);
+                safeLocalStorageRemoveItem(key);
             }
         }
     }, [scores, hole, selectedGroup, selectedCourse, selectedJo, view]);
@@ -757,7 +1095,7 @@ export default function RefereePage() {
         }
 
         const storageKey = getLocalStorageScoresKey();
-        const savedInterimScores = storageKey ? JSON.parse(localStorage.getItem(storageKey) || '{}') : {};
+        const savedInterimScores = storageKey ? JSON.parse(safeLocalStorageGetItem(storageKey) || '{}') : {};
 
         const initializeScores = async () => {
             const newScoresState: { [key: string]: ScoreData } = {};
@@ -788,19 +1126,26 @@ export default function RefereePage() {
                     newScoresState[player.id] = {
                         score: Number(existingScoreFromDb),
                         status: 'locked',
-                        forfeitType: forfeitType
+                        forfeitType: forfeitType,
+                        wasLocked: false // 아직 잠금 해제 안됨 (잠금 해제 시 true로 변경됨)
                     };
                 } else {
-                    // 저장된 점수가 없으면 편집 상태로 설정
+                    // 저장된 점수가 없으면 편집 상태로 설정 (처음 입력)
                     const interimScore = savedInterimScores[player.id];
                     if (interimScore && interimScore.status === 'editing') {
                         newScoresState[player.id] = {
                             score: Number(interimScore.score),
                             status: 'editing',
-                            forfeitType: interimScore.forfeitType || null
+                            forfeitType: interimScore.forfeitType || null,
+                            wasLocked: false // 처음 입력이므로 불참 포함
                         };
                     } else {
-                        newScoresState[player.id] = { score: 1, status: 'editing', forfeitType: null };
+                        newScoresState[player.id] = { 
+                            score: 1, 
+                            status: 'editing', 
+                            forfeitType: null,
+                            wasLocked: false // 처음 입력이므로 불참 포함
+                        };
                     }
                 }
             }
@@ -848,14 +1193,23 @@ export default function RefereePage() {
 
     // ---- Handlers ----
     const handleStartScoring = () => {
-        // 코스는 자동 선택되므로 assignedCourse가 있으면 코스는 선택된 것으로 간주
-        const isCourseSelected = selectedCourse || (assignedCourse && String(assignedCourse.id));
+        // assignedCourse가 없으면 작동하지 않음 (치명적 오류 방지)
+        if (!assignedCourse) {
+            toast({
+                title: '❌ 오류',
+                description: '담당 코스를 찾을 수 없습니다. 관리자에게 문의하세요.',
+                variant: 'destructive',
+            });
+            return;
+        }
 
-        if (selectedGroup && isCourseSelected && selectedJo && currentPlayers.length > 0) {
-            // 코스가 자동 선택되었지만 selectedCourse가 설정되지 않은 경우 설정
-            if (!selectedCourse && assignedCourse) {
-                setSelectedCourse(String(assignedCourse.id));
-            }
+        // 코스는 assignedCourse에서 가져옴
+        const courseIdStr = String(assignedCourse.id);
+        if (!selectedCourse || selectedCourse !== courseIdStr) {
+            setSelectedCourse(courseIdStr);
+        }
+
+        if (selectedGroup && selectedCourse && selectedJo && currentPlayers.length > 0) {
             setView('scoring');
         } else {
             toast({
@@ -876,22 +1230,45 @@ export default function RefereePage() {
         if (scores[id]?.status === 'editing') {
             const currentScore = scores[id].score;
             const newScore = Math.max(0, currentScore + delta);
+            const wasLocked = scores[id].wasLocked || false; // 원래 잠금 상태였는지 확인
 
             // 0점이 되었을 때 기권 타입 순환 처리
             let newForfeitType = scores[id].forfeitType;
+            
             if (newScore === 0 && currentScore > 0) {
-                // 처음 0점이 되면 '불참'
-                newForfeitType = 'absent';
-            } else if (newScore === 0 && currentScore === 0) {
-                // 0점 상태에서 -버튼 누르면 순환
-                if (scores[id].forfeitType === 'absent') {
+                // 처음 0점이 되면
+                if (wasLocked) {
+                    // 수정 시에는 실격으로 시작 (불참 제외)
                     newForfeitType = 'disqualified';
-                } else if (scores[id].forfeitType === 'disqualified') {
-                    newForfeitType = 'forfeit';
-                } else if (scores[id].forfeitType === 'forfeit') {
-                    newForfeitType = 'absent'; // 다시 처음으로 순환
                 } else {
-                    newForfeitType = 'absent'; // 기본값
+                    // 처음 입력 시에는 불참으로 시작
+                    newForfeitType = 'absent';
+                }
+            } else if (newScore === 0 && currentScore === 0 && delta < 0) {
+                // 0점 상태에서 -버튼 누르면 순환
+                if (wasLocked) {
+                    // 수정 시에는 실격 <-> 기권만 순환
+                    const currentForfeitType = scores[id].forfeitType;
+                    if (currentForfeitType === 'disqualified') {
+                        newForfeitType = 'forfeit';
+                    } else if (currentForfeitType === 'forfeit') {
+                        newForfeitType = 'disqualified'; // 다시 실격으로 순환
+                    } else {
+                        // forfeitType이 없거나 null이면 실격으로 시작
+                        newForfeitType = 'disqualified';
+                    }
+                } else {
+                    // 처음 입력 시에는 불참 -> 실격 -> 기권 -> 불참 순환
+                    const currentForfeitType = scores[id].forfeitType;
+                    if (currentForfeitType === 'absent') {
+                        newForfeitType = 'disqualified';
+                    } else if (currentForfeitType === 'disqualified') {
+                        newForfeitType = 'forfeit';
+                    } else if (currentForfeitType === 'forfeit') {
+                        newForfeitType = 'absent'; // 다시 불참으로 순환
+                    } else {
+                        newForfeitType = 'absent'; // 기본값은 불참
+                    }
                 }
             } else if (newScore > 0) {
                 // 점수가 0보다 크면 기권 타입 초기화
@@ -1118,7 +1495,11 @@ export default function RefereePage() {
         if (unlockPasswordInput === unlockPasswordFromDb) {
             setScores(prev => ({
                 ...prev,
-                [playerToUnlock.id]: { ...prev[playerToUnlock.id], status: 'editing' }
+                [playerToUnlock.id]: { 
+                    ...prev[playerToUnlock.id], 
+                    status: 'editing',
+                    wasLocked: true // 잠금 해제 시 수정 모드임을 표시
+                }
             }));
             toast({ title: '성공', description: '잠금이 해제되었습니다. 점수를 수정하세요.' });
             setIsUnlockModalOpen(false);
@@ -1230,6 +1611,18 @@ export default function RefereePage() {
                     <CardDescription className="text-sm">점수를 기록할 경기 형태, 그룹, 코스, 조를 선택하세요.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                    {!assignedCourse && !loading && (
+                        <Card className="border-red-400 bg-red-50 text-red-900">
+                            <CardContent className="p-4">
+                                <p className="font-bold text-lg">❌ 오류: 담당 코스를 찾을 수 없습니다</p>
+                                <p className="text-sm mt-2">
+                                    심판 ID "{refereeData?.id || '알 수 없음'}"에 해당하는 코스를 찾을 수 없습니다.
+                                    <br />
+                                    관리자에게 문의하세요.
+                                </p>
+                            </CardContent>
+                        </Card>
+                    )}
                     <Select
                         value={selectedType as string}
                         onValueChange={v => {
@@ -1271,7 +1664,21 @@ export default function RefereePage() {
                     </Select>
                     <Select
                         value={selectedCourse || ''}
-                        onValueChange={v => { setSelectedCourse((v || '').toString()); setSelectedJo(''); }}
+                        onValueChange={v => { 
+                            // assignedCourse와 일치하는지 확인 (비활성화되어 있지만 안전장치)
+                            const newCourse = (v || '').toString();
+                            if (assignedCourse && String(assignedCourse.id) !== newCourse) {
+                                console.warn('⚠️ 코스 변경 시도 무시: assignedCourse와 불일치', {
+                                    attempted: newCourse,
+                                    assigned: String(assignedCourse.id)
+                                });
+                                // assignedCourse로 강제 설정
+                                setSelectedCourse(String(assignedCourse.id));
+                            } else {
+                                setSelectedCourse(newCourse);
+                            }
+                            setSelectedJo(''); 
+                        }}
                         disabled={true}
                     >
                         <SelectTrigger className="h-12 text-base bg-muted">
@@ -1424,8 +1831,8 @@ export default function RefereePage() {
                             <Button variant="destructive" onClick={() => {
                                 // 세션/로컬스토리지 정리 및 심판 로그인 페이지로 이동
                                 if (typeof window !== 'undefined') {
-                                    localStorage.clear();
-                                    sessionStorage.clear();
+                                    safeLocalStorageClear();
+                                    safeSessionStorageClear();
                                     router.replace('/referee/login');
                                 }
                             }} className="h-9 text-base sm:text-lg font-bold flex-shrink-0 ml-2">로그아웃</Button>

@@ -11,8 +11,21 @@ export default function ServiceWorkerRegistration() {
         // Service Worker 등록 (재시도 로직 포함)
         const registerServiceWorker = async () => {
             try {
-                // 기존 등록 확인
-                const existingRegistration = await navigator.serviceWorker.getRegistration();
+                // 기존 등록 확인 (권한 거부 오류 처리)
+                let existingRegistration = null;
+                try {
+                    existingRegistration = await navigator.serviceWorker.getRegistration();
+                } catch (getRegError: any) {
+                    // 권한 거부 또는 NotSupportedError인 경우 조용히 처리
+                    if (getRegError.name === 'NotSupportedError' || 
+                        getRegError.message?.includes('denied permission') ||
+                        getRegError.message?.includes('Service Worker')) {
+                        console.warn('Service Worker 권한이 거부되었거나 지원되지 않습니다.');
+                        return; // 재시도하지 않고 종료
+                    }
+                    // 다른 오류는 다시 throw하여 상위 catch에서 처리
+                    throw getRegError;
+                }
                 
                 if (existingRegistration) {
                     // 이미 등록된 경우 업데이트 확인
@@ -39,6 +52,14 @@ export default function ServiceWorkerRegistration() {
                     // 업데이트 실패는 무시 (이미 등록됨)
                 });
             } catch (error: any) {
+                // 권한 거부 오류는 조용히 처리
+                if (error.name === 'NotSupportedError' || 
+                    error.message?.includes('denied permission') ||
+                    error.message?.includes('Service Worker')) {
+                    console.warn('Service Worker 권한이 거부되었거나 지원되지 않습니다.');
+                    return; // 재시도하지 않고 종료
+                }
+
                 console.error('Service Worker 등록 실패:', error);
                 // 에러 상세 정보 출력 (디버깅용)
                 if (error.message) {

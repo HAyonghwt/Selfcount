@@ -57,11 +57,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   React.useEffect(() => {
     setIsClient(true)
-    
+
     // 🟢 기본값 설정 (Firebase 접근 실패 시에도 앱이 동작하도록)
     setAppName('ParkScore');
     setSelfScoringEnabled(true);
-    
+
     if (db) {
       // 🟢 딜레이를 두고 config 접근 (인증 완료 대기)
       const timer = setTimeout(() => {
@@ -70,26 +70,26 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           const configRef = ref(db, 'config');
           // 실시간으로 설정 변경 감지
           const unsubscribe = onValue(configRef, (snapshot) => {
-              if (snapshot.exists()) {
-                  const data = snapshot.val();
-                  if (data.appName) {
-                      setAppName(data.appName);
-                  }
-                  // 자율 채점 활성화 설정 읽기 (기본값: true)
-                  const enabled = data.selfScoringEnabled !== false;
-                  setSelfScoringEnabled(enabled);
+            if (snapshot.exists()) {
+              const data = snapshot.val();
+              if (data.appName) {
+                setAppName(data.appName);
               }
+              // 자율 채점 활성화 설정 읽기 (기본값: true)
+              const enabled = data.selfScoringEnabled !== false;
+              setSelfScoringEnabled(enabled);
+            }
           }, (error) => {
-              console.warn('설정 로드 실패 (기본값 사용):', error);
-              // 🟢 오류 발생해도 기본값으로 계속 동작
+            console.warn('설정 로드 실패 (기본값 사용):', error);
+            // 🟢 오류 발생해도 기본값으로 계속 동작
           });
-          
+
           return () => unsubscribe();
         } catch (error) {
           console.warn('Config 접근 실패 (기본값 사용):', error);
         }
       }, 1000); // 1초 딜레이
-      
+
       return () => clearTimeout(timer);
     }
   }, [])
@@ -157,8 +157,8 @@ function SidebarContentWithSidebarHooks({ isMobile, pathname, appName, selfScori
       <Sidebar collapsible={isMobile ? "offcanvas" : "icon"} className="border-r">
         <SidebarHeader className="p-4">
           <div className="flex items-center gap-3">
-            <Image 
-              src="/logo.png" 
+            <Image
+              src="/logo.png"
               alt={`${appName} 로고`}
               width={40}
               height={40}
@@ -181,7 +181,7 @@ function SidebarContentWithSidebarHooks({ isMobile, pathname, appName, selfScori
               </SidebarMenuButton>
             </SidebarMenuItem>
 
-            
+
             <SidebarSeparator className="my-2" />
 
             {mainNavItems.map((item) => (

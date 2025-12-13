@@ -16,6 +16,7 @@ import { loginWithKoreanId, loginRefereeWithKoreanId } from '@/lib/auth';
 import { ref, get } from 'firebase/database';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
+import { safeSessionStorageSetItem, safeSessionStorageGetItem } from '@/lib/utils';
 
 interface AppConfig {
   appName: string;
@@ -155,7 +156,7 @@ export default function LoginPage() {
           // Firestore 초기화 대기
           await new Promise(resolve => setTimeout(resolve, 100));
           const captainData = await loginWithKoreanId(email, password);
-          sessionStorage.setItem('selfScoringCaptain', JSON.stringify(captainData));
+          safeSessionStorageSetItem('selfScoringCaptain', JSON.stringify(captainData));
           router.push('/self-scoring/game');
           return;
         } catch (error: any) {
@@ -172,17 +173,66 @@ export default function LoginPage() {
       // 한글 아이디로 로그인 시도 (심판)
       if (email.match(/^\d+번홀심판\d*$/)) {
         try {
+          // Firestore 접근 전에 익명 인증 먼저 수행
+          const authenticated = await ensureAuthenticated();
+          if (!authenticated) {
+            toast({
+              title: '로그인 실패',
+              description: 'Firebase 인증에 실패했습니다. 페이지를 새로고침하고 다시 시도해주세요.',
+              variant: 'destructive',
+            });
+            setLoading(false);
+            return;
+          }
+
           // Firestore 초기화 대기
           await new Promise(resolve => setTimeout(resolve, 100));
           const refereeData = await loginRefereeWithKoreanId(email, password);
-          sessionStorage.setItem('refereeData', JSON.stringify(refereeData));
-          router.push(`/referee/${refereeData.hole}`);
+          
+          // 로그인 성공 시 세션에 저장 (여러 번 시도)
+          let saved = false;
+          for (let i = 0; i < 5; i++) {
+            saved = safeSessionStorageSetItem('refereeData', JSON.stringify(refereeData));
+            if (saved) {
+              // 저장 성공 확인을 위해 읽기 테스트
+              const verify = safeSessionStorageGetItem('refereeData');
+              if (verify && verify === JSON.stringify(refereeData)) {
+                break;
+              }
+            }
+            // 저장 실패 시 잠시 대기 후 재시도
+            await new Promise(resolve => setTimeout(resolve, 100));
+          }
+          
+          if (!saved) {
+            // sessionStorage 저장 실패 시 URL 파라미터로 데이터 전달
+            console.warn('sessionStorage 저장 실패, URL 파라미터로 데이터 전달');
+            const encodedData = encodeURIComponent(JSON.stringify(refereeData));
+            const targetUrl = `/referee/${refereeData.hole}?refereeData=${encodedData}`;
+            window.location.href = targetUrl;
+            return;
+          }
+          
+          toast({
+            title: '로그인 성공',
+            description: '심판 페이지로 이동합니다.',
+            duration: 500,
+          });
+
+          // 해당 홀의 심판 페이지로 즉시 이동 (window.location.href 사용)
+          const targetUrl = `/referee/${refereeData.hole}`;
+          
+          // sessionStorage 저장 확인 후 이동
+          setTimeout(() => {
+            window.location.href = targetUrl;
+          }, 500);
           return;
         } catch (error: any) {
           setError(error.message);
           toast({
             title: "로그인 실패",
             description: error.message,
+            variant: 'destructive',
           });
           setLoading(false);
           return;
