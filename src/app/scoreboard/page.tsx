@@ -1443,11 +1443,8 @@ function ExternalScoreboard() {
         rotationGroupsRef.current = rotationGroups;
     }, [rotationGroups]);
 
-    // 그룹 순환 로직 (데이터가 있는 그룹만 순환) - finalDataByGroup 선언 이후에 위치
-    // finalDataByGroup을 dependency에서 제거하여 점수 입력 시에도 순환이 멈추지 않도록 함
-    // isRotationActive만 dependency로 사용하여 점수 입력 시 재실행되지 않도록 함
-    // interval을 ref로 관리하여 리렌더링 시에도 유지
-    useEffect(() => {
+    // 순환 로직 실행 함수 (재사용을 위해 별도 함수로 분리)
+    const startRotationInterval = useCallback(() => {
         // 기존 interval이 있으면 먼저 정리
         if (rotationIntervalIdRef.current) {
             clearInterval(rotationIntervalIdRef.current);
@@ -1511,6 +1508,14 @@ function ExternalScoreboard() {
                 setFilterGroup(currentRotationGroups[nextIndex]);
             }
         }, rotationIntervalRef.current * 1000);
+    }, [isRotationActive]);
+
+    // 그룹 순환 로직 (데이터가 있는 그룹만 순환) - finalDataByGroup 선언 이후에 위치
+    // finalDataByGroup을 dependency에서 제거하여 점수 입력 시에도 순환이 멈추지 않도록 함
+    // isRotationActive만 dependency로 사용하여 점수 입력 시 재실행되지 않도록 함
+    // interval을 ref로 관리하여 리렌더링 시에도 유지
+    useEffect(() => {
+        startRotationInterval();
 
         return () => {
             if (rotationIntervalIdRef.current) {
@@ -1518,7 +1523,15 @@ function ExternalScoreboard() {
                 rotationIntervalIdRef.current = null;
             }
         };
-    }, [isRotationActive]); // isRotationActive만 dependency로 사용하여 점수 입력 시 재실행되지 않도록 함
+    }, [isRotationActive, startRotationInterval]); // isRotationActive만 dependency로 사용하여 점수 입력 시 재실행되지 않도록 함
+
+    // rotationInterval 변경 시 interval 재시작 (순환 시간 변경 반영)
+    useEffect(() => {
+        // 순환이 활성화되어 있고 interval이 실행 중일 때만 재시작
+        if (isRotationActive && rotationIntervalIdRef.current) {
+            startRotationInterval();
+        }
+    }, [rotationInterval, isRotationActive, startRotationInterval]); // rotationInterval 변경 시 interval 재시작
 
     // 선수별 점수 로그 캐시 상태 (playerId별)
     const [playerScoreLogs, setPlayerScoreLogs] = useState<{ [playerId: string]: ScoreLog[] }>({});
