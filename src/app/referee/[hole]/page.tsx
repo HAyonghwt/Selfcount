@@ -1282,7 +1282,8 @@ export default function RefereePage() {
             while (attempt < maxRetries) {
                 try {
                     const dbInstance = db as import('firebase/database').Database;
-                    const scoreRef = ref(dbInstance, `/scores/${playerToSave.id}/${selectedCourse}/${hole}`);
+                    const scorePath = `/scores/${playerToSave.id}/${selectedCourse}/${hole}`;
+                    const scoreRef = ref(dbInstance, scorePath);
                     const prevScore = allScores[playerToSave.id]?.[selectedCourse as string]?.[hole as string] ?? null;
 
                     // 모바일에서는 잠시 대기 후 재시도
@@ -1420,12 +1421,28 @@ export default function RefereePage() {
                 if (!dataCache.current.scores[selectedCourse][playerToSave.id]) {
                     dataCache.current.scores[selectedCourse][playerToSave.id] = {};
                 }
-                dataCache.current.scores[selectedCourse][playerToSave.id][selectedCourse] = {
-                    ...dataCache.current.scores[selectedCourse][playerToSave.id][selectedCourse],
-                    [hole]: scoreData.score
-                };
+                if (!dataCache.current.scores[selectedCourse][playerToSave.id][selectedCourse]) {
+                    dataCache.current.scores[selectedCourse][playerToSave.id][selectedCourse] = {};
+                }
+                dataCache.current.scores[selectedCourse][playerToSave.id][selectedCourse][hole] = scoreData.score;
                 dataCache.current.lastUpdated[`scores_${selectedCourse}`] = Date.now();
             }
+            
+            // allScores 상태도 즉시 업데이트하여 UI 반영
+            // Firebase 구독이 자동으로 업데이트하지만, 즉시 반영을 위해 여기서도 업데이트
+            // 단, initializeScores useEffect가 불필요하게 재실행되지 않도록 주의
+            setAllScores(prev => {
+                const updated = { ...prev };
+                if (!updated[playerToSave.id]) {
+                    updated[playerToSave.id] = {};
+                }
+                if (!updated[playerToSave.id][selectedCourse as string]) {
+                    updated[playerToSave.id][selectedCourse as string] = {};
+                }
+                // 저장한 점수만 업데이트 (다른 선수나 홀의 점수는 변경하지 않음)
+                updated[playerToSave.id][selectedCourse as string][hole as string] = scoreData.score;
+                return updated;
+            });
 
             // 점수 저장 후 완료된 조 상태 즉시 업데이트
             setTimeout(() => {
@@ -1703,7 +1720,10 @@ export default function RefereePage() {
                 {currentPlayers.map(player => {
                     // scores 상태에서 직접 가져오기 (최신 상태 보장)
                     const scoreData = scores[player.id];
-                    if (!scoreData) return null;
+                    // 초기 렌더링 시 점수 데이터가 아직 로드되지 않을 수 있음 (정상)
+                    if (!scoreData) {
+                        return null;
+                    }
 
                     // 기권 여부: 이전 홀 중 0점이 하나라도 있으면 true
                     const currentHoleNum = Number(hole);

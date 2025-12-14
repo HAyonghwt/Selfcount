@@ -1,7 +1,7 @@
 "use client"
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { db, ensureAuthenticated } from '@/lib/firebase';
-import { ref, onValue, onChildChanged, off, query, orderByKey, limitToLast } from 'firebase/database';
+import { ref, onValue, onChildChanged, onChildAdded, off, query, orderByKey, limitToLast } from 'firebase/database';
 import { Flame, ChevronUp, ChevronDown, Globe } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -447,42 +447,98 @@ function ExternalScoreboard() {
                     }
                 });
                 
-                // 점수 데이터: 최적화된 실시간 업데이트 (선수별 변경만 감지)
-                const scoresRef = ref(dbInstance, 'scores');
-                // 선수별 변경 감지 (onChildChanged는 초기 데이터 로딩 후에만 작동)
-                // 초기 로딩이 완료된 후에는 onChildChanged로 변경된 선수만 감지하여 네트워크 트래픽 최소화
-                const unsubScores = onChildChanged(scoresRef, snap => {
-                    const playerId = snap.key;
-                    const playerScores = snap.val();
-                    
-                    if (playerId && playerScores) {
-                        setScores((prev: any) => {
-                            // 해당 선수의 점수만 업데이트
-                            const newScores = { ...prev, [playerId]: playerScores };
+                // 점수 데이터: 최적화된 실시간 업데이트 (선수별 코스별 개별 구독)
+                // 모든 선수와 코스에 대해 개별 구독을 설정하여 변경된 코스의 점수만 전송받음 (데이터 사용량 최소화)
+                // onValue를 코스별로 사용하여 중첩 경로 변경(scores/playerId/courseId/hole)도 감지
+                const scoreSubscriptions: (() => void)[] = [];
+                const allPlayerIds = Object.keys(players);
+                
+                // 모든 코스 ID 추출 (tournament에서)
+                const allCourseIds = tournament?.courses ? Object.keys(tournament.courses) : [];
+                
+                allPlayerIds.forEach(playerId => {
+                    allCourseIds.forEach(courseId => {
+                        const playerCourseScoresRef = ref(dbInstance, `scores/${playerId}/${courseId}`);
+                        const unsubscribe = onValue(playerCourseScoresRef, snap => {
+                            const courseScores = snap.val();
                             
-                            // 해시 비교로 중복 데이터 차단
-                            const newHash = JSON.stringify(newScores);
-                            if (newHash !== lastScoresHash) {
-                                setLastScoresHash(newHash);
-                                setLastUpdateTime(Date.now());
+                            setScores((prev: any) => {
+                                const newScores = { ...prev };
+                                if (!newScores[playerId]) {
+                                    newScores[playerId] = {};
+                                }
+                                // 코스별 점수 업데이트 (null이면 빈 객체로 처리)
+                                newScores[playerId][courseId] = courseScores || {};
                                 
-                                // 변경된 선수의 로그 캐시 무효화
-                                invalidatePlayerLogCache(playerId);
+                                // 해시 비교로 중복 데이터 차단
+                                const newHash = JSON.stringify(newScores);
+                                if (newHash !== lastScoresHash) {
+                                    setLastScoresHash(newHash);
+                                    setLastUpdateTime(Date.now());
+                                    
+                                    // 변경된 선수의 로그 캐시 무효화
+                                    invalidatePlayerLogCache(playerId);
+                                    
+                                    // 변경된 선수 ID 저장 (로그 업데이트용)
+                                    setChangedPlayerIds((prevIds: string[]) => {
+                                        if (!prevIds.includes(playerId)) {
+                                            return [...prevIds, playerId];
+                                        }
+                                        return prevIds;
+                                    });
+                                    
+                                    return newScores;
+                                }
+                                return prev;
+                            });
+                        });
+                        scoreSubscriptions.push(unsubscribe);
+                    });
+                });
+                
+                // 선수 추가 시 새로운 구독 추가를 위한 리스너
+                const playersRefForScores = ref(dbInstance, 'players');
+                const unsubNewPlayers = onChildAdded(playersRefForScores, snap => {
+                    const newPlayerId = snap.key;
+                    if (newPlayerId && !allPlayerIds.includes(newPlayerId)) {
+                        allCourseIds.forEach(courseId => {
+                            const playerCourseScoresRef = ref(dbInstance, `scores/${newPlayerId}/${courseId}`);
+                            const unsubscribe = onValue(playerCourseScoresRef, snap => {
+                                const courseScores = snap.val();
                                 
-                                // 변경된 선수 ID 저장 (로그 업데이트용)
-                                setChangedPlayerIds((prevIds: string[]) => {
-                                    if (!prevIds.includes(playerId)) {
-                                        return [...prevIds, playerId];
+                                setScores((prev: any) => {
+                                    const newScores = { ...prev };
+                                    if (!newScores[newPlayerId]) {
+                                        newScores[newPlayerId] = {};
                                     }
-                                    return prevIds;
+                                    newScores[newPlayerId][courseId] = courseScores || {};
+                                    
+                                    const newHash = JSON.stringify(newScores);
+                                    if (newHash !== lastScoresHash) {
+                                        setLastScoresHash(newHash);
+                                        setLastUpdateTime(Date.now());
+                                        invalidatePlayerLogCache(newPlayerId);
+                                        setChangedPlayerIds((prevIds: string[]) => {
+                                            if (!prevIds.includes(newPlayerId)) {
+                                                return [...prevIds, newPlayerId];
+                                            }
+                                            return prevIds;
+                                        });
+                                        return newScores;
+                                    }
+                                    return prev;
                                 });
-                                
-                                return newScores;
-                            }
-                            return prev;
+                            });
+                            scoreSubscriptions.push(unsubscribe);
                         });
                     }
                 });
+                
+                // 모든 구독을 하나의 함수로 묶어서 반환
+                const unsubScores = () => {
+                    scoreSubscriptions.forEach(unsub => unsub());
+                    unsubNewPlayers();
+                };
                 
                 // 토너먼트 설정: 변경사항만 감지
                 const tournamentRef = ref(dbInstance, 'tournaments/current');
