@@ -521,17 +521,24 @@ export default function RefereePage() {
             const playerCourseRef = ref(dbInstance, `scores/${player.id}/${selectedCourse}`);
             const unsubscribe = onValue(playerCourseRef, (snapshot) => {
                 const playerCourseScores = snapshot.val();
-                if (playerCourseScores) {
-                    courseScores[player.id] = { [selectedCourse]: playerCourseScores };
-                } else {
-                    // 점수가 없는 경우 빈 객체로 설정
-                    courseScores[player.id] = { [selectedCourse]: {} };
-                }
-
-                // 전체 상태 업데이트
-                setAllScores({ ...courseScores });
-
-
+                
+                // 함수형 업데이트로 최신 상태 보장 (다른 선수의 점수가 덮어쓰이지 않도록)
+                setAllScores(prev => {
+                    const updated = { ...prev };
+                    if (playerCourseScores) {
+                        if (!updated[player.id]) {
+                            updated[player.id] = {};
+                        }
+                        updated[player.id][selectedCourse] = playerCourseScores;
+                    } else {
+                        // 점수가 없는 경우 빈 객체로 설정
+                        if (!updated[player.id]) {
+                            updated[player.id] = {};
+                        }
+                        updated[player.id][selectedCourse] = {};
+                    }
+                    return updated;
+                });
             });
 
             subscriptions.current[`score_${player.id}`] = unsubscribe;
@@ -1106,7 +1113,7 @@ export default function RefereePage() {
 
     }, [view, selectedJo, selectedCourse, hole, allScores, currentPlayers]);
 
-    // allScores 변경 시 실격 복구를 위한 scores 상태 업데이트
+    // allScores 변경 시 실격 복구 및 기권 해제를 위한 scores 상태 업데이트
     useEffect(() => {
         if (view !== 'scoring' || !selectedJo || !selectedGroup || Object.keys(scores).length === 0) {
             return;
@@ -1119,28 +1126,78 @@ export default function RefereePage() {
             return;
         }
 
-        // 현재 선수들의 실격 복구 체크
+        // 현재 선수들의 점수 업데이트 체크
         playersToCheck.forEach(player => {
             const currentScoreState = scoresRef.current[player.id];
             const firebaseScore = allScores[player.id]?.[selectedCourse as string]?.[hole as string];
 
-            // 실격 복구 감지: scores에서는 0점이지만 Firebase에서는 0이 아닌 점수
-            // 단, editing 상태인 점수는 보호 (사용자가 수정 중인 점수)
-            if (currentScoreState &&
-                currentScoreState.status === 'editing' &&
-                currentScoreState.score === 0 &&
-                firebaseScore !== undefined &&
-                Number(firebaseScore) > 0) {
+            if (!currentScoreState) return;
+
+            // editing 상태인 점수는 보호 (사용자가 수정 중인 점수)
+            if (currentScoreState.status === 'editing') {
                 // editing 상태이지만 실격 복구가 필요한 경우에만 업데이트
-                // 하지만 forfeitType은 보존하지 않음 (Firebase에서 복구된 점수이므로)
-                setScores(prev => ({
-                    ...prev,
-                    [player.id]: {
-                        ...prev[player.id],
-                        score: Number(firebaseScore),
-                        forfeitType: null
+                // 실격 복구 감지: scores에서는 0점이지만 Firebase에서는 0이 아닌 점수
+                if (currentScoreState.score === 0 &&
+                    firebaseScore !== undefined &&
+                    Number(firebaseScore) > 0) {
+                    setScores(prev => ({
+                        ...prev,
+                        [player.id]: {
+                            ...prev[player.id],
+                            score: Number(firebaseScore),
+                            forfeitType: null
+                        }
+                    }));
+                }
+                return; // editing 상태는 여기서 종료
+            }
+
+            // locked 상태인 점수는 관리자 페이지에서 변경 시 업데이트
+            if (currentScoreState.status === 'locked') {
+                const currentScore = currentScoreState.score;
+                const newScore = firebaseScore !== undefined && firebaseScore !== null ? Number(firebaseScore) : null;
+                
+                // 점수가 변경된 경우 업데이트
+                if (newScore !== currentScore) {
+                    if (newScore === null) {
+                        // null로 변경된 경우 (점수 삭제 - 기권 해제)
+                        setScores(prev => ({
+                            ...prev,
+                            [player.id]: {
+                                score: 1,
+                                status: 'editing',
+                                forfeitType: null,
+                                wasLocked: false
+                            }
+                        }));
+                    } else if (newScore === 0) {
+                        // 0점으로 변경된 경우 (기권 처리)
+                        getForfeitTypeFromLogs(player.id, selectedCourse as string, hole as string).then(ft => {
+                            setScores(prev => ({
+                                ...prev,
+                                [player.id]: {
+                                    ...prev[player.id],
+                                    score: 0,
+                                    forfeitType: ft,
+                                    status: 'locked',
+                                    wasLocked: currentScoreState.wasLocked
+                                }
+                            }));
+                        });
+                    } else {
+                        // 0점이 아닌 점수로 변경된 경우 (기권 해제 - 이전 점수 복구)
+                        setScores(prev => ({
+                            ...prev,
+                            [player.id]: {
+                                ...prev[player.id],
+                                score: newScore,
+                                forfeitType: null,
+                                status: 'locked',
+                                wasLocked: currentScoreState.wasLocked
+                            }
+                        }));
                     }
-                }));
+                }
             }
         });
     }, [allScores, view, selectedJo, selectedCourse, selectedGroup, hole, allPlayers]);
