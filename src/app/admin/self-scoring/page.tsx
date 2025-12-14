@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
@@ -8,11 +8,13 @@ import { Input } from '@/components/ui/input';
 import { db } from '@/lib/firebase';
 import { ref, onValue } from 'firebase/database';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Eye, EyeOff, Copy, Check, RefreshCw } from 'lucide-react';
+import { Eye, EyeOff, Copy, Check, RefreshCw, Download } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { getSelfScoringLogs, ScoreLog } from '@/lib/scoreLogs';
 import { getCaptainAccounts } from '@/lib/auth';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+// @ts-ignore
+import QRCode from 'qrcode.react';
 
 const MAX_CAPTAINS = 10;
 
@@ -26,6 +28,7 @@ export default function SelfScoringManagementPage() {
     const [logsLoading, setLogsLoading] = useState(false);
     const [captainAccounts, setCaptainAccounts] = useState<any[]>([]);
     const [showPasswords, setShowPasswords] = useState<{ [key: string]: boolean }>({});
+    const qrRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         if (!db) return;
@@ -108,6 +111,23 @@ export default function SelfScoringManagementPage() {
         }
     };
 
+    const handleDownloadQR = () => {
+        const canvas = qrRef.current?.querySelector("canvas");
+        if (canvas) {
+            const urlImg = canvas.toDataURL("image/png");
+            const a = document.createElement("a");
+            a.href = urlImg;
+            a.download = "자율채점주소.png";
+            a.click();
+        } else {
+            toast({
+                title: '다운로드 실패',
+                description: 'QR코드를 생성할 수 없습니다.',
+                variant: 'destructive',
+            });
+        }
+    };
+
 
 
 
@@ -156,16 +176,31 @@ export default function SelfScoringManagementPage() {
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                    <div className="flex items-center space-x-2">
-                        <Input
-                            value={`${window.location.origin}/`}
-                            readOnly
-                            className="flex-1"
-                        />
-                        <Button onClick={() => handleCopyUrl(-1)}>
-                            {copiedIndex === -1 ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                            복사하기
-                        </Button>
+                    <div className="flex flex-col md:flex-row gap-4 items-start md:items-center">
+                        <div className="flex gap-2 items-center flex-1 w-full">
+                            <Input
+                                value={`${window.location.origin}/`}
+                                readOnly
+                                className="flex-1"
+                            />
+                            <Button onClick={() => handleCopyUrl(-1)}>
+                                {copiedIndex === -1 ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                                복사하기
+                            </Button>
+                        </div>
+                        {/* QR 코드 영역 */}
+                        <div className="flex flex-col items-center justify-center md:ml-4" style={{ minWidth: 120 }}>
+                            <div ref={qrRef} className="bg-white p-2 rounded shadow mb-2">
+                                {QRCode ? (
+                                    <QRCode value={`${window.location.origin}/`} size={90} level="H" includeMargin={false} />
+                                ) : (
+                                    <div style={{color: 'red', fontSize: 12, width: 90, height: 90, display: 'flex', alignItems: 'center', justifyContent: 'center'}}>QR코드 라이브러리 로드 실패</div>
+                                )}
+                            </div>
+                            <Button variant="outline" onClick={handleDownloadQR} size="sm" style={{ width: 140 }}>
+                                <Download className="w-4 h-4 mr-1" /> QR코드 다운로드
+                            </Button>
+                        </div>
                     </div>
                 </CardContent>
             </Card>

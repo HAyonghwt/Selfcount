@@ -1057,6 +1057,17 @@ export default function RefereePage() {
                     continue;
                 }
 
+                // 불참/실격/기권 처리된 선수는 locked 상태를 유지 (다른 선수의 점수 입력과 관계없이)
+                const existingLockedScore = scoresRef.current[player.id];
+                if (existingLockedScore && existingLockedScore.status === 'locked') {
+                    const isForfeited = existingLockedScore.forfeitType && existingLockedScore.score === 0;
+                    if (isForfeited) {
+                        // 불참/실격/기권 처리된 선수는 기존 상태 유지
+                        newScoresState[player.id] = existingLockedScore;
+                        continue;
+                    }
+                }
+
                 // 먼저 Firebase에서 직접 확인 (allScores가 불완전할 수 있음)
                 let existingScoreFromDb = allScores[player.id]?.[selectedCourse as string]?.[hole as string];
 
@@ -1154,6 +1165,15 @@ export default function RefereePage() {
 
             // locked 상태인 점수는 관리자 페이지에서 변경 시 업데이트
             if (currentScoreState.status === 'locked') {
+                // 불참/실격/기권 처리된 선수는 다른 선수의 점수 입력과 관계없이 계속 잠겨 있어야 함
+                // forfeitType이 있고 score가 0이면 불참/실격/기권 처리된 것으로 간주
+                const isForfeited = currentScoreState.forfeitType && currentScoreState.score === 0;
+                
+                // 불참/실격/기권 처리된 선수는 이 useEffect에서 상태를 변경하지 않음
+                if (isForfeited) {
+                    return;
+                }
+                
                 const currentScore = currentScoreState.score;
                 const newScore = firebaseScore !== undefined && firebaseScore !== null ? Number(firebaseScore) : null;
                 
