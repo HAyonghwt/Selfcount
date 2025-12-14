@@ -1103,7 +1103,8 @@ export default function RefereePage() {
                         wasLocked: false // 아직 잠금 해제 안됨 (잠금 해제 시 true로 변경됨)
                     };
                 } else {
-                    // 저장된 점수가 없으면 편집 상태로 설정 (처음 입력)
+                    // 저장된 점수가 없으면 편집 상태로 설정 (처음 입력 또는 관리자 해제로 null 복원)
+                    // 관리자 해제로 null로 복원된 경우도 편집 상태로 설정
                     const interimScore = savedInterimScores[player.id];
                     if (interimScore && interimScore.status === 'editing') {
                         newScoresState[player.id] = {
@@ -1117,7 +1118,7 @@ export default function RefereePage() {
                             score: 1, 
                             status: 'editing', 
                             forfeitType: null,
-                            wasLocked: false // 처음 입력이므로 불참 포함
+                            wasLocked: false // 처음 입력 또는 관리자 해제로 null 복원
                         };
                     }
                 }
