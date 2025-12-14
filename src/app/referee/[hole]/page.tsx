@@ -1057,17 +1057,6 @@ export default function RefereePage() {
                     continue;
                 }
 
-                // 불참/실격/기권 처리된 선수는 locked 상태를 유지 (다른 선수의 점수 입력과 관계없이)
-                const existingLockedScore = scoresRef.current[player.id];
-                if (existingLockedScore && existingLockedScore.status === 'locked') {
-                    const isForfeited = existingLockedScore.forfeitType && existingLockedScore.score === 0;
-                    if (isForfeited) {
-                        // 불참/실격/기권 처리된 선수는 기존 상태 유지
-                        newScoresState[player.id] = existingLockedScore;
-                        continue;
-                    }
-                }
-
                 // 먼저 Firebase에서 직접 확인 (allScores가 불완전할 수 있음)
                 let existingScoreFromDb = allScores[player.id]?.[selectedCourse as string]?.[hole as string];
 
@@ -1080,6 +1069,23 @@ export default function RefereePage() {
                         existingScoreFromDb = snapshot.val();
                     } catch (error) {
                         console.warn(`선수 ${player.id} 점수 직접 확인 실패:`, error);
+                    }
+                }
+
+                // 불참/실격/기권 처리된 선수는 locked 상태를 유지 (다른 선수의 점수 입력과 관계없이)
+                // 단, 관리자 페이지에서 해제한 경우는 Firebase 점수를 반영해야 함
+                const existingLockedScore = scoresRef.current[player.id];
+                if (existingLockedScore && existingLockedScore.status === 'locked') {
+                    const isForfeited = existingLockedScore.forfeitType && existingLockedScore.score === 0;
+                    
+                    // 관리자 페이지에서 해제한 경우 (Firebase에서 점수가 null이거나 0이 아닌 값)
+                    const wasReleasedByAdmin = (existingScoreFromDb === null || existingScoreFromDb === undefined) || 
+                                              (existingScoreFromDb !== null && existingScoreFromDb !== undefined && Number(existingScoreFromDb) !== 0);
+                    
+                    if (isForfeited && !wasReleasedByAdmin) {
+                        // 불참/실격/기권 처리된 선수이고 관리자 페이지에서 해제하지 않은 경우 기존 상태 유지
+                        newScoresState[player.id] = existingLockedScore;
+                        continue;
                     }
                 }
 
@@ -1169,14 +1175,44 @@ export default function RefereePage() {
                 // forfeitType이 있고 score가 0이면 불참/실격/기권 처리된 것으로 간주
                 const isForfeited = currentScoreState.forfeitType && currentScoreState.score === 0;
                 
-                // 불참/실격/기권 처리된 선수는 이 useEffect에서 상태를 변경하지 않음
-                if (isForfeited) {
-                    return;
-                }
-                
                 const currentScore = currentScoreState.score;
                 const newScore = firebaseScore !== undefined && firebaseScore !== null ? Number(firebaseScore) : null;
                 
+                // 불참/실격/기권 처리된 선수는 관리자 페이지에서 해제한 경우만 업데이트
+                if (isForfeited) {
+                    // 관리자 페이지에서 해제한 경우 (Firebase에서 점수가 null이거나 0이 아닌 값)
+                    if (newScore === null || (newScore !== null && newScore !== 0)) {
+                        // 관리자 페이지에서 해제한 경우 업데이트
+                        if (newScore === null) {
+                            // null로 변경된 경우 (점수 삭제 - 기권 해제)
+                            setScores(prev => ({
+                                ...prev,
+                                [player.id]: {
+                                    score: 1,
+                                    status: 'editing',
+                                    forfeitType: null,
+                                    wasLocked: false
+                                }
+                            }));
+                        } else {
+                            // 0이 아닌 점수로 변경된 경우 (기권 해제 - 이전 점수 복구)
+                            setScores(prev => ({
+                                ...prev,
+                                [player.id]: {
+                                    ...prev[player.id],
+                                    score: newScore,
+                                    forfeitType: null,
+                                    status: 'locked',
+                                    wasLocked: currentScoreState.wasLocked
+                                }
+                            }));
+                        }
+                    }
+                    // 점수가 변경되지 않았거나 여전히 0점이면 상태 유지 (다른 선수 점수 입력과 관계없이)
+                    return;
+                }
+                
+                // 불참/실격/기권 처리되지 않은 일반 선수는 기존 로직대로 처리
                 // 점수가 변경된 경우 업데이트
                 if (newScore !== currentScore) {
                     if (newScore === null) {
@@ -1411,32 +1447,34 @@ export default function RefereePage() {
                             const courseName = courseObj ? courseObj.name : cid;
                             for (let h = 1; h <= 9; h++) {
                                 const existing = allScores[playerToSave.id]?.[cid]?.[h.toString()];
+                                // 실격/기권/불참 처리 시 모든 홀의 점수를 0점으로 변경 (기존 점수도 포함)
+                                const oldValue = existing === undefined || existing === null || existing === '' || isNaN(Number(existing)) ? 0 : Number(existing);
+                                
+                                // 모든 홀을 0점으로 설정
+                                await set(ref(dbInstance, `/scores/${playerToSave.id}/${cid}/${h}`), 0);
+                                const refereeId = (refereeData && refereeData.id) ? refereeData.id : `${hole}번홀심판`;
+                                
+                                // 직접 입력한 코스/홀과 다른 홀을 구분하여 로그 기록
                                 if (cid === selectedCourse && h === Number(hole)) {
-                                    // 직접 입력한 코스/홀
-                                    await set(ref(dbInstance, `/scores/${playerToSave.id}/${cid}/${h}`), 0);
-                                    const refereeId = (refereeData && refereeData.id) ? refereeData.id : `${hole}번홀심판`;
                                     await logScoreChange({
                                         matchId: 'tournaments/current',
                                         playerId: playerToSave.id,
                                         scoreType: 'holeScore',
                                         holeNumber: h,
-                                        oldValue: existing === undefined || existing === null || existing === '' || isNaN(Number(existing)) ? 0 : Number(existing),
+                                        oldValue: oldValue,
                                         newValue: 0,
                                         modifiedBy: refereeId,
                                         modifiedByType: 'judge',
                                         comment: `심판 직접 ${scoreData.forfeitType === 'absent' ? '불참' : scoreData.forfeitType === 'disqualified' ? '실격' : '기권'} (코스: ${courseName}, 홀: ${h})`,
                                         courseId: cid
                                     });
-                                } else if (existing === undefined || existing === null || existing === '' || isNaN(Number(existing))) {
-                                    // 나머지 미입력 홀만 0점 처리 (기존 점수는 보존)
-                                    await set(ref(dbInstance, `/scores/${playerToSave.id}/${cid}/${h}`), 0);
-                                    const refereeId = (refereeData && refereeData.id) ? refereeData.id : `${hole}번홀심판`;
+                                } else {
                                     await logScoreChange({
                                         matchId: 'tournaments/current',
                                         playerId: playerToSave.id,
                                         scoreType: 'holeScore',
                                         holeNumber: h,
-                                        oldValue: existing === undefined || existing === null || existing === '' || isNaN(Number(existing)) ? 0 : Number(existing),
+                                        oldValue: oldValue,
                                         newValue: 0,
                                         modifiedBy: refereeId,
                                         modifiedByType: 'judge',
@@ -1444,7 +1482,6 @@ export default function RefereePage() {
                                         courseId: cid
                                     });
                                 }
-                                // 기존 점수가 있는 홀은 그대로 보존 (0점으로 덮어쓰지 않음)
                             }
                         }
                     }
