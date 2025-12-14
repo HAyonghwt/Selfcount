@@ -1,7 +1,7 @@
 
 "use client"
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
@@ -10,8 +10,10 @@ import { db } from '@/lib/firebase';
 import { ref, onValue } from 'firebase/database';
 import { getRefereeAccounts } from '@/lib/auth';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Eye, EyeOff, Copy, Check } from 'lucide-react';
+import { Eye, EyeOff, Copy, Check, Download } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+// @ts-ignore
+import QRCode from 'qrcode.react';
 
 const MAX_HOLES = 9;
 
@@ -26,6 +28,7 @@ export default function RefereeManagementPage() {
     const [showPasswords, setShowPasswords] = useState<{ [key: string]: boolean }>({});
     const [tournamentCourses, setTournamentCourses] = useState<any[]>([]);
     const [groupsData, setGroupsData] = useState<{ [key: string]: any }>({});
+    const qrRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         if (!db) return;
@@ -172,6 +175,23 @@ export default function RefereeManagementPage() {
         }
     };
 
+    const handleDownloadQR = () => {
+        const canvas = qrRef.current?.querySelector("canvas");
+        if (canvas) {
+            const urlImg = canvas.toDataURL("image/png");
+            const a = document.createElement("a");
+            a.href = urlImg;
+            a.download = "심판용주소.png";
+            a.click();
+        } else {
+            toast({
+                title: '다운로드 실패',
+                description: 'QR코드를 생성할 수 없습니다.',
+                variant: 'destructive',
+            });
+        }
+    };
+
 
 
     const renderSkeleton = () => (
@@ -278,31 +298,45 @@ export default function RefereeManagementPage() {
                     <div className="space-y-4">
                         <div className="space-y-2">
                             <label className="text-sm font-medium">아래 주소를 심판들에게 전달하고 담당 홀의 아이디와 비밀번호를 이용해서 로그인 하게 합니다</label>
-                            <div className="flex gap-2">
-                                <Input 
-                                    value={mainUrl} 
-                                    onChange={(e) => setMainUrl(e.target.value)}
-                                    placeholder="https://your-domain.com"
-                                    className="flex-1"
-                                />
-                                <Button 
-                                    onClick={handleCopyUrl}
-                                    variant="outline"
-                                    className="min-w-[100px]"
-                                >
-                                    {copied ? (
-                                        <>
-                                            <Check className="mr-2 h-4 w-4" />
-                                            복사됨
-                                        </>
-                                    ) : (
-                                        <>
-                                            <Copy className="mr-2 h-4 w-4" />
-                                            복사하기
-                                        </>
-                                    )}
-                                </Button>
-
+                            <div className="flex flex-col md:flex-row gap-4 items-start md:items-center">
+                                <div className="flex gap-2 items-center flex-1 w-full">
+                                    <Input 
+                                        value={mainUrl} 
+                                        onChange={(e) => setMainUrl(e.target.value)}
+                                        placeholder="https://your-domain.com"
+                                        className="flex-1"
+                                    />
+                                    <Button 
+                                        onClick={handleCopyUrl}
+                                        variant="outline"
+                                        className="min-w-[100px]"
+                                    >
+                                        {copied ? (
+                                            <>
+                                                <Check className="mr-2 h-4 w-4" />
+                                                복사됨
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Copy className="mr-2 h-4 w-4" />
+                                                복사하기
+                                            </>
+                                        )}
+                                    </Button>
+                                </div>
+                                {/* QR 코드 영역 */}
+                                <div className="flex flex-col items-center justify-center md:ml-4" style={{ minWidth: 120 }}>
+                                    <div ref={qrRef} className="bg-white p-2 rounded shadow mb-2">
+                                        {QRCode ? (
+                                            <QRCode value={mainUrl} size={90} level="H" includeMargin={false} />
+                                        ) : (
+                                            <div style={{color: 'red', fontSize: 12, width: 90, height: 90, display: 'flex', alignItems: 'center', justifyContent: 'center'}}>QR코드 라이브러리 로드 실패</div>
+                                        )}
+                                    </div>
+                                    <Button variant="outline" onClick={handleDownloadQR} size="sm" style={{ width: 140 }}>
+                                        <Download className="w-4 h-4 mr-1" /> QR코드 다운로드
+                                    </Button>
+                                </div>
                             </div>
                         </div>
                     </div>

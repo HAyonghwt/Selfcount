@@ -322,19 +322,7 @@ function ExternalScoreboard() {
         }
     }, [languageMode]);
 
-    // 그룹 순환 로직
-    useEffect(() => {
-        if (!isRotationActive || rotationGroups.length === 0) {
-            return;
-        }
-
-        const interval = setInterval(() => {
-            currentRotationIndexRef.current = (currentRotationIndexRef.current + 1) % rotationGroups.length;
-            setFilterGroup(rotationGroups[currentRotationIndexRef.current]);
-        }, rotationInterval * 1000);
-
-        return () => clearInterval(interval);
-    }, [isRotationActive, rotationGroups, rotationInterval]);
+    // 그룹 순환 로직은 finalDataByGroup 선언 이후로 이동 (아래 참조)
     
     // 캐싱을 위한 상태 추가
     const [lastScoresHash, setLastScoresHash] = useState('');
@@ -1403,6 +1391,58 @@ function ExternalScoreboard() {
         }
         return visibleGroups.filter(g => g === filterGroup);
     }, [filterGroup, visibleGroups]);
+
+    // 그룹 순환 로직 (데이터가 있는 그룹만 순환) - finalDataByGroup 선언 이후에 위치
+    useEffect(() => {
+        if (!isRotationActive || rotationGroups.length === 0) {
+            return;
+        }
+
+        const interval = setInterval(() => {
+            // finalDataByGroup에서 선수가 있는 그룹만 필터링 (점수 유무와 관계없이 선수가 있으면 포함)
+            const availableGroups = rotationGroups.filter(group => {
+                const groupData = finalDataByGroup[group];
+                // 그룹에 선수가 있으면 순환에 포함 (점수가 없어도 선수 이름이 있으면 표시)
+                return groupData && Array.isArray(groupData) && groupData.length > 0;
+            });
+            
+            if (availableGroups.length === 0) {
+                // 순환 가능한 그룹이 없으면 순환 중지
+                setIsRotationActive(false);
+                return;
+            }
+            
+            // 현재 그룹이 availableGroups에 있는지 확인
+            const currentGroup = rotationGroups[currentRotationIndexRef.current];
+            if (!availableGroups.includes(currentGroup)) {
+                // 현재 그룹에 선수가 없으면 availableGroups의 첫 번째 그룹으로 이동
+                const newIndex = rotationGroups.indexOf(availableGroups[0]);
+                if (newIndex !== -1) {
+                    currentRotationIndexRef.current = newIndex;
+                    setFilterGroup(availableGroups[0]);
+                }
+                return;
+            }
+            
+            // 다음 그룹으로 이동 (선수가 있는 그룹만)
+            let nextIndex = (currentRotationIndexRef.current + 1) % rotationGroups.length;
+            let attempts = 0;
+            const maxAttempts = rotationGroups.length;
+            
+            // 선수가 있는 그룹을 찾을 때까지 순환
+            while (!availableGroups.includes(rotationGroups[nextIndex]) && attempts < maxAttempts) {
+                nextIndex = (nextIndex + 1) % rotationGroups.length;
+                attempts++;
+            }
+            
+            if (attempts < maxAttempts) {
+                currentRotationIndexRef.current = nextIndex;
+                setFilterGroup(rotationGroups[nextIndex]);
+            }
+        }, rotationInterval * 1000);
+
+        return () => clearInterval(interval);
+    }, [isRotationActive, rotationGroups, rotationInterval, finalDataByGroup]);
 
     // 선수별 점수 로그 캐시 상태 (playerId별)
     const [playerScoreLogs, setPlayerScoreLogs] = useState<{ [playerId: string]: ScoreLog[] }>({});
