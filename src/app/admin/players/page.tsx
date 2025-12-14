@@ -695,7 +695,11 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
         const groupCoursesRef = ref(db!, `tournaments/current/groups/${currentEditingGroup.name}/courses`);
         set(groupCoursesRef, assignedCourses)
             .then(() => {
-                toast({ title: "저장 완료", description: `${currentEditingGroup.name} 그룹의 코스 설정이 저장되었습니다.` });
+                toast({ 
+                    title: "저장 완료", 
+                    description: `${currentEditingGroup.name} 그룹의 코스 설정이 저장되었습니다.`,
+                    duration: 2000
+                });
                 setGroupCourseModalOpen(false);
                 setCurrentEditingGroup(null);
             })
@@ -1273,9 +1277,14 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                         
                         return (
                             <div key={course.id} className="flex items-center justify-between space-x-3">
-                                <Label htmlFor={`course-${course.id}`} className="text-base font-medium flex-1">
-                                    {course.name}
-                                </Label>
+                                <div className="flex items-center gap-2 flex-1">
+                                    <Label htmlFor={`course-${course.id}`} className="text-base font-medium">
+                                        {course.name}
+                                    </Label>
+                                    {currentOrder > 0 && (
+                                        <Check className="h-4 w-4 text-primary" />
+                                    )}
+                                </div>
                                 <Select
                                     value={currentOrder.toString()}
                                     onValueChange={(value) => {
@@ -1300,11 +1309,17 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="0">선택 안함</SelectItem>
-                                        {availableOrders.map(order => (
-                                            <SelectItem key={order} value={order.toString()}>
-                                                {order === 1 ? '첫번째 코스' : order === 2 ? '두번째 코스' : order === 3 ? '세번째 코스' : `${order}번째 코스`}
-                                            </SelectItem>
-                                        ))}
+                                        {availableOrders.map(order => {
+                                            const isSelected = currentOrder === order;
+                                            return (
+                                                <SelectItem key={order} value={order.toString()}>
+                                                    <div className="flex items-center gap-2">
+                                                        {isSelected && <Check className="h-4 w-4 text-primary" />}
+                                                        <span>{order === 1 ? '첫번째 코스' : order === 2 ? '두번째 코스' : order === 3 ? '세번째 코스' : `${order}번째 코스`}</span>
+                                                    </div>
+                                                </SelectItem>
+                                            );
+                                        })}
                                     </SelectContent>
                                 </Select>
                             </div>
