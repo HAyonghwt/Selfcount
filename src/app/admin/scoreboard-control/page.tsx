@@ -136,6 +136,7 @@ export default function AdminScoreboardControlPage() {
                                 <SelectValue placeholder="시간 선택" />
                             </SelectTrigger>
                             <SelectContent>
+                                <SelectItem value="0.167">10초</SelectItem>
                                 <SelectItem value="0.5">30초</SelectItem>
                                 {Array.from({ length: 10 }, (_, i) => i + 1).map((num) => (
                                     <SelectItem key={num} value={num.toString()}>

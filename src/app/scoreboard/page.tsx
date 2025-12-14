@@ -1,9 +1,9 @@
 "use client"
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { db, ensureAuthenticated } from '@/lib/firebase';
-import { ref, onValue, onChildChanged, onChildAdded, off, query, orderByKey, limitToLast } from 'firebase/database';
+import { ref, onValue, onChildChanged, onChildAdded, off, query, orderByKey, limitToLast, set } from 'firebase/database';
 import { Flame, ChevronUp, ChevronDown, Globe } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, safeLocalStorageGetItem, safeLocalStorageSetItem } from '@/lib/utils';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -397,6 +397,8 @@ function ExternalScoreboard() {
                     setLastTournamentHash(JSON.stringify(data));
                     checkAllLoaded();
                 });
+
+                // 순환 설정 불러오기는 별도 useEffect에서 처리 (초기 로딩과 분리)
                 
                 // 3초 후에도 로딩이 안 되면 강제로 로딩 완료
                 const fallbackTimer = setTimeout(() => {
@@ -1392,23 +1394,66 @@ function ExternalScoreboard() {
         return visibleGroups.filter(g => g === filterGroup);
     }, [filterGroup, visibleGroups]);
 
+    // finalDataByGroup의 최신 값을 참조하기 위한 ref
+    const finalDataByGroupRef = useRef(finalDataByGroup);
+    useEffect(() => {
+        finalDataByGroupRef.current = finalDataByGroup;
+    }, [finalDataByGroup]);
+
+    // 순환 설정 불러오기 (localStorage에서, 새로고침 시에도 유지)
+    // 각 모니터마다 다른 설정을 가질 수 있도록 localStorage 사용
+    // initialDataLoaded가 true가 된 후에 설정을 불러와서 순환이 제대로 시작되도록 함
+    useEffect(() => {
+        if (!initialDataLoaded) return; // 초기 데이터 로딩이 완료된 후에만 실행
+        
+        try {
+            const savedSettings = safeLocalStorageGetItem('scoreboardRotation');
+            if (savedSettings) {
+                const settings = JSON.parse(savedSettings);
+                // intervalSeconds 먼저 설정
+                if (settings.intervalSeconds !== undefined) {
+                    setRotationInterval(settings.intervalSeconds);
+                }
+                // selectedGroups 설정 (순환이 활성화되어 있으면 그룹이 있어야 함)
+                if (settings.selectedGroups && Array.isArray(settings.selectedGroups) && settings.selectedGroups.length > 0) {
+                    setRotationGroups(settings.selectedGroups);
+                    // 순환이 활성화되어 있고 그룹이 있으면 첫 번째 그룹으로 설정
+                    if (settings.isActive && settings.selectedGroups.length > 0) {
+                        currentRotationIndexRef.current = 0;
+                        setFilterGroup(settings.selectedGroups[0]);
+                    }
+                }
+                // isRotationActive는 마지막에 설정하여 순환 로직이 실행되도록 함
+                if (settings.isActive !== undefined) {
+                    setIsRotationActive(settings.isActive);
+                }
+            }
+        } catch (error) {
+            console.error('순환 설정 불러오기 실패:', error);
+        }
+    }, [initialDataLoaded]); // initialDataLoaded가 true가 되면 실행
+
     // 그룹 순환 로직 (데이터가 있는 그룹만 순환) - finalDataByGroup 선언 이후에 위치
+    // finalDataByGroup을 dependency에서 제거하여 점수 입력 시에도 순환이 멈추지 않도록 함
     useEffect(() => {
         if (!isRotationActive || rotationGroups.length === 0) {
             return;
         }
 
         const interval = setInterval(() => {
+            // finalDataByGroupRef를 통해 최신 값 참조 (점수 입력 시에도 순환 유지)
+            const currentFinalData = finalDataByGroupRef.current;
+            
             // finalDataByGroup에서 선수가 있는 그룹만 필터링 (점수 유무와 관계없이 선수가 있으면 포함)
             const availableGroups = rotationGroups.filter(group => {
-                const groupData = finalDataByGroup[group];
+                const groupData = currentFinalData[group];
                 // 그룹에 선수가 있으면 순환에 포함 (점수가 없어도 선수 이름이 있으면 표시)
                 return groupData && Array.isArray(groupData) && groupData.length > 0;
             });
             
             if (availableGroups.length === 0) {
-                // 순환 가능한 그룹이 없으면 순환 중지
-                setIsRotationActive(false);
+                // 순환 가능한 그룹이 없으면 순환 중지하지 않고 대기
+                // (데이터가 아직 로딩 중일 수 있으므로)
                 return;
             }
             
@@ -1442,7 +1487,7 @@ function ExternalScoreboard() {
         }, rotationInterval * 1000);
 
         return () => clearInterval(interval);
-    }, [isRotationActive, rotationGroups, rotationInterval, finalDataByGroup]);
+    }, [isRotationActive, rotationGroups, rotationInterval]);
 
     // 선수별 점수 로그 캐시 상태 (playerId별)
     const [playerScoreLogs, setPlayerScoreLogs] = useState<{ [playerId: string]: ScoreLog[] }>({});
@@ -2049,11 +2094,22 @@ function ExternalScoreboard() {
                                     id="rotation-active"
                                     checked={isRotationActive}
                                     onCheckedChange={(checked) => {
-                                        setIsRotationActive(checked === true);
-                                        if (checked === true && rotationGroups.length > 0) {
+                                        const newValue = checked === true;
+                                        setIsRotationActive(newValue);
+                                        if (newValue && rotationGroups.length > 0) {
                                             // 순환 시작 시 첫 번째 그룹으로 설정
                                             currentRotationIndexRef.current = 0;
                                             setFilterGroup(rotationGroups[0]);
+                                        }
+                                        // localStorage에 저장 (새로고침 시 유지, 각 모니터별로 독립적)
+                                        try {
+                                            safeLocalStorageSetItem('scoreboardRotation', JSON.stringify({
+                                                isActive: newValue,
+                                                intervalSeconds: rotationInterval,
+                                                selectedGroups: rotationGroups
+                                            }));
+                                        } catch (error) {
+                                            console.error('순환 설정 저장 실패:', error);
                                         }
                                     }}
                                     className="border-gray-600"
@@ -2075,10 +2131,23 @@ function ExternalScoreboard() {
                                                     id={`rotation-group-${group}`}
                                                     checked={rotationGroups.includes(group)}
                                                     onCheckedChange={(checked) => {
+                                                        let newGroups: string[];
                                                         if (checked === true) {
-                                                            setRotationGroups(prev => [...prev, group]);
+                                                            newGroups = [...rotationGroups, group];
+                                                            setRotationGroups(newGroups);
                                                         } else {
-                                                            setRotationGroups(prev => prev.filter(g => g !== group));
+                                                            newGroups = rotationGroups.filter(g => g !== group);
+                                                            setRotationGroups(newGroups);
+                                                        }
+                                                        // localStorage에 저장 (새로고침 시 유지, 각 모니터별로 독립적)
+                                                        try {
+                                                            safeLocalStorageSetItem('scoreboardRotation', JSON.stringify({
+                                                                isActive: isRotationActive,
+                                                                intervalSeconds: rotationInterval,
+                                                                selectedGroups: newGroups
+                                                            }));
+                                                        } catch (error) {
+                                                            console.error('순환 설정 저장 실패:', error);
                                                         }
                                                     }}
                                                     className="border-gray-600"
@@ -2095,12 +2164,26 @@ function ExternalScoreboard() {
                                     <Label className="text-xs text-gray-400">순환 시간</Label>
                                     <Select 
                                         value={rotationInterval.toString()} 
-                                        onValueChange={(value) => setRotationInterval(parseInt(value))}
+                                        onValueChange={(value) => {
+                                            const newInterval = parseInt(value);
+                                            setRotationInterval(newInterval);
+                                            // localStorage에 저장 (새로고침 시 유지, 각 모니터별로 독립적)
+                                            try {
+                                                safeLocalStorageSetItem('scoreboardRotation', JSON.stringify({
+                                                    isActive: isRotationActive,
+                                                    intervalSeconds: newInterval,
+                                                    selectedGroups: rotationGroups
+                                                }));
+                                            } catch (error) {
+                                                console.error('순환 설정 저장 실패:', error);
+                                            }
+                                        }}
                                     >
                                         <SelectTrigger className="w-full h-8 bg-gray-800/80 border-gray-600 text-white text-xs">
                                             <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent className="bg-gray-900 text-white border-gray-700">
+                                            <SelectItem value="10">10초</SelectItem>
                                             <SelectItem value="30">30초</SelectItem>
                                             <SelectItem value="60">1분</SelectItem>
                                             <SelectItem value="120">2분</SelectItem>
