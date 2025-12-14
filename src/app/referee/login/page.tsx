@@ -29,16 +29,16 @@ export default function RefereeLoginPage() {
                 console.warn('Firebase 익명 인증 실패 (계속 진행):', error);
             }
 
-            // 로그인 상태 확인
+        // 로그인 상태 확인
             const loggedInReferee = safeSessionStorageGetItem('refereeData');
-            if (loggedInReferee) {
-                try {
-                    const referee = JSON.parse(loggedInReferee);
+        if (loggedInReferee) {
+            try {
+                const referee = JSON.parse(loggedInReferee);
                     // 이미 로그인된 경우 즉시 이동
                     window.location.href = `/referee/${referee.hole}`;
-                    return;
-                } catch (error) {
-                    console.error('심판 데이터 파싱 오류:', error);
+                return;
+            } catch (error) {
+                console.error('심판 데이터 파싱 오류:', error);
                     setLoading(false);
                 }
             } else {

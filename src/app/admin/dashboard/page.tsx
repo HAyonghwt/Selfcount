@@ -1616,8 +1616,28 @@ export default function AdminDashboard() {
         return progressByGroup;
     }, [processedDataByGroup, scores]);
 
+    // 플레이오프 체크를 위한 안정적인 해시 값 생성
+    const groupProgressHash = useMemo(() => {
+        if (!groupProgress) return '';
+        return JSON.stringify(groupProgress);
+    }, [groupProgress]);
+
+    const finalDataByGroupHash = useMemo(() => {
+        if (!finalDataByGroup) return '';
+        return JSON.stringify(finalDataByGroup);
+    }, [finalDataByGroup]);
+
+    const processedDataByGroupHash = useMemo(() => {
+        if (!processedDataByGroup) return '';
+        return JSON.stringify(processedDataByGroup);
+    }, [processedDataByGroup]);
+
+    const notifiedSuddenDeathGroupsStr = useMemo(() => {
+        return notifiedSuddenDeathGroups.join(',');
+    }, [notifiedSuddenDeathGroups]);
+
     useEffect(() => {
-        if (!groupProgress || !finalDataByGroup) return;
+        if (!groupProgress || !finalDataByGroup || !processedDataByGroup) return;
 
         // 모든 플레이오프가 필요한 그룹을 먼저 찾기
         const groupsNeedingPlayoff: string[] = [];
@@ -1625,11 +1645,165 @@ export default function AdminDashboard() {
             // Check if group is 100% complete and not yet notified
             if (groupProgress[groupName] === 100 && !notifiedSuddenDeathGroups.includes(groupName)) {
                 const playersInGroup = finalDataByGroup[groupName];
-                if (playersInGroup) {
-                    const tiedFirstPlace = playersInGroup.filter(p => p.rank === 1);
+                const processedPlayersInGroup = processedDataByGroup[groupName];
+                
+                if (playersInGroup && processedPlayersInGroup) {
+                    // processedDataByGroup에서 원래 1위 동점자 확인 (applyPlayoffRanking 전 상태)
+                    const originalTiedFirstPlace = processedPlayersInGroup.filter((p: any) => p.rank === 1);
                     
-                    // Check if there are 2 or more players tied for first
-                    if (tiedFirstPlace.length > 1) {
+                    // 원래 1위 동점자가 없으면 플레이오프 불필요
+                    if (originalTiedFirstPlace.length <= 1) {
+                        return; // 다음 그룹으로
+                    }
+                    
+                    // 서든데스로 순위가 결정되었는지 확인 (가장 먼저 확인)
+                    // 원래 1위 동점자들이 모두 서든데스에 참여했고 점수가 입력되어 있는지 확인
+                    const originalTiedFirstPlaceIds = new Set(originalTiedFirstPlace.map((p: any) => p.id));
+                    let hasSuddenDeathRanking = false;
+                    
+                    // individual과 team 모두 확인
+                    const checkSuddenDeathData = (suddenDeathData: any) => {
+                        if (!suddenDeathData) return false;
+                        
+                        // 그룹별 데이터인 경우 해당 그룹 데이터 확인
+                        if (typeof suddenDeathData === 'object' && !suddenDeathData.isActive) {
+                            // 그룹별 데이터인 경우
+                            const groupData = suddenDeathData[groupName];
+                            if (!groupData?.isActive || !groupData?.players || !groupData?.scores) {
+                                return false;
+                            }
+                            
+                            // 원래 1위 동점자들이 모두 서든데스에 참여했는지 확인
+                            const allInSuddenDeath = originalTiedFirstPlace.every((p: any) => 
+                                groupData.players[p.id] === true
+                            );
+                            
+                            if (!allInSuddenDeath) {
+                                return false;
+                            }
+                            
+                            // 원래 1위 동점자들이 모두 서든데스에 참여했고, 점수가 입력되어 있는지 확인
+                            return originalTiedFirstPlace.every((p: any) => {
+                                const playerScores = groupData.scores[p.id];
+                                if (!playerScores) return false;
+                                // 서든데스 홀에 점수가 하나라도 입력되어 있으면 완료된 것으로 봄
+                                if (groupData.holes && Array.isArray(groupData.holes)) {
+                                    return groupData.holes.some((hole: number) => {
+                                        // hole은 number이지만 scores에서는 string 키로 저장될 수 있음
+                                        const score = playerScores[hole] || playerScores[hole.toString()];
+                                        return score !== undefined && score !== null;
+                                    });
+                                }
+                                return false;
+                            });
+                        } else {
+                            // 단일 데이터인 경우 (기존 로직)
+                            if (!suddenDeathData?.isActive || !suddenDeathData?.players || !suddenDeathData?.scores) {
+                                return false;
+                            }
+                            
+                            // 원래 1위 동점자들이 모두 서든데스에 참여했는지 확인
+                            const allInSuddenDeath = originalTiedFirstPlace.every((p: any) => 
+                                suddenDeathData.players[p.id] === true
+                            );
+                            
+                            if (!allInSuddenDeath) {
+                                return false;
+                            }
+                            
+                            // 원래 1위 동점자들이 모두 서든데스에 참여했고, 점수가 입력되어 있는지 확인
+                            return originalTiedFirstPlace.every((p: any) => {
+                                const playerScores = suddenDeathData.scores[p.id];
+                                if (!playerScores) return false;
+                                // 서든데스 홀에 점수가 하나라도 입력되어 있으면 완료된 것으로 봄
+                                if (suddenDeathData.holes && Array.isArray(suddenDeathData.holes)) {
+                                    return suddenDeathData.holes.some((hole: number) => {
+                                        // hole은 number이지만 scores에서는 string 키로 저장될 수 있음
+                                        const score = playerScores[hole] || playerScores[hole.toString()];
+                                        return score !== undefined && score !== null;
+                                    });
+                                }
+                                return false;
+                            });
+                        }
+                    };
+                    
+                    // individual과 team 서든데스 데이터 모두 확인
+                    if (originalTiedFirstPlace.length > 0) {
+                        hasSuddenDeathRanking = checkSuddenDeathData(individualSuddenDeathData) || 
+                                               checkSuddenDeathData(teamSuddenDeathData);
+                    }
+                    
+                    // NTP로 순위가 결정되었는지 확인
+                    let hasNTPRanking = false;
+                    if (!hasSuddenDeathRanking && originalTiedFirstPlace.length > 0) {
+                        // individual과 team 모두 확인
+                        const checkNTPData = (ntpData: any) => {
+                            if (!ntpData) return false;
+                            
+                            // 그룹별 데이터인 경우 해당 그룹 데이터 확인
+                            if (typeof ntpData === 'object' && !ntpData.isActive) {
+                                // 그룹별 데이터인 경우
+                                const groupData = ntpData[groupName];
+                                if (!groupData?.isActive || !groupData?.rankings) {
+                                    return false;
+                                }
+                                
+                                // 원래 1위 동점자들이 모두 NTP 순위가 있는지 확인
+                                return originalTiedFirstPlace.every((p: any) => 
+                                    groupData.rankings[p.id] !== undefined && groupData.rankings[p.id] !== null
+                                );
+                            } else {
+                                // 단일 데이터인 경우 (기존 로직)
+                                if (!ntpData?.isActive || !ntpData?.rankings) {
+                                    return false;
+                                }
+                                
+                                // 원래 1위 동점자들이 모두 NTP 순위가 있는지 확인
+                                return originalTiedFirstPlace.every((p: any) => 
+                                    ntpData.rankings[p.id] !== undefined && ntpData.rankings[p.id] !== null
+                                );
+                            }
+                        };
+                        
+                        // individual과 team NTP 데이터 모두 확인
+                        hasNTPRanking = checkNTPData(individualNTPData) || checkNTPData(teamNTPData);
+                    }
+                    
+                    // 백카운트로 순위가 결정되었는지 확인
+                    let hasBackcountRanking = false;
+                    if (!hasSuddenDeathRanking && !hasNTPRanking) {
+                        const playerType = originalTiedFirstPlace[0]?.type;
+                        const isIndividual = playerType === 'individual';
+                        const backcountApplied = isIndividual ? individualBackcountApplied : teamBackcountApplied;
+                        if (backcountApplied) {
+                            // 원래 1위 동점자 중 하나라도 rank가 1이 아니면 백카운트로 순위가 결정된 것
+                            hasBackcountRanking = originalTiedFirstPlace.some((p: any) => {
+                                const playerInFinal = playersInGroup.find((fp: any) => fp.id === p.id);
+                                if (playerInFinal) {
+                                    return playerInFinal.rank !== 1 && playerInFinal.rank !== null;
+                                }
+                                return false;
+                            });
+                        }
+                    }
+                    
+                    // 서든데스/NTP/백카운트로 순위가 결정되었으면 안내창 안 뜸
+                    if (hasSuddenDeathRanking || hasNTPRanking || hasBackcountRanking) {
+                        return; // 순위가 결정되었으므로 다음 그룹으로
+                    }
+                    
+                    // finalDataByGroup에서 순위 결정 후 1위 동점자 확인 (applyPlayoffRanking 후 상태)
+                    const finalTiedFirstPlace = playersInGroup.filter(p => p.rank === 1);
+                    
+                    // 순위가 결정되었는지 확인: finalTiedFirstPlace.length === 1이면 순위가 결정된 것
+                    if (finalTiedFirstPlace.length === 1) {
+                        return; // 순위가 결정되었으므로 다음 그룹으로
+                    }
+                    
+                    // 순위가 결정되지 않았으면 플레이오프 필요
+                    // finalTiedFirstPlace.length > 1이면 여전히 동점이므로 플레이오프 필요
+                    if (finalTiedFirstPlace.length > 1) {
                         groupsNeedingPlayoff.push(groupName);
                     }
                 }
@@ -1666,7 +1840,7 @@ export default function AdminDashboard() {
                 return newGroups;
             });
         }
-    }, [groupProgress, finalDataByGroup, notifiedSuddenDeathGroups, router]);
+    }, [groupProgressHash, finalDataByGroupHash, processedDataByGroupHash, notifiedSuddenDeathGroupsStr, router]);
 
     const handleExportToExcel = async () => {
         const XLSX = await import('xlsx-js-style');

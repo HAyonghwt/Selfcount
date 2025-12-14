@@ -283,7 +283,7 @@ export const loginRefereeWithKoreanId = async (koreanId: string, password: strin
     
     // 기존 오류 메시지가 있으면 그대로 사용
     if (error.message) {
-      throw error;
+    throw error;
     }
     
     // 알 수 없는 오류
