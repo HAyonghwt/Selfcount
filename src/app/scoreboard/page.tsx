@@ -247,9 +247,6 @@ export default function ScoreboardPage() {
     return () => unsub();
   }, []);
 
-  useEffect(() => {
-    console.log('giftEventStatus:', giftEventStatus);
-  }, [giftEventStatus]);
 
   if (giftEventStatus === 'waiting') {
     return <GiftEventStandby />;
@@ -1418,14 +1415,11 @@ function ExternalScoreboard() {
             if (Object.keys(finalDataByGroup).length === 0) return;
             
             setLogsLoading(true);
-            console.log('기본 로그 로딩 시작 - finalDataByGroup 변경 감지');
             
             // 수정된 점수가 있는 선수만 로그 로딩 (최적화)
             const playersWithScores = Object.values(finalDataByGroup).flat()
                 .filter((p: any) => p.hasAnyScore) // 점수가 있는 선수만
                 .map((p: any) => p.id);
-            
-            console.log('로그 로딩할 선수들:', playersWithScores);
             
             const logsMap: { [playerId: string]: ScoreLog[] } = {};
             
@@ -1433,15 +1427,12 @@ function ExternalScoreboard() {
             const existingPlayerIds = Object.keys(playerScoreLogs);
             const newPlayerIds = playersWithScores.filter(pid => !existingPlayerIds.includes(pid));
             
-            console.log('새로 로딩할 선수들:', newPlayerIds);
-            
             // 새로운 선수만 로그 로딩 (병렬 처리로 성능 향상)
             if (newPlayerIds.length > 0) {
                 await Promise.all(newPlayerIds.map(async (pid) => {
                     try {
                         const logs = await getPlayerScoreLogsOptimized(pid);
                         logsMap[pid] = logs;
-                        console.log(`기본 로그 로딩 완료 - 선수 ${pid}:`, logs.length, '개');
                     } catch (error) {
                         console.error(`기본 로그 로딩 실패 - 선수 ${pid}:`, error);
                         logsMap[pid] = [];
@@ -1738,27 +1729,6 @@ function ExternalScoreboard() {
   
   // 실제로 수정된 경우만 빨간색으로 표시 (oldValue가 0이고 newValue가 점수인 경우는 제외)
   const isModified = !!cellLog && cellLog.oldValue !== 0 && cellLog.oldValue !== cellLog.newValue;
-  
-  // 디버깅: 수정된 점수 정보 로깅
-  if (isModified && cellLog) {
-    console.log(`수정된 점수 발견 - 선수: ${player.id}, 코스: ${course.id}, 홀: ${i + 1}`, {
-      oldValue: cellLog.oldValue,
-      newValue: cellLog.newValue,
-      modifiedBy: cellLog.modifiedBy,
-      modifiedByType: cellLog.modifiedByType,
-      comment: cellLog.comment
-    });
-  }
-  
-  // 임시 디버깅: 모든 점수에 대해 로그 확인
-  if (score !== null && score !== undefined && score !== 0) {
-    console.log(`점수 셀 정보 - 선수: ${player.id}, 코스: ${course.id}, 홀: ${i + 1}`, {
-      score,
-      logs: logs.length,
-      cellLog: cellLog ? '있음' : '없음',
-      isModified
-    });
-  }
   
   // 툴팁 내용 구성
   const tooltipContent = cellLog ? (

@@ -464,7 +464,6 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
 
         // 그룹이 없으면 자동으로 생성
         if (!groupsData[individualGroup]) {
-            console.log('Creating new group:', individualGroup);
             const defaultCourses = courses.reduce((acc, course) => {
                 acc[course.id] = true;
                 return acc;
@@ -474,9 +473,6 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                 type: 'individual',
                 courses: defaultCourses
             };
-            console.log('Group creation added to updates:', updates);
-        } else {
-            console.log('Group already exists:', individualGroup);
         }
 
         update(ref(db!), updates)
