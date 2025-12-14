@@ -299,6 +299,9 @@ function ExternalScoreboard() {
     const [rotationInterval, setRotationInterval] = useState<number>(30); // 기본 30초
     const [isRotationActive, setIsRotationActive] = useState<boolean>(false);
     const currentRotationIndexRef = useRef<number>(0);
+    const rotationIntervalRef = useRef<number>(30); // interval 값을 ref로도 관리
+    const rotationGroupsRef = useRef<string[]>([]); // rotationGroups를 ref로도 관리
+    const rotationIntervalIdRef = useRef<NodeJS.Timeout | null>(null); // interval ID를 ref로 관리하여 리렌더링 시에도 유지
     
     // 다국어 지원 상태
     const [languageMode, setLanguageMode] = useState<'korean' | 'english' | 'cycle'>('korean');
@@ -922,10 +925,8 @@ function ExternalScoreboard() {
         const allCourses = Object.values(tournament.courses || {}).filter(Boolean);
         if (Object.keys(players).length === 0) return {};
 
-        // 그룹 필터링 최적화: 선택된 그룹의 선수만 우선 처리
-        const playersToProcess = filterGroup === 'all' 
-            ? Object.entries(players)
-            : Object.entries(players).filter(([_, player]: [string, any]) => player.group === filterGroup);
+        // 모든 그룹의 선수를 처리 (순환 시 filterGroup 변경으로 인한 재계산 방지)
+        const playersToProcess = Object.entries(players);
 
         const allProcessedPlayers: any[] = playersToProcess.map(([playerId, player]: [string, any]) => {
             const playerGroupData = groupsData[player.group];
@@ -1383,7 +1384,7 @@ function ExternalScoreboard() {
         finalData = applyPlayoffRanking(finalData);
 
         return finalData;
-    }, [processedDataByGroup, processedIndividualSuddenDeathData, processedTeamSuddenDeathData, individualBackcountApplied, teamBackcountApplied, individualNTPData, teamNTPData, tournament.courses, filterGroup]);
+    }, [processedDataByGroup, processedIndividualSuddenDeathData, processedTeamSuddenDeathData, individualBackcountApplied, teamBackcountApplied, individualNTPData, teamNTPData, tournament.courses]); // filterGroup 제거: 순환 시 재계산 방지
     
     const visibleGroups = Object.keys(finalDataByGroup).filter(groupName => finalDataByGroup[groupName]?.some((player: any) => player.assignedCourses.length > 0));
     
@@ -1433,19 +1434,44 @@ function ExternalScoreboard() {
         }
     }, [initialDataLoaded]); // initialDataLoaded가 true가 되면 실행
 
+    // rotationInterval과 rotationGroups를 ref에 동기화
+    useEffect(() => {
+        rotationIntervalRef.current = rotationInterval;
+    }, [rotationInterval]);
+    
+    useEffect(() => {
+        rotationGroupsRef.current = rotationGroups;
+    }, [rotationGroups]);
+
     // 그룹 순환 로직 (데이터가 있는 그룹만 순환) - finalDataByGroup 선언 이후에 위치
     // finalDataByGroup을 dependency에서 제거하여 점수 입력 시에도 순환이 멈추지 않도록 함
+    // isRotationActive만 dependency로 사용하여 점수 입력 시 재실행되지 않도록 함
+    // interval을 ref로 관리하여 리렌더링 시에도 유지
     useEffect(() => {
-        if (!isRotationActive || rotationGroups.length === 0) {
+        // 기존 interval이 있으면 먼저 정리
+        if (rotationIntervalIdRef.current) {
+            clearInterval(rotationIntervalIdRef.current);
+            rotationIntervalIdRef.current = null;
+        }
+
+        if (!isRotationActive) {
             return;
         }
 
-        const interval = setInterval(() => {
+        // rotationGroupsRef를 통해 최신 값 참조
+        if (rotationGroupsRef.current.length === 0) {
+            return;
+        }
+
+        // interval을 ref에 저장하여 리렌더링 시에도 유지
+        rotationIntervalIdRef.current = setInterval(() => {
             // finalDataByGroupRef를 통해 최신 값 참조 (점수 입력 시에도 순환 유지)
             const currentFinalData = finalDataByGroupRef.current;
+            // rotationGroupsRef를 통해 최신 값 참조
+            const currentRotationGroups = rotationGroupsRef.current;
             
             // finalDataByGroup에서 선수가 있는 그룹만 필터링 (점수 유무와 관계없이 선수가 있으면 포함)
-            const availableGroups = rotationGroups.filter(group => {
+            const availableGroups = currentRotationGroups.filter(group => {
                 const groupData = currentFinalData[group];
                 // 그룹에 선수가 있으면 순환에 포함 (점수가 없어도 선수 이름이 있으면 표시)
                 return groupData && Array.isArray(groupData) && groupData.length > 0;
@@ -1458,10 +1484,10 @@ function ExternalScoreboard() {
             }
             
             // 현재 그룹이 availableGroups에 있는지 확인
-            const currentGroup = rotationGroups[currentRotationIndexRef.current];
+            const currentGroup = currentRotationGroups[currentRotationIndexRef.current];
             if (!availableGroups.includes(currentGroup)) {
                 // 현재 그룹에 선수가 없으면 availableGroups의 첫 번째 그룹으로 이동
-                const newIndex = rotationGroups.indexOf(availableGroups[0]);
+                const newIndex = currentRotationGroups.indexOf(availableGroups[0]);
                 if (newIndex !== -1) {
                     currentRotationIndexRef.current = newIndex;
                     setFilterGroup(availableGroups[0]);
@@ -1470,24 +1496,29 @@ function ExternalScoreboard() {
             }
             
             // 다음 그룹으로 이동 (선수가 있는 그룹만)
-            let nextIndex = (currentRotationIndexRef.current + 1) % rotationGroups.length;
+            let nextIndex = (currentRotationIndexRef.current + 1) % currentRotationGroups.length;
             let attempts = 0;
-            const maxAttempts = rotationGroups.length;
+            const maxAttempts = currentRotationGroups.length;
             
             // 선수가 있는 그룹을 찾을 때까지 순환
-            while (!availableGroups.includes(rotationGroups[nextIndex]) && attempts < maxAttempts) {
-                nextIndex = (nextIndex + 1) % rotationGroups.length;
+            while (!availableGroups.includes(currentRotationGroups[nextIndex]) && attempts < maxAttempts) {
+                nextIndex = (nextIndex + 1) % currentRotationGroups.length;
                 attempts++;
             }
             
             if (attempts < maxAttempts) {
                 currentRotationIndexRef.current = nextIndex;
-                setFilterGroup(rotationGroups[nextIndex]);
+                setFilterGroup(currentRotationGroups[nextIndex]);
             }
-        }, rotationInterval * 1000);
+        }, rotationIntervalRef.current * 1000);
 
-        return () => clearInterval(interval);
-    }, [isRotationActive, rotationGroups, rotationInterval]);
+        return () => {
+            if (rotationIntervalIdRef.current) {
+                clearInterval(rotationIntervalIdRef.current);
+                rotationIntervalIdRef.current = null;
+            }
+        };
+    }, [isRotationActive]); // isRotationActive만 dependency로 사용하여 점수 입력 시 재실행되지 않도록 함
 
     // 선수별 점수 로그 캐시 상태 (playerId별)
     const [playerScoreLogs, setPlayerScoreLogs] = useState<{ [playerId: string]: ScoreLog[] }>({});
