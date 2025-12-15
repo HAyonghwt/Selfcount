@@ -1078,14 +1078,74 @@ export default function RefereePage() {
                 if (existingLockedScore && existingLockedScore.status === 'locked') {
                     const isForfeited = existingLockedScore.forfeitType && existingLockedScore.score === 0;
                     
-                    // 관리자 페이지에서 해제한 경우 (Firebase에서 점수가 null이거나 0이 아닌 값)
-                    const wasReleasedByAdmin = (existingScoreFromDb === null || existingScoreFromDb === undefined) || 
-                                              (existingScoreFromDb !== null && existingScoreFromDb !== undefined && Number(existingScoreFromDb) !== 0);
-                    
-                    if (isForfeited && !wasReleasedByAdmin) {
-                        // 불참/실격/기권 처리된 선수이고 관리자 페이지에서 해제하지 않은 경우 기존 상태 유지
-                        newScoresState[player.id] = existingLockedScore;
-                        continue;
+                    if (isForfeited) {
+                        // 관리자 페이지에서 해제했는지 확인
+                        // 관리자가 해제하면 모든 홀의 점수가 복원되거나 삭제되므로, 다른 홀의 점수를 확인
+                        let wasReleasedByAdmin = false;
+                        
+                        // 1. 현재 홀의 점수가 null이거나 0이 아니면 관리자가 해제한 것으로 판단
+                        if (existingScoreFromDb !== undefined && existingScoreFromDb !== null && Number(existingScoreFromDb) !== 0) {
+                            wasReleasedByAdmin = true;
+                        } else if (existingScoreFromDb === null || existingScoreFromDb === undefined) {
+                            // 2. 현재 홀의 점수가 null이면 다른 홀의 점수를 확인
+                            let hasAnyScore = false;
+                            let hasZeroScore = false;
+                            
+                            // allScores에서 다른 홀의 점수 확인
+                            if (allScores[player.id] && allScores[player.id][selectedCourse as string]) {
+                                for (let h = 1; h <= 9; h++) {
+                                    const otherHoleScore = allScores[player.id][selectedCourse as string][h.toString()];
+                                    if (otherHoleScore !== undefined && otherHoleScore !== null) {
+                                        hasAnyScore = true;
+                                        if (otherHoleScore === 0) {
+                                            hasZeroScore = true;
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            // 다른 홀에 점수가 있는데 0점이 없으면 관리자가 해제한 것으로 판단
+                            if (hasAnyScore && !hasZeroScore) {
+                                wasReleasedByAdmin = true;
+                            } else if (!hasAnyScore) {
+                                // allScores가 비어있으면 Firebase에서 확인
+                                try {
+                                    const dbInstance = db as import('firebase/database').Database;
+                                    const playerCourseRef = ref(dbInstance, `scores/${player.id}/${selectedCourse}`);
+                                    const courseSnapshot = await get(playerCourseRef);
+                                    if (courseSnapshot.exists()) {
+                                        const courseScores = courseSnapshot.val();
+                                        for (let h = 1; h <= 9; h++) {
+                                            const holeKey = h.toString();
+                                            const holeScore = courseScores[h] !== undefined ? courseScores[h] : 
+                                                             courseScores[holeKey] !== undefined ? courseScores[holeKey] : 
+                                                             null;
+                                            if (holeScore !== undefined && holeScore !== null) {
+                                                hasAnyScore = true;
+                                                if (holeScore === 0 || holeScore === '0' || Number(holeScore) === 0) {
+                                                    hasZeroScore = true;
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                        // 다른 홀에 점수가 있는데 0점이 없으면 관리자가 해제한 것으로 판단
+                                        if (hasAnyScore && !hasZeroScore) {
+                                            wasReleasedByAdmin = true;
+                                        }
+                                    }
+                                } catch (error) {
+                                    console.warn(`관리자 해제 확인 실패:`, error);
+                                }
+                            }
+                        }
+                        
+                        if (!wasReleasedByAdmin) {
+                            // 불참/실격/기권 처리된 선수이고 관리자 페이지에서 해제하지 않은 경우 기존 상태 유지
+                            newScoresState[player.id] = existingLockedScore;
+                            continue;
+                        }
+                        // 관리자가 해제한 경우 아래 로직으로 진행하여 편집 상태로 설정
                     }
                 }
 
