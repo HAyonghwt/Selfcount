@@ -2251,13 +2251,30 @@ export default function SelfScoringPage() {
               setShowLeaveConfirm(false);
               try {
                 if (typeof window !== 'undefined') {
-                  if (window.history.length > 2) {
-                    // 최초 진입 시 pushState로 추가한 히스토리를 포함해 2단계 뒤로 이동
-                    window.history.go(-2);
-                  } else {
-                    // 유의미한 뒤로가기가 없으면 목록 페이지로 이동
-                    window.location.href = '/self-scoring';
-                  }
+                  // 새 창으로 열린 경우 창을 닫기 시도
+                  // window.close()는 JavaScript에서 직접 열린 창만 닫을 수 있음
+                  // 모바일 브라우저에서도 새 창으로 열린 경우 일반적으로 작동함
+                  window.close();
+                  
+                  // 창이 닫히지 않을 수 있는 경우를 대비해 fallback 로직
+                  // (예: 직접 URL로 접근한 경우, 브라우저 보안 정책으로 인해 닫히지 않는 경우)
+                  setTimeout(() => {
+                    // 창이 아직 열려있으면 (window.close()가 실패한 경우) 기존 로직 실행
+                    // document.hidden은 창이 숨겨졌는지 확인하는 속성
+                    // 하지만 더 확실한 방법은 window 객체가 여전히 존재하는지 확인
+                    try {
+                      // window 객체에 접근할 수 있으면 창이 아직 열려있는 것
+                      if (window && !window.closed) {
+                        if (window.history.length > 2) {
+                          window.history.go(-2);
+                        } else {
+                          window.location.href = '/self-scoring';
+                        }
+                      }
+                    } catch (e) {
+                      // window 객체에 접근할 수 없으면 창이 닫힌 것
+                    }
+                  }, 200);
                 }
               } finally {
                 setTimeout(() => { exitGuardRef.current = false; }, 800);
