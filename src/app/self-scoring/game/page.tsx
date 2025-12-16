@@ -86,6 +86,33 @@ export default function SelfScoringGameSetupPage() {
         return () => window.removeEventListener('popstate', onPopState);
     }, []);
 
+    // 사용 가능한 경기방식 계산 (2인1팀 그룹과 선수가 있을 때만 표시)
+    const availableGameModes = useMemo(() => {
+        const modes: Array<{ value: string; label: string }> = [];
+        
+        // 개인전은 항상 표시
+        modes.push({ value: 'individual', label: '개인전' });
+        
+        // 2인1팀: 그룹과 선수가 모두 있을 때만 표시
+        const hasTeamGroups = Object.values(groupsData || {}).some((g: any) => g?.type === 'team');
+        const hasTeamPlayers = allPlayers.some((p: any) => p?.type === 'team');
+        
+        if (hasTeamGroups && hasTeamPlayers) {
+            modes.push({ value: 'team', label: '2인1팀' });
+        }
+        
+        return modes;
+    }, [groupsData, allPlayers]);
+
+    // gameMode가 사용 가능한 옵션에 없으면 초기화 (2인1팀이 삭제된 경우 대비)
+    useEffect(() => {
+        if (gameMode && !availableGameModes.some(mode => mode.value === gameMode)) {
+            setGameMode('');
+            setSelectedGroup('');
+            setSelectedJo('');
+        }
+    }, [gameMode, availableGameModes]);
+
     // 자율채점에서는 아이디에 따라 조 범위를 제한
     const availableGroups = useMemo(() => {
         // 그룹은 객체 형태: { [groupName]: { name, type, courses, ... } }
@@ -271,8 +298,11 @@ export default function SelfScoringGameSetupPage() {
                                     <SelectValue placeholder="경기방식을 선택하세요" />
                                 </SelectTrigger>
                                 <SelectContent className="max-h-[60vh] overflow-y-auto">
-                                    <SelectItem value="individual">개인전</SelectItem>
-                                    <SelectItem value="team">2인1팀</SelectItem>
+                                    {availableGameModes.map(mode => (
+                                        <SelectItem key={mode.value} value={mode.value}>
+                                            {mode.label}
+                                        </SelectItem>
+                                    ))}
                                 </SelectContent>
                             </Select>
                         </div>
