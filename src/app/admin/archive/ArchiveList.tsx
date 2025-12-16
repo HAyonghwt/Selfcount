@@ -13,6 +13,7 @@ interface ArchiveData {
   archiveId: string;
   tournamentName: string;
   date: string;
+  tournamentStartDate?: string; // 대회 시작 날짜 (선택적)
   playerCount: number;
   players: any;
   scores: any;
@@ -62,6 +63,11 @@ interface ProcessedPlayer {
 
 function formatDate(dateStr: string) {
   if (!dateStr) return "-";
+  // YYYYMM 형식의 날짜를 YYYY-MM 형식으로 변환
+  if (dateStr.match(/^\d{6}$/)) {
+    return dateStr.replace(/(\d{4})(\d{2})/, "$1-$2");
+  }
+  // 기존 형식 지원 (YYYYMMDD_HHMMSS)
   return dateStr.replace(/(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})/, "$1-$2-$3 $4:$5:$6");
 }
 
@@ -218,7 +224,11 @@ const ArchiveList: React.FC = () => {
                     <TableCell>
                       <button className="text-blue-700 underline" onClick={() => setSelected(a)}>{a.tournamentName || "-"}</button>
                     </TableCell>
-                    <TableCell>{formatDate(a.archiveId.split("_")[0])}</TableCell>
+                    <TableCell>
+                      {a.tournamentStartDate 
+                        ? formatDate(a.tournamentStartDate.substring(0, 6)) 
+                        : formatDate(a.archiveId.split("_")[1] || a.archiveId.split("_")[0])}
+                    </TableCell>
                     <TableCell>{a.playerCount || (a.players ? Object.keys(a.players).length : "-")}</TableCell>
                     <TableCell>
                       <div className="flex gap-2 items-center">
@@ -522,7 +532,7 @@ const ArchiveDetail: React.FC<{ archive: ArchiveData }> = ({ archive }) => {
       <Card>
         <CardHeader>
           <CardTitle>
-            {archive.tournamentName || "-"} <span className="text-sm text-gray-400 ml-2">({formatDate(archive.archiveId.split("_")[0])})</span>
+            {archive.tournamentName || "-"} <span className="text-sm text-gray-400 ml-2">({archive.tournamentStartDate ? formatDate(archive.tournamentStartDate.substring(0, 6)) : formatDate(archive.archiveId.split("_")[1] || archive.archiveId.split("_")[0])})</span>
           </CardTitle>
         </CardHeader>
         <CardContent>

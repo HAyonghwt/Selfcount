@@ -165,12 +165,22 @@ export default function AdminDashboard() {
             return;
         }
         try {
-            // 대회명 추출 (tournaments/current.name에서 직접 읽기)
-            const tournamentRef = ref(db, 'tournaments/current/name');
+            // 대회명 및 시작 날짜 추출 (tournaments/current에서 직접 읽기)
+            const tournamentRef = ref(db, 'tournaments/current');
             let tournamentName = '';
+            let tournamentStartDate = '';
             await new Promise<void>((resolve) => {
                 onValue(tournamentRef, (snap) => {
-                    tournamentName = snap.val() || '대회';
+                    const tournamentData = snap.val() || {};
+                    tournamentName = tournamentData.name || '대회';
+                    // 시작 날짜가 있으면 사용, 없으면 현재 날짜 사용
+                    if (tournamentData.startDate) {
+                        tournamentStartDate = tournamentData.startDate;
+                    } else {
+                        const now = new Date();
+                        const pad = (n: number) => n.toString().padStart(2, '0');
+                        tournamentStartDate = `${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}`;
+                    }
                     resolve();
                 }, { onlyOnce: true });
             });
@@ -178,14 +188,15 @@ export default function AdminDashboard() {
             const now = new Date();
             const pad = (n: number) => n.toString().padStart(2, '0');
             const dateStr = `${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
-            // archiveId: 날짜+시간+대회명(공백제거)
-            const archiveId = `${(tournamentName || '대회').replace(/\s/g, '')}_${now.getFullYear()}${pad(now.getMonth()+1)}`; // 대회명_YYYYMM 형식
+            // archiveId: 대회명(공백제거)_YYYYMM 형식
+            const archiveId = `${(tournamentName || '대회').replace(/\s/g, '')}_${tournamentStartDate.substring(0, 6)}`; // 대회명_YYYYMM 형식
             // 참가자 수
             const playerCount = Object.keys(players).length;
             // 저장 데이터
             const archiveData = {
                 savedAt: now.toISOString(),
                 tournamentName: tournamentName || '대회',
+                tournamentStartDate: tournamentStartDate, // 대회 시작 날짜 추가
                 playerCount,
                 players,
                 scores,
