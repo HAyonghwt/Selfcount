@@ -9,7 +9,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import html2canvas from "html2canvas";
 import "./styles.css";
 
-type CourseTab = { id: string; name: string; pars: number[] };
+type CourseTab = { id: string; name: string; pars: number[]; originalOrder?: number };
 type PlayerDb = {
   id: string;
   type: "individual" | "team";
@@ -337,7 +337,9 @@ export default function SelfScoringPage() {
             pars: Array.isArray(c.pars) ? (c.pars as number[]) : [3, 4, 4, 4, 4, 3, 5, 3, 3],
           })) as CourseTab[];
           setCourseTabs(tabs);
-          setActiveCourseId(String(sessionStorage.getItem("selfScoringActiveCourseId") || (tabs[0]?.id || "")));
+          // 초기 로드 시에는 activeCourseId를 설정하지 않음
+          // 그룹별 순서로 정렬된 후 첫 번째 탭이 선택되도록 함
+          // setActiveCourseId는 코스 탭이 그룹별 순서로 정렬될 때 설정됨
         }
       }
     } catch { }
@@ -509,34 +511,77 @@ export default function SelfScoringPage() {
       const coursesObj = data.courses || {};
       const groupsObj = data.groups || {};
 
-      // 그룹에 배정된 코스 id 목록(true로 표시된 것만) - 필요한 코스만 필터링
+      // 그룹에 배정된 코스 id 목록 및 순서 정보 가져오기
       const group = groupsObj[selectedGroup] || {};
-      const assignedIds: string[] = group.courses
-        ? Object.keys(group.courses).filter((cid: string) => group.courses[cid])
-        : Object.keys(coursesObj);
+      const coursesOrder = group.courses || {};
+      
+      // 그룹에 배정된 코스 목록 (number 타입이고 0보다 큰 값만, 또는 boolean true)
+      const assignedCourses: Array<{ cid: string; order: number }> = Object.entries(coursesOrder)
+        .map(([cid, order]: [string, any]) => {
+          // number 타입이고 0보다 큰 경우만
+          if (typeof order === 'number' && order > 0) {
+            return { cid, order };
+          }
+          // boolean true인 경우 (레거시 호환성)
+          if (order === true) {
+            return { cid, order: 1 }; // 기본값으로 1 설정
+          }
+          return null;
+        })
+        .filter((item): item is { cid: string; order: number } => item !== null);
 
-      // 코스 탭 구성: id, name, pars - 필요한 코스만 구성
-      const nextTabs: CourseTab[] = assignedIds
-        .map((cid) => {
-          const key = Object.keys(coursesObj).find((k) => String(k) === String(cid));
+      // 코스 순서대로 정렬 (작은 순서가 먼저 = 첫번째 코스가 위)
+      assignedCourses.sort((a, b) => a.order - b.order);
+
+      // 코스 탭 구성: id, name, pars - 그룹별 코스 순서대로 구성
+      // 대회 및 코스 관리에서 설정된 코스 순서 정보도 함께 저장 (색상 테마용)
+      const courseKeys = Object.keys(coursesObj);
+      const nextTabs: CourseTab[] = assignedCourses
+        .map(({ cid }) => {
+          const key = courseKeys.find((k) => String(k) === String(cid));
           const course = key ? coursesObj[key] : null;
           if (!course) return null;
+          
+          // 코스의 원본 순서 정보 저장 (색상 테마용)
+          // 1. course.order 필드가 있으면 그것을 사용
+          // 2. 없으면 courses 객체의 키 순서를 사용 (대회 및 코스 관리에서 설정된 순서)
+          let originalOrder: number;
+          if (course.order !== undefined && typeof course.order === 'number') {
+            originalOrder = course.order;
+          } else {
+            // courses 객체의 키 순서로 결정 (Firebase는 숫자 키의 경우 순서를 유지)
+            const courseIndex = courseKeys.findIndex(k => String(k) === String(cid));
+            originalOrder = courseIndex >= 0 ? courseIndex + 1 : 999;
+          }
+          
           return {
             id: String(course.id ?? cid),
             name: String(course.name ?? cid),
             pars: Array.isArray(course.pars) ? course.pars : [3, 4, 4, 4, 4, 3, 5, 3, 3],
+            originalOrder,
           } as CourseTab;
         })
         .filter(Boolean) as CourseTab[];
 
       if (nextTabs.length > 0) {
+        const prevTabsLength = courseTabs.length;
         setCourseTabs(nextTabs);
-        // 현재 활성 코스가 목록에 없으면 첫 코스로 교체
+        
+        // 코스 탭이 처음 로드되거나 완전히 바뀐 경우 (그룹 변경 등)
+        // 또는 현재 활성 코스가 목록에 없는 경우 첫 번째 탭 선택
+        const isInitialLoad = prevTabsLength === 0;
         const exists = nextTabs.some((t) => String(t.id) === String(activeCourseId));
-        if (!exists) {
+        
+        if (isInitialLoad || !exists || !activeCourseId) {
+          // 처음 로드이거나 현재 활성 코스가 목록에 없으면 첫 번째 탭 선택
           setActiveCourseId(String(nextTabs[0].id));
           if (typeof window !== 'undefined') {
             sessionStorage.setItem('selfScoringActiveCourseId', String(nextTabs[0].id));
+          }
+        } else {
+          // 현재 활성 코스가 목록에 있으면 유지하고 sessionStorage도 업데이트
+          if (typeof window !== 'undefined') {
+            sessionStorage.setItem('selfScoringActiveCourseId', String(activeCourseId));
           }
         }
       }
@@ -1149,11 +1194,30 @@ export default function SelfScoringPage() {
 
   // 순환 관련 유틸 사용 안 함 (간소화 모드)
 
-  // 코스 테마 클래스: 0=red, 1=blue, 2=yellow, 3=white (순환)
+  // 코스 테마 클래스: 코스 이름에 포함된 A, B, C, D로 색상 결정
+  // A코스=빨강, B코스=파랑, C코스=노랑, D코스=하양, E코스=빨강, F코스=파랑... (4개마다 반복)
+  // 만약 코스 이름에 A, B, C, D가 없으면 대회 및 코스 관리의 순서로 fallback
   const themeClass = useMemo(() => {
-    const idx = Math.max(0, courseTabs.findIndex((c) => String(c.id) === String(activeCourseId)));
-    const cycle = ((idx === -1 ? 0 : idx) % 4);
-    return cycle === 0 ? 'theme-red' : cycle === 1 ? 'theme-blue' : cycle === 2 ? 'theme-yellow' : 'theme-white';
+    const activeCourse = courseTabs.find((c) => String(c.id) === String(activeCourseId));
+    if (!activeCourse) return 'theme-red';
+    
+    // 코스 이름에서 A, B, C, D 등을 추출
+    const courseName = activeCourse.name || '';
+    // 알파벳 대문자 찾기 (A-Z)
+    const alphabetMatch = courseName.match(/[A-Z]/);
+    
+    if (alphabetMatch) {
+      // 알파벳을 숫자로 변환 (A=0, B=1, C=2, D=3, E=4, F=5...)
+      const alphabetIndex = alphabetMatch[0].charCodeAt(0) - 'A'.charCodeAt(0);
+      // 4개마다 반복 (A=0→빨강, B=1→파랑, C=2→노랑, D=3→하양, E=4→빨강...)
+      const cycle = alphabetIndex % 4;
+      return cycle === 0 ? 'theme-red' : cycle === 1 ? 'theme-blue' : cycle === 2 ? 'theme-yellow' : 'theme-white';
+    } else {
+      // 코스 이름에 A, B, C, D가 없으면 대회 및 코스 관리의 순서로 fallback
+      const courseOrder = activeCourse.originalOrder ?? (courseTabs.findIndex((c) => String(c.id) === String(activeCourseId)) + 1);
+      const cycle = ((courseOrder - 1) % 4);
+      return cycle === 0 ? 'theme-red' : cycle === 1 ? 'theme-blue' : cycle === 2 ? 'theme-yellow' : 'theme-white';
+    }
   }, [courseTabs, activeCourseId]);
 
   // 서명 로컬스토리지 키
@@ -1873,7 +1937,12 @@ export default function SelfScoringPage() {
             <button
               key={c.id}
               className={`tab ${String(activeCourseId) === String(c.id) ? 'active' : ''}`}
-              onClick={() => setActiveCourseId(String(c.id))}
+              onClick={() => {
+                setActiveCourseId(String(c.id));
+                if (typeof window !== 'undefined') {
+                  sessionStorage.setItem('selfScoringActiveCourseId', String(c.id));
+                }
+              }}
             >
               {c.name}
             </button>
