@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { Download, Filter, Printer } from 'lucide-react';
+import { Download, Filter, Printer, ChevronDown, ChevronUp } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import * as XLSX from 'xlsx-js-style';
 import { db } from '@/lib/firebase';
@@ -15,7 +15,7 @@ import { ref, onValue, set, get, query, limitToLast, onChildChanged, off } from 
 import { useToast } from '@/hooks/use-toast';
 import { ToastAction } from '@/components/ui/toast';
 import ExternalScoreboardInfo from '@/components/ExternalScoreboardInfo';
-import { safeLocalStorageGetItem, safeLocalStorageSetItem, safeLocalStorageRemoveItem } from '@/lib/utils';
+import { safeLocalStorageGetItem, safeLocalStorageSetItem, safeLocalStorageRemoveItem, cn } from '@/lib/utils';
 
 interface ProcessedPlayer {
     id: string;
@@ -136,7 +136,8 @@ export default function AdminDashboard() {
         playerId: '',
         courseId: '',
         holeIndex: -1,
-        score: ''
+        score: '',
+        forfeitType: null as 'absent' | 'disqualified' | 'forfeit' | null
     });
 
     // 점수 초기화 모달 상태
@@ -775,8 +776,11 @@ export default function AdminDashboard() {
         }
         try {
             const scoreValue = score === '' ? null : Number(score);
-            // 0점(기권) 입력 시: 소속 그룹의 모든 코스/홀에 0점 입력
-            if (scoreValue === 0) {
+            // 0점(기권/불참/실격) 입력 시 또는 점수가 없고 forfeitType이 있는 경우: 소속 그룹의 모든 코스/홀에 0점 입력
+            if (scoreValue === 0 || (scoreValue === null && scoreEditModal.forfeitType)) {
+                // forfeitType이 없으면 기본값으로 'forfeit' 설정
+                const forfeitType = scoreEditModal.forfeitType || 'forfeit';
+                
                 // 선수 정보 찾기
                 const player = players[playerId];
                 if (player && player.group && groupsData[player.group]) {
@@ -795,28 +799,51 @@ export default function AdminDashboard() {
                         console.warn('백업 저장 실패(무시):', e);
                     }
 
+                    // 기권 타입에 따른 메시지
+                    const forfeitTypeText = forfeitType === 'absent' ? '불참' : 
+                                          forfeitType === 'disqualified' ? '실격' : '기권';
+
                     // 그룹에 배정된 코스 id 목록
                     const assignedCourseIds = group.courses ? Object.keys(group.courses).filter((cid: any) => group.courses[cid]) : [];
                     for (const cid of assignedCourseIds) {
                         for (let h = 1; h <= 9; h++) {
                             const prevScore = scores?.[playerId]?.[cid]?.[h];
-                            if (prevScore === undefined || prevScore === null) {
-                                await set(ref(db, `scores/${playerId}/${cid}/${h}`), 0);
+                            const oldValue = prevScore === undefined || prevScore === null ? 0 : prevScore;
+                            
+                            // 모든 홀을 0점으로 설정
+                            await set(ref(db, `scores/${playerId}/${cid}/${h}`), 0);
+                            
+                            // 직접 입력한 코스/홀과 다른 홀을 구분하여 로그 기록
+                            if (cid === courseId && h === holeIndex + 1) {
                                 await logScoreChange({
                                     matchId: 'tournaments/current',
                                     playerId,
                                     scoreType: 'holeScore',
                                     holeNumber: h,
-                                    oldValue: 0,
+                                    oldValue: oldValue,
                                     newValue: 0,
                                     modifiedBy: 'admin',
                                     modifiedByType: 'admin',
-                                    comment: `기권 처리(미입력 홀만, courseId=${cid})`
+                                    comment: `관리자 직접 ${forfeitTypeText} (코스: ${cid}, 홀: ${h})`,
+                                    courseId: cid
                                 });
-                                
-                                // 실시간 업데이트를 위한 로그 캐시 무효화
-                                invalidatePlayerLogCache(playerId);
+                            } else {
+                                await logScoreChange({
+                                    matchId: 'tournaments/current',
+                                    playerId,
+                                    scoreType: 'holeScore',
+                                    holeNumber: h,
+                                    oldValue: oldValue,
+                                    newValue: 0,
+                                    modifiedBy: 'admin',
+                                    modifiedByType: 'admin',
+                                    comment: `관리자페이지에서 ${forfeitTypeText} 처리 (코스: ${cid}, 홀: ${h})`,
+                                    courseId: cid
+                                });
                             }
+                            
+                            // 실시간 업데이트를 위한 로그 캐시 무효화
+                            invalidatePlayerLogCache(playerId);
                         }
                     }
                 }
@@ -2096,7 +2123,7 @@ export default function AdminDashboard() {
     const getForfeitTypeFromLogs = (playerId: string): 'absent' | 'disqualified' | 'forfeit' | null => {
         const logs = playerScoreLogs[playerId] || [];
         const forfeitLogs = logs
-            .filter(l => l.newValue === 0 && l.modifiedByType === 'judge' && l.comment)
+            .filter(l => l.newValue === 0 && (l.modifiedByType === 'judge' || l.modifiedByType === 'admin') && l.comment)
             .sort((a, b) => b.modifiedAt - a.modifiedAt); // 최신순 정렬
         
         if (forfeitLogs.length > 0) {
@@ -2119,7 +2146,8 @@ export default function AdminDashboard() {
             updatedData[groupName] = updatedData[groupName].map((player: any) => {
                 if (player.hasForfeited) {
                     const forfeitType = getForfeitTypeFromLogs(player.id);
-                    return { ...player, forfeitType };
+                    // forfeitType이 null이면 기본값 'forfeit'로 설정
+                    return { ...player, forfeitType: forfeitType || 'forfeit' };
                 }
                 return player;
             });
@@ -2551,13 +2579,37 @@ export default function AdminDashboard() {
     <TableCell
       key={i}
       className={`text-center font-mono px-2 py-1 border-r cursor-pointer hover:bg-primary/10 ${isModified ? 'text-red-600 font-bold bg-red-50' : ''}`}
-      onDoubleClick={() => {
+      onDoubleClick={async () => {
+        // 현재 점수와 기권 타입 확인
+        const currentScore = score === null ? null : Number(score);
+        let initialForfeitType: 'absent' | 'disqualified' | 'forfeit' | null = null;
+        
+        // 점수가 없으면 불참으로 초기화
+        if (currentScore === null) {
+          initialForfeitType = 'absent';
+        } else if (currentScore === 0) {
+          // 점수가 0이면 로그에서 기권 타입 확인
+          const logs = playerScoreLogs[player.id] || [];
+          const forfeitLogs = logs
+            .filter(l => l.newValue === 0 && l.holeNumber === i + 1 && 
+                    (l.courseId === course.id || (l.comment && l.comment.includes(`코스: ${course.id}`))))
+            .sort((a, b) => b.modifiedAt - a.modifiedAt);
+          
+          if (forfeitLogs.length > 0) {
+            const latestLog = forfeitLogs[0];
+            if (latestLog.comment?.includes('불참')) initialForfeitType = 'absent';
+            else if (latestLog.comment?.includes('실격')) initialForfeitType = 'disqualified';
+            else if (latestLog.comment?.includes('기권')) initialForfeitType = 'forfeit';
+          }
+        }
+        
         setScoreEditModal({
           open: true,
           playerId: player.id,
           courseId: course.id,
           holeIndex: i,
-          score: score === null ? '' : String(score)
+          score: currentScore === null ? '' : String(currentScore),
+          forfeitType: initialForfeitType
         });
       }}
     >
@@ -2598,22 +2650,90 @@ export default function AdminDashboard() {
         <DialogTitle>점수 수정</DialogTitle>
         <DialogDescription>
           선수: <b>{player.name}</b> / 코스: <b>{player.coursesData[course.id]?.courseName}</b> / 홀: <b>{scoreEditModal.holeIndex + 1}번</b>
-          <br />
-          입력 점수: <b>{scoreEditModal.score === "0" ? "기권/불참/실격" : scoreEditModal.score}</b>
         </DialogDescription>
       </DialogHeader>
-      <input
-        type="number"
-        className="w-full border rounded px-3 py-2 text-lg text-center"
-        value={scoreEditModal.score}
-        onChange={e => setScoreEditModal({ ...scoreEditModal, score: e.target.value })}
-        min={0}
-        max={20}
-        autoFocus
-      />
-      {(scoreEditModal.score === "0" || Number(scoreEditModal.score) === 0) && (
-        <div className="mt-2 text-red-600 text-center font-bold text-lg">기권/불참/실격</div>
-      )}
+      <div className="flex items-center justify-center gap-4 py-4">
+        <Button
+          variant="outline"
+          size="icon"
+          className="h-12 w-12"
+          onClick={() => {
+            const currentScore = scoreEditModal.score === '' ? null : Number(scoreEditModal.score);
+            let newScore: number;
+            if (currentScore === null) {
+              newScore = 1;
+            } else if (currentScore === 0) {
+              newScore = 1;
+            } else if (currentScore >= 10) {
+              newScore = 10;
+            } else {
+              newScore = currentScore + 1;
+            }
+            setScoreEditModal({ 
+              ...scoreEditModal, 
+              score: String(newScore),
+              forfeitType: newScore > 0 ? null : scoreEditModal.forfeitType
+            });
+          }}
+        >
+          <ChevronUp className="h-6 w-6" />
+        </Button>
+        <span className={cn(
+          "font-bold tabular-nums text-center min-w-[80px]",
+          (scoreEditModal.score === "0" || Number(scoreEditModal.score) === 0) ? "text-xs text-red-600" : "text-4xl"
+        )}>
+          {(scoreEditModal.score === "0" || Number(scoreEditModal.score) === 0) ? 
+            (scoreEditModal.forfeitType === 'absent' ? '불참' : 
+             scoreEditModal.forfeitType === 'disqualified' ? '실격' : 
+             scoreEditModal.forfeitType === 'forfeit' ? '기권' : '기권') : 
+            (scoreEditModal.score === '' ? '-' : scoreEditModal.score)}
+        </span>
+        <Button
+          variant="outline"
+          size="icon"
+          className="h-12 w-12"
+          onClick={() => {
+            const currentScore = scoreEditModal.score === '' ? null : Number(scoreEditModal.score);
+            let newScore: number | null;
+            let newForfeitType: 'absent' | 'disqualified' | 'forfeit' | null = scoreEditModal.forfeitType;
+            
+            if (currentScore === null || currentScore === 0) {
+              // 점수가 없거나 0점인 경우 불참->실격->기권->불참 순환
+              if (currentScore === null) {
+                // 점수가 없는 경우 1로 시작
+                newScore = 1;
+                newForfeitType = null;
+              } else {
+                // 0점인 경우 불참->실격->기권->불참 순환
+                newScore = 0;
+                if (newForfeitType === null || newForfeitType === 'absent') {
+                  newForfeitType = 'disqualified';
+                } else if (newForfeitType === 'disqualified') {
+                  newForfeitType = 'forfeit';
+                } else if (newForfeitType === 'forfeit') {
+                  newForfeitType = 'absent';
+                }
+              }
+            } else if (currentScore === 1) {
+              // 1점에서 하향 클릭 시 0점(불참)으로
+              newScore = 0;
+              newForfeitType = 'absent';
+            } else {
+              // 2점 이상에서 하향 클릭 시 1 감소
+              newScore = currentScore - 1;
+              newForfeitType = null;
+            }
+            
+            setScoreEditModal({ 
+              ...scoreEditModal, 
+              score: newScore === null ? '' : String(newScore),
+              forfeitType: newForfeitType
+            });
+          }}
+        >
+          <ChevronDown className="h-6 w-6" />
+        </Button>
+      </div>
       <DialogFooter>
         <Button onClick={() => handleScoreEditSave()}>저장</Button>
         <Button variant="outline" onClick={() => setScoreEditModal({ ...scoreEditModal, open: false })}>취소</Button>

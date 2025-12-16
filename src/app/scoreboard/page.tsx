@@ -260,9 +260,9 @@ export default function ScoreboardPage() {
 
 // 기권 타입을 로그에서 추출하는 함수
 const getForfeitTypeFromLogs = (logs: ScoreLog[]): 'absent' | 'disqualified' | 'forfeit' | null => {
-    // 가장 최근의 기권 처리 로그를 찾음
+    // 가장 최근의 기권 처리 로그를 찾음 (심판과 관리자 모두 포함)
     const forfeitLogs = logs
-        .filter(l => l.newValue === 0 && l.modifiedByType === 'judge' && l.comment)
+        .filter(l => l.newValue === 0 && (l.modifiedByType === 'judge' || l.modifiedByType === 'admin') && l.comment)
         .sort((a, b) => b.modifiedAt - a.modifiedAt); // 최신순 정렬
     
     if (forfeitLogs.length === 0) return null;

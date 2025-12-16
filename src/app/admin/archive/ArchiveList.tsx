@@ -104,7 +104,7 @@ async function getForfeitTypeFromLogs(playerId: string): Promise<'absent' | 'dis
   try {
     const logs = await getPlayerScoreLogsOptimized(playerId);
     const forfeitLogs = logs
-      .filter(l => l.newValue === 0 && l.modifiedByType === 'judge' && l.comment)
+      .filter(l => l.newValue === 0 && (l.modifiedByType === 'judge' || l.modifiedByType === 'admin') && l.comment)
       .sort((a, b) => b.modifiedAt - a.modifiedAt); // 최신순 정렬
     
     if (forfeitLogs.length > 0) {
@@ -113,9 +113,9 @@ async function getForfeitTypeFromLogs(playerId: string): Promise<'absent' | 'dis
       if (latestLog.comment?.includes('실격')) return 'disqualified';
       if (latestLog.comment?.includes('기권')) return 'forfeit';
     }
-    return 'forfeit';
+    return null;
   } catch {
-    return 'forfeit';
+    return null;
   }
 }
 
@@ -371,8 +371,10 @@ const ArchiveDetail: React.FC<{ archive: ArchiveData }> = ({ archive }) => {
           if (player.hasForfeited) {
             // 모든 기권 선수에 대해 로그에서 정확한 타입 조회
             const newForfeitType = await getForfeitTypeFromLogs(player.id);
-            if (newForfeitType && newForfeitType !== player.forfeitType) {
-              player.forfeitType = newForfeitType;
+            // newForfeitType이 null이면 기본값 'forfeit'로 설정
+            const finalForfeitType = newForfeitType || 'forfeit';
+            if (finalForfeitType !== player.forfeitType) {
+              player.forfeitType = finalForfeitType;
               hasChanges = true;
             }
           }
