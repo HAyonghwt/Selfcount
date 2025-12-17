@@ -1414,19 +1414,24 @@ function ExternalScoreboard() {
                 // intervalSeconds 먼저 설정
                 if (settings.intervalSeconds !== undefined) {
                     setRotationInterval(settings.intervalSeconds);
+                    rotationIntervalRef.current = settings.intervalSeconds; // ref도 즉시 동기화
                 }
                 // selectedGroups 설정 (순환이 활성화되어 있으면 그룹이 있어야 함)
                 if (settings.selectedGroups && Array.isArray(settings.selectedGroups) && settings.selectedGroups.length > 0) {
                     setRotationGroups(settings.selectedGroups);
+                    rotationGroupsRef.current = settings.selectedGroups; // ref도 즉시 동기화
                     // 순환이 활성화되어 있고 그룹이 있으면 첫 번째 그룹으로 설정
                     if (settings.isActive && settings.selectedGroups.length > 0) {
                         currentRotationIndexRef.current = 0;
                         setFilterGroup(settings.selectedGroups[0]);
                     }
                 }
-                // isRotationActive는 마지막에 설정하여 순환 로직이 실행되도록 함
+                // isRotationActive는 ref 동기화가 완료된 후에 설정하여 순환 로직이 제대로 실행되도록 함
                 if (settings.isActive !== undefined) {
-                    setIsRotationActive(settings.isActive);
+                    // ref 동기화가 완료되도록 약간의 지연 후 활성화
+                    setTimeout(() => {
+                        setIsRotationActive(settings.isActive);
+                    }, 0);
                 }
             }
         } catch (error) {
@@ -1456,7 +1461,15 @@ function ExternalScoreboard() {
         }
 
         // rotationGroupsRef를 통해 최신 값 참조
-        if (rotationGroupsRef.current.length === 0) {
+        // ref가 아직 동기화되지 않았을 수 있으므로 state 값도 확인
+        const currentGroups = rotationGroupsRef.current.length > 0 
+            ? rotationGroupsRef.current 
+            : rotationGroups;
+        const currentInterval = rotationIntervalRef.current > 0 
+            ? rotationIntervalRef.current 
+            : rotationInterval;
+
+        if (currentGroups.length === 0) {
             return;
         }
 
@@ -1464,8 +1477,10 @@ function ExternalScoreboard() {
         rotationIntervalIdRef.current = setInterval(() => {
             // finalDataByGroupRef를 통해 최신 값 참조 (점수 입력 시에도 순환 유지)
             const currentFinalData = finalDataByGroupRef.current;
-            // rotationGroupsRef를 통해 최신 값 참조
-            const currentRotationGroups = rotationGroupsRef.current;
+            // rotationGroupsRef를 통해 최신 값 참조 (없으면 state 값 사용)
+            const currentRotationGroups = rotationGroupsRef.current.length > 0 
+                ? rotationGroupsRef.current 
+                : rotationGroups;
             
             // finalDataByGroup에서 선수가 있는 그룹만 필터링 (점수 유무와 관계없이 선수가 있으면 포함)
             const availableGroups = currentRotationGroups.filter(group => {
@@ -1507,8 +1522,8 @@ function ExternalScoreboard() {
                 currentRotationIndexRef.current = nextIndex;
                 setFilterGroup(currentRotationGroups[nextIndex]);
             }
-        }, rotationIntervalRef.current * 1000);
-    }, [isRotationActive]);
+        }, currentInterval * 1000);
+    }, [isRotationActive, rotationGroups, rotationInterval]);
 
     // 그룹 순환 로직 (데이터가 있는 그룹만 순환) - finalDataByGroup 선언 이후에 위치
     // finalDataByGroup을 dependency에서 제거하여 점수 입력 시에도 순환이 멈추지 않도록 함
