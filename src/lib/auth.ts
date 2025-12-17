@@ -325,12 +325,25 @@ export const getRefereeAccounts = async (): Promise<RefereeAccount[]> => {
     
     const referees: RefereeAccount[] = [];
     querySnapshot.forEach((doc) => {
-      const data = doc.data() as RefereeAccount;
-      // 실제 id 필드를 사용
-      referees.push({ 
+      const data = doc.data() as any;
+      // isActive 값을 명시적으로 boolean으로 변환
+      let isActiveValue: boolean;
+      if (data.isActive === undefined || data.isActive === null) {
+        isActiveValue = true; // 기본값
+      } else if (typeof data.isActive === 'boolean') {
+        isActiveValue = data.isActive;
+      } else if (typeof data.isActive === 'string') {
+        isActiveValue = data.isActive === 'true' || data.isActive === '1';
+      } else {
+        isActiveValue = Boolean(data.isActive);
+      }
+      
+      const referee: RefereeAccount = { 
         ...data, 
-        id: data.id || doc.id // id 필드가 없으면 문서 ID 사용
-      });
+        id: data.id || doc.id, // id 필드가 없으면 문서 ID 사용
+        isActive: isActiveValue // 명시적으로 boolean으로 변환된 값 사용
+      };
+      referees.push(referee);
     });
     
     return referees.sort((a, b) => a.hole - b.hole);

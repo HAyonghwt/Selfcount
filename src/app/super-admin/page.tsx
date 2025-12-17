@@ -286,6 +286,8 @@ export default function SuperAdminPage() {
             });
             
             setSelectedReferees([]);
+            // 약간의 지연 후 새로고침 (Firestore 업데이트 반영 시간 확보)
+            await new Promise(resolve => setTimeout(resolve, 300));
             await loadRefereeAccounts();
         } catch (error: any) {
             toast({
@@ -328,6 +330,36 @@ export default function SuperAdminPage() {
         } catch (error: any) {
             toast({
                 title: "비밀번호 변경 실패",
+                description: error.message,
+                variant: "destructive",
+            });
+        }
+    };
+
+    // 심판 계정 비활성화/활성화
+    const handleToggleRefereeStatus = async (koreanId: string, isActive: boolean) => {
+        const action = isActive ? '비활성화' : '활성화';
+        if (!confirm(`정말로 ${koreanId} 계정을 ${action}하시겠습니까?`)) {
+            return;
+        }
+
+        try {
+            if (isActive) {
+                await deactivateRefereeAccount(koreanId);
+            } else {
+                await activateRefereeAccount(koreanId);
+            }
+            
+            toast({
+                title: "성공",
+                description: `${koreanId} 계정이 ${action}되었습니다.`,
+            });
+            // 약간의 지연 후 새로고침 (Firestore 업데이트 반영 시간 확보)
+            await new Promise(resolve => setTimeout(resolve, 300));
+            await loadRefereeAccounts(); // 목록 새로고침
+        } catch (error: any) {
+            toast({
+                title: `계정 ${action} 실패`,
                 description: error.message,
                 variant: "destructive",
             });
@@ -830,16 +862,17 @@ export default function SuperAdminPage() {
                                                  <span className="text-xs font-medium">전체 선택</span>
                                              </div>
                                              {refereeAccounts.map((account) => (
-                                                 <div key={account.id} className="flex items-center justify-between p-3 bg-white rounded border">
+                                                 <div key={account.id} className={`flex items-center justify-between p-3 rounded border ${account.isActive ? 'bg-white' : 'bg-gray-100'}`}>
                                                      <div className="flex items-center gap-2 flex-1">
                                                          <Checkbox
                                                              checked={selectedReferees.includes(account.id)}
                                                              onCheckedChange={(checked) => handleSelectReferee(account.id, checked as boolean)}
                                                          />
                                                          <div>
-                                                             <div className="font-medium">{account.id}</div>
+                                                             <div className={`font-medium ${!account.isActive ? 'text-gray-500' : ''}`}>{account.id}</div>
                                                              <div className="text-xs text-muted-foreground">
                                                                  {account.hole}번 홀 담당
+                                                                 {!account.isActive && <span className="ml-2 text-red-500">(비활성화)</span>}
                                                              </div>
                                                          </div>
                                                      </div>
@@ -876,17 +909,28 @@ export default function SuperAdminPage() {
                                                                  </Button>
                                                              </div>
                                                          ) : (
-                                                             <Button
-                                                                 size="sm"
-                                                                 variant="outline"
-                                                                 onClick={() => {
-                                                                     setEditingRefereePassword(account.id);
-                                                                     setNewRefereePassword(account.password || '123456');
-                                                                 }}
-                                                                 className="text-xs"
-                                                             >
-                                                                 비밀번호 변경
-                                                             </Button>
+                                                             <>
+                                                                 <Button
+                                                                     size="sm"
+                                                                     variant="outline"
+                                                                     onClick={() => {
+                                                                         setEditingRefereePassword(account.id);
+                                                                         setNewRefereePassword(account.password || '123456');
+                                                                     }}
+                                                                     className="text-xs"
+                                                                     disabled={!account.isActive}
+                                                                 >
+                                                                     비밀번호 변경
+                                                                 </Button>
+                                                                 <Button
+                                                                     size="sm"
+                                                                     variant={account.isActive ? "destructive" : "default"}
+                                                                     onClick={() => handleToggleRefereeStatus(account.id, account.isActive)}
+                                                                     className={`text-xs ${account.isActive ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'}`}
+                                                                 >
+                                                                     {account.isActive ? '비활성화' : '활성화'}
+                                                                 </Button>
+                                                             </>
                                                          )}
                                                      </div>
                                                  </div>

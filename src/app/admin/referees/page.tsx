@@ -8,7 +8,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { db } from '@/lib/firebase';
 import { ref, onValue } from 'firebase/database';
-import { getRefereeAccounts } from '@/lib/auth';
+import { getFirestoreDb } from '@/lib/firebase';
+import { collection, onSnapshot, getDocs } from 'firebase/firestore';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Eye, EyeOff, Copy, Check, Download } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
@@ -80,18 +81,80 @@ export default function RefereeManagementPage() {
         };
     }, []);
 
-    // 심판 계정 목록 불러오기
+    // 심판 계정 목록 불러오기 (Firestore 실시간 리스너 사용)
     useEffect(() => {
-        const loadRefereeAccounts = async () => {
-            try {
-                const accounts = await getRefereeAccounts();
-                setRefereeAccounts(accounts);
-            } catch (error) {
-                console.error('심판 계정 목록 불러오기 실패:', error);
-            }
-        };
-        loadRefereeAccounts();
+        const fs = getFirestoreDb();
+        const refereesRef = collection(fs, 'referees');
+        
+        // Firestore 실시간 리스너 설정
+        const unsubscribe = onSnapshot(refereesRef, (querySnapshot) => {
+            const accounts: any[] = [];
+            querySnapshot.forEach((doc) => {
+                const data = doc.data() as any;
+                // isActive 값을 명시적으로 boolean으로 변환
+                let isActiveValue: boolean;
+                if (data.isActive === undefined || data.isActive === null) {
+                    isActiveValue = true; // 기본값
+                } else if (typeof data.isActive === 'boolean') {
+                    isActiveValue = data.isActive;
+                } else if (typeof data.isActive === 'string') {
+                    isActiveValue = data.isActive === 'true' || data.isActive === '1';
+                } else {
+                    isActiveValue = Boolean(data.isActive);
+                }
+                
+                accounts.push({
+                    ...data,
+                    id: data.id || doc.id,
+                    isActive: isActiveValue
+                });
+            });
+            
+            // hole 순서로 정렬
+            const sortedAccounts = accounts.sort((a, b) => a.hole - b.hole);
+            setRefereeAccounts(sortedAccounts);
+        }, (error) => {
+            console.error('심판 계정 목록 실시간 업데이트 실패:', error);
+        });
+        
+        return () => unsubscribe();
     }, []);
+
+    // 수동 새로고침 함수 (버튼용)
+    const loadRefereeAccounts = async () => {
+        const fs = getFirestoreDb();
+        const refereesRef = collection(fs, 'referees');
+        
+        // 일회성 조회 (getDocs 사용)
+        try {
+            const querySnapshot = await getDocs(refereesRef);
+            const accounts: any[] = [];
+            querySnapshot.forEach((doc) => {
+                const data = doc.data() as any;
+                let isActiveValue: boolean;
+                if (data.isActive === undefined || data.isActive === null) {
+                    isActiveValue = true;
+                } else if (typeof data.isActive === 'boolean') {
+                    isActiveValue = data.isActive;
+                } else if (typeof data.isActive === 'string') {
+                    isActiveValue = data.isActive === 'true' || data.isActive === '1';
+                } else {
+                    isActiveValue = Boolean(data.isActive);
+                }
+                
+                accounts.push({
+                    ...data,
+                    id: data.id || doc.id,
+                    isActive: isActiveValue
+                });
+            });
+            
+            const sortedAccounts = accounts.sort((a, b) => a.hole - b.hole);
+            setRefereeAccounts(sortedAccounts);
+        } catch (error) {
+            console.error('심판 계정 목록 불러오기 실패:', error);
+        }
+    };
 
     // 코스에 배정된 그룹 목록을 가져오는 함수
     const getAssignedGroupsForCourse = (courseId: string) => {
@@ -345,11 +408,23 @@ export default function RefereeManagementPage() {
 
             <Card>
                 <CardHeader>
-                    <CardTitle>심판 계정 목록</CardTitle>
-                    <CardDescription>
-                        대회에서 선택된 코스별로 심판 계정을 표시합니다. 
-                        {tournamentCourses.length === 0 && " 먼저 대회 및 코스 관리에서 코스를 선택해주세요."}
-                    </CardDescription>
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <CardTitle>심판 계정 목록</CardTitle>
+                            <CardDescription>
+                                대회에서 선택된 코스별로 심판 계정을 표시합니다. 
+                                {tournamentCourses.length === 0 && " 먼저 대회 및 코스 관리에서 코스를 선택해주세요."}
+                            </CardDescription>
+                        </div>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={loadRefereeAccounts}
+                            className="ml-4"
+                        >
+                            목록 새로고침
+                        </Button>
+                    </div>
                 </CardHeader>
                 <CardContent>
                     <div className="space-y-6">
