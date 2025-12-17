@@ -1,0 +1,234 @@
+/* Scoreboard Theme Variables */
+:root {
+    /* Default (Dark Mode) - Matches existing bg-black */
+    --sb-bg-color: #000000;
+    --sb-text-color: #e5e7eb;
+    /* gray-200 */
+    --sb-border-color: #374151;
+    /* gray-700 */
+    --sb-header-text-color: #fde047;
+    /* yellow-300 */
+    --sb-sub-text-color: #4ade80;
+    /* green-400 */
+
+    --sb-table-border-color: #1f2937;
+    /* gray-800 */
+    --sb-table-header-bg: transparent;
+    --sb-table-header-text: #9ca3af;
+    /* gray-400 */
+    --sb-table-row-hover: rgba(31, 41, 55, 0.5);
+    /* gray-800/50 */
+    --sb-table-stripe-bg: rgba(31, 41, 55, 0.5);
+    /* gray-800/50 */
+
+    --sb-cell-border: #1f2937;
+    /* gray-800 */
+    --sb-rank-gold: #facc15;
+    /* yellow-400 */
+
+    /* Select/Dropdown Colors */
+    --sb-select-bg: rgba(31, 41, 55, 0.8);
+    /* gray-800/80 */
+    --sb-select-border: #4b5563;
+    /* gray-600 */
+    --sb-select-text: #ffffff;
+
+    --sb-info-col-bg: transparent;
+}
+
+/* Grey Mode (Cursor AI Style) */
+[data-theme='grey'] {
+    --sb-bg-color: #18181b;
+    /* zinc-950/Cursor Dark */
+    --sb-text-color: #d4d4d8;
+    /* zinc-300 */
+    --sb-border-color: #3f3f46;
+    /* zinc-700 */
+    --sb-header-text-color: #fde047;
+    /* yellow-300 (Keep purely for visibility or adjust to softer gold) */
+    --sb-sub-text-color: #4ade80;
+    /* green-400 */
+
+    --sb-table-border-color: #27272a;
+    /* zinc-800 */
+    --sb-table-header-bg: #27272a;
+    /* zinc-800 */
+    --sb-table-header-text: #a1a1aa;
+    /* zinc-400 */
+    --sb-table-row-hover: #27272a;
+    --sb-table-stripe-bg: #27272a;
+
+    --sb-cell-border: #3f3f46;
+    /* zinc-700 */
+
+    --sb-select-bg: #27272a;
+    --sb-select-border: #52525b;
+
+    --sb-info-col-bg: transparent;
+}
+
+/* Light Mode (Custom Design from Images) */
+[data-theme='light'] {
+    --sb-bg-color: #ffffff;
+    --sb-text-color: #1f2937;
+    /* gray-800 */
+    --sb-border-color: #9ca3af;
+    /* gray-400 - Updated to match cell borders (User Req) */
+
+    --sb-header-text-color: #292424;
+    /* Title Color (User Req) */
+    --sb-sub-text-color: #4B75F2;
+    /* Blue (Image 12) */
+
+    --sb-table-border-color: #9ca3af;
+    /* gray-400 (Darker Grey Border) */
+    --sb-table-header-bg: #0e07cc;
+    /* Vivid Blue Header (User Req) */
+    --sb-table-header-text: #ffffff;
+    /* White Text */
+    --sb-table-row-hover: #f3f4f6;
+    /* gray-100 */
+    --sb-table-stripe-bg: transparent;
+    /* Disable default stripe on header if mapped to holes? No, specific override below */
+
+    --sb-cell-border: #9ca3af;
+    /* gray-400 (Darker Cell Borders) */
+    --sb-rank-gold: #0903A6;
+    /* Dark Blue for Rank/Total (User Req) */
+
+    /* Select/Dropdown Colors */
+    --sb-select-bg: #ffffff;
+    --sb-select-border: #d1d5db;
+    --sb-select-text: #1f2937;
+
+    /* Custom: Info Column Background in Light Mode */
+    --sb-info-col-bg: #B3C8F2;
+    /* Light Blue (Image 11/12) */
+
+    /* Custom: Hole Header Background */
+    --sb-hole-header-bg: #462ae7;
+    /* User Req: Changed from Light Blue to Deep Purple-Blue */
+}
+
+/* Default vars for new custom props */
+:root {
+    --sb-hole-header-bg: transparent;
+    /* Default to inherit or stripe */
+}
+
+[data-theme='grey'] {
+    --sb-hole-header-bg: transparent;
+}
+
+/* Override for Hole Headers in Light Mode (Applied via spec class or existing class modification) */
+[data-theme='light'] .sb-th-hole {
+    background-color: var(--sb-hole-header-bg) !important;
+}
+
+/* Global Container */
+.scoreboard-container {
+    background-color: var(--sb-bg-color);
+    color: var(--sb-text-color);
+    transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Headers */
+.sb-title {
+    color: var(--sb-header-text-color);
+}
+
+.sb-progress-text {
+    color: var(--sb-sub-text-color);
+}
+
+.sb-group-header {
+    border-bottom: 2px solid var(--sb-border-color);
+}
+
+/* Tables */
+.sb-table {
+    border-left: 1px solid var(--sb-table-border-color);
+    border-right: 1px solid var(--sb-table-border-color);
+}
+
+.sb-table-head {
+    color: var(--sb-table-header-text);
+    background-color: var(--sb-table-header-bg);
+}
+
+.sb-th {
+    border-right: 1px solid var(--sb-cell-border);
+    border-bottom: 2px solid var(--sb-border-color);
+}
+
+.sb-th-stripe {
+    background-color: var(--sb-table-stripe-bg);
+}
+
+.sb-td {
+    border-right: 1px solid var(--sb-cell-border);
+    border-bottom: 1px solid var(--sb-cell-border);
+}
+
+/* Info Column Style (for Name/Group/Club) */
+.sb-td-info {
+    background-color: var(--sb-info-col-bg);
+}
+
+.sb-tr-stripe .sb-td-stripe {
+    background-color: var(--sb-table-stripe-bg);
+}
+
+/* Colors that MUST NOT CHANGE across themes */
+.sb-score-plus {
+    color: #f87171 !important;
+    /* red-400 */
+}
+
+[data-theme='light'] .sb-score-plus {
+    color: #dc2626 !important;
+    /* red-600 for better contrast on white */
+}
+
+.sb-score-minus {
+    color: #60a5fa !important;
+    /* blue-400 */
+}
+
+[data-theme='light'] .sb-score-minus {
+    color: #2563eb !important;
+    /* blue-600 */
+}
+
+.sb-score-zero {
+    color: var(--sb-text-color);
+    /* E is usually grey/standard color */
+}
+
+/* Rank special color */
+.sb-rank {
+    color: var(--sb-rank-gold);
+}
+
+/* Dropdown/Select overrides */
+.sb-select-trigger {
+    background-color: var(--sb-select-bg) !important;
+    border-color: var(--sb-select-border) !important;
+    color: var(--sb-select-text) !important;
+}
+
+.sb-select-content {
+    background-color: var(--sb-select-bg) !important;
+    border-color: var(--sb-select-border) !important;
+    color: var(--sb-select-text) !important;
+}
+
+/* Scrollbar hiding (inherited) */
+.scoreboard-container::-webkit-scrollbar {
+    display: none;
+}
+
+.scoreboard-container {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
