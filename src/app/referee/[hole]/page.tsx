@@ -1237,41 +1237,61 @@ export default function RefereePage() {
                 const isForfeited = currentScoreState.forfeitType && currentScoreState.score === 0;
                 
                 const currentScore = currentScoreState.score;
-                const newScore = firebaseScore !== undefined && firebaseScore !== null ? Number(firebaseScore) : null;
                 
-                // 불참/실격/기권 처리된 선수는 관리자 페이지에서 해제한 경우만 업데이트
+                // 불참/실격/기권 처리된 선수는 Firebase에서 직접 확인하여 관리자 해제 여부 판단
                 if (isForfeited) {
-                    // 관리자 페이지에서 해제한 경우 (Firebase에서 점수가 null이거나 0이 아닌 값)
-                    if (newScore === null || (newScore !== null && newScore !== 0)) {
-                        // 관리자 페이지에서 해제한 경우 업데이트
-                        if (newScore === null) {
-                            // null로 변경된 경우 (점수 삭제 - 기권 해제)
-                            setScores(prev => ({
-                                ...prev,
-                                [player.id]: {
-                                    score: 1,
-                                    status: 'editing',
-                                    forfeitType: null,
-                                    wasLocked: false
+                    // allScores가 업데이트될 때 불참 처리된 선수의 점수가 allScores에 없을 수 있음
+                    // 이 경우 Firebase에서 직접 확인하여 실제 점수 상태를 확인해야 함
+                    (async () => {
+                        try {
+                            const dbInstance = db as import('firebase/database').Database;
+                            const playerHoleRef = ref(dbInstance, `scores/${player.id}/${selectedCourse}/${hole}`);
+                            const snapshot = await get(playerHoleRef);
+                            const actualFirebaseScore = snapshot.val();
+                            
+                            // Firebase에서 실제 점수 확인
+                            const actualScore = actualFirebaseScore !== undefined && actualFirebaseScore !== null ? Number(actualFirebaseScore) : null;
+                            
+                            // 관리자 페이지에서 해제한 경우만 업데이트 (실제 Firebase 점수가 null이거나 0이 아닌 값)
+                            if (actualScore === null || (actualScore !== null && actualScore !== 0)) {
+                                // 관리자 페이지에서 해제한 경우 업데이트
+                                if (actualScore === null) {
+                                    // null로 변경된 경우 (점수 삭제 - 기권 해제)
+                                    setScores(prev => ({
+                                        ...prev,
+                                        [player.id]: {
+                                            score: 1,
+                                            status: 'editing',
+                                            forfeitType: null,
+                                            wasLocked: false
+                                        }
+                                    }));
+                                } else {
+                                    // 0이 아닌 점수로 변경된 경우 (기권 해제 - 이전 점수 복구)
+                                    setScores(prev => ({
+                                        ...prev,
+                                        [player.id]: {
+                                            ...prev[player.id],
+                                            score: actualScore,
+                                            forfeitType: null,
+                                            status: 'locked' as const,
+                                            wasLocked: currentScoreState.wasLocked
+                                        }
+                                    }));
                                 }
-                            }));
-                        } else {
-                            // 0이 아닌 점수로 변경된 경우 (기권 해제 - 이전 점수 복구)
-                            setScores(prev => ({
-                                ...prev,
-                                [player.id]: {
-                                    ...prev[player.id],
-                                    score: newScore,
-                                    forfeitType: null,
-                                    status: 'locked',
-                                    wasLocked: currentScoreState.wasLocked
-                                }
-                            }));
+                            }
+                            // Firebase에서 점수가 여전히 0이면 상태 유지 (다른 선수 점수 입력과 관계없이)
+                        } catch (error) {
+                            console.warn(`불참 처리된 선수 ${player.id} 점수 확인 실패:`, error);
+                            // 에러 발생 시 상태 유지 (안전하게 기존 상태 유지)
                         }
-                    }
-                    // 점수가 변경되지 않았거나 여전히 0점이면 상태 유지 (다른 선수 점수 입력과 관계없이)
+                    })();
+                    // 불참 처리된 선수는 allScores 변경과 관계없이 상태 유지
                     return;
                 }
+                
+                // 불참/실격/기권 처리되지 않은 일반 선수는 allScores에서 점수 확인
+                const newScore = firebaseScore !== undefined && firebaseScore !== null ? Number(firebaseScore) : null;
                 
                 // 불참/실격/기권 처리되지 않은 일반 선수는 기존 로직대로 처리
                 // 점수가 변경된 경우 업데이트
