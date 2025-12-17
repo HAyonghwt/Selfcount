@@ -925,8 +925,9 @@ export default function AdminDashboard() {
     const activeUnsubsRef = useRef<(() => void)[]>([]);
     const [individualSuddenDeathData, setIndividualSuddenDeathData] = useState<any>(null);
     const [teamSuddenDeathData, setTeamSuddenDeathData] = useState<any>(null);
-    const [individualBackcountApplied, setIndividualBackcountApplied] = useState<boolean>(false);
-    const [teamBackcountApplied, setTeamBackcountApplied] = useState<boolean>(false);
+    // 백카운트/NTP 상태: 그룹별로 관리 (외부 전광판/플레이오프 관리와 동일한 구조)
+    const [individualBackcountApplied, setIndividualBackcountApplied] = useState<{ [groupName: string]: boolean }>({});
+    const [teamBackcountApplied, setTeamBackcountApplied] = useState<{ [groupName: string]: boolean }>({});
     const [individualNTPData, setIndividualNTPData] = useState<any>(null);
     const [teamNTPData, setTeamNTPData] = useState<any>(null);
     const [notifiedSuddenDeathGroups, setNotifiedSuddenDeathGroups] = useState<string[]>([]);
@@ -1178,8 +1179,24 @@ export default function AdminDashboard() {
         });
         const unsubIndividualSuddenDeath = onValue(individualSuddenDeathRef, snap => setIndividualSuddenDeathData(snap.val()));
         const unsubTeamSuddenDeath = onValue(teamSuddenDeathRef, snap => setTeamSuddenDeathData(snap.val()));
-        const unsubIndividualBackcount = onValue(individualBackcountRef, snap => setIndividualBackcountApplied(snap.val() || false));
-        const unsubTeamBackcount = onValue(teamBackcountRef, snap => setTeamBackcountApplied(snap.val() || false));
+        const unsubIndividualBackcount = onValue(individualBackcountRef, snap => {
+            const data = snap.val();
+            // 레거시(boolean)와 그룹별 객체 구조 모두 지원
+            if (typeof data === 'boolean') {
+                // 예전 대회 데이터: true이면 모든 그룹에 적용된 것으로 간주
+                setIndividualBackcountApplied(data ? { '*': true } : {});
+            } else {
+                setIndividualBackcountApplied(data || {});
+            }
+        });
+        const unsubTeamBackcount = onValue(teamBackcountRef, snap => {
+            const data = snap.val();
+            if (typeof data === 'boolean') {
+                setTeamBackcountApplied(data ? { '*': true } : {});
+            } else {
+                setTeamBackcountApplied(data || {});
+            }
+        });
         const unsubIndividualNTP = onValue(individualNTPRef, snap => setIndividualNTPData(snap.val()));
         const unsubTeamNTP = onValue(teamNTPRef, snap => setTeamNTPData(snap.val()));
         
@@ -1378,44 +1395,67 @@ export default function AdminDashboard() {
     }, [players, scores, courses, groupsData, filterGroup]);
     
     const processSuddenDeath = (suddenDeathData: any) => {
-        if (!suddenDeathData?.isActive || !suddenDeathData.players || !suddenDeathData.holes || !Array.isArray(suddenDeathData.holes)) return [];
-        
-        const participatingPlayerIds = Object.keys(suddenDeathData.players).filter(id => suddenDeathData.players[id]);
-        const allPlayersMap = new Map(Object.entries(players).map(([id, p]) => [id, p]));
+        if (!suddenDeathData) return [];
 
-        const results: any[] = participatingPlayerIds.map(id => {
-            const playerInfo: any = allPlayersMap.get(id);
-            if (!playerInfo) return null;
+        // 단일(레거시) 구조 또는 그룹별 구조 모두 지원
+        const processOne = (sd: any) => {
+            if (!sd?.isActive || !sd.players || !sd.holes || !Array.isArray(sd.holes)) return [];
 
-            const name = playerInfo.type === 'team' ? `${playerInfo.p1_name} / ${playerInfo.p2_name}` : playerInfo.name;
+            const participatingPlayerIds = Object.keys(sd.players).filter(id => sd.players[id]);
+            const allPlayersMap = new Map(Object.entries(players).map(([id, p]) => [id, p]));
 
-            let totalScore = 0;
-            let holesPlayed = 0;
-            suddenDeathData.holes.forEach((hole:number) => {
-                const score = suddenDeathData.scores?.[id]?.[hole];
-                if (score !== undefined && score !== null) {
-                    totalScore += score;
-                    holesPlayed++;
-                }
+            const results: any[] = participatingPlayerIds.map(id => {
+                const playerInfo: any = allPlayersMap.get(id);
+                if (!playerInfo) return null;
+
+                const name = playerInfo.type === 'team' ? `${playerInfo.p1_name} / ${playerInfo.p2_name}` : playerInfo.name;
+
+                let totalScore = 0;
+                let holesPlayed = 0;
+                sd.holes.forEach((hole:number) => {
+                    const score = sd.scores?.[id]?.[hole];
+                    if (score !== undefined && score !== null) {
+                        totalScore += score;
+                        holesPlayed++;
+                    }
+                });
+                return { id, name, totalScore, holesPlayed };
+            }).filter(Boolean);
+
+            results.sort((a, b) => {
+                if (a.holesPlayed !== b.holesPlayed) return b.holesPlayed - a.holesPlayed;
+                if (a.totalScore !== b.totalScore) return a.totalScore - b.totalScore;
+                return a.name.localeCompare(b.name);
             });
-            return { id, name, totalScore, holesPlayed };
-        }).filter(Boolean);
 
-        results.sort((a, b) => {
-            if (a.holesPlayed !== b.holesPlayed) return b.holesPlayed - a.holesPlayed;
-            if (a.totalScore !== b.totalScore) return a.totalScore - b.totalScore;
-            return a.name.localeCompare(b.name);
-        });
-
-        let rank = 1;
-        for (let i = 0; i < results.length; i++) {
-            if (i > 0 && (results[i].holesPlayed < results[i - 1].holesPlayed || (results[i].holesPlayed === results[i-1].holesPlayed && results[i].totalScore > results[i - 1].totalScore))) {
-                rank = i + 1;
+            let rank = 1;
+            for (let i = 0; i < results.length; i++) {
+                if (i > 0 && (results[i].holesPlayed < results[i - 1].holesPlayed || (results[i].holesPlayed === results[i-1].holesPlayed && results[i].totalScore > results[i - 1].totalScore))) {
+                    rank = i + 1;
+                }
+                results[i].rank = rank;
             }
-            results[i].rank = rank;
+
+            return results;
+        };
+
+        // 레거시: 전체에 대해 하나의 서든데스 데이터
+        if (suddenDeathData.isActive) {
+            return processOne(suddenDeathData);
         }
 
-        return results;
+        // 그룹별 구조: { groupName: { isActive, players, holes, scores } }
+        if (typeof suddenDeathData === 'object') {
+            let allResults: any[] = [];
+            Object.values(suddenDeathData).forEach((groupSd: any) => {
+                if (groupSd && groupSd.isActive) {
+                    allResults = allResults.concat(processOne(groupSd));
+                }
+            });
+            return allResults;
+        }
+
+        return [];
     }
 
     const processedIndividualSuddenDeathData = useMemo(() => processSuddenDeath(individualSuddenDeathData), [individualSuddenDeathData, players]);
@@ -1436,20 +1476,38 @@ export default function AdminDashboard() {
                 const playerType = firstPlacePlayers[0].type;
                 const isIndividual = playerType === 'individual';
                 
-                // NTP 순위 적용 확인
-                const ntpData = isIndividual ? individualNTPData : teamNTPData;
-                const shouldApplyNTP = ntpData?.isActive && ntpData?.rankings;
+                // NTP 순위 적용 확인 (외부 전광판과 동일한 방식 + 그룹별 구조 지원)
+                const baseNtpData = isIndividual ? individualNTPData : teamNTPData;
+                let ntpDataForGroup: any = null;
+                if (baseNtpData) {
+                    // 레거시 단일 구조: { isActive, rankings }
+                    if (baseNtpData.isActive && baseNtpData.rankings) {
+                        ntpDataForGroup = baseNtpData;
+                    } else if (typeof baseNtpData === 'object' && !baseNtpData.isActive) {
+                        // 그룹별 구조: { [groupName]: { isActive, rankings } }
+                        const groupNtp = baseNtpData[groupName];
+                        if (groupNtp?.isActive && groupNtp.rankings) {
+                            ntpDataForGroup = groupNtp;
+                        }
+                    }
+                }
+                const shouldApplyNTP = !!(ntpDataForGroup && ntpDataForGroup.isActive && ntpDataForGroup.rankings);
                 
-                // 백카운트 적용 확인
-                const shouldApplyBackcount = (isIndividual && individualBackcountApplied) ||
-                                          (!isIndividual && teamBackcountApplied);
+                // 백카운트 적용 확인 (그룹별 적용)
+                const backcountState = isIndividual ? individualBackcountApplied : teamBackcountApplied;
+                const groupNameForBackcount = firstPlacePlayers[0]?.group;
+                const shouldApplyBackcount = !!(
+                    backcountState &&
+                    (backcountState[groupNameForBackcount] || backcountState['*'])
+                );
 
                 if (shouldApplyNTP) {
-                    // NTP 순위 적용
-                    const ntpRankings = ntpData.rankings;
+                    // NTP 순위 적용 (외부 전광판과 동일하게 1위 동점자에게만 적용)
+                    const ntpRankings = ntpDataForGroup.rankings;
                     firstPlacePlayers.forEach((player: any) => {
-                        if (ntpRankings[player.id]) {
-                            player.rank = ntpRankings[player.id];
+                        const ntpRank = ntpRankings[player.id];
+                        if (ntpRank !== undefined && ntpRank !== null) {
+                            player.rank = ntpRank;
                         }
                     });
 
@@ -1813,8 +1871,12 @@ export default function AdminDashboard() {
                     if (!hasSuddenDeathRanking && !hasNTPRanking) {
                         const playerType = originalTiedFirstPlace[0]?.type;
                         const isIndividual = playerType === 'individual';
-                        const backcountApplied = isIndividual ? individualBackcountApplied : teamBackcountApplied;
-                        if (backcountApplied) {
+                        const backcountState = isIndividual ? individualBackcountApplied : teamBackcountApplied;
+                        const backcountAppliedForGroup = !!(
+                            backcountState &&
+                            (backcountState[groupName] || backcountState['*'])
+                        );
+                        if (backcountAppliedForGroup) {
                             // 원래 1위 동점자 중 하나라도 rank가 1이 아니면 백카운트로 순위가 결정된 것
                             hasBackcountRanking = originalTiedFirstPlace.some((p: any) => {
                                 const playerInFinal = playersInGroup.find((fp: any) => fp.id === p.id);

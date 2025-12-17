@@ -198,13 +198,13 @@ export default function SuddenDeathPage() {
                     if (groupSuddenDeath && typeof groupSuddenDeath === 'object') {
                         groupData[groupName] = groupSuddenDeath;
                         if (groupSuddenDeath.scores) {
-                            const stringScores: any = {};
+                const stringScores: any = {};
                             Object.entries(groupSuddenDeath.scores).forEach(([pId, hScores]: [string, any]) => {
-                                stringScores[pId] = {};
-                                Object.entries(hScores).forEach(([h, s]) => {
-                                    stringScores[pId][h] = String(s);
-                                });
-                            });
+                    stringScores[pId] = {};
+                    Object.entries(hScores).forEach(([h, s]) => {
+                        stringScores[pId][h] = String(s);
+                    });
+                });
                             groupScores[groupName] = stringScores;
                         }
                     }
@@ -414,10 +414,10 @@ export default function SuddenDeathPage() {
             // Only include groups where all first-place tied players have completed all courses
             if (!allFirstPlaceCompleted) continue;
             
-            if (firstPlacePlayers[0].type === 'individual') {
-                individualTies.push(...firstPlacePlayers);
-            } else if (firstPlacePlayers[0].type === 'team') {
-                teamTies.push(...firstPlacePlayers);
+                if (firstPlacePlayers[0].type === 'individual') {
+                    individualTies.push(...firstPlacePlayers);
+                } else if (firstPlacePlayers[0].type === 'team') {
+                    teamTies.push(...firstPlacePlayers);
             }
         }
         
@@ -510,9 +510,9 @@ export default function SuddenDeathPage() {
         delete updatedData[groupName];
         
         if (Object.keys(updatedData).length === 0) {
-            remove(ref(db, `tournaments/current/suddenDeath/${type}`))
+        remove(ref(db, `tournaments/current/suddenDeath/${type}`))
                 .then(() => toast({ title: "초기화 완료", description: `${groupName} 그룹 서든데스 정보가 초기화되었습니다.` }))
-                .catch(err => toast({ title: "오류", description: err.message }));
+            .catch(err => toast({ title: "오류", description: err.message }));
         } else {
             set(ref(db, `tournaments/current/suddenDeath/${type}`), updatedData)
                 .then(() => toast({ title: "초기화 완료", description: `${groupName} 그룹 서든데스 정보가 초기화되었습니다.` }))
@@ -659,16 +659,16 @@ export default function SuddenDeathPage() {
         delete updatedRankings[groupName];
         
         if (Object.keys(updatedData).length === 0) {
-            remove(ref(db, `tournaments/current/nearestToPin/${type}`))
-                .then(() => {
+        remove(ref(db, `tournaments/current/nearestToPin/${type}`))
+            .then(() => {
                     toast({ title: "초기화 완료", description: `${groupName} 그룹 니어리스트 투 더 핀 정보가 초기화되었습니다.` });
-                    if (type === 'individual') {
-                        setIndividualNTPRankings({});
-                    } else {
-                        setTeamNTPRankings({});
-                    }
-                })
-                .catch(err => toast({ title: "오류", description: err.message }));
+                if (type === 'individual') {
+                    setIndividualNTPRankings({});
+                } else {
+                    setTeamNTPRankings({});
+                }
+            })
+            .catch(err => toast({ title: "오류", description: err.message }));
         } else {
             set(ref(db, `tournaments/current/nearestToPin/${type}`), updatedData)
                 .then(() => {
@@ -711,12 +711,12 @@ export default function SuddenDeathPage() {
         
         const updatedAllRankings = { ...allRankings, [groupName]: updatedRankings };
         setRankings(updatedAllRankings);
-        
-        // Firebase 업데이트
-        if (db && ntpData?.isActive) {
+            
+            // Firebase 업데이트
+            if (db && ntpData?.isActive) {
             const updatedNTPData = { ...allNTPData, [groupName]: { ...ntpData, rankings: updatedRankings } };
             set(ref(db, `tournaments/current/nearestToPin/${type}`), updatedNTPData)
-                .catch(err => toast({ title: "오류", description: err.message }));
+                    .catch(err => toast({ title: "오류", description: err.message }));
         }
     };
 
@@ -868,6 +868,9 @@ export default function SuddenDeathPage() {
             return acc;
         }, {} as Record<string, Player[]>);
 
+        // 전체 서든데스 설정 섹션에서, 아무 선수도 선택되지 않았으면 코스/홀 선택을 비활성화
+        const hasAnySelectedPlayer = Object.values(selectedPlayers || {}).some(Boolean);
+
         return (
             <div className="space-y-6">
                 <Card>
@@ -939,7 +942,7 @@ export default function SuddenDeathPage() {
                                                 <Select 
                                                     value={selectedCourseId}
                                                     onValueChange={setSelectedCourseId}
-                                                    disabled={suddenDeathData?.isActive}
+                                                    disabled={suddenDeathData?.isActive || !hasAnySelectedPlayer}
                                                 >
                                                     <SelectTrigger id={`${type}-course-select`}><SelectValue placeholder="코스 선택" /></SelectTrigger>
                                                     <SelectContent>
@@ -954,7 +957,7 @@ export default function SuddenDeathPage() {
                                                     selected={selectedHoles.map(String)}
                                                     onChange={(values) => setSelectedHoles(values.map(Number))}
                                                     placeholder="홀 선택..."
-                                                    disabled={suddenDeathData?.isActive}
+                                                    disabled={suddenDeathData?.isActive || !hasAnySelectedPlayer}
                                                 />
                                             </div>
                                         </div>
@@ -1317,6 +1320,11 @@ export default function SuddenDeathPage() {
             .filter(Boolean)
             .sort((a: any, b: any) => a.ntpRank - b.ntpRank);
 
+        // 이 그룹에서 선택된 서든데스 참가자 수 (코스/홀 선택 활성화 여부에 사용)
+        const selectedCountForGroup = Object.keys(selectedSuddenDeathPlayers)
+            .filter(id => selectedSuddenDeathPlayers[id] && groupTiedPlayers.some(p => p.id === id))
+            .length;
+
     return (
             <Card key={groupName} className="border-2">
                 <CardHeader>
@@ -1405,6 +1413,7 @@ export default function SuddenDeathPage() {
                                                 <Select 
                                                     value={selectedCourseId}
                                                     onValueChange={setSelectedCourseId}
+                                                    disabled={selectedCountForGroup === 0}
                                                 >
                                                     <SelectTrigger><SelectValue placeholder="코스 선택" /></SelectTrigger>
                                                     <SelectContent>
@@ -1419,6 +1428,7 @@ export default function SuddenDeathPage() {
                                                     selected={selectedHoles.map(String)}
                                                     onChange={(values) => setSelectedHoles(values.map(Number))}
                                                     placeholder="홀 선택..."
+                                                    disabled={selectedCountForGroup === 0}
                                                 />
                                             </div>
                                         </div>
