@@ -1439,43 +1439,101 @@ function ExternalScoreboard() {
         finalDataByGroupRef.current = finalDataByGroup;
     }, [finalDataByGroup]);
 
-    // 순환 설정 불러오기 (localStorage에서, 새로고침 시에도 유지)
-    // 각 모니터마다 다른 설정을 가질 수 있도록 localStorage 사용
-    // initialDataLoaded가 true가 된 후에 설정을 불러와서 순환이 제대로 시작되도록 함
-    useEffect(() => {
-        if (!initialDataLoaded) return; // 초기 데이터 로딩이 완료된 후에만 실행
+    // 순환 설정 불러오기 (Firebase 실시간 구독)
+    const rotationSettingsLoadedRef = useRef(false);
 
-        try {
-            const savedSettings = safeLocalStorageGetItem('scoreboardRotation');
-            if (savedSettings) {
-                const settings = JSON.parse(savedSettings);
-                // intervalSeconds 먼저 설정
-                if (settings.intervalSeconds !== undefined) {
-                    setRotationInterval(settings.intervalSeconds);
-                    rotationIntervalRef.current = settings.intervalSeconds; // ref도 즉시 동기화
+    useEffect(() => {
+        if (!initialDataLoaded || !db) return;
+
+        const rotationRef = ref(db as any, 'tournaments/current/scoreboardRotation');
+
+        const unsubRotation = onValue(rotationRef, (snap) => {
+            const settings = snap.val();
+            // console.log('Rotation Settings loaded:', settings); // Removed
+
+            if (settings) {
+                // 설정 업데이트
+                if (settings.intervalMinutes !== undefined) {
+                    // 분 단위를 초 단위로 변환 (기본값: 0.5분 = 30초)
+                    const intervalSeconds = (settings.intervalMinutes || 0.5) * 60;
+                    setRotationInterval(intervalSeconds);
+                    rotationIntervalRef.current = intervalSeconds;
                 }
-                // selectedGroups 설정 (순환이 활성화되어 있으면 그룹이 있어야 함)
+
                 if (settings.selectedGroups && Array.isArray(settings.selectedGroups) && settings.selectedGroups.length > 0) {
                     setRotationGroups(settings.selectedGroups);
-                    rotationGroupsRef.current = settings.selectedGroups; // ref도 즉시 동기화
-                    // 순환이 활성화되어 있고 그룹이 있으면 첫 번째 그룹으로 설정
+                    rotationGroupsRef.current = settings.selectedGroups;
+
+                    // console.log('Rotation Check:', { // Removed
+                    //     isActive: settings.isActive,
+                    //     loaded: rotationSettingsLoadedRef.current,
+                    //     groups: settings.selectedGroups,
+                    //     initialDataLoaded: initialDataLoaded,
+                    //     currentFilterGroup: filterGroup
+                    // });
+
+                    // 순환이 활성화되었거나, 설정이 로드되는 시점에 적절한 그룹을 표시
                     if (settings.isActive && settings.selectedGroups.length > 0) {
-                        currentRotationIndexRef.current = 0;
-                        setFilterGroup(settings.selectedGroups[0]);
+                        try {
+                            const currentFinalData = finalDataByGroupRef.current || {};
+
+                            // 1. 유효한(데이터가 있는) 그룹 찾기
+                            let validGroupIndex = 0;
+                            let foundValidGroup = false;
+
+                            // 선택된 그룹들 중에서 데이터가 존재하는 첫 번째 그룹 인덱스 찾기
+                            for (let i = 0; i < settings.selectedGroups.length; i++) {
+                                const gName = settings.selectedGroups[i];
+                                const gData = currentFinalData[gName];
+                                // 그룹 데이터가 있고(배열), 선수가 1명이라도 있으면 유효한 그룹으로 판단
+                                if (gData && Array.isArray(gData) && gData.length > 0) {
+                                    validGroupIndex = i;
+                                    foundValidGroup = true;
+                                    // console.log(`Found valid group '${gName}' at index ${i} for initial rotation.`); // Removed
+                                    break;
+                                } else {
+                                    // console.log(`Group '${gName}' at index ${i} is not valid (no data or no players).`); // Removed
+                                }
+                            }
+
+                            // 2. 초기 로딩 시점에만 그룹 변경 (이미 사용자가 보고 있는 중이면 변경 안함)
+                            // 단, 유효한 그룹을 찾았을 때만 변경함 (데이터가 없으면 변경 안함 -> 'No Data' 방지)
+                            if (!rotationSettingsLoadedRef.current) {
+                                if (foundValidGroup) {
+                                    // console.log('Initializing Rotation Group to:', settings.selectedGroups[validGroupIndex]); // Removed
+                                    currentRotationIndexRef.current = validGroupIndex;
+                                    setFilterGroup(settings.selectedGroups[validGroupIndex]);
+                                    // 유효한 그룹을 찾아서 설정했을 때만 '로드 완료' 처리
+                                    rotationSettingsLoadedRef.current = true;
+                                } else {
+                                    // 유효한 그룹이 하나도 없으면? 
+                                    // 일단 넘어가고 다음 데이터 로드 시(onValue가 다시 불리거나 함) 다시 시도
+                                    // console.log("No valid groups found yet"); // Removed
+                                }
+                            } else {
+                                // console.log('Rotation settings already loaded, skipping initial group set.'); // Removed
+                            }
+                        } catch (e) {
+                            console.error("Rotation init error:", e);
+                        }
                     }
                 }
-                // isRotationActive는 ref 동기화가 완료된 후에 설정하여 순환 로직이 제대로 실행되도록 함
+
                 if (settings.isActive !== undefined) {
-                    // ref 동기화가 완료되도록 약간의 지연 후 활성화
-                    setTimeout(() => {
-                        setIsRotationActive(settings.isActive);
-                    }, 0);
+                    setIsRotationActive(settings.isActive);
                 }
             }
-        } catch (error) {
-            console.error('순환 설정 불러오기 실패:', error);
-        }
-    }, [initialDataLoaded]); // initialDataLoaded가 true가 되면 실행
+        });
+
+        // 언서브 등록
+        activeUnsubsRef.current.push(unsubRotation);
+
+        return () => {
+            // activeUnsubsRef에서 정리되므로 여기서 별도 정리 불필요하지만,
+            // 명시적으로 component unmount 시 정리되는 것이 안전함.
+            // (단, activeUnsubsRef 메커니즘을 따르므로 여기선 생략 가능)
+        };
+    }, [initialDataLoaded, db]); // initialDataLoaded가 true가 되면 실행 및 구독 시작
 
     // rotationInterval과 rotationGroups를 ref에 동기화
     useEffect(() => {
