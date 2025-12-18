@@ -311,6 +311,8 @@ function ExternalScoreboard() {
     const rotationIntervalRef = useRef<number>(30); // interval 값을 ref로도 관리
     const rotationGroupsRef = useRef<string[]>([]); // rotationGroups를 ref로도 관리
     const rotationIntervalIdRef = useRef<NodeJS.Timeout | null>(null); // interval ID를 ref로 관리하여 리렌더링 시에도 유지
+    // 사용자가 화면에서 직접 순환 체크박스를 건드렸는지 여부 (Firebase 설정값이 상태를 덮어쓰지 않도록 제어)
+    const hasUserToggledRotationRef = useRef<boolean>(false);
 
     // 다국어 지원 상태
     const [languageMode, setLanguageMode] = useState<'korean' | 'english' | 'cycle'>('korean');
@@ -1520,7 +1522,11 @@ function ExternalScoreboard() {
                 }
 
                 if (settings.isActive !== undefined) {
-                    setIsRotationActive(settings.isActive);
+                    // 사용자가 아직 화면에서 직접 순환 체크박스를 건드리지 않은 경우에만
+                    // Firebase 설정값으로 isRotationActive를 동기화
+                    if (!hasUserToggledRotationRef.current) {
+                        setIsRotationActive(settings.isActive);
+                    }
                 }
             }
         });
@@ -1776,19 +1782,27 @@ function ExternalScoreboard() {
         );
     }
 
-    const NoDataContent = () => (
-        <div className="bg-black min-h-screen text-white p-8">
-            <div className="text-center py-20">
-                <h1 className="text-4xl font-bold">{tournament.name || (currentLang === 'ko' ? '파크골프 토너먼트' : 'Park Golf Tournament')}</h1>
-                <p className="mt-4 text-2xl text-gray-400">
-                    {Object.keys(players).length === 0
-                        ? t('noData')
-                        : (groupsToDisplay.length === 0 && filterGroup !== 'all' ? t('noGroupData') : t('noCourse'))
-                    }
-                </p>
+    const NoDataContent = () => {
+        // 순환이 활성화된 상태에서는 "그룹에 표시할 데이터가 없습니다" 문구가
+        // 사용성을 해치므로, 해당 문구는 순환 비활성 상태에서만 노출되도록 조정
+        const noDataMessage =
+            Object.keys(players).length === 0
+                ? t('noData')
+                : (groupsToDisplay.length === 0 && filterGroup !== 'all' && !isRotationActive
+                    ? t('noGroupData')
+                    : t('noCourse'));
+
+        return (
+            <div className="bg-black min-h-screen text-white p-8">
+                <div className="text-center py-20">
+                    <h1 className="text-4xl font-bold">{tournament.name || (currentLang === 'ko' ? '파크골프 토너먼트' : 'Park Golf Tournament')}</h1>
+                    <p className="mt-4 text-2xl text-gray-400">
+                        {noDataMessage}
+                    </p>
+                </div>
             </div>
-        </div>
-    );
+        );
+    };
 
     const SuddenDeathTable = ({ type, data, processedData }: { type: 'individual' | 'team', data: any, processedData: any[] }) => {
         const title = type === 'individual' ? t('suddenDeathIndividual') : t('suddenDeathTeam');
@@ -2268,12 +2282,29 @@ function ExternalScoreboard() {
                                     checked={isRotationActive}
                                     onCheckedChange={(checked) => {
                                         const newValue = checked === true;
+                                        // 사용자가 화면에서 직접 순환 체크박스를 건드렸음을 기록
+                                        hasUserToggledRotationRef.current = true;
+
                                         setIsRotationActive(newValue);
-                                        if (newValue && rotationGroups.length > 0) {
-                                            // 순환 시작 시 첫 번째 그룹으로 설정
-                                            currentRotationIndexRef.current = 0;
-                                            setFilterGroup(rotationGroups[0]);
+
+                                        if (newValue) {
+                                            // 현재 rotationGroupsRef / rotationGroups / allGroupsList 중에서
+                                            // 실제로 화면에 표시 가능한(visibleGroups에 포함된) 첫 번째 그룹만
+                                            // 초기 순환 대상으로 사용. 유효한 그룹이 없으면 현재 화면 유지.
+                                            const baseGroups =
+                                                (rotationGroupsRef.current && rotationGroupsRef.current.length > 0)
+                                                    ? rotationGroupsRef.current
+                                                    : (rotationGroups.length > 0 ? rotationGroups : allGroupsList);
+
+                                            const firstValidGroup = baseGroups.find(g => visibleGroups.includes(g));
+
+                                            if (firstValidGroup) {
+                                                const idxInRotation = rotationGroups.indexOf(firstValidGroup);
+                                                currentRotationIndexRef.current = idxInRotation >= 0 ? idxInRotation : 0;
+                                                setFilterGroup(firstValidGroup);
+                                            }
                                         }
+
                                         // localStorage에 저장 (새로고침 시 유지, 각 모니터별로 독립적)
                                         try {
                                             safeLocalStorageSetItem('scoreboardRotation', JSON.stringify({
