@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Upload, Download, UserPlus, Trash2, Edit, AlertTriangle, RotateCcw, Users, PlusCircle, X, Save, Settings, Check, Columns, Search } from "lucide-react";
+import { Upload, Download, UserPlus, Trash2, Edit, AlertTriangle, RotateCcw, Users, PlusCircle, X, Save, Settings, Check, Columns, Search, FileDown } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -48,6 +48,8 @@ export default function PlayerManagementPage() {
     const [newGroupName, setNewGroupName] = useState("");
     const [newGroupType, setNewGroupType] = useState<'individual' | 'team'>('individual');
     const [courses, setCourses] = useState<any[]>([]);
+    const [tournament, setTournament] = useState<any>({});
+    const [isDownloadingRoster, setIsDownloadingRoster] = useState(false);
     
     // Course assignment modal states
     const [isGroupCourseModalOpen, setGroupCourseModalOpen] = useState(false);
@@ -92,6 +94,7 @@ export default function PlayerManagementPage() {
 
         const unsubTournament = onValue(tournamentRef, (snapshot) => {
             const data = snapshot.val() || {};
+            setTournament(data);
             setGroupsData(data.groups || {});
             setCourses(data.courses ? Object.values(data.courses) : []); // isActive 필터 제거
         });
@@ -761,6 +764,325 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
     const groupList = Object.values(groupsData).sort((a: any, b: any) => a.name.localeCompare(b.name));
     const groupNameList = groupList.map((g: any) => g.name);
 
+    // 조편성표 이미지 다운로드 함수
+    const handleDownloadRoster = async (type: 'individual' | 'team') => {
+        if (isDownloadingRoster) return;
+        
+        setIsDownloadingRoster(true);
+        try {
+            // html2canvas 동적 임포트
+            const html2canvas = (await import('html2canvas')).default;
+
+            const tournamentName = tournament?.name || '파크골프 토너먼트';
+            const printDate = new Date().toLocaleString('ko-KR');
+            
+            // 해당 타입의 그룹만 필터링
+            const targetGroups = groupList.filter((g: any) => g.type === type);
+            
+            if (targetGroups.length === 0) {
+                toast({ 
+                    title: "알림", 
+                    description: `${type === 'individual' ? '개인전' : '2인1팀'} 그룹이 없습니다.` 
+                });
+                setIsDownloadingRoster(false);
+                return;
+            }
+
+            toast({ title: "조편성표 생성 시작", description: `${targetGroups.length}개 그룹의 조편성표를 생성합니다...` });
+
+            // A4 사이즈 기준 (210mm x 297mm, 96dpi 기준 약 794px x 1123px)
+            // 실제 사용할 크기: 794px 너비 (여백 포함)
+            const A4_WIDTH = 794;
+            const A4_HEIGHT = 1123;
+            const HEADER_HEIGHT = 120; // 헤더 높이
+            const GROUP_HEADER_HEIGHT = 50; // 그룹 헤더 높이
+            const TABLE_HEADER_HEIGHT = 40; // 테이블 헤더 높이
+            const ROW_HEIGHT = type === 'individual' ? 35 : 40; // 행 높이
+            const FOOTER_HEIGHT = 30; // 푸터 높이
+            const MARGIN = 20; // 여백
+
+            // 한 페이지에 들어갈 수 있는 행 수 계산
+            const availableHeight = A4_HEIGHT - HEADER_HEIGHT - GROUP_HEADER_HEIGHT - TABLE_HEADER_HEIGHT - FOOTER_HEIGHT - (MARGIN * 2);
+            const maxRowsPerPage = Math.floor(availableHeight / ROW_HEIGHT);
+
+            // 그룹별로 처리
+            for (let groupIdx = 0; groupIdx < targetGroups.length; groupIdx++) {
+                const group = targetGroups[groupIdx];
+                const groupName = group.name;
+                
+                // 해당 그룹의 선수들 가져오기
+                const groupPlayers = allPlayers.filter((p: any) => 
+                    p.type === type && p.group === groupName
+                );
+
+                if (groupPlayers.length === 0) continue;
+
+                // 조별로 그룹화
+                const playersByJo: { [jo: string]: any[] } = {};
+                groupPlayers.forEach((player: any) => {
+                    const jo = player.jo?.toString() || '미지정';
+                    if (!playersByJo[jo]) {
+                        playersByJo[jo] = [];
+                    }
+                    playersByJo[jo].push(player);
+                });
+
+                // 조 번호 정렬 (숫자 우선, 그 다음 문자열)
+                const sortedJos = Object.keys(playersByJo).sort((a, b) => {
+                    const numA = parseInt(a);
+                    const numB = parseInt(b);
+                    if (!isNaN(numA) && !isNaN(numB)) {
+                        return numA - numB;
+                    }
+                    if (!isNaN(numA)) return -1;
+                    if (!isNaN(numB)) return 1;
+                    return a.localeCompare(b);
+                });
+
+                // 조별로 행 수 계산하여 페이지 분할
+                let currentPageJoList: string[] = [];
+                let pageNumber = 1;
+
+                const createPage = async (jos: string[], pageNum: number, isLastPage: boolean) => {
+                    const container = document.createElement('div');
+                    container.style.cssText = `
+                        position: absolute; 
+                        left: -9999px; 
+                        top: 0; 
+                        width: ${A4_WIDTH}px !important; 
+                        min-width: ${A4_WIDTH}px !important; 
+                        max-width: none !important;
+                        background-color: white; 
+                        padding: ${MARGIN}px; 
+                        z-index: -1;
+                        overflow: visible !important;
+                    `;
+                    document.body.appendChild(container);
+
+                    const styleContent = `
+                        <style>
+                            .print-wrapper { 
+                                font-family: 'Pretendard', 'Malgun Gothic', sans-serif; 
+                                text-align: center; 
+                                color: #1e293b; 
+                                width: 100%; 
+                                box-sizing: border-box; 
+                            }
+                            .print-header { 
+                                background-color: #3b82f6; 
+                                color: white; 
+                                padding: 30px 20px; 
+                                border-radius: 12px; 
+                                margin-bottom: 20px;
+                                box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+                                width: 100%;
+                                box-sizing: border-box;
+                            }
+                            .print-title { font-size: 32px; font-weight: 800; margin-bottom: 12px; }
+                            .print-date { font-size: 16px; opacity: 0.9; }
+                            .group-section { 
+                                text-align: left; 
+                                margin-bottom: 15px; 
+                                margin-top: 20px; 
+                                display: flex; 
+                                align-items: center; 
+                                gap: 8px;
+                            }
+                            .group-icon { font-size: 24px; }
+                            .group-title { font-size: 22px; font-weight: 700; color: #334155; }
+                            .roster-table { 
+                                width: 100%; 
+                                border-collapse: collapse; 
+                                margin-bottom: 10px; 
+                                background-color: white;
+                                font-size: 14px;
+                                table-layout: fixed; 
+                            }
+                            .roster-table th { 
+                                background-color: #f1f5f9; 
+                                color: #475569; 
+                                font-weight: 700; 
+                                padding: 12px 6px; 
+                                border: 1px solid #e2e8f0;
+                                vertical-align: middle;
+                                font-size: 14px;
+                                text-align: center;
+                            }
+                            .roster-table td { 
+                                padding: 12px 6px; 
+                                border: 1px solid #e2e8f0; 
+                                vertical-align: middle;
+                                color: #334155;
+                                font-weight: 500;
+                                font-size: 14px;
+                                text-align: center;
+                                line-height: 1.5;
+                            }
+                            .jo-header {
+                                background-color: #e0f2fe !important;
+                                font-weight: 800;
+                                color: #0369a1;
+                            }
+                            .text-center { text-align: center; }
+                            .text-left { text-align: left; }
+                            .font-bold { font-weight: 700; }
+                            .page-footer {
+                                margin-top: 15px;
+                                font-size: 12px;
+                                color: #64748b;
+                                text-align: center;
+                            }
+                        </style>
+                    `;
+
+                    let htmlContent = styleContent;
+                    
+                    // 첫 페이지에만 대회 제목 표시
+                    if (pageNum === 1) {
+                        htmlContent += `
+                            <div class="print-wrapper">
+                                <div class="print-header">
+                                    <div class="print-title">⛳ ${tournamentName}</div>
+                                </div>
+                        `;
+                    } else {
+                        htmlContent += `<div class="print-wrapper">`;
+                    }
+                    
+                    htmlContent += `
+                            <div class="group-section">
+                                <span class="group-icon">📋</span>
+                                <span class="group-title">${groupName} 조편성표</span>
+                            </div>
+                            <table class="roster-table">
+                                <colgroup>
+                                    <col style="width: 100px;">
+                                    <col style="width: auto;">
+                                </colgroup>
+                                <thead>
+                                    <tr>
+                                        <th>조</th>
+                                        <th>조 구성원</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                    `;
+
+                    // 조별로 행 추가 (한 줄에 모든 구성원 나열)
+                    jos.forEach((jo) => {
+                        const playersInJo = playersByJo[jo];
+                        const membersList: string[] = [];
+                        
+                        playersInJo.forEach((player: any) => {
+                            if (type === 'individual') {
+                                const name = player.name || '-';
+                                const affiliation = player.affiliation || '무소속';
+                                membersList.push(`${name}(<span style="color: #64748b;">${affiliation}</span>)`);
+                            } else {
+                                const p1Name = player.p1_name || '-';
+                                const p1Affiliation = player.p1_affiliation || '무소속';
+                                const p2Name = player.p2_name || '-';
+                                const p2Affiliation = player.p2_affiliation || '무소속';
+                                membersList.push(`${p1Name}(<span style="color: #64748b;">${p1Affiliation}</span>) ${p2Name}(<span style="color: #64748b;">${p2Affiliation}</span>)`);
+                            }
+                        });
+                        
+                        htmlContent += `<tr>`;
+                        htmlContent += `<td class="jo-header text-center font-bold">${jo}</td>`;
+                        htmlContent += `<td class="text-center">${membersList.join('   ')}</td>`;
+                        htmlContent += `</tr>`;
+                    });
+
+                    htmlContent += `
+                                </tbody>
+                            </table>
+                            <div class="page-footer">
+                                ${isLastPage ? `총 ${groupPlayers.length}${type === 'individual' ? '명' : '팀'}` : ''} - ${pageNum}페이지
+                            </div>
+                        </div>
+                    `;
+
+                    container.innerHTML = htmlContent;
+
+                    // 이미지 생성
+                    const canvas = await html2canvas(container, {
+                        scale: 2,
+                        useCORS: true,
+                        backgroundColor: '#ffffff',
+                        windowWidth: A4_WIDTH,
+                        width: A4_WIDTH,
+                        height: A4_HEIGHT,
+                        x: 0,
+                        scrollX: 0
+                    });
+
+                    // 다운로드
+                    const image = canvas.toDataURL("image/png");
+                    const link = document.createElement("a");
+                    link.href = image;
+                    const pageSuffix = targetGroups.length > 1 || pageNum > 1 ? `_${pageNum}` : '';
+                    link.download = `${tournamentName}_${groupName}_조편성표${pageSuffix}_${new Date().toISOString().slice(0, 10)}.png`;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+
+                    // 컨테이너 정리
+                    document.body.removeChild(container);
+
+                    // 페이지 간 대기
+                    if (!isLastPage || groupIdx < targetGroups.length - 1) {
+                        await new Promise(resolve => setTimeout(resolve, 500));
+                    }
+                };
+
+                // 조별로 행 수를 계산하여 페이지 분할
+                let currentPageRowCount = 0;
+                
+                for (let i = 0; i < sortedJos.length; i++) {
+                    const jo = sortedJos[i];
+                    const playersInJo = playersByJo[jo];
+                    const joRows = playersInJo.length;
+
+                    // 현재 페이지에 추가할 수 있는지 확인
+                    if (currentPageRowCount + joRows > maxRowsPerPage && currentPageJoList.length > 0) {
+                        // 현재 페이지 저장
+                        await createPage(currentPageJoList, pageNumber, false);
+                        pageNumber++;
+                        currentPageJoList = [];
+                        currentPageRowCount = 0;
+                    }
+
+                    // 현재 조 추가
+                    currentPageJoList.push(jo);
+                    currentPageRowCount += joRows;
+                }
+
+                // 마지막 페이지 저장
+                if (currentPageJoList.length > 0) {
+                    await createPage(currentPageJoList, pageNumber, true);
+                }
+
+                // 그룹 간 대기
+                if (groupIdx < targetGroups.length - 1) {
+                    toast({ description: `${groupName} 저장 완료... (${groupIdx + 1}/${targetGroups.length})` });
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                }
+            }
+
+            toast({ title: "조편성표 생성 완료", description: "모든 그룹의 조편성표가 생성되었습니다." });
+
+        } catch (error) {
+            console.error('조편성표 생성 실패:', error);
+            toast({ 
+                title: "생성 실패", 
+                description: "조편성표 생성 중 오류가 발생했습니다.", 
+                variant: "destructive" 
+            });
+        } finally {
+            setIsDownloadingRoster(false);
+        }
+    };
+
   return (
     <div className="space-y-6">
         <Card>
@@ -875,6 +1197,15 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                             <CardContent className="flex flex-col sm:flex-row gap-4">
                                 <Button variant="outline" onClick={() => handleDownloadTemplate('individual')}><Download className="mr-2 h-4 w-4" /> 엑셀 양식 다운로드</Button>
                                 <Button onClick={() => individualFileInput?.click()}><Upload className="mr-2 h-4 w-4" /> 엑셀 파일 업로드</Button>
+                                <Button 
+                                    variant="default" 
+                                    className="bg-blue-600 hover:bg-blue-700 text-white"
+                                    onClick={() => handleDownloadRoster('individual')}
+                                    disabled={isDownloadingRoster || allPlayers.filter((p: any) => p.type === 'individual').length === 0}
+                                >
+                                    <FileDown className="mr-2 h-4 w-4" /> 
+                                    {isDownloadingRoster ? '생성 중...' : '조 편성표 다운'}
+                                </Button>
                                 <input type="file" ref={setIndividualFileInput} className="hidden" accept=".xlsx, .xls" onChange={(e) => handleFileUpload(e, 'individual')} />
                             </CardContent>
                         </Card>
@@ -1141,6 +1472,15 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                             <CardContent className="flex flex-col sm:flex-row gap-4">
                                <Button variant="outline" onClick={() => handleDownloadTemplate('team')}><Download className="mr-2 h-4 w-4" /> 엑셀 양식 다운로드</Button>
                                 <Button onClick={() => teamFileInput?.click()}><Upload className="mr-2 h-4 w-4" /> 엑셀 파일 업로드</Button>
+                                <Button 
+                                    variant="default" 
+                                    className="bg-blue-600 hover:bg-blue-700 text-white"
+                                    onClick={() => handleDownloadRoster('team')}
+                                    disabled={isDownloadingRoster || allPlayers.filter((p: any) => p.type === 'team').length === 0}
+                                >
+                                    <FileDown className="mr-2 h-4 w-4" /> 
+                                    {isDownloadingRoster ? '생성 중...' : '조 편성표 다운'}
+                                </Button>
                                 <input type="file" ref={setTeamFileInput} className="hidden" accept=".xlsx, .xls" onChange={(e) => handleFileUpload(e, 'team')} />
                             </CardContent>
                         </Card>
