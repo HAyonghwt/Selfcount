@@ -5,6 +5,7 @@ import { db } from '@/lib/firebase';
 import { ref, onValue, set, get, remove, update } from 'firebase/database';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { User, Users, Gift, Award, RefreshCw, Sparkles, Trophy } from 'lucide-react';
 import GiftEventDrawSmall from './GiftEventDrawSmall';
 
@@ -20,6 +21,7 @@ export default function GiftEventAdminPage() {
   const [winners, setWinners] = useState<Participant[]>([]);
   const [remaining, setRemaining] = useState<string[]>([]);
   const [currentWinner, setCurrentWinner] = useState<Participant | null>(null);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   // Load initial data from Firebase
   useEffect(() => {
@@ -134,6 +136,7 @@ export default function GiftEventAdminPage() {
     remove(ref(db, 'giftEvent'));
     setCurrentWinner(null);
     setWinners([]);
+    setShowResetConfirm(false);
   };
 
   const remainingParticipants = participants.filter(p => remaining.includes(p.id));
@@ -184,7 +187,7 @@ export default function GiftEventAdminPage() {
                 </CardTitle>
         </CardHeader>
               <CardContent className="space-y-3 md:space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 md:gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 md:gap-3">
                   <Button 
                     onClick={handleStartEvent} 
                     disabled={status !== 'waiting'} 
@@ -200,15 +203,6 @@ export default function GiftEventAdminPage() {
                   >
                     추첨 시작
           </Button>
-                  
-                  <Button 
-                    onClick={handleResetEvent} 
-                    variant="destructive"
-                    className="bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white font-medium h-10 md:h-12 text-sm md:text-base"
-                  >
-                    <RefreshCw className="mr-0.5 h-4 w-4" />
-                    초기화
-          </Button>
                 </div>
                 
                 {/* 상태 표시 */}
@@ -222,6 +216,16 @@ export default function GiftEventAdminPage() {
                     {status === 'finished' && '완료'}
                   </div>
                 </div>
+                
+                {/* 초기화 버튼 */}
+                <Button 
+                  onClick={() => setShowResetConfirm(true)} 
+                  variant="destructive"
+                  className="w-full bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white font-medium h-10 md:h-12 text-sm md:text-base"
+                >
+                  <RefreshCw className="mr-0.5 h-4 w-4" />
+                  초기화
+          </Button>
         </CardContent>
       </Card>
 
@@ -330,6 +334,24 @@ export default function GiftEventAdminPage() {
           </div>
         </div>
 
+        {/* 초기화 확인 모달 */}
+        <AlertDialog open={showResetConfirm} onOpenChange={setShowResetConfirm}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>추첨 초기화</AlertDialogTitle>
+              <AlertDialogDescription>
+                추첨을 초기화하시겠습니까?<br />
+                모든 당첨자 정보와 추첨 상태가 삭제됩니다.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>취소</AlertDialogCancel>
+              <AlertDialogAction onClick={handleResetEvent} className="bg-red-600 hover:bg-red-700">
+                확인
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
       </div>
     </div>
