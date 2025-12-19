@@ -139,7 +139,7 @@ export default function SelfScoringGameSetupPage() {
         });
     }, [groupsData, captainData, gameMode]);
 
-    // 선택된 그룹에 해당하는 조 목록 계산
+    // 선택된 그룹에 해당하는 조 목록 계산 (엑셀 파일의 조 순서 유지)
     const availableJos = useMemo(() => {
         if (!selectedGroup) return [];
         const groupPlayers = allPlayers.filter((p: any) => p.group === selectedGroup);
@@ -152,8 +152,45 @@ export default function SelfScoringGameSetupPage() {
                 orderedJos.push(joStr);
             }
         });
+        
+        // 그룹 데이터에서 조 순서 정보 가져오기
+        const groupData = groupsData[selectedGroup];
+        const joOrder = groupData?.joOrder || {};
+        
+        // 조 순서 정보가 있으면 그 순서대로 정렬, 없으면 기존 정렬 유지
+        if (Object.keys(joOrder).length > 0) {
+            orderedJos.sort((a, b) => {
+                const orderA = joOrder[a] || 999;
+                const orderB = joOrder[b] || 999;
+                if (orderA !== orderB) {
+                    return orderA - orderB;
+                }
+                // 순서 정보가 같으면 조 번호로 정렬 (숫자 우선, 그 다음 문자열)
+                const numA = parseInt(a);
+                const numB = parseInt(b);
+                if (!isNaN(numA) && !isNaN(numB)) {
+                    return numA - numB;
+                }
+                if (!isNaN(numA)) return -1;
+                if (!isNaN(numB)) return 1;
+                return a.localeCompare(b);
+            });
+        } else {
+            // 조 순서 정보가 없으면 기존 정렬 (숫자 우선, 그 다음 문자열)
+            orderedJos.sort((a, b) => {
+                const numA = parseInt(a);
+                const numB = parseInt(b);
+                if (!isNaN(numA) && !isNaN(numB)) {
+                    return numA - numB;
+                }
+                if (!isNaN(numA)) return -1;
+                if (!isNaN(numB)) return 1;
+                return a.localeCompare(b);
+            });
+        }
+        
         return orderedJos;
-    }, [allPlayers, selectedGroup]);
+    }, [allPlayers, selectedGroup, groupsData]);
 
     // 선택된 그룹의 배정 코스 목록 계산 (활성 코스만)
     const assignedCourseList = useMemo(() => {

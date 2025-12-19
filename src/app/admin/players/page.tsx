@@ -64,6 +64,8 @@ export default function PlayerManagementPage() {
     // Refs for file inputs, compatible with React 19
     const [individualFileInput, setIndividualFileInput] = useState<HTMLInputElement | null>(null);
     const [teamFileInput, setTeamFileInput] = useState<HTMLInputElement | null>(null);
+    const [individualReorganizeFileInput, setIndividualReorganizeFileInput] = useState<HTMLInputElement | null>(null);
+    const [teamReorganizeFileInput, setTeamReorganizeFileInput] = useState<HTMLInputElement | null>(null);
 
     // Search states
     const [individualSearchTerm, setIndividualSearchTerm] = useState('');
@@ -368,6 +370,263 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                 update(ref(db!), updates)
                     .then(() => {
                         toast({ title: '성공', description: `${newPlayers.length}명의 선수가 성공적으로 등록되었습니다.` });
+                    })
+                    .catch(err => toast({ title: '저장 실패', description: err.message }));
+
+            } catch (error) {
+                console.error("Excel upload error:", error);
+                toast({ title: '파일 처리 오류', description: '엑셀 파일을 처리하는 중 오류가 발생했습니다. 파일 형식이 올바른지 확인해주세요.' });
+            } finally {
+                if(e.target) e.target.value = '';
+            }
+        };
+        reader.readAsBinaryString(file);
+    };
+
+    // 조 재편성 업로드 함수 (기존 선수 조 번호만 업데이트, 엑셀 파일의 새 조 편성만 검증)
+    const handleReorganizeFileUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'individual' | 'team') => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            try {
+                const data = event.target?.result;
+                const wb = XLSX.read(data, { type: 'binary' });
+                let newPlayers: any[] = [];
+
+                // 그룹명 체크 추가
+                const sheetNames = wb.SheetNames;
+                const groupList = Object.values(groupsData)
+                    .filter((g: any) => g.type === type)
+                    .map((g: any) => g.name);
+                const missingGroups = groupList.filter(g => !sheetNames.includes(g));
+                const extraGroups = sheetNames.filter(s => !groupList.includes(s));
+                const duplicateGroups = sheetNames.filter((s, i, arr) => arr.indexOf(s) !== i);
+
+                if (extraGroups.length > 0) {
+                    toast({
+                        title: '그룹명 불일치',
+                        description: `엑셀 파일에 그룹 목록에 없는 ${extraGroups.join(', ')} 그룹이 포함되어 있습니다.\n먼저 그룹과 코스를 등록하고 다시 업로드해 주시기 바랍니다.`,
+                    });
+                    return;
+                }
+                if (duplicateGroups.length > 0) {
+                    toast({
+                        title: '그룹명 중복',
+                        description: `엑셀 파일에 그룹명이 중복되어 있습니다: ${duplicateGroups.join(', ')}`,
+                    });
+                    return;
+                }
+                if (missingGroups.length > 0) {
+                    if (!window.confirm(`엑셀파일에 그룹이 일부 빠져 있습니다. ${missingGroups.join(', ')}(은)는 추가나 변동없이 이대로 선수 등록을 진행하시겠습니까?`)) {
+                        return;
+                    }
+                }
+
+                // 그룹별 조 순서 추적 (엑셀 파일에서 나타나는 순서)
+                const groupJoOrder: { [groupName: string]: { [jo: string]: number } } = {};
+
+                wb.SheetNames.forEach(sheetName => {
+                    const groupName = sheetName;
+                    const ws = wb.Sheets[sheetName];
+                    const jsonData = XLSX.utils.sheet_to_json(ws);
+                    
+                    if (jsonData.length < 1) return;
+
+                    // 조 순서 추적을 위한 변수
+                    const seenJos = new Set<string>();
+                    let joOrderIndex = 1;
+
+                    if (type === 'individual') {
+                        jsonData.forEach((row: any) => {
+                            const name = row['이름']?.toString().trim();
+                            const jo = row['조'];
+                            const affiliation = row['소속']?.toString().trim() || '무소속';
+
+                            if (name && jo) {
+                                const joStr = jo.toString();
+                                // 조 순서 추적 (처음 나타나는 조만 순서 저장)
+                                if (!seenJos.has(joStr)) {
+                                    if (!groupJoOrder[groupName]) groupJoOrder[groupName] = {};
+                                    groupJoOrder[groupName][joStr] = joOrderIndex++;
+                                    seenJos.add(joStr);
+                                }
+                                
+                                newPlayers.push({
+                                    type: 'individual',
+                                    group: groupName,
+                                    jo: joStr,
+                                    name: name,
+                                    affiliation: affiliation,
+                                });
+                            }
+                        });
+                    } else { // team
+                         jsonData.forEach((row: any) => {
+                            const p1_name = row['선수1 이름']?.toString().trim();
+                            const p2_name = row['선수2 이름']?.toString().trim();
+                            if (p1_name && p2_name && row['조']) {
+                                const joStr = row['조'].toString();
+                                // 조 순서 추적 (처음 나타나는 조만 순서 저장)
+                                if (!seenJos.has(joStr)) {
+                                    if (!groupJoOrder[groupName]) groupJoOrder[groupName] = {};
+                                    groupJoOrder[groupName][joStr] = joOrderIndex++;
+                                    seenJos.add(joStr);
+                                }
+                                
+                                newPlayers.push({
+                                    type: 'team',
+                                    group: groupName,
+                                    jo: joStr,
+                                    p1_name: p1_name,
+                                    p1_affiliation: row['선수1 소속']?.toString().trim() || '무소속',
+                                    p2_name: p2_name,
+                                    p2_affiliation: row['선수2 소속']?.toString().trim() || '무소속',
+                                });
+                            }
+                        });
+                    }
+                });
+
+                if (newPlayers.length === 0) {
+                    toast({ title: '오류', description: '파일에서 유효한 선수 정보를 찾을 수 없습니다.' });
+                    return;
+                }
+
+                // 기존 선수 찾기 및 업데이트/추가 구분
+                const playersToUpdate: Array<{ playerId: string; newJo: string }> = [];
+                const playersToAdd: any[] = [];
+                
+                newPlayers.forEach(newPlayer => {
+                    // 같은 그룹 내에서 기존 선수 찾기
+                    let existingPlayer: any = null;
+                    
+                    if (type === 'individual') {
+                        // 개인전: 이름 + 소속 + 그룹으로 식별
+                        existingPlayer = allPlayers.find((p: any) => 
+                            p.type === 'individual' &&
+                            p.group === newPlayer.group &&
+                            p.name?.toString().trim() === newPlayer.name &&
+                            (p.affiliation || '무소속') === newPlayer.affiliation
+                        );
+                    } else {
+                        // 팀전: 선수1이름 + 선수1소속 + 선수2이름 + 선수2소속 + 그룹으로 식별
+                        existingPlayer = allPlayers.find((p: any) => 
+                            p.type === 'team' &&
+                            p.group === newPlayer.group &&
+                            p.p1_name?.toString().trim() === newPlayer.p1_name &&
+                            (p.p1_affiliation || '무소속') === newPlayer.p1_affiliation &&
+                            p.p2_name?.toString().trim() === newPlayer.p2_name &&
+                            (p.p2_affiliation || '무소속') === newPlayer.p2_affiliation
+                        );
+                    }
+                    
+                    if (existingPlayer) {
+                        // 기존 선수 발견: 조 번호만 업데이트
+                        playersToUpdate.push({
+                            playerId: existingPlayer.id,
+                            newJo: newPlayer.jo
+                        });
+                    } else {
+                        // 기존 선수 없음: 새로 추가
+                        playersToAdd.push(newPlayer);
+                    }
+                });
+
+                // --- 조별 인원(팀) 제한 검증 시작 (조 재편성용: 엑셀 파일의 새 조 편성만 검증) ---
+                const groupJoLimit = type === 'individual' ? 4 : 2;
+                // 엑셀 파일에 있는 선수들의 새 조 편성만 검증 (조 재편성은 엑셀 파일 기준으로 덮어쓰기)
+                const newJoMap: { [key: string]: { [key: string]: number } } = {};
+                
+                // 엑셀 파일의 모든 선수들(newPlayers)을 새 조 기준으로 집계
+                newPlayers.forEach((p: any) => {
+                    const g = p.group || '';
+                    const j = p.jo || '';
+                    if (g && j) {
+                        if (!newJoMap[g]) newJoMap[g] = {};
+                        if (!newJoMap[g][j]) newJoMap[g][j] = 0;
+                        newJoMap[g][j]++;
+                    }
+                });
+                
+                // 초과 조 찾기 (엑셀 파일의 새 조 편성만 검증)
+                const overList: string[] = [];
+                Object.entries(newJoMap).forEach(([g, jos]: [string, any]) => {
+                    Object.entries(jos).forEach(([j, cnt]: [string, any]) => {
+                        if (cnt > groupJoLimit) {
+                            overList.push(`${g} 그룹 ${j}조: ${cnt}${type === 'individual' ? '명' : '팀'} (최대 ${groupJoLimit}${type === 'individual' ? '명' : '팀'})`);
+                        }
+                    });
+                });
+                if (overList.length > 0) {
+                    toast({
+                        title: '조별 인원(팀) 초과',
+                        description: overList.join('\n') + '\n조별 최대 인원을 초과하여 등록할 수 없습니다.',
+                    });
+                    return;
+                }
+                // --- 조별 인원(팀) 제한 검증 끝 ---
+
+                // 최대 인원 제한 검증 (새로 추가되는 선수만 카운트)
+                if (allPlayers.length + playersToAdd.length > maxPlayers) {
+                    toast({
+                        title: '선수 등록 제한',
+                        description: `엑셀 파일의 새 선수(${playersToAdd.length}명)를 추가하면 최대 인원(${maxPlayers}명)을 초과합니다. 현재 ${allPlayers.length}명 등록됨.`,
+                    });
+                    return;
+                }
+                
+                const updates: { [key: string]: any } = {};
+                
+                // 기존 선수 조 번호 업데이트
+                playersToUpdate.forEach(({ playerId, newJo }) => {
+                    updates[`/players/${playerId}/jo`] = newJo;
+                });
+                
+                // 새 선수 추가
+                playersToAdd.forEach(player => {
+                    const newPlayerKey = push(ref(db!, 'players')).key;
+                    if(newPlayerKey) {
+                        updates[`/players/${newPlayerKey}`] = player;
+                    }
+                });
+
+                // 새로운 그룹들 자동 생성 및 조 순서 정보 저장
+                const allGroupsInFile = [...new Set(newPlayers.map(p => p.group))];
+                allGroupsInFile.forEach(groupName => {
+                    if (!groupsData[groupName]) {
+                        const defaultCourses = courses.reduce((acc, course) => {
+                            acc[course.id] = true;
+                            return acc;
+                        }, {});
+                        updates[`/tournaments/current/groups/${groupName}`] = {
+                            name: groupName,
+                            type: type,
+                            courses: defaultCourses,
+                            joOrder: groupJoOrder[groupName] || {}
+                        };
+                    } else {
+                        // 기존 그룹이면 조 순서 정보만 업데이트
+                        if (groupJoOrder[groupName]) {
+                            updates[`/tournaments/current/groups/${groupName}/joOrder`] = groupJoOrder[groupName];
+                        }
+                    }
+                });
+
+                update(ref(db!), updates)
+                    .then(() => {
+                        const updateCount = playersToUpdate.length;
+                        const addCount = playersToAdd.length;
+                        let message = '';
+                        if (updateCount > 0 && addCount > 0) {
+                            message = `${updateCount}명의 선수 조 번호가 업데이트되고, ${addCount}명의 선수가 새로 등록되었습니다.`;
+                        } else if (updateCount > 0) {
+                            message = `${updateCount}명의 선수 조 번호가 업데이트되었습니다.`;
+                        } else {
+                            message = `${addCount}명의 선수가 성공적으로 등록되었습니다.`;
+                        }
+                        toast({ title: '성공', description: message });
                     })
                     .catch(err => toast({ title: '저장 실패', description: err.message }));
 
@@ -807,7 +1066,7 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
 
             // 그룹별로 처리
             for (let groupIdx = 0; groupIdx < targetGroups.length; groupIdx++) {
-                const group = targetGroups[groupIdx];
+                const group = targetGroups[groupIdx] as any;
                 const groupName = group.name;
                 
                 // 해당 그룹의 선수들 가져오기
@@ -1209,6 +1468,24 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                                 <input type="file" ref={setIndividualFileInput} className="hidden" accept=".xlsx, .xls" onChange={(e) => handleFileUpload(e, 'individual')} />
                             </CardContent>
                         </Card>
+                        <Card className="bg-blue-50 border-blue-200">
+                            <CardHeader>
+                                <CardTitle className="text-lg">조 재편성 일괄 등록</CardTitle>
+                                <CardDescription className="text-sm text-muted-foreground">
+                                    기존 선수들의 조 번호만 업데이트합니다. 조별 인원 제한 검증은 엑셀 파일의 새 조 편성만 검증합니다.
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent className="flex flex-col sm:flex-row gap-4">
+                                <Button 
+                                    variant="default" 
+                                    className="bg-orange-600 hover:bg-orange-700 text-white"
+                                    onClick={() => individualReorganizeFileInput?.click()}
+                                >
+                                    <Upload className="mr-2 h-4 w-4" /> 조 재편성 엑셀 파일 업로드
+                                </Button>
+                                <input type="file" ref={setIndividualReorganizeFileInput} className="hidden" accept=".xlsx, .xls" onChange={(e) => handleReorganizeFileUpload(e, 'individual')} />
+                            </CardContent>
+                        </Card>
                         <Card>
                              <CardHeader>
                                 <CardTitle className="text-lg">수동 등록</CardTitle>
@@ -1482,6 +1759,24 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                                     {isDownloadingRoster ? '생성 중...' : '조 편성표 다운'}
                                 </Button>
                                 <input type="file" ref={setTeamFileInput} className="hidden" accept=".xlsx, .xls" onChange={(e) => handleFileUpload(e, 'team')} />
+                            </CardContent>
+                        </Card>
+                        <Card className="bg-blue-50 border-blue-200">
+                            <CardHeader>
+                                <CardTitle className="text-lg">조 재편성 일괄 등록</CardTitle>
+                                <CardDescription className="text-sm text-muted-foreground">
+                                    기존 선수들의 조 번호만 업데이트합니다. 조별 인원 제한 검증은 엑셀 파일의 새 조 편성만 검증합니다.
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent className="flex flex-col sm:flex-row gap-4">
+                                <Button 
+                                    variant="default" 
+                                    className="bg-orange-600 hover:bg-orange-700 text-white"
+                                    onClick={() => teamReorganizeFileInput?.click()}
+                                >
+                                    <Upload className="mr-2 h-4 w-4" /> 조 재편성 엑셀 파일 업로드
+                                </Button>
+                                <input type="file" ref={setTeamReorganizeFileInput} className="hidden" accept=".xlsx, .xls" onChange={(e) => handleReorganizeFileUpload(e, 'team')} />
                             </CardContent>
                         </Card>
                          <Card>
