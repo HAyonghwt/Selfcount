@@ -1273,10 +1273,8 @@ export default function AdminDashboard() {
         const allCoursesList = Object.values(courses).filter(Boolean);
         if (Object.keys(players).length === 0 || allCoursesList.length === 0) return {};
 
-        // 🟢 filterGroup이 'all'이 아닌 경우 해당 그룹만 처리
-        const playersToProcess = filterGroup === 'all'
-            ? Object.entries(players)
-            : Object.entries(players).filter(([, player]: [string, any]) => player.group === filterGroup);
+        // 모든 선수 처리 (filterGroup은 표시용 필터이지 데이터 처리 필터가 아님)
+        const playersToProcess = Object.entries(players);
 
         const allProcessedPlayers: any[] = playersToProcess.map(([playerId, player]: [string, any]) => {
             const playerGroupData = groupsData[player.group];
@@ -1384,9 +1382,9 @@ export default function AdminDashboard() {
             return acc;
         }, {} as Record<string, any[]>);
 
-        // 🟢 필터된 그룹만 순위 계산 (성능 최적화)
+        // 모든 그룹 순위 계산 (filterGroup은 표시용 필터이지 데이터 처리 필터가 아님)
         const rankedData: { [key: string]: ProcessedPlayer[] } = {};
-        const groupsToRank = filterGroup === 'all' ? Object.keys(groupedData) : [filterGroup].filter(g => groupedData[g]);
+        const groupsToRank = Object.keys(groupedData);
 
         for (const groupName of groupsToRank) {
             // 코스 순서 기반으로 정렬 (order가 큰 것이 마지막 = 백카운트 기준)
@@ -1447,7 +1445,7 @@ export default function AdminDashboard() {
             rankedData[groupName] = finalPlayers;
         }
         return rankedData;
-    }, [players, scores, courses, groupsData, filterGroup]);
+    }, [players, scores, courses, groupsData]);
 
     const processSuddenDeath = (suddenDeathData: any) => {
         if (!suddenDeathData) return [];

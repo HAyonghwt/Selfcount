@@ -23,6 +23,8 @@ export default function SimulationTool() {
         progress: 0
     });
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+    const [showReportModal, setShowReportModal] = useState(false);
+    const [reportData, setReportData] = useState<{ title: string; reports: StatusReport[] } | null>(null);
     const [courses, setCourses] = useState<any[]>([]);
     const [groupsData, setGroupsData] = useState<any>({});
     const [allPlayers, setAllPlayers] = useState<any[]>([]);
@@ -110,12 +112,13 @@ export default function SimulationTool() {
                 };
             }
 
-            // 선수 등록
-            const maleCount = Math.floor(count / 2);
-            const femaleCount = count - maleCount;
+            // 선수 등록 (정확히 반반으로 나누기)
+            // 300명 등록 시 정확히 남자 150명, 여자 150명
+            const maleCount = count === 300 ? 150 : Math.floor(count / 2);
+            const femaleCount = count === 300 ? 150 : count - maleCount;
             const playersPerJo = 4; // 조당 4명
 
-            // 남자부 선수 등록
+            // 남자부 선수 등록 (조 번호 1부터 시작)
             for (let i = 0; i < maleCount; i++) {
                 const jo = Math.floor(i / playersPerJo) + 1;
                 const playerKey = push(ref(db, 'players')).key;
@@ -128,9 +131,11 @@ export default function SimulationTool() {
                 };
             }
 
-            // 여자부 선수 등록
+            // 여자부 선수 등록 (조 번호는 남자부 다음부터 시작)
+            // 남자부 조 수 계산: Math.ceil(maleCount / playersPerJo)
+            const maleJoCount = Math.ceil(maleCount / playersPerJo);
             for (let i = 0; i < femaleCount; i++) {
-                const jo = Math.floor(i / playersPerJo) + 1;
+                const jo = maleJoCount + Math.floor(i / playersPerJo) + 1;
                 const playerKey = push(ref(db, 'players')).key;
                 updates[`/players/${playerKey}`] = {
                     type: 'individual',
@@ -306,14 +311,18 @@ export default function SimulationTool() {
         return processedPlayers;
     };
 
-    // 심판 점수 등록 (1일차)
-    const registerRefereeScores = async () => {
+    // 심판 점수 등록 (1일차 또는 2일차)
+    const registerRefereeScores = async (day: 1 | 2 = 1) => {
         if (!db) {
             toast({ title: '오류', description: '데이터베이스 연결이 없습니다.', variant: 'destructive' });
             return;
         }
 
-        setSimulationState({ isRunning: true, currentStep: '심판 점수 등록 중...', progress: 0 });
+        setSimulationState({ 
+            isRunning: true, 
+            currentStep: `심판 ${day}일차 점수 등록 중...`, 
+            progress: 0 
+        });
 
         try {
             const courseA = courses.find(c => c.name === 'A코스' || c.id === 1);
@@ -331,57 +340,105 @@ export default function SimulationTool() {
                 return;
             }
 
-            const maleGroupPlayers = allPlayers.filter(p => 
+            // Firebase에서 최신 선수 데이터 직접 가져오기 (상태 동기화 문제 해결)
+            const playersSnapshot = await get(ref(db, 'players'));
+            const latestPlayersData = playersSnapshot.val() || {};
+            const latestPlayers = Object.entries(latestPlayersData).map(([id, player]) => ({ id, ...player as any }));
+            
+            const maleGroupPlayers = latestPlayers.filter(p => 
                 p.group === '남자부' && isSimulationData(p)
             );
-            const femaleGroupPlayers = allPlayers.filter(p => 
+            const femaleGroupPlayers = latestPlayers.filter(p => 
                 p.group === '여자부' && isSimulationData(p)
             );
+
+            if (maleGroupPlayers.length === 0 && femaleGroupPlayers.length === 0) {
+                toast({ 
+                    title: '오류', 
+                    description: '시뮬레이션 선수가 등록되어 있지 않습니다. 먼저 선수를 등록해주세요.', 
+                    variant: 'destructive' 
+                });
+                setSimulationState({ isRunning: false, currentStep: '', progress: 0 });
+                return;
+            }
 
             const updates: { [key: string]: any } = {};
             let progress = 0;
             const total = maleGroupPlayers.length + femaleGroupPlayers.length;
 
-            // 남자부: AB코스 점수 입력
-            for (const player of maleGroupPlayers) {
-                for (const course of [courseA, courseB]) {
-                    for (let hole = 1; hole <= 9; hole++) {
-                        const par = course.pars?.[hole - 1] || 4;
-                        // 파 기준 ±2타 범위에서 랜덤 점수 생성
-                        const score = Math.max(1, Math.min(9, par + Math.floor(Math.random() * 5) - 2));
-                        updates[`/scores/${player.id}/${course.id}/${hole}`] = score;
+            if (day === 1) {
+                // 1일차: 남자부 AB코스, 여자부 CD코스
+                for (const player of maleGroupPlayers) {
+                    for (const course of [courseA, courseB]) {
+                        for (let hole = 1; hole <= 9; hole++) {
+                            const par = course.pars?.[hole - 1] || 4;
+                            const score = Math.max(1, Math.min(9, par + Math.floor(Math.random() * 5) - 2));
+                            updates[`/scores/${player.id}/${course.id}/${hole}`] = score;
+                        }
                     }
+                    progress++;
+                    setSimulationState({ 
+                        isRunning: true, 
+                        currentStep: `1일차 남자부 점수 입력 중... (${progress}/${total})`, 
+                        progress: (progress / total) * 100 
+                    });
                 }
-                progress++;
-                setSimulationState({ 
-                    isRunning: true, 
-                    currentStep: `남자부 점수 입력 중... (${progress}/${total})`, 
-                    progress: (progress / total) * 100 
-                });
-            }
 
-            // 여자부: CD코스 점수 입력
-            for (const player of femaleGroupPlayers) {
-                for (const course of [courseC, courseD]) {
-                    for (let hole = 1; hole <= 9; hole++) {
-                        const par = course.pars?.[hole - 1] || 4;
-                        const score = Math.max(1, Math.min(9, par + Math.floor(Math.random() * 5) - 2));
-                        updates[`/scores/${player.id}/${course.id}/${hole}`] = score;
+                for (const player of femaleGroupPlayers) {
+                    for (const course of [courseC, courseD]) {
+                        for (let hole = 1; hole <= 9; hole++) {
+                            const par = course.pars?.[hole - 1] || 4;
+                            const score = Math.max(1, Math.min(9, par + Math.floor(Math.random() * 5) - 2));
+                            updates[`/scores/${player.id}/${course.id}/${hole}`] = score;
+                        }
                     }
+                    progress++;
+                    setSimulationState({ 
+                        isRunning: true, 
+                        currentStep: `1일차 여자부 점수 입력 중... (${progress}/${total})`, 
+                        progress: (progress / total) * 100 
+                    });
                 }
-                progress++;
-                setSimulationState({ 
-                    isRunning: true, 
-                    currentStep: `여자부 점수 입력 중... (${progress}/${total})`, 
-                    progress: (progress / total) * 100 
-                });
+            } else {
+                // 2일차: 남자부 CD코스, 여자부 AB코스
+                for (const player of maleGroupPlayers) {
+                    for (const course of [courseC, courseD]) {
+                        for (let hole = 1; hole <= 9; hole++) {
+                            const par = course.pars?.[hole - 1] || 4;
+                            const score = Math.max(1, Math.min(9, par + Math.floor(Math.random() * 5) - 2));
+                            updates[`/scores/${player.id}/${course.id}/${hole}`] = score;
+                        }
+                    }
+                    progress++;
+                    setSimulationState({ 
+                        isRunning: true, 
+                        currentStep: `2일차 남자부 점수 입력 중... (${progress}/${total})`, 
+                        progress: (progress / total) * 100 
+                    });
+                }
+
+                for (const player of femaleGroupPlayers) {
+                    for (const course of [courseA, courseB]) {
+                        for (let hole = 1; hole <= 9; hole++) {
+                            const par = course.pars?.[hole - 1] || 4;
+                            const score = Math.max(1, Math.min(9, par + Math.floor(Math.random() * 5) - 2));
+                            updates[`/scores/${player.id}/${course.id}/${hole}`] = score;
+                        }
+                    }
+                    progress++;
+                    setSimulationState({ 
+                        isRunning: true, 
+                        currentStep: `2일차 여자부 점수 입력 중... (${progress}/${total})`, 
+                        progress: (progress / total) * 100 
+                    });
+                }
             }
 
             await update(ref(db), updates);
             
             toast({ 
                 title: '점수 등록 완료', 
-                description: `1일차 점수가 등록되었습니다. (남자부: AB코스, 여자부: CD코스)` 
+                description: `${day}일차 심판 점수가 등록되었습니다. ${day === 1 ? '(남자부: AB코스, 여자부: CD코스)' : '(남자부: CD코스, 여자부: AB코스)'}` 
             });
         } catch (error: any) {
             toast({ 
@@ -423,12 +480,31 @@ export default function SimulationTool() {
                 return;
             }
 
-            const maleGroupPlayers = allPlayers.filter(p => 
+            // Firebase에서 최신 선수 데이터 직접 가져오기 (상태 동기화 문제 해결)
+            const playersSnapshot = await get(ref(db, 'players'));
+            const latestPlayersData = playersSnapshot.val() || {};
+            const latestPlayers = Object.entries(latestPlayersData).map(([id, player]) => ({ id, ...player as any }));
+            
+            const maleGroupPlayers = latestPlayers.filter(p => 
                 p.group === '남자부' && isSimulationData(p)
             );
-            const femaleGroupPlayers = allPlayers.filter(p => 
+            const femaleGroupPlayers = latestPlayers.filter(p => 
                 p.group === '여자부' && isSimulationData(p)
             );
+
+            if (maleGroupPlayers.length === 0 && femaleGroupPlayers.length === 0) {
+                toast({ 
+                    title: '오류', 
+                    description: '시뮬레이션 선수가 등록되어 있지 않습니다. 먼저 선수를 등록해주세요.', 
+                    variant: 'destructive' 
+                });
+                setSimulationState({ isRunning: false, currentStep: '', progress: 0 });
+                return;
+            }
+
+            // Firebase에서 최신 점수 데이터 가져오기
+            const scoresSnapshot = await get(ref(db, 'scores'));
+            const latestScores = scoresSnapshot.val() || {};
 
             const updates: { [key: string]: any } = {};
             let progress = 0;
@@ -441,7 +517,7 @@ export default function SimulationTool() {
                 for (const player of maleGroupPlayers) {
                     for (const course of [courseA, courseB]) {
                         // 이미 점수가 있으면 스킵 (심판 점수 등록이 이미 되어 있음)
-                        const hasScore = allScores[player.id]?.[course.id]?.['1'];
+                        const hasScore = latestScores[player.id]?.[course.id]?.['1'];
                         if (hasScore) {
                             skippedCount++;
                             continue;
@@ -463,7 +539,7 @@ export default function SimulationTool() {
 
                 for (const player of femaleGroupPlayers) {
                     for (const course of [courseC, courseD]) {
-                        const hasScore = allScores[player.id]?.[course.id]?.['1'];
+                        const hasScore = latestScores[player.id]?.[course.id]?.['1'];
                         if (hasScore) {
                             skippedCount++;
                             continue;
@@ -486,7 +562,7 @@ export default function SimulationTool() {
                 // 2일차: 남자부 CD코스, 여자부 AB코스
                 for (const player of maleGroupPlayers) {
                     for (const course of [courseC, courseD]) {
-                        const hasScore = allScores[player.id]?.[course.id]?.['1'];
+                        const hasScore = latestScores[player.id]?.[course.id]?.['1'];
                         if (hasScore) {
                             skippedCount++;
                             continue;
@@ -508,7 +584,7 @@ export default function SimulationTool() {
 
                 for (const player of femaleGroupPlayers) {
                     for (const course of [courseA, courseB]) {
-                        const hasScore = allScores[player.id]?.[course.id]?.['1'];
+                        const hasScore = latestScores[player.id]?.[course.id]?.['1'];
                         if (hasScore) {
                             skippedCount++;
                             continue;
@@ -529,18 +605,26 @@ export default function SimulationTool() {
                 }
             }
 
-            if (Object.keys(updates).length > 0) {
+            if (Object.keys(updates).length === 0) {
+                toast({ 
+                    title: '경고', 
+                    description: skippedCount > 0 
+                        ? `이미 모든 점수가 등록되어 있습니다. (${skippedCount}개 코스 스킵됨)`
+                        : '등록할 점수가 없습니다. 선수가 등록되어 있는지 확인해주세요.', 
+                    variant: 'destructive' 
+                });
+            } else {
                 await update(ref(db), updates);
+                
+                const message = skippedCount > 0 
+                    ? `${day}일차 조장 점수가 등록되었습니다. (${Object.keys(updates).length}개 점수 등록, ${skippedCount}개 코스 스킵됨)`
+                    : `${day}일차 조장 점수가 등록되었습니다. (${Object.keys(updates).length}개 점수)`;
+                
+                toast({ 
+                    title: '점수 등록 완료', 
+                    description: message 
+                });
             }
-            
-            const message = skippedCount > 0 
-                ? `${day}일차 조장 점수가 등록되었습니다. (이미 점수가 있는 ${skippedCount}개 코스는 스킵됨)`
-                : `${day}일차 조장 점수가 등록되었습니다.`;
-            
-            toast({ 
-                title: '점수 등록 완료', 
-                description: message 
-            });
         } catch (error: any) {
             toast({ 
                 title: '점수 등록 실패', 
@@ -562,11 +646,18 @@ export default function SimulationTool() {
         setSimulationState({ isRunning: true, currentStep: '선수 재편성 중...', progress: 0 });
 
         try {
+            // Firebase에서 최신 데이터 직접 가져오기 (상태 동기화 문제 해결)
+            const playersSnapshot = await get(ref(db, 'players'));
+            const scoresSnapshot = await get(ref(db, 'scores'));
+            const latestPlayersData = playersSnapshot.val() || {};
+            const latestScores = scoresSnapshot.val() || {};
+            const latestPlayers = Object.entries(latestPlayersData).map(([id, player]) => ({ id, ...player as any }));
+            
             // 1일차 순위 계산 (1일차 점수만 사용)
-            const maleGroupPlayers = allPlayers.filter(p => 
+            const maleGroupPlayers = latestPlayers.filter(p => 
                 p.group === '남자부' && isSimulationData(p)
             );
-            const femaleGroupPlayers = allPlayers.filter(p => 
+            const femaleGroupPlayers = latestPlayers.filter(p => 
                 p.group === '여자부' && isSimulationData(p)
             );
 
@@ -589,7 +680,7 @@ export default function SimulationTool() {
                         detailedScores[courseId] = {};
 
                         for (let hole = 1; hole <= 9; hole++) {
-                            const score = allScores[player.id]?.[courseId]?.[String(hole)];
+                            const score = latestScores[player.id]?.[courseId]?.[String(hole)];
                             if (score !== null && score !== undefined && score > 0) {
                                 courseTotal += score;
                                 detailedScores[courseId][String(hole)] = score;
@@ -638,15 +729,17 @@ export default function SimulationTool() {
             const updates: { [key: string]: any } = {};
             const playersPerJo = 4;
 
-            // 남자부 재편성
+            // 남자부 재편성 (조 번호 1부터 시작)
             rankedMales.forEach((player, index) => {
                 const newJo = Math.floor(index / playersPerJo) + 1;
                 updates[`/players/${player.id}/jo`] = newJo;
             });
 
-            // 여자부 재편성
+            // 여자부 재편성 (조 번호는 남자부 다음부터 시작)
+            // 남자부 조 수 계산: Math.ceil(rankedMales.length / playersPerJo)
+            const maleJoCount = Math.ceil(rankedMales.length / playersPerJo);
             rankedFemales.forEach((player, index) => {
-                const newJo = Math.floor(index / playersPerJo) + 1;
+                const newJo = maleJoCount + Math.floor(index / playersPerJo) + 1;
                 updates[`/players/${player.id}/jo`] = newJo;
             });
 
@@ -725,6 +818,509 @@ export default function SimulationTool() {
         }
     };
 
+    // 상태 보고 인터페이스
+    interface StatusReport {
+        step: string;
+        status: 'success' | 'error' | 'warning';
+        message: string;
+        details?: any;
+    }
+
+    // 전체 상태 확인 함수
+    const checkSystemStatus = async (): Promise<StatusReport[]> => {
+        const reports: StatusReport[] = [];
+        
+        try {
+            // Firebase에서 최신 데이터 직접 가져오기 (상태 동기화 문제 해결)
+            const playersSnapshot = await get(ref(db, 'players'));
+            const scoresSnapshot = await get(ref(db, 'scores'));
+            const latestPlayersData = playersSnapshot.val() || {};
+            const latestScores = scoresSnapshot.val() || {};
+            
+            // 최신 데이터로 상태 업데이트
+            const playersArray = Object.entries(latestPlayersData).map(([id, player]) => ({ id, ...player as any }));
+            setAllPlayers(playersArray);
+            setAllScores(latestScores);
+            
+            // 1. 선수 수 확인
+            const simulationPlayers = playersArray.filter(p => isSimulationData(p));
+            const maleCount = simulationPlayers.filter(p => p.group === '남자부').length;
+            const femaleCount = simulationPlayers.filter(p => p.group === '여자부').length;
+            
+            reports.push({
+                step: '선수 등록 상태',
+                status: simulationPlayers.length > 0 ? 'success' : 'warning',
+                message: `총 ${simulationPlayers.length}명 (남자부: ${maleCount}명, 여자부: ${femaleCount}명)`,
+                details: { total: simulationPlayers.length, male: maleCount, female: femaleCount }
+            });
+
+            // 2. 1일차 점수 확인
+            let day1ScoreCount = 0;
+            let day1MaleScoreCount = 0;
+            let day1FemaleScoreCount = 0;
+            
+            const courseA = courses.find(c => c.name === 'A코스' || c.id === 1);
+            const courseB = courses.find(c => c.name === 'B코스' || c.id === 2);
+            const courseC = courses.find(c => c.name === 'C코스' || c.id === 3);
+            const courseD = courses.find(c => c.name === 'D코스' || c.id === 4);
+
+            for (const player of simulationPlayers) {
+                if (player.group === '남자부') {
+                    const hasA = latestScores[player.id]?.[courseA?.id]?.['1'] !== undefined;
+                    const hasB = latestScores[player.id]?.[courseB?.id]?.['1'] !== undefined;
+                    if (hasA && hasB) {
+                        day1MaleScoreCount++;
+                        day1ScoreCount++;
+                    }
+                } else if (player.group === '여자부') {
+                    const hasC = latestScores[player.id]?.[courseC?.id]?.['1'] !== undefined;
+                    const hasD = latestScores[player.id]?.[courseD?.id]?.['1'] !== undefined;
+                    if (hasC && hasD) {
+                        day1FemaleScoreCount++;
+                        day1ScoreCount++;
+                    }
+                }
+            }
+
+            reports.push({
+                step: '1일차 점수 상태',
+                status: day1ScoreCount === simulationPlayers.length ? 'success' : 'warning',
+                message: `${day1ScoreCount}/${simulationPlayers.length}명 점수 등록됨 (남자부: ${day1MaleScoreCount}/${maleCount}, 여자부: ${day1FemaleScoreCount}/${femaleCount})`,
+                details: { total: day1ScoreCount, expected: simulationPlayers.length, male: day1MaleScoreCount, female: day1FemaleScoreCount }
+            });
+
+            // 3. 재편성 상태 확인
+            const playersByJo: { [jo: number]: number } = {};
+            const malePlayersByJo: { [jo: number]: number } = {};
+            const femalePlayersByJo: { [jo: number]: number } = {};
+            
+            for (const player of simulationPlayers) {
+                const jo = player.jo || 0;
+                if (jo > 0) {
+                    playersByJo[jo] = (playersByJo[jo] || 0) + 1;
+                    if (player.group === '남자부') {
+                        malePlayersByJo[jo] = (malePlayersByJo[jo] || 0) + 1;
+                    } else if (player.group === '여자부') {
+                        femalePlayersByJo[jo] = (femalePlayersByJo[jo] || 0) + 1;
+                    }
+                }
+            }
+            
+            // 재편성 후 예상 조 수: 남자부 38조 + 여자부 38조 = 76조 (각 그룹별로 4명씩)
+            const maleJoCount = Math.ceil(maleCount / 4);
+            const femaleJoCount = Math.ceil(femaleCount / 4);
+            const expectedJos = maleJoCount + femaleJoCount;
+            const actualJos = Object.keys(playersByJo).filter(jo => parseInt(jo) > 0).length;
+            const actualMaleJos = Object.keys(malePlayersByJo).filter(jo => parseInt(jo) > 0).length;
+            const actualFemaleJos = Object.keys(femalePlayersByJo).filter(jo => parseInt(jo) > 0).length;
+            const maxPlayersPerJo = Math.max(...Object.values(playersByJo), 0);
+            const maxMalePlayersPerJo = Object.keys(malePlayersByJo).length > 0 ? Math.max(...Object.values(malePlayersByJo), 0) : 0;
+            const maxFemalePlayersPerJo = Object.keys(femalePlayersByJo).length > 0 ? Math.max(...Object.values(femalePlayersByJo), 0) : 0;
+            
+            // 재편성 완료 여부: 조 수가 맞고, 조당 최대 4명 이하
+            const hasReorganized = actualJos === expectedJos && maxPlayersPerJo <= 4 && maxMalePlayersPerJo <= 4 && maxFemalePlayersPerJo <= 4;
+
+            const joDetails = `전체 조 수: ${actualJos}개 (예상: ${expectedJos}개), 남자부 조 수: ${actualMaleJos}개 (예상: ${maleJoCount}개), 여자부 조 수: ${actualFemaleJos}개 (예상: ${femaleJoCount}개)`;
+            const joCountMessage = actualJos === expectedJos 
+                ? `✅ ${joDetails}` 
+                : `⚠️ ${joDetails}`;
+            const playersPerJoMessage = maxPlayersPerJo <= 4 
+                ? `조당 최대 인원: ${maxPlayersPerJo}명 (정상)` 
+                : `⚠️ 조당 최대 인원: ${maxPlayersPerJo}명 (초과됨, 최대 4명)`;
+            
+            reports.push({
+                step: '재편성 상태',
+                status: hasReorganized ? 'success' : 'warning',
+                message: `${joCountMessage}\n${playersPerJoMessage}`,
+                details: { 
+                    actualJos, 
+                    expectedJos, 
+                    actualMaleJos,
+                    expectedMaleJos: maleJoCount,
+                    actualFemaleJos,
+                    expectedFemaleJos: femaleJoCount,
+                    playersByJo,
+                    malePlayersByJo,
+                    femalePlayersByJo,
+                    maxPlayersPerJo,
+                    maxMalePlayersPerJo,
+                    maxFemalePlayersPerJo
+                }
+            });
+
+            // 4. 2일차 점수 확인
+            let day2ScoreCount = 0;
+            let day2MaleScoreCount = 0;
+            let day2FemaleScoreCount = 0;
+
+            for (const player of simulationPlayers) {
+                if (player.group === '남자부') {
+                    const hasC = latestScores[player.id]?.[courseC?.id]?.['1'] !== undefined;
+                    const hasD = latestScores[player.id]?.[courseD?.id]?.['1'] !== undefined;
+                    if (hasC && hasD) {
+                        day2MaleScoreCount++;
+                        day2ScoreCount++;
+                    }
+                } else if (player.group === '여자부') {
+                    const hasA = latestScores[player.id]?.[courseA?.id]?.['1'] !== undefined;
+                    const hasB = latestScores[player.id]?.[courseB?.id]?.['1'] !== undefined;
+                    if (hasA && hasB) {
+                        day2FemaleScoreCount++;
+                        day2ScoreCount++;
+                    }
+                }
+            }
+
+            reports.push({
+                step: '2일차 점수 상태',
+                status: day2ScoreCount === simulationPlayers.length ? 'success' : day2ScoreCount > 0 ? 'warning' : 'error',
+                message: `${day2ScoreCount}/${simulationPlayers.length}명 점수 등록됨 (남자부: ${day2MaleScoreCount}/${maleCount}, 여자부: ${day2FemaleScoreCount}/${femaleCount})`,
+                details: { total: day2ScoreCount, expected: simulationPlayers.length, male: day2MaleScoreCount, female: day2FemaleScoreCount }
+            });
+
+            // 5. 전체 코스 점수 확인
+            let allCoursesScoreCount = 0;
+            for (const player of simulationPlayers) {
+                const hasA = latestScores[player.id]?.[courseA?.id]?.['1'] !== undefined;
+                const hasB = latestScores[player.id]?.[courseB?.id]?.['1'] !== undefined;
+                const hasC = latestScores[player.id]?.[courseC?.id]?.['1'] !== undefined;
+                const hasD = latestScores[player.id]?.[courseD?.id]?.['1'] !== undefined;
+                
+                if (player.group === '남자부' && hasA && hasB && hasC && hasD) {
+                    allCoursesScoreCount++;
+                } else if (player.group === '여자부' && hasA && hasB && hasC && hasD) {
+                    allCoursesScoreCount++;
+                }
+            }
+
+            reports.push({
+                step: '전체 코스 점수 상태',
+                status: allCoursesScoreCount === simulationPlayers.length ? 'success' : 'warning',
+                message: `${allCoursesScoreCount}/${simulationPlayers.length}명이 ABCD 모든 코스 점수 보유`,
+                details: { total: allCoursesScoreCount, expected: simulationPlayers.length }
+            });
+
+        } catch (error: any) {
+            reports.push({
+                step: '상태 확인 오류',
+                status: 'error',
+                message: error.message || '알 수 없는 오류'
+            });
+        }
+
+        return reports;
+    };
+
+    // 심판 자동실행
+    const runRefereeAutoSimulation = async () => {
+        if (!db) {
+            toast({ title: '오류', description: '데이터베이스 연결이 없습니다.', variant: 'destructive' });
+            return;
+        }
+
+        const reports: StatusReport[] = [];
+        setSimulationState({ isRunning: true, currentStep: '심판 자동실행 시작...', progress: 0 });
+
+        try {
+            // 기존 시뮬레이션 데이터 삭제 (중복 방지)
+            const existingSimulationPlayers = allPlayers.filter(p => isSimulationData(p));
+            if (existingSimulationPlayers.length > 0) {
+                reports.push({ step: '기존 데이터 삭제', status: 'success', message: `기존 시뮬레이션 데이터 ${existingSimulationPlayers.length}명 삭제 중...` });
+                setSimulationState({ isRunning: true, currentStep: '기존 시뮬레이션 데이터 삭제 중...', progress: 0 });
+                
+                const deleteUpdates: { [key: string]: any } = {};
+                for (const player of existingSimulationPlayers) {
+                    deleteUpdates[`/players/${player.id}`] = null;
+                    if (allScores[player.id]) {
+                        deleteUpdates[`/scores/${player.id}`] = null;
+                    }
+                }
+                await update(ref(db), deleteUpdates);
+                await new Promise(resolve => setTimeout(resolve, 1000)); // 삭제 동기화 대기
+            }
+            
+            // 1단계: 300명 등록 (남자 150명, 여자 150명)
+            reports.push({ step: '1단계: 선수 등록', status: 'success', message: '300명 등록 시작 (남자 150명, 여자 150명)' });
+            setSimulationState({ isRunning: true, currentStep: '1단계: 300명 선수 등록 중... (남자 150명, 여자 150명)', progress: 0 });
+            await registerPlayers(300);
+            // Firebase 데이터 동기화 대기 (더 긴 대기 시간)
+            await new Promise(resolve => setTimeout(resolve, 3000));
+            
+            // 실제로 선수가 등록되었는지 확인
+            const playersSnapshot = await get(ref(db, 'players'));
+            const playersData = playersSnapshot.val() || {};
+            const registeredCount = Object.values(playersData).filter((p: any) => 
+                isSimulationData(p)
+            ).length;
+            
+            if (registeredCount === 0) {
+                reports.push({
+                    step: '선수 등록 확인',
+                    status: 'error',
+                    message: `선수 등록 실패: 0명 등록됨 (예상: 300명)`
+                });
+            } else {
+                reports.push({
+                    step: '선수 등록 확인',
+                    status: 'success',
+                    message: `선수 등록 성공: ${registeredCount}명 등록됨`
+                });
+            }
+            
+            // 상태 확인 (데이터 동기화 후 - 더 긴 대기)
+            await new Promise(resolve => setTimeout(resolve, 2000)); // 추가 대기 (상태 동기화 확실히)
+            const statusAfterRegister = await checkSystemStatus();
+            reports.push(...statusAfterRegister);
+
+            // 2단계: 1일차 심판 점수 등록
+            reports.push({ step: '2단계: 1일차 심판 점수 등록', status: 'success', message: '1일차 점수 등록 시작' });
+            setSimulationState({ isRunning: true, currentStep: '2단계: 1일차 심판 점수 등록 중...', progress: 0 });
+            await registerRefereeScores(1);
+            await new Promise(resolve => setTimeout(resolve, 2000)); // 점수 동기화 대기
+            
+            const statusAfterDay1 = await checkSystemStatus();
+            reports.push(...statusAfterDay1);
+
+            // 3단계: 조 재편성
+            reports.push({ step: '3단계: 조 재편성', status: 'success', message: '조 재편성 시작' });
+            setSimulationState({ isRunning: true, currentStep: '3단계: 조 재편성 중...', progress: 0 });
+            await reorganizePlayers();
+            await new Promise(resolve => setTimeout(resolve, 2000)); // 재편성 동기화 대기
+            
+            const statusAfterReorganize = await checkSystemStatus();
+            reports.push(...statusAfterReorganize);
+
+            // 4단계: 2일차 심판 점수 등록
+            reports.push({ step: '4단계: 2일차 심판 점수 등록', status: 'success', message: '2일차 점수 등록 시작' });
+            setSimulationState({ isRunning: true, currentStep: '4단계: 2일차 심판 점수 등록 중...', progress: 0 });
+            await registerRefereeScores(2);
+            await new Promise(resolve => setTimeout(resolve, 2000)); // 점수 동기화 대기
+            
+            const finalStatus = await checkSystemStatus();
+            reports.push(...finalStatus);
+
+            // 최종 보고서 생성
+            const successCount = reports.filter(r => r.status === 'success').length;
+            const warningCount = reports.filter(r => r.status === 'warning').length;
+            const errorCount = reports.filter(r => r.status === 'error').length;
+
+            // 콘솔에 상세 보고서 출력
+            console.log('========================================');
+            console.log('심판 자동실행 완료 - 상세 보고서');
+            console.log('========================================');
+            console.log(`✅ 성공: ${successCount}개`);
+            console.log(`⚠️ 경고: ${warningCount}개`);
+            console.log(`❌ 오류: ${errorCount}개`);
+            console.log('----------------------------------------');
+            reports.forEach((r, i) => {
+                const icon = r.status === 'success' ? '✅' : r.status === 'warning' ? '⚠️' : '❌';
+                console.log(`${i + 1}. [${icon}] ${r.step}: ${r.message}`);
+                if (r.details) {
+                    console.log('   상세:', r.details);
+                }
+            });
+            console.log('========================================');
+
+            // 모달로 보고서 표시
+            setReportData({
+                title: '심판 자동실행 완료',
+                reports: reports
+            });
+            setShowReportModal(true);
+
+            toast({ 
+                title: '심판 자동실행 완료', 
+                description: `성공: ${successCount}개, 경고: ${warningCount}개, 오류: ${errorCount}개 (상세 보고서는 모달에서 확인하세요)`,
+                duration: 5000
+            });
+
+        } catch (error: any) {
+            reports.push({
+                step: '자동실행 오류',
+                status: 'error',
+                message: error.message || '알 수 없는 오류'
+            });
+            
+            // 콘솔에 오류 출력
+            console.error('========================================');
+            console.error('심판 자동실행 오류 발생!');
+            console.error('========================================');
+            console.error('오류 메시지:', error.message || '알 수 없는 오류');
+            console.error('오류 스택:', error.stack);
+            console.error('========================================');
+            
+            // 모달로 오류 보고서 표시
+            setReportData({
+                title: '심판 자동실행 오류',
+                reports: reports
+            });
+            setShowReportModal(true);
+            
+            toast({ 
+                title: '자동실행 실패', 
+                description: error.message || '알 수 없는 오류 (상세 보고서는 모달에서 확인하세요)', 
+                variant: 'destructive' 
+            });
+        } finally {
+            setSimulationState({ isRunning: false, currentStep: '', progress: 0 });
+        }
+    };
+
+    // 조장 자동실행
+    const runCaptainAutoSimulation = async () => {
+        if (!db) {
+            toast({ title: '오류', description: '데이터베이스 연결이 없습니다.', variant: 'destructive' });
+            return;
+        }
+
+        const reports: StatusReport[] = [];
+        setSimulationState({ isRunning: true, currentStep: '조장 자동실행 시작...', progress: 0 });
+
+        try {
+            // 기존 시뮬레이션 데이터 삭제 (중복 방지)
+            const existingSimulationPlayers = allPlayers.filter(p => isSimulationData(p));
+            if (existingSimulationPlayers.length > 0) {
+                reports.push({ step: '기존 데이터 삭제', status: 'success', message: `기존 시뮬레이션 데이터 ${existingSimulationPlayers.length}명 삭제 중...` });
+                setSimulationState({ isRunning: true, currentStep: '기존 시뮬레이션 데이터 삭제 중...', progress: 0 });
+                
+                const deleteUpdates: { [key: string]: any } = {};
+                for (const player of existingSimulationPlayers) {
+                    deleteUpdates[`/players/${player.id}`] = null;
+                    if (allScores[player.id]) {
+                        deleteUpdates[`/scores/${player.id}`] = null;
+                    }
+                }
+                await update(ref(db), deleteUpdates);
+                await new Promise(resolve => setTimeout(resolve, 1000)); // 삭제 동기화 대기
+            }
+            
+            // 1단계: 300명 등록 (남자 150명, 여자 150명)
+            reports.push({ step: '1단계: 선수 등록', status: 'success', message: '300명 등록 시작 (남자 150명, 여자 150명)' });
+            setSimulationState({ isRunning: true, currentStep: '1단계: 300명 선수 등록 중... (남자 150명, 여자 150명)', progress: 0 });
+            await registerPlayers(300);
+            // Firebase 데이터 동기화 대기 (더 긴 대기 시간)
+            await new Promise(resolve => setTimeout(resolve, 3000));
+            
+            // 실제로 선수가 등록되었는지 확인
+            const playersSnapshot = await get(ref(db, 'players'));
+            const playersData = playersSnapshot.val() || {};
+            const registeredCount = Object.values(playersData).filter((p: any) => 
+                isSimulationData(p)
+            ).length;
+            
+            if (registeredCount === 0) {
+                reports.push({
+                    step: '선수 등록 확인',
+                    status: 'error',
+                    message: `선수 등록 실패: 0명 등록됨 (예상: 300명)`
+                });
+            } else {
+                reports.push({
+                    step: '선수 등록 확인',
+                    status: 'success',
+                    message: `선수 등록 성공: ${registeredCount}명 등록됨`
+                });
+            }
+            
+            // 상태 확인 (데이터 동기화 후 - 더 긴 대기)
+            await new Promise(resolve => setTimeout(resolve, 2000)); // 추가 대기 (상태 동기화 확실히)
+            const statusAfterRegister = await checkSystemStatus();
+            reports.push(...statusAfterRegister);
+
+            // 2단계: 1일차 조장 점수 등록
+            reports.push({ step: '2단계: 1일차 조장 점수 등록', status: 'success', message: '1일차 점수 등록 시작' });
+            setSimulationState({ isRunning: true, currentStep: '2단계: 1일차 조장 점수 등록 중...', progress: 0 });
+            await registerCaptainScores(1);
+            await new Promise(resolve => setTimeout(resolve, 2000)); // 점수 동기화 대기
+            
+            const statusAfterDay1 = await checkSystemStatus();
+            reports.push(...statusAfterDay1);
+
+            // 3단계: 조 재편성
+            reports.push({ step: '3단계: 조 재편성', status: 'success', message: '조 재편성 시작' });
+            setSimulationState({ isRunning: true, currentStep: '3단계: 조 재편성 중...', progress: 0 });
+            await reorganizePlayers();
+            await new Promise(resolve => setTimeout(resolve, 2000)); // 재편성 동기화 대기
+            
+            const statusAfterReorganize = await checkSystemStatus();
+            reports.push(...statusAfterReorganize);
+
+            // 4단계: 2일차 조장 점수 등록
+            reports.push({ step: '4단계: 2일차 조장 점수 등록', status: 'success', message: '2일차 점수 등록 시작' });
+            setSimulationState({ isRunning: true, currentStep: '4단계: 2일차 조장 점수 등록 중...', progress: 0 });
+            await registerCaptainScores(2);
+            await new Promise(resolve => setTimeout(resolve, 2000)); // 점수 동기화 대기
+            
+            const finalStatus = await checkSystemStatus();
+            reports.push(...finalStatus);
+
+            // 최종 보고서 생성
+            const successCount = reports.filter(r => r.status === 'success').length;
+            const warningCount = reports.filter(r => r.status === 'warning').length;
+            const errorCount = reports.filter(r => r.status === 'error').length;
+
+            // 콘솔에 상세 보고서 출력
+            console.log('========================================');
+            console.log('조장 자동실행 완료 - 상세 보고서');
+            console.log('========================================');
+            console.log(`✅ 성공: ${successCount}개`);
+            console.log(`⚠️ 경고: ${warningCount}개`);
+            console.log(`❌ 오류: ${errorCount}개`);
+            console.log('----------------------------------------');
+            reports.forEach((r, i) => {
+                const icon = r.status === 'success' ? '✅' : r.status === 'warning' ? '⚠️' : '❌';
+                console.log(`${i + 1}. [${icon}] ${r.step}: ${r.message}`);
+                if (r.details) {
+                    console.log('   상세:', r.details);
+                }
+            });
+            console.log('========================================');
+
+            // 모달로 보고서 표시
+            setReportData({
+                title: '조장 자동실행 완료',
+                reports: reports
+            });
+            setShowReportModal(true);
+
+            toast({ 
+                title: '조장 자동실행 완료', 
+                description: `성공: ${successCount}개, 경고: ${warningCount}개, 오류: ${errorCount}개 (상세 보고서는 모달에서 확인하세요)`,
+                duration: 5000
+            });
+
+        } catch (error: any) {
+            reports.push({
+                step: '자동실행 오류',
+                status: 'error',
+                message: error.message || '알 수 없는 오류'
+            });
+            
+            // 콘솔에 오류 출력
+            console.error('========================================');
+            console.error('조장 자동실행 오류 발생!');
+            console.error('========================================');
+            console.error('오류 메시지:', error.message || '알 수 없는 오류');
+            console.error('오류 스택:', error.stack);
+            console.error('========================================');
+            
+            // 모달로 오류 보고서 표시
+            setReportData({
+                title: '조장 자동실행 오류',
+                reports: reports
+            });
+            setShowReportModal(true);
+            
+            toast({ 
+                title: '자동실행 실패', 
+                description: error.message || '알 수 없는 오류 (상세 보고서는 모달에서 확인하세요)', 
+                variant: 'destructive' 
+            });
+        } finally {
+            setSimulationState({ isRunning: false, currentStep: '', progress: 0 });
+        }
+    };
+
     const simulationPlayersCount = allPlayers.filter(p => isSimulationData(p)).length;
 
     return (
@@ -787,13 +1383,22 @@ export default function SimulationTool() {
                         300명 등록
                     </Button>
                     <Button
-                        onClick={registerRefereeScores}
+                        onClick={() => registerRefereeScores(1)}
                         disabled={simulationState.isRunning}
                         className="bg-blue-600 hover:bg-blue-700"
                     >
                         <UserCheck className="mr-2 h-4 w-4" />
                         심판 점수 등록
                         <span className="ml-2 text-xs">(1일차)</span>
+                    </Button>
+                    <Button
+                        onClick={() => registerRefereeScores(2)}
+                        disabled={simulationState.isRunning}
+                        className="bg-blue-600 hover:bg-blue-700"
+                    >
+                        <UserCheck className="mr-2 h-4 w-4" />
+                        심판 점수 등록
+                        <span className="ml-2 text-xs">(2일차)</span>
                     </Button>
                     <Button
                         onClick={() => registerCaptainScores(1)}
@@ -820,6 +1425,22 @@ export default function SimulationTool() {
                     >
                         <RotateCcw className="mr-2 h-4 w-4" />
                         재편성 선수 등록
+                    </Button>
+                    <Button
+                        onClick={runRefereeAutoSimulation}
+                        disabled={simulationState.isRunning}
+                        className="bg-indigo-600 hover:bg-indigo-700 col-span-full"
+                    >
+                        <Trophy className="mr-2 h-4 w-4" />
+                        심판 자동실행 (300명 등록 → 1일차 → 재편성 → 2일차)
+                    </Button>
+                    <Button
+                        onClick={runCaptainAutoSimulation}
+                        disabled={simulationState.isRunning}
+                        className="bg-teal-600 hover:bg-teal-700 col-span-full"
+                    >
+                        <Trophy className="mr-2 h-4 w-4" />
+                        조장 자동실행 (300명 등록 → 1일차 → 재편성 → 2일차)
                     </Button>
                     <Button
                         onClick={() => setShowDeleteConfirm(true)}
@@ -864,6 +1485,55 @@ export default function SimulationTool() {
                             className="bg-red-600 hover:bg-red-700"
                         >
                             삭제
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
+            {/* 보고서 모달 */}
+            <AlertDialog open={showReportModal} onOpenChange={setShowReportModal}>
+                <AlertDialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>{reportData?.title || '실행 보고서'}</AlertDialogTitle>
+                    </AlertDialogHeader>
+                    {reportData && (
+                        <div className="mt-4 space-y-2">
+                            <div className="flex gap-4 text-sm font-semibold">
+                                <span className="text-green-600">✅ 성공: {reportData.reports.filter(r => r.status === 'success').length}개</span>
+                                <span className="text-yellow-600">⚠️ 경고: {reportData.reports.filter(r => r.status === 'warning').length}개</span>
+                                <span className="text-red-600">❌ 오류: {reportData.reports.filter(r => r.status === 'error').length}개</span>
+                            </div>
+                            <div className="mt-4 space-y-2 max-h-[60vh] overflow-y-auto">
+                                {reportData.reports.map((r, i) => {
+                                    const icon = r.status === 'success' ? '✅' : r.status === 'warning' ? '⚠️' : '❌';
+                                    const colorClass = r.status === 'success' ? 'text-green-700' : r.status === 'warning' ? 'text-yellow-700' : 'text-red-700';
+                                    const bgClass = r.status === 'success' ? 'bg-green-50 border-green-200' : r.status === 'warning' ? 'bg-yellow-50 border-yellow-200' : 'bg-red-50 border-red-200';
+                                    return (
+                                        <div key={i} className={`p-3 rounded border ${bgClass}`}>
+                                            <div className="flex items-start gap-2">
+                                                <span className="text-lg">{icon}</span>
+                                                <div className="flex-1">
+                                                    <div className={`font-semibold ${colorClass}`}>{r.step}</div>
+                                                    <div className="text-sm text-gray-700 mt-1">{r.message}</div>
+                                                    {r.details && (
+                                                        <details className="mt-2">
+                                                            <summary className="text-xs text-gray-500 cursor-pointer">상세 정보 보기</summary>
+                                                            <pre className="text-xs text-gray-600 mt-1 p-2 bg-white rounded border overflow-auto">
+                                                                {JSON.stringify(r.details, null, 2)}
+                                                            </pre>
+                                                        </details>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
+                    <AlertDialogFooter>
+                        <AlertDialogAction onClick={() => setShowReportModal(false)}>
+                            닫기
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
