@@ -1722,6 +1722,31 @@ export default function AdminDashboard() {
         return finalData;
     }, [processedDataByGroup, processedIndividualSuddenDeathData, processedTeamSuddenDeathData, individualBackcountApplied, teamBackcountApplied, individualNTPData, teamNTPData, courses]);
 
+    // Firebase에 순위 저장 (다른 페이지에서 사용하기 위해) - useEffect로 분리하여 부작용 제거
+    const prevRanksRef = useRef<string>('');
+    useEffect(() => {
+        if (!db || !finalDataByGroup) return;
+
+        const ranksData: { [playerId: string]: number | null } = {};
+        for (const groupName in finalDataByGroup) {
+            finalDataByGroup[groupName].forEach((player: ProcessedPlayer) => {
+                ranksData[player.id] = player.rank;
+            });
+        }
+
+        // 이전 순위와 비교하여 변경된 경우에만 저장 (불필요한 쓰기 방지)
+        const ranksDataStr = JSON.stringify(ranksData);
+        if (prevRanksRef.current === ranksDataStr) {
+            return; // 변경 없음
+        }
+        prevRanksRef.current = ranksDataStr;
+
+        const ranksRef = ref(db, 'tournaments/current/ranks');
+        set(ranksRef, ranksData).catch(err => {
+            console.error('순위 저장 오류:', err);
+        });
+    }, [finalDataByGroup, db]);
+
 
     const groupProgress = useMemo(() => {
         const progressByGroup: { [key: string]: number } = {};

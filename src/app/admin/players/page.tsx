@@ -29,6 +29,8 @@ const initialTeamState = Array(2).fill({ p1_name: '', p1_affiliation: '', p2_nam
 export default function PlayerManagementPage() {
     const { toast } = useToast();
     const [allPlayers, setAllPlayers] = useState<any[]>([]);
+    const [allScores, setAllScores] = useState<any>({});
+    const [playerRanks, setPlayerRanks] = useState<{ [playerId: string]: number | null }>({});
     
     // Form states
     const [individualGroup, setIndividualGroup] = useState('');
@@ -80,6 +82,7 @@ export default function PlayerManagementPage() {
         const playersRef = ref(db!, 'players');
         const configRef = ref(db!, 'config');
         const tournamentRef = ref(db!, 'tournaments/current');
+        const scoresRef = ref(db!, 'scores');
         
         const unsubPlayers = onValue(playersRef, (snapshot) => {
             const data = snapshot.val();
@@ -101,10 +104,23 @@ export default function PlayerManagementPage() {
             setCourses(data.courses ? Object.values(data.courses) : []); // isActive 필터 제거
         });
 
+        const unsubScores = onValue(scoresRef, (snapshot) => {
+            const data = snapshot.val();
+            setAllScores(data || {});
+        });
+
+        const ranksRef = ref(db!, 'tournaments/current/ranks');
+        const unsubRanks = onValue(ranksRef, (snapshot) => {
+            const data = snapshot.val();
+            setPlayerRanks(data || {});
+        });
+
         return () => {
             unsubPlayers();
             unsubConfig();
             unsubTournament();
+            unsubScores();
+            unsubRanks();
         };
     }, []);
     
@@ -208,6 +224,124 @@ export default function PlayerManagementPage() {
         }
 
         XLSX.writeFile(wb, filename);
+    };
+
+    // 조 재편성용 엑셀 다운로드 함수
+    const handleDownloadReorganizeTemplate = async (type: 'individual' | 'team') => {
+        try {
+            // Firebase에 저장된 순위 사용 (전광판과 동일한 순위)
+
+            const wb = XLSX.utils.book_new();
+            const groupList = Object.values(groupsData)
+                .filter((g: any) => g.type === type)
+                .map((g: any) => g.name);
+
+            if (groupList.length === 0) {
+                toast({
+                    title: '오류',
+                    description: '등록된 그룹이 없습니다.',
+                    variant: 'destructive'
+                });
+                return;
+            }
+
+            // 순위 데이터 확인
+            const hasRanks = Object.keys(playerRanks).length > 0;
+            if (!hasRanks) {
+                const confirmDownload = window.confirm(
+                    '순위 데이터가 아직 없습니다.\n\n' +
+                    '순위를 포함하려면 먼저 "외부 전광판" 또는 "홈 전광판" 페이지를 방문하여 순위가 계산되도록 해주세요.\n\n' +
+                    '순위 없이 다운로드하시겠습니까?'
+                );
+                if (!confirmDownload) {
+                    return;
+                }
+            }
+
+            groupList.forEach((groupName: string) => {
+                const groupPlayers = allPlayers.filter((p: any) => 
+                    p.group === groupName && 
+                    p.type === type
+                );
+
+                if (groupPlayers.length === 0) return;
+
+                // Firebase에 저장된 순위 사용
+                const playersWithRank = groupPlayers.map((player: any) => {
+                    const rank = playerRanks[player.id] ?? null;
+                    // 디버깅: 순위가 없는 경우 로그 출력
+                    if (rank === null && hasRanks) {
+                        console.log(`순위 없음: ${player.name || player.p1_name} (ID: ${player.id})`);
+                    }
+                    return {
+                        ...player,
+                        rank: rank
+                    };
+                });
+
+                // 순위순으로 정렬 (순위가 없는 선수는 맨 뒤로)
+                playersWithRank.sort((a: any, b: any) => {
+                    if (a.rank === null && b.rank === null) return 0;
+                    if (a.rank === null) return 1;
+                    if (b.rank === null) return -1;
+                    return a.rank - b.rank;
+                });
+
+                let sheetData: any[][] = [];
+
+                if (type === 'individual') {
+                    sheetData = [['조', '이름', '소속', '순위']];
+                    playersWithRank.forEach((player: any) => {
+                        sheetData.push([
+                            player.jo || '',
+                            player.name || '',
+                            player.affiliation || '무소속',
+                            player.rank !== null && player.rank !== undefined ? player.rank : ''
+                        ]);
+                    });
+                } else { // team
+                    sheetData = [['조', '선수1 이름', '선수1 소속', '선수2 이름', '선수2 소속', '순위']];
+                    playersWithRank.forEach((player: any) => {
+                        sheetData.push([
+                            player.jo || '',
+                            player.p1_name || '',
+                            player.p1_affiliation || '무소속',
+                            player.p2_name || '',
+                            player.p2_affiliation || '무소속',
+                            player.rank !== null && player.rank !== undefined ? player.rank : ''
+                        ]);
+                    });
+                }
+
+                const ws = XLSX.utils.aoa_to_sheet(sheetData);
+                
+                if (type === 'individual') {
+                    ws['!cols'] = [{ wch: 12 }, { wch: 15 }, { wch: 20 }, { wch: 8 }];
+                } else {
+                    ws['!cols'] = [{ wch: 8 }, { wch: 18 }, { wch: 20 }, { wch: 18 }, { wch: 20 }, { wch: 8 }];
+                }
+
+                XLSX.utils.book_append_sheet(wb, ws, groupName);
+            });
+
+            const filename = type === 'individual' 
+                ? '개인전_조재편성용_양식.xlsx' 
+                : '2인1팀_조재편성용_양식.xlsx';
+            
+            XLSX.writeFile(wb, filename);
+            
+            toast({
+                title: '다운로드 완료',
+                description: `${filename} 파일이 다운로드되었습니다.`,
+            });
+        } catch (error) {
+            console.error('다운로드 오류:', error);
+            toast({
+                title: '오류',
+                description: '파일 다운로드 중 오류가 발생했습니다.',
+                variant: 'destructive'
+            });
+        }
     };
     
     const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'individual' | 'team') => {
@@ -1483,6 +1617,13 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                                 >
                                     <Upload className="mr-2 h-4 w-4" /> 조 재편성 엑셀 파일 업로드
                                 </Button>
+                                <Button 
+                                    variant="default" 
+                                    className="bg-green-600 hover:bg-green-700 text-white"
+                                    onClick={() => handleDownloadReorganizeTemplate('individual')}
+                                >
+                                    <Download className="mr-2 h-4 w-4" /> 조 재편성용 다운
+                                </Button>
                                 <input type="file" ref={setIndividualReorganizeFileInput} className="hidden" accept=".xlsx, .xls" onChange={(e) => handleReorganizeFileUpload(e, 'individual')} />
                             </CardContent>
                         </Card>
@@ -1775,6 +1916,13 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                                     onClick={() => teamReorganizeFileInput?.click()}
                                 >
                                     <Upload className="mr-2 h-4 w-4" /> 조 재편성 엑셀 파일 업로드
+                                </Button>
+                                <Button 
+                                    variant="default" 
+                                    className="bg-green-600 hover:bg-green-700 text-white"
+                                    onClick={() => handleDownloadReorganizeTemplate('team')}
+                                >
+                                    <Download className="mr-2 h-4 w-4" /> 조 재편성용 다운
                                 </Button>
                                 <input type="file" ref={setTeamReorganizeFileInput} className="hidden" accept=".xlsx, .xls" onChange={(e) => handleReorganizeFileUpload(e, 'team')} />
                             </CardContent>
