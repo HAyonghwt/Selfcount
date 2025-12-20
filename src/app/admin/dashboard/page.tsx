@@ -16,6 +16,7 @@ import { useToast } from '@/hooks/use-toast';
 import { ToastAction } from '@/components/ui/toast';
 import ExternalScoreboardInfo from '@/components/ExternalScoreboardInfo';
 import { safeLocalStorageGetItem, safeLocalStorageSetItem, safeLocalStorageRemoveItem, cn } from '@/lib/utils';
+import SimulationTool from '@/components/SimulationTool';
 
 interface ProcessedPlayer {
     id: string;
@@ -2357,9 +2358,263 @@ export default function AdminDashboard() {
             // 3. 그룹별 반복 처리
             for (let i = 0; i < totalGroups; i++) {
                 const groupName = groupsToPrint[i];
-                const groupPlayers = updateForfeitTypes[groupName] || [];
+                // 시뮬레이션 데이터 포함하여 모든 선수 데이터 가져오기
+                const groupPlayers = (updateForfeitTypes[groupName] || finalDataByGroup[groupName] || []).filter((p: any) => {
+                    // 시뮬레이션 데이터도 포함하되, 점수가 있는 선수만 표시
+                    return p && (p.hasAnyScore || p.coursesData);
+                });
 
-                if (groupPlayers.length === 0) continue;
+                if (groupPlayers.length === 0) {
+                    // 시뮬레이션 데이터 확인
+                    const simulationPlayers = Object.values(players).filter((p: any) => 
+                        p.group === groupName && (p.name?.includes('시뮬') || p.affiliation?.includes('시뮬'))
+                    );
+                    if (simulationPlayers.length === 0) continue;
+                    
+                    // 시뮬레이션 선수 데이터 직접 생성
+                    const simProcessedPlayers = simulationPlayers.map((player: any) => {
+                        const playerScoresData = scores[player.id] || {};
+                        const playerGroupData = groupsData[player.group];
+                        const coursesOrder = playerGroupData?.courses || {};
+                        const assignedCourseIds = Object.keys(coursesOrder).filter((cid: string) => {
+                            const order = coursesOrder[cid];
+                            return typeof order === 'boolean' ? order : (typeof order === 'number' && order > 0);
+                        });
+                        const coursesForPlayer = assignedCourseIds
+                            .map(cid => {
+                                const key = Object.keys(courses).find(k => String(k) === String(cid));
+                                return key ? courses[key] : undefined;
+                            })
+                            .filter(Boolean);
+                        
+                        const coursesData: any = {};
+                        let totalScore = 0;
+                        let hasAnyScore = false;
+
+                        coursesForPlayer.forEach((course: any) => {
+                            const courseId = course.id;
+                            const scoresForCourse = playerScoresData[courseId] || {};
+                            const courseTotal = Object.values(scoresForCourse).reduce((acc: number, s: any) => typeof s === 'number' ? acc + s : acc, 0);
+                            coursesData[courseId] = {
+                                courseName: course.name,
+                                courseTotal: courseTotal,
+                                holeScores: Array.from({ length: 9 }, (_, i) => {
+                                    const holeScore = scoresForCourse[(i + 1).toString()];
+                                    return typeof holeScore === 'number' ? holeScore : null;
+                                })
+                            };
+                            totalScore += courseTotal;
+                            if (courseTotal > 0) hasAnyScore = true;
+                        });
+
+                        return {
+                            id: player.id,
+                            jo: player.jo,
+                            name: player.name,
+                            affiliation: player.affiliation,
+                            group: player.group,
+                            type: player.type,
+                            totalScore: totalScore,
+                            coursesData,
+                            hasAnyScore,
+                            hasForfeited: false,
+                            assignedCourses: coursesForPlayer,
+                            rank: null
+                        };
+                    }).filter((p: any) => p.hasAnyScore);
+
+                    if (simProcessedPlayers.length === 0) continue;
+                    
+                    // 순위 계산
+                    simProcessedPlayers.sort((a: any, b: any) => a.totalScore - b.totalScore);
+                    let currentRank = 1;
+                    simProcessedPlayers.forEach((player: any, index: number) => {
+                        if (index > 0 && simProcessedPlayers[index - 1].totalScore !== player.totalScore) {
+                            currentRank = index + 1;
+                        }
+                        player.rank = currentRank;
+                    });
+
+                    // 시뮬레이션 선수 데이터로 계속 진행
+                    const sortedPlayers = simProcessedPlayers;
+                    const groupNameEnglish = getGroupNameEnglish(groupName);
+                    const playersPerPage = 50;
+                    const totalPages = Math.ceil(sortedPlayers.length / playersPerPage);
+
+                    // 페이지별로 처리 (기존 로직과 동일)
+                    for (let pageNum = 0; pageNum < totalPages; pageNum++) {
+                        const startIdx = pageNum * playersPerPage;
+                        const endIdx = Math.min(startIdx + playersPerPage, sortedPlayers.length);
+                        const pagePlayers = sortedPlayers.slice(startIdx, endIdx);
+                        const isFirstPage = pageNum === 0;
+
+                        const container = document.createElement('div');
+                        container.style.cssText = `
+                            position: absolute; 
+                            left: -9999px; 
+                            top: 0; 
+                            width: 1200px !important; 
+                            min-width: 1200px !important; 
+                            max-width: none !important;
+                            background-color: white; 
+                            padding: 40px; 
+                            z-index: -1;
+                            overflow: visible !important;
+                        `;
+                        document.body.appendChild(container);
+
+                        let htmlContent = styleContent;
+                        
+                        if (isFirstPage) {
+                            htmlContent += `
+                                <div class="print-wrapper">
+                                    <div class="print-header">
+                                        <div class="print-title">⛳ ${tournamentName || 'Park Golf Championship'}</div>
+                                        <div class="print-date">인쇄일시: ${printDate}</div>
+                                    </div>
+                            `;
+                        } else {
+                            htmlContent += `<div class="print-wrapper">`;
+                        }
+
+                        htmlContent += `
+                            <div class="group-section">
+                                <div class="group-left">
+                                    <span class="group-icon">📊</span>
+                                    <span class="group-title">
+                                        ${groupName}
+                                        <span class="group-title-english">${groupNameEnglish}</span>
+                                    </span>
+                                </div>
+                            </div>
+                            <table class="print-table">
+                                <colgroup>
+                                    <col style="width: 60px;">
+                                    <col style="width: 60px;">
+                                    <col style="width: auto;">
+                                    <col style="width: 120px;">
+                                    <col style="width: 100px;">
+                                    ${Array.from({ length: 9 }).map(() => `<col style="width: 45px;">`).join('')}
+                                    <col style="width: 60px;">
+                                    <col style="width: 70px;">
+                                </colgroup>
+                                <thead>
+                                    <tr>
+                                        <th>
+                                            <span class="header-korean">순위</span>
+                                            <span class="header-english">Rank</span>
+                                        </th>
+                                        <th>
+                                            <span class="header-korean">조</span>
+                                            <span class="header-english">Group</span>
+                                        </th>
+                                        <th>
+                                            <span class="header-korean">선수명(팀명)</span>
+                                            <span class="header-english">Player Name (Team)</span>
+                                        </th>
+                                        <th>
+                                            <span class="header-korean">소속</span>
+                                            <span class="header-english">Club</span>
+                                        </th>
+                                        <th>
+                                            <span class="header-korean">코스</span>
+                                            <span class="header-english">Course</span>
+                                        </th>
+                                        ${Array.from({ length: 9 }).map((_, i) => `<th>${i + 1}</th>`).join('')}
+                                        <th>
+                                            <span class="header-korean">합계</span>
+                                            <span class="header-english">Sum</span>
+                                        </th>
+                                        <th>
+                                            <span class="header-korean">총타수</span>
+                                            <span class="header-english">Total</span>
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                        `;
+
+                        pagePlayers.forEach((player: any) => {
+                            const courses = player.assignedCourses || [];
+                            const rowSpan = courses.length || 1;
+                            const rankClass = player.rank === 1 ? 'rank-1' : (player.rank <= 3 ? `rank-${player.rank}` : '');
+
+                            htmlContent += `<tr>`;
+                            htmlContent += `<td rowspan="${rowSpan}" class="text-center ${rankClass}">${player.rank ? player.rank + '위' : '-'}</td>`;
+                            htmlContent += `<td rowspan="${rowSpan}" class="text-center">${player.jo}</td>`;
+                            htmlContent += `<td rowspan="${rowSpan}" class="text-center font-bold">${player.name}</td>`;
+                            htmlContent += `<td rowspan="${rowSpan}" class="text-center">${player.affiliation}</td>`;
+
+                            if (courses.length > 0) {
+                                const firstCourse = courses[0];
+                                const cData = player.coursesData[firstCourse.id];
+                                htmlContent += `<td class="text-center font-bold" style="color: #059669;">${cData?.courseName || firstCourse.name}</td>`;
+
+                                for (let i = 0; i < 9; i++) {
+                                    const s = cData?.holeScores[i];
+                                    htmlContent += `<td class="text-center">${s !== null && s !== undefined ? s : '-'}</td>`;
+                                }
+
+                                htmlContent += `<td class="text-center col-sum">${cData?.courseTotal || '-'}</td>`;
+                                htmlContent += `<td rowspan="${rowSpan}" class="text-center col-total">
+                                    ${player.hasAnyScore ? player.totalScore : '-'}
+                                </td>`;
+                            } else {
+                                htmlContent += `<td colspan="11" class="text-center">배정된 코스 없음</td>`;
+                                htmlContent += `<td class="text-center">-</td>`;
+                            }
+                            htmlContent += `</tr>`;
+
+                            for (let k = 1; k < courses.length; k++) {
+                                const nextCourse = courses[k];
+                                const cData = player.coursesData[nextCourse.id];
+                                htmlContent += `<tr>`;
+                                htmlContent += `<td class="text-center font-bold" style="color: #059669;">${cData?.courseName || nextCourse.name}</td>`;
+                                for (let i = 0; i < 9; i++) {
+                                    const s = cData?.holeScores[i];
+                                    htmlContent += `<td class="text-center">${s !== null && s !== undefined ? s : '-'}</td>`;
+                                }
+                                htmlContent += `<td class="text-center col-sum">${cData?.courseTotal || '-'}</td>`;
+                                htmlContent += `</tr>`;
+                            }
+                        });
+
+                        htmlContent += `</tbody></table></div>`;
+
+                        container.innerHTML = htmlContent;
+
+                        const canvas = await (window.html2canvas || (await import('html2canvas')).default)(container, {
+                            scale: 2,
+                            useCORS: true,
+                            backgroundColor: '#ffffff',
+                            windowWidth: 1200,
+                            width: 1200,
+                            x: 0,
+                            scrollX: 0
+                        });
+
+                        const image = canvas.toDataURL("image/png");
+                        const link = document.createElement("a");
+                        link.href = image;
+                        const pageSuffix = totalPages > 1 ? `_${pageNum + 1}페이지` : '';
+                        link.download = `${tournamentName || 'Scores'}_${groupName}_점수표${pageSuffix}_${new Date().toISOString().slice(0, 10)}.png`;
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                        document.body.removeChild(container);
+
+                        if (pageNum < totalPages - 1) {
+                            toast({ description: `${groupName} ${pageNum + 1}/${totalPages} 페이지 저장 완료...` });
+                            await new Promise(resolve => setTimeout(resolve, 1000));
+                        }
+                    }
+
+                    if (i < totalGroups - 1) {
+                        toast({ description: `${groupName} 저장 완료... (${i + 1}/${totalGroups})` });
+                        await new Promise(resolve => setTimeout(resolve, 1500));
+                    }
+                    continue;
+                }
 
                 const sortedPlayers = [...groupPlayers].sort((a: any, b: any) => (a.rank || 999) - (b.rank || 999));
                 const groupNameEnglish = getGroupNameEnglish(groupName);
@@ -2852,6 +3107,9 @@ export default function AdminDashboard() {
         <>
             <ExternalScoreboardInfo url={externalScoreboardUrl} />
             <div className="space-y-6">
+                {/* 시뮬레이션 도구 카드 - 독립적으로 동작하며 삭제해도 기존 코드에 영향 없음 */}
+                <SimulationTool />
+                
                 <Card>
                     <CardHeader>
                         <CardTitle className="text-2xl font-bold font-headline">홈 전광판 (관리자용)</CardTitle>

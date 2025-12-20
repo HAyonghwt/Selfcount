@@ -1157,6 +1157,21 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
     const groupList = Object.values(groupsData).sort((a: any, b: any) => a.name.localeCompare(b.name));
     const groupNameList = groupList.map((g: any) => g.name);
 
+    // 그룹명 영어 번역 함수
+    const getGroupNameEnglish = (groupName: string): string => {
+        const translations: { [key: string]: string } = {
+            '여자부': "Women's Division",
+            '남자부': "Men's Division",
+            '남자 시니어': "Men's Senior",
+            '여자 시니어': "Women's Senior",
+            '남자일반': "Men's General",
+            '여자일반': "Women's General",
+            '부부대항': "Couples",
+            '2인1조': "2-Person Team"
+        };
+        return translations[groupName] || groupName;
+    };
+
     // 조편성표 이미지 다운로드 함수
     const handleDownloadRoster = async (type: 'individual' | 'team') => {
         if (isDownloadingRoster) return;
@@ -1193,9 +1208,10 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
             const ROW_HEIGHT = type === 'individual' ? 35 : 40; // 행 높이
             const FOOTER_HEIGHT = 30; // 푸터 높이
             const MARGIN = 20; // 여백
+            const BOTTOM_MARGIN = 40; // 하단 여백 (셀이 잘리지 않도록 추가 여백)
 
-            // 한 페이지에 들어갈 수 있는 행 수 계산
-            const availableHeight = A4_HEIGHT - HEADER_HEIGHT - GROUP_HEADER_HEIGHT - TABLE_HEADER_HEIGHT - FOOTER_HEIGHT - (MARGIN * 2);
+            // 한 페이지에 들어갈 수 있는 행 수 계산 (하단 여백 고려)
+            const availableHeight = A4_HEIGHT - HEADER_HEIGHT - GROUP_HEADER_HEIGHT - TABLE_HEADER_HEIGHT - FOOTER_HEIGHT - (MARGIN * 2) - BOTTOM_MARGIN;
             const maxRowsPerPage = Math.floor(availableHeight / ROW_HEIGHT);
 
             // 그룹별로 처리
@@ -1203,12 +1219,36 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                 const group = targetGroups[groupIdx] as any;
                 const groupName = group.name;
                 
-                // 해당 그룹의 선수들 가져오기
-                const groupPlayers = allPlayers.filter((p: any) => 
-                    p.type === type && p.group === groupName
-                );
+                // 해당 그룹의 선수들 가져오기 (시뮬레이션 데이터 포함)
+                const groupPlayers = allPlayers.filter((p: any) => {
+                    // 타입과 그룹이 일치하는지 확인
+                    const typeMatch = p.type === type;
+                    const groupMatch = p.group === groupName;
+                    
+                    // 디버깅: 시뮬레이션 데이터 확인
+                    if (p.name?.includes('시뮬') || p.affiliation?.includes('시뮬')) {
+                        console.log('시뮬레이션 선수 발견:', {
+                            id: p.id,
+                            name: p.name,
+                            group: p.group,
+                            type: p.type,
+                            jo: p.jo,
+                            targetGroup: groupName,
+                            targetType: type,
+                            typeMatch,
+                            groupMatch
+                        });
+                    }
+                    
+                    return typeMatch && groupMatch;
+                });
 
-                if (groupPlayers.length === 0) continue;
+                if (groupPlayers.length === 0) {
+                    console.warn(`그룹 "${groupName}"에 ${type === 'individual' ? '개인전' : '2인1팀'} 선수가 없습니다.`);
+                    continue;
+                }
+                
+                console.log(`그룹 "${groupName}" 조편성표 생성: ${groupPlayers.length}명`);
 
                 // 조별로 그룹화
                 const playersByJo: { [jo: string]: any[] } = {};
@@ -1236,7 +1276,7 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                 let currentPageJoList: string[] = [];
                 let pageNumber = 1;
 
-                const createPage = async (jos: string[], pageNum: number, isLastPage: boolean) => {
+                const createPage = async (jos: string[], pageNum: number, isLastPage: boolean, totalPages: number, totalPlayers: number) => {
                     const container = document.createElement('div');
                     container.style.cssText = `
                         position: absolute; 
@@ -1295,11 +1335,23 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                                 background-color: #f1f5f9; 
                                 color: #475569; 
                                 font-weight: 700; 
-                                padding: 12px 6px; 
+                                padding: 14px 6px; 
                                 border: 1px solid #e2e8f0;
                                 vertical-align: middle;
                                 font-size: 14px;
                                 text-align: center;
+                                line-height: 1.4;
+                            }
+                            .roster-table th .header-korean {
+                                display: block;
+                                font-size: 14px;
+                                margin-bottom: 3px;
+                            }
+                            .roster-table th .header-english {
+                                display: block;
+                                font-size: 11px;
+                                font-weight: 500;
+                                color: #64748b;
                             }
                             .roster-table td { 
                                 padding: 12px 6px; 
@@ -1342,10 +1394,12 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                         htmlContent += `<div class="print-wrapper">`;
                     }
                     
+                    const groupNameEnglish = getGroupNameEnglish(groupName);
+                    
                     htmlContent += `
                             <div class="group-section">
                                 <span class="group-icon">📋</span>
-                                <span class="group-title">${groupName} 조편성표</span>
+                                <span class="group-title">${groupName} 조편성표 ${groupNameEnglish ? `<span style="font-size: 18px; font-weight: 500; color: #64748b; margin-left: 8px;">${groupNameEnglish}</span>` : ''}</span>
                             </div>
                             <table class="roster-table">
                                 <colgroup>
@@ -1354,8 +1408,14 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                                 </colgroup>
                                 <thead>
                                     <tr>
-                                        <th>조</th>
-                                        <th>조 구성원</th>
+                                        <th>
+                                            <span class="header-korean">조</span>
+                                            <span class="header-english">Group</span>
+                                        </th>
+                                        <th>
+                                            <span class="header-korean">조 구성원</span>
+                                            <span class="header-english">Group Members</span>
+                                        </th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -1364,12 +1424,19 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                     // 조별로 행 추가 (한 줄에 모든 구성원 나열)
                     jos.forEach((jo) => {
                         const playersInJo = playersByJo[jo];
+                        
+                        if (!playersInJo || playersInJo.length === 0) {
+                            console.warn(`조 ${jo}에 선수가 없습니다.`);
+                            return;
+                        }
+                        
                         const membersList: string[] = [];
                         
                         playersInJo.forEach((player: any) => {
                             if (type === 'individual') {
-                                const name = player.name || '-';
+                                const name = player.name || player.id || '-';
                                 const affiliation = player.affiliation || '무소속';
+                                // 시뮬레이션 데이터도 정상적으로 표시
                                 membersList.push(`${name}(<span style="color: #64748b;">${affiliation}</span>)`);
                             } else {
                                 const p1Name = player.p1_name || '-';
@@ -1380,17 +1447,28 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                             }
                         });
                         
+                        if (membersList.length === 0) {
+                            console.warn(`조 ${jo}의 구성원 목록이 비어있습니다.`);
+                            return;
+                        }
+                        
                         htmlContent += `<tr>`;
                         htmlContent += `<td class="jo-header text-center font-bold">${jo}</td>`;
                         htmlContent += `<td class="text-center">${membersList.join('   ')}</td>`;
                         htmlContent += `</tr>`;
                     });
 
+                    // 테이블 맨 아래에 헤더와 같은 배경색의 빈 행 추가 (보기 좋게)
+                    const menuRowHeight = Math.floor(ROW_HEIGHT / 3); // 메뉴 두께의 1/3
+                    htmlContent += `<tr style="height: ${menuRowHeight}px;">`;
+                    htmlContent += `<td colspan="2" style="background-color: #f1f5f9; border: 1px solid #e2e8f0;"></td>`;
+                    htmlContent += `</tr>`;
+
                     htmlContent += `
                                 </tbody>
                             </table>
-                            <div class="page-footer">
-                                ${isLastPage ? `총 ${groupPlayers.length}${type === 'individual' ? '명' : '팀'}` : ''} - ${pageNum}페이지
+                            <div class="page-footer" style="margin-top: 40px; padding-bottom: 20px;">
+                                ${isLastPage ? `총 ${totalPlayers}${type === 'individual' ? '명' : '팀'}` : ''} - ${pageNum}/${totalPages}페이지
                             </div>
                         </div>
                     `;
@@ -1429,17 +1507,43 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                 };
 
                 // 조별로 행 수를 계산하여 페이지 분할
+                // 첫 페이지는 15조까지만, 이후 페이지는 첫 페이지 높이 기준으로 분할
+                // 조는 중간에 잘리지 않도록 조 단위로만 분할
+                const FIRST_PAGE_MAX_JO = 15; // 첫 페이지 최대 조 수
+                const SUBSEQUENT_PAGE_MAX_JO = 15; // 이후 페이지 최대 조 수 (줄바꿈 고려하여 첫 페이지와 동일하게)
                 let currentPageRowCount = 0;
+                let isFirstPage = true;
+                const totalJos = sortedJos.length; // 전체 조 수
+                let totalPages = 1; // 총 페이지 수 (계산용)
+                
+                // 총 페이지 수 미리 계산
+                if (totalJos > FIRST_PAGE_MAX_JO) {
+                    const remainingJos = totalJos - FIRST_PAGE_MAX_JO;
+                    totalPages = 1 + Math.ceil(remainingJos / SUBSEQUENT_PAGE_MAX_JO);
+                }
+                
+                console.log(`그룹 "${groupName}" 조편성표: 총 ${totalJos}조, 예상 페이지 수: ${totalPages}`);
                 
                 for (let i = 0; i < sortedJos.length; i++) {
                     const jo = sortedJos[i];
                     const playersInJo = playersByJo[jo];
-                    const joRows = playersInJo.length;
-
-                    // 현재 페이지에 추가할 수 있는지 확인
-                    if (currentPageRowCount + joRows > maxRowsPerPage && currentPageJoList.length > 0) {
+                    
+                    // 조당 1행이므로 항상 1행으로 계산
+                    const joRows = 1;
+                    
+                    // 첫 페이지는 15조까지만
+                    if (isFirstPage && currentPageJoList.length >= FIRST_PAGE_MAX_JO) {
+                        // 첫 페이지 저장
+                        await createPage(currentPageJoList, pageNumber, false, totalPages, groupPlayers.length);
+                        pageNumber++;
+                        currentPageJoList = [];
+                        currentPageRowCount = 0;
+                        isFirstPage = false;
+                    }
+                    // 이후 페이지는 첫 페이지와 동일한 조 수로 분할 (줄바꿈 고려)
+                    else if (!isFirstPage && currentPageJoList.length >= SUBSEQUENT_PAGE_MAX_JO) {
                         // 현재 페이지 저장
-                        await createPage(currentPageJoList, pageNumber, false);
+                        await createPage(currentPageJoList, pageNumber, false, totalPages, groupPlayers.length);
                         pageNumber++;
                         currentPageJoList = [];
                         currentPageRowCount = 0;
@@ -1448,11 +1552,31 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                     // 현재 조 추가
                     currentPageJoList.push(jo);
                     currentPageRowCount += joRows;
+                    
+                    // 디버깅: 조별 선수 수 확인
+                    if (playersInJo.length === 0) {
+                        console.warn(`조 ${jo}에 선수가 없습니다.`);
+                    } else {
+                        console.log(`조 ${jo}: ${playersInJo.length}명 - ${playersInJo.map((p: any) => p.name).join(', ')}`);
+                    }
                 }
 
-                // 마지막 페이지 저장
+                // 마지막 페이지 저장 (모든 조 포함 확인)
                 if (currentPageJoList.length > 0) {
-                    await createPage(currentPageJoList, pageNumber, true);
+                    await createPage(currentPageJoList, pageNumber, true, totalPages, groupPlayers.length);
+                }
+                
+                // 모든 조가 포함되었는지 확인
+                const processedJosCount = sortedJos.length;
+                const expectedTotalPlayers = processedJosCount * 4; // 조당 4명 가정
+                console.log(`그룹 "${groupName}" 조편성표 완료:`);
+                console.log(`  - 총 조 수: ${processedJosCount}조`);
+                console.log(`  - 총 페이지 수: ${pageNumber}페이지`);
+                console.log(`  - 총 선수 수: ${groupPlayers.length}${type === 'individual' ? '명' : '팀'}`);
+                console.log(`  - 처리된 조 목록: ${sortedJos.join(', ')}`);
+                
+                if (processedJosCount * 4 !== groupPlayers.length) {
+                    console.warn(`⚠️ 경고: 조 수(${processedJosCount}) × 4 ≠ 총 선수 수(${groupPlayers.length})`);
                 }
 
                 // 그룹 간 대기
