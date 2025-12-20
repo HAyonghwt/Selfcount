@@ -770,25 +770,34 @@ export default function SimulationTool() {
         setSimulationState({ isRunning: true, currentStep: '시뮬레이션 데이터 삭제 중...', progress: 0 });
 
         try {
-            const simulationPlayers = allPlayers.filter(p => isSimulationData(p));
+            // Firebase에서 최신 데이터 직접 가져오기 (상태 동기화 문제 해결)
+            const playersSnapshot = await get(ref(db, 'players'));
+            const scoresSnapshot = await get(ref(db, 'scores'));
+            const groupsSnapshot = await get(ref(db, 'tournaments/current/groups'));
+            const latestPlayersData = playersSnapshot.val() || {};
+            const latestScores = scoresSnapshot.val() || {};
+            const latestGroupsData = groupsSnapshot.val() || {};
+            const latestPlayers = Object.entries(latestPlayersData).map(([id, player]) => ({ id, ...player as any }));
+            
+            const simulationPlayers = latestPlayers.filter(p => isSimulationData(p));
             const updates: { [key: string]: any } = {};
 
             // 선수 삭제
             for (const player of simulationPlayers) {
                 updates[`/players/${player.id}`] = null;
                 // 점수 삭제
-                if (allScores[player.id]) {
+                if (latestScores[player.id]) {
                     updates[`/scores/${player.id}`] = null;
                 }
             }
 
             // 그룹 삭제 (시뮬레이션 그룹만)
-            if (groupsData['남자부'] || groupsData['여자부']) {
+            if (latestGroupsData['남자부'] || latestGroupsData['여자부']) {
                 // 그룹에 시뮬레이션 선수만 있는 경우에만 삭제
-                const maleGroupHasRealPlayers = allPlayers.some(p => 
+                const maleGroupHasRealPlayers = latestPlayers.some(p => 
                     p.group === '남자부' && !isSimulationData(p)
                 );
-                const femaleGroupHasRealPlayers = allPlayers.some(p => 
+                const femaleGroupHasRealPlayers = latestPlayers.some(p => 
                     p.group === '여자부' && !isSimulationData(p)
                 );
 
@@ -801,6 +810,16 @@ export default function SimulationTool() {
             }
 
             await update(ref(db), updates);
+            
+            // 상태 업데이트
+            setAllPlayers(latestPlayers.filter(p => !isSimulationData(p)));
+            const remainingScores: any = {};
+            for (const playerId in latestScores) {
+                if (!simulationPlayers.find(p => p.id === playerId)) {
+                    remainingScores[playerId] = latestScores[playerId];
+                }
+            }
+            setAllScores(remainingScores);
             
             toast({ 
                 title: '삭제 완료', 
