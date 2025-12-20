@@ -273,6 +273,20 @@ export default function AdminDashboard() {
                     font-weight: bold;
                     border-left: 4px solid #3b82f6;
                     margin-bottom: 20px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                }
+                .group-title-left {
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                }
+                .group-title-english {
+                    font-size: 16px;
+                    font-weight: 500;
+                    color: #64748b;
+                    margin-left: 12px;
                 }
                 .score-table {
                     width: 100%;
@@ -284,7 +298,7 @@ export default function AdminDashboard() {
                 .score-table th {
                     background: #e2e8f0;
                     color: #1e293b;
-                    padding: 8px 4px;
+                    padding: 12px 4px;
                     border: 1px solid #cbd5e1;
                     text-align: center;
                     font-weight: bold;
@@ -292,6 +306,18 @@ export default function AdminDashboard() {
                     white-space: nowrap;
                     overflow: hidden;
                     text-overflow: ellipsis;
+                    line-height: 1.4;
+                }
+                .score-table th .header-korean {
+                    display: block;
+                    font-size: 11px;
+                    margin-bottom: 2px;
+                }
+                .score-table th .header-english {
+                    display: block;
+                    font-size: 9px;
+                    font-weight: 500;
+                    color: #64748b;
                 }
                 .score-table td {
                     padding: 6px 4px;
@@ -413,17 +439,39 @@ export default function AdminDashboard() {
                 printContent += '<div class="page-break"></div>';
             }
 
+            const groupNameEnglish = getGroupNameEnglish(groupName);
             printContent += `
                 <div class="group-section">
-                    <div class="group-title">📊 ${groupName} 그룹</div>
+                    <div class="group-title">
+                        <div class="group-title-left">
+                            <span>📊</span>
+                            <span>${groupName} 그룹</span>
+                            <span class="group-title-english">${groupNameEnglish}</span>
+                        </div>
+                    </div>
                     <table class="score-table">
                         <thead>
                             <tr>
-                                <th class="responsive-column">순위</th>
-                                <th class="responsive-column">조</th>
-                                <th class="responsive-column">선수명(팀명)</th>
-                                <th class="responsive-column">소속</th>
-                                <th class="responsive-column">코스</th>
+                                <th class="responsive-column">
+                                    <span class="header-korean">순위</span>
+                                    <span class="header-english">Rank</span>
+                                </th>
+                                <th class="responsive-column">
+                                    <span class="header-korean">조</span>
+                                    <span class="header-english">Group</span>
+                                </th>
+                                <th class="responsive-column">
+                                    <span class="header-korean">선수명(팀명)</span>
+                                    <span class="header-english">Player Name (Team)</span>
+                                </th>
+                                <th class="responsive-column">
+                                    <span class="header-korean">소속</span>
+                                    <span class="header-english">Club</span>
+                                </th>
+                                <th class="responsive-column">
+                                    <span class="header-korean">코스</span>
+                                    <span class="header-english">Course</span>
+                                </th>
                                 <th class="fixed-column">1</th>
                                 <th class="fixed-column">2</th>
                                 <th class="fixed-column">3</th>
@@ -433,8 +481,14 @@ export default function AdminDashboard() {
                                 <th class="fixed-column">7</th>
                                 <th class="fixed-column">8</th>
                                 <th class="fixed-column">9</th>
-                                <th class="fixed-column">합계</th>
-                                <th class="fixed-column">총타수</th>
+                                <th class="fixed-column">
+                                    <span class="header-korean">합계</span>
+                                    <span class="header-english">Sum</span>
+                                </th>
+                                <th class="fixed-column">
+                                    <span class="header-korean">총타수</span>
+                                    <span class="header-english">Total</span>
+                                </th>
                             </tr>
                         </thead>
                         <tbody>
