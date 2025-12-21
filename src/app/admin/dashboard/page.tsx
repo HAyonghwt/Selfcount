@@ -3132,7 +3132,6 @@ export default function AdminDashboard() {
 
     return (
         <>
-            <ExternalScoreboardInfo url={externalScoreboardUrl} />
             <div className="space-y-6">
                 {/* 시뮬레이션 도구 카드 - 독립적으로 동작하며 삭제해도 기존 코드에 영향 없음 */}
                 <SimulationTool />

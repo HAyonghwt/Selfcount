@@ -35,6 +35,7 @@ import { get, ref, update, onValue } from "firebase/database"
 import { db } from "@/lib/firebase"
 
 const mainNavItems = [
+  { href: "/admin/main", icon: ClipboardList, label: "메인" },
   { href: "/admin/dashboard", icon: BarChart2, label: "홈 전광판" },
   { href: "/admin/tournaments", icon: Trophy, label: "대회 및 코스 관리" },
   { href: "/admin/players", icon: Users, label: "그룹 및 선수관리" },
