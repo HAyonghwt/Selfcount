@@ -12,7 +12,7 @@ import { Label } from '@/components/ui/label';
 import { LogIn, Tv } from 'lucide-react';
 import { auth, db, firestore, firebaseConfig, ensureAuthenticated } from '@/lib/firebase';
 import { signInWithEmailAndPassword } from 'firebase/auth';
-import { loginWithKoreanId, loginRefereeWithKoreanId } from '@/lib/auth';
+import { loginWithKoreanId, loginRefereeWithKoreanId, loginHostWithKoreanId } from '@/lib/auth';
 import { ref, get } from 'firebase/database';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -221,6 +221,75 @@ export default function LoginPage() {
 
           // 해당 홀의 심판 페이지로 즉시 이동 (window.location.href 사용)
           const targetUrl = `/referee/${refereeData.hole}`;
+          
+          // sessionStorage 저장 확인 후 이동
+          setTimeout(() => {
+            window.location.href = targetUrl;
+          }, 500);
+          return;
+        } catch (error: any) {
+          setError(error.message);
+          toast({
+            title: "로그인 실패",
+            description: error.message,
+            variant: 'destructive',
+          });
+          setLoading(false);
+          return;
+        }
+      }
+
+      // 한글 아이디로 로그인 시도 (사회자)
+      if (email === '사회자') {
+        try {
+          // Firestore 접근 전에 익명 인증 먼저 수행
+          const authenticated = await ensureAuthenticated();
+          if (!authenticated) {
+            toast({
+              title: '로그인 실패',
+              description: 'Firebase 인증에 실패했습니다. 페이지를 새로고침하고 다시 시도해주세요.',
+              variant: 'destructive',
+            });
+            setLoading(false);
+            return;
+          }
+
+          // Firestore 초기화 대기
+          await new Promise(resolve => setTimeout(resolve, 100));
+          const hostData = await loginHostWithKoreanId(email, password);
+          
+          // 로그인 성공 시 세션에 저장 (여러 번 시도)
+          let saved = false;
+          for (let i = 0; i < 5; i++) {
+            saved = safeSessionStorageSetItem('hostData', JSON.stringify(hostData));
+            if (saved) {
+              // 저장 성공 확인을 위해 읽기 테스트
+              const verify = safeSessionStorageGetItem('hostData');
+              if (verify && verify === JSON.stringify(hostData)) {
+                break;
+              }
+            }
+            // 저장 실패 시 잠시 대기 후 재시도
+            await new Promise(resolve => setTimeout(resolve, 100));
+          }
+          
+          if (!saved) {
+            // sessionStorage 저장 실패 시 URL 파라미터로 데이터 전달
+            console.warn('sessionStorage 저장 실패, URL 파라미터로 데이터 전달');
+            const encodedData = encodeURIComponent(JSON.stringify(hostData));
+            const targetUrl = `/admin/gift-event?hostData=${encodedData}`;
+            window.location.href = targetUrl;
+            return;
+          }
+          
+          toast({
+            title: '로그인 성공',
+            description: '경품 행사 페이지로 이동합니다.',
+            duration: 500,
+          });
+
+          // 경품 행사 페이지로 즉시 이동
+          const targetUrl = `/admin/gift-event`;
           
           // sessionStorage 저장 확인 후 이동
           setTimeout(() => {

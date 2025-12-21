@@ -22,6 +22,15 @@ export interface RefereeAccount {
   isActive: boolean;
 }
 
+export interface HostAccount {
+  id: string;
+  password: string;
+  email: string;
+  createdAt: any;
+  lastLogin: any;
+  isActive: boolean;
+}
+
 /**
  * 한글 아이디로 조장 로그인
  */
@@ -475,6 +484,169 @@ export const createBulkRefereeAccounts = async (replaceExisting: boolean = false
       
       await addDoc(refereesRef, refereeData);
     }
+  } catch (error) {
+    throw error;
+  }
+};
+
+/**
+ * 한글 아이디로 사회자 로그인
+ */
+export const loginHostWithKoreanId = async (koreanId: string, password: string): Promise<HostAccount> => {
+  try {
+    const fs = getFirestoreDb();
+    const hostsRef = collection(fs, 'hosts');
+    const q = query(hostsRef, where('id', '==', koreanId));
+    const querySnapshot = await getDocs(q);
+    
+    if (querySnapshot.empty) {
+      throw new Error('존재하지 않는 사회자 계정입니다.');
+    }
+    
+    const hostData = querySnapshot.docs[0].data() as HostAccount;
+    
+    if (!hostData.isActive) {
+      throw new Error('비활성화된 사회자 계정입니다.');
+    }
+    
+    if (hostData.password !== password) {
+      throw new Error('비밀번호가 올바르지 않습니다.');
+    }
+    
+    return hostData;
+  } catch (error: any) {
+    if (error.code === 'permission-denied' || 
+        error.message?.includes('Missing or insufficient permissions') ||
+        error.message?.includes('permission denied')) {
+      throw new Error('Firestore 접근 권한이 없습니다. 관리자에게 문의하세요.');
+    }
+    
+    if (error.message) {
+      throw error;
+    }
+    
+    throw new Error('로그인 중 오류가 발생했습니다. 다시 시도해주세요.');
+  }
+};
+
+/**
+ * 사회자 계정 생성 (슈퍼관리자용)
+ */
+export const createHostAccount = async (koreanId: string, password: string): Promise<void> => {
+  try {
+    const fs = getFirestoreDb();
+    
+    // 기존 계정이 있는지 확인
+    const hostsRef = collection(fs, 'hosts');
+    const existingQuery = query(hostsRef, where('id', '==', koreanId));
+    const existingSnapshot = await getDocs(existingQuery);
+    
+    if (!existingSnapshot.empty) {
+      throw new Error('이미 존재하는 사회자 계정입니다.');
+    }
+    
+    const hostData = {
+      id: koreanId,
+      password: password,
+      email: 'host@yongin.com',
+      createdAt: new Date(),
+      lastLogin: null,
+      isActive: true
+    };
+    
+    await addDoc(hostsRef, hostData);
+  } catch (error) {
+    throw error;
+  }
+};
+
+/**
+ * 사회자 계정 조회 (슈퍼관리자용)
+ */
+export const getHostAccount = async (): Promise<HostAccount | null> => {
+  try {
+    const fs = getFirestoreDb();
+    const hostsRef = collection(fs, 'hosts');
+    const querySnapshot = await getDocs(hostsRef);
+    
+    if (querySnapshot.empty) {
+      return null;
+    }
+    
+    const hostData = querySnapshot.docs[0].data() as HostAccount;
+    return {
+      ...hostData,
+      id: hostData.id || querySnapshot.docs[0].id
+    };
+  } catch (error) {
+    throw error;
+  }
+};
+
+/**
+ * 사회자 계정 비밀번호 변경 (슈퍼관리자용)
+ */
+export const updateHostPassword = async (koreanId: string, newPassword: string): Promise<void> => {
+  try {
+    const fs = getFirestoreDb();
+    const hostsRef = collection(fs, 'hosts');
+    const q = query(hostsRef, where('id', '==', koreanId));
+    const querySnapshot = await getDocs(q);
+    
+    if (querySnapshot.empty) {
+      throw new Error('존재하지 않는 사회자 계정입니다.');
+    }
+    
+    const docRef = doc(fs, 'hosts', querySnapshot.docs[0].id);
+    await updateDoc(docRef, {
+      password: newPassword
+    });
+  } catch (error) {
+    throw error;
+  }
+};
+
+/**
+ * 사회자 계정 비활성화 (슈퍼관리자용)
+ */
+export const deactivateHostAccount = async (koreanId: string): Promise<void> => {
+  try {
+    const fs = getFirestoreDb();
+    const hostsRef = collection(fs, 'hosts');
+    const q = query(hostsRef, where('id', '==', koreanId));
+    const querySnapshot = await getDocs(q);
+    
+    if (querySnapshot.empty) {
+      throw new Error('존재하지 않는 사회자 계정입니다.');
+    }
+    
+    const docRef = doc(fs, 'hosts', querySnapshot.docs[0].id);
+    await updateDoc(docRef, {
+      isActive: false
+    });
+  } catch (error) {
+    throw error;
+  }
+};
+
+/**
+ * 사회자 계정 활성화 (슈퍼관리자용)
+ */
+export const activateHostAccount = async (koreanId: string): Promise<void> => {
+  try {
+    const fs = getFirestoreDb();
+    const hostsRef = collection(fs, 'hosts');
+    const q = query(hostsRef, where('id', '==', koreanId));
+    const querySnapshot = await getDocs(q);
+    
+    if (querySnapshot.empty) {
+      throw new Error('존재하지 않는 사회자 계정입니다.');
+    }
+    
+    const docRef = doc(fs, 'hosts', querySnapshot.docs[0].id);
+    await updateDoc(docRef, {
+      isActive: true
+    });
   } catch (error) {
     throw error;
   }

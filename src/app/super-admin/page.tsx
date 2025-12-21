@@ -12,7 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { db, auth } from "@/lib/firebase";
 import { ref, set, get, onValue } from "firebase/database";
 import { createUserWithEmailAndPassword, updatePassword } from "firebase/auth";
-import { createBulkCaptainAccounts, getCaptainAccounts, deactivateCaptainAccount, activateCaptainAccount, updateCaptainPassword, createBulkRefereeAccounts, getRefereeAccounts, updateRefereePassword, activateRefereeAccount, deactivateRefereeAccount } from "@/lib/auth";
+import { createBulkCaptainAccounts, getCaptainAccounts, deactivateCaptainAccount, activateCaptainAccount, updateCaptainPassword, createBulkRefereeAccounts, getRefereeAccounts, updateRefereePassword, activateRefereeAccount, deactivateRefereeAccount, createHostAccount, getHostAccount, updateHostPassword, activateHostAccount, deactivateHostAccount } from "@/lib/auth";
 import { Skeleton } from "@/components/ui/skeleton";
 
 
@@ -43,6 +43,12 @@ export default function SuperAdminPage() {
     const [addMoreReferees, setAddMoreReferees] = useState(false);
     const [selectedCaptains, setSelectedCaptains] = useState<string[]>([]);
     const [selectedReferees, setSelectedReferees] = useState<string[]>([]);
+    const [hostAccount, setHostAccount] = useState<any>(null);
+    const [creatingHost, setCreatingHost] = useState(false);
+    const [editingHostPassword, setEditingHostPassword] = useState(false);
+    const [newHostPassword, setNewHostPassword] = useState('');
+    const [hostId, setHostId] = useState('사회자');
+    const [hostPassword, setHostPassword] = useState('123456');
 
     useEffect(() => {
         if (!db) return;
@@ -75,6 +81,22 @@ export default function SuperAdminPage() {
             setLoading(false);
         });
         return () => unsubscribe();
+    }, []);
+
+    // 사회자 계정 불러오기
+    useEffect(() => {
+        const loadHostAccount = async () => {
+            try {
+                const account = await getHostAccount();
+                setHostAccount(account);
+                if (account) {
+                    setHostPassword(account.password || '123456');
+                }
+            } catch (error) {
+                console.error('사회자 계정 불러오기 실패:', error);
+            }
+        };
+        loadHostAccount();
     }, []);
     
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -446,6 +468,142 @@ export default function SuperAdminPage() {
         } catch (error: any) {
             toast({
                 title: "비밀번호 변경 실패",
+                description: error.message,
+                variant: "destructive",
+            });
+        }
+    };
+
+    // 사회자 계정 생성
+    const handleCreateHost = async () => {
+        if (!hostId.trim() || !hostPassword.trim()) {
+            toast({
+                title: "계정 생성 실패",
+                description: "아이디와 비밀번호를 입력해주세요.",
+                variant: "destructive",
+            });
+            return;
+        }
+
+        if (hostPassword.length < 4) {
+            toast({
+                title: "계정 생성 실패",
+                description: "비밀번호는 최소 4자 이상이어야 합니다.",
+                variant: "destructive",
+            });
+            return;
+        }
+
+        if (hostAccount) {
+            toast({
+                title: "계정 생성 실패",
+                description: "이미 사회자 계정이 존재합니다.",
+                variant: "destructive",
+            });
+            return;
+        }
+
+        setCreatingHost(true);
+        try {
+            await createHostAccount(hostId, hostPassword);
+            toast({
+                title: "성공",
+                description: "사회자 계정이 생성되었습니다.",
+            });
+            const account = await getHostAccount();
+            setHostAccount(account);
+        } catch (error: any) {
+            toast({
+                title: "계정 생성 실패",
+                description: error.message,
+                variant: "destructive",
+            });
+        } finally {
+            setCreatingHost(false);
+        }
+    };
+
+    // 사회자 계정 비밀번호 변경
+    const handleUpdateHostPassword = async () => {
+        if (!newHostPassword.trim()) {
+            toast({
+                title: "비밀번호 변경 실패",
+                description: "새 비밀번호를 입력해주세요.",
+                variant: "destructive",
+            });
+            return;
+        }
+
+        if (newHostPassword.length < 4) {
+            toast({
+                title: "비밀번호 변경 실패",
+                description: "비밀번호는 최소 4자 이상이어야 합니다.",
+                variant: "destructive",
+            });
+            return;
+        }
+
+        if (!hostAccount) {
+            toast({
+                title: "비밀번호 변경 실패",
+                description: "사회자 계정이 없습니다.",
+                variant: "destructive",
+            });
+            return;
+        }
+
+        try {
+            await updateHostPassword(hostAccount.id, newHostPassword);
+            toast({
+                title: "성공",
+                description: "사회자 계정의 비밀번호가 변경되었습니다.",
+            });
+            setEditingHostPassword(false);
+            setNewHostPassword('');
+            const account = await getHostAccount();
+            setHostAccount(account);
+            if (account) {
+                setHostPassword(account.password || '123456');
+            }
+        } catch (error: any) {
+            toast({
+                title: "비밀번호 변경 실패",
+                description: error.message,
+                variant: "destructive",
+            });
+        }
+    };
+
+    // 사회자 계정 활성화/비활성화
+    const handleToggleHostStatus = async (isActive: boolean) => {
+        if (!hostAccount) {
+            toast({
+                title: "상태 변경 실패",
+                description: "사회자 계정이 없습니다.",
+                variant: "destructive",
+            });
+            return;
+        }
+
+        try {
+            if (isActive) {
+                await activateHostAccount(hostAccount.id);
+                toast({
+                    title: "성공",
+                    description: "사회자 계정이 활성화되었습니다.",
+                });
+            } else {
+                await deactivateHostAccount(hostAccount.id);
+                toast({
+                    title: "성공",
+                    description: "사회자 계정이 비활성화되었습니다.",
+                });
+            }
+            const account = await getHostAccount();
+            setHostAccount(account);
+        } catch (error: any) {
+            toast({
+                title: "상태 변경 실패",
                 description: error.message,
                 variant: "destructive",
             });
@@ -940,6 +1098,129 @@ export default function SuperAdminPage() {
                                      <p className="text-xs text-muted-foreground mt-2">
                                          초기 비밀번호: 123456 | 각 심판별로 개별 비밀번호 설정 가능
                                      </p>
+                                 </div>
+                             )}
+                         </CardContent>
+                     </Card>
+
+                     <Card>
+                         <CardHeader>
+                             <CardTitle>사회자 계정 관리</CardTitle>
+                             <CardDescription>경품 추첨 전용 사회자 계정을 관리합니다.</CardDescription>
+                         </CardHeader>
+                         <CardContent className="space-y-4">
+                             {!hostAccount ? (
+                                 <div className="space-y-4">
+                                     <div className="space-y-2">
+                                         <Label htmlFor="hostId">아이디</Label>
+                                         <Input 
+                                             id="hostId" 
+                                             value={hostId} 
+                                             onChange={(e) => setHostId(e.target.value)}
+                                             placeholder="사회자"
+                                             disabled={creatingHost}
+                                         />
+                                     </div>
+                                     <div className="space-y-2">
+                                         <Label htmlFor="hostPassword">비밀번호</Label>
+                                         <Input 
+                                             id="hostPassword" 
+                                             type="text"
+                                             value={hostPassword} 
+                                             onChange={(e) => setHostPassword(e.target.value)}
+                                             placeholder="123456"
+                                             disabled={creatingHost}
+                                         />
+                                         <p className="text-xs text-muted-foreground">최소 4자 이상</p>
+                                     </div>
+                                     <Button 
+                                         onClick={handleCreateHost} 
+                                         disabled={creatingHost}
+                                         className="bg-blue-600 hover:bg-blue-700"
+                                     >
+                                         {creatingHost ? '생성 중...' : '사회자 계정 생성'}
+                                     </Button>
+                                 </div>
+                             ) : (
+                                 <div className="space-y-4">
+                                     <div className="p-4 bg-muted/30 rounded-lg border">
+                                         <div className="flex items-center justify-between mb-2">
+                                             <div>
+                                                 <div className="font-semibold text-lg">{hostAccount.id}</div>
+                                                 <div className="text-sm text-muted-foreground">
+                                                     {hostAccount.isActive ? (
+                                                         <span className="text-green-600">활성화됨</span>
+                                                     ) : (
+                                                         <span className="text-red-600">비활성화됨</span>
+                                                     )}
+                                                 </div>
+                                             </div>
+                                             <Button
+                                                 size="sm"
+                                                 variant={hostAccount.isActive ? "destructive" : "default"}
+                                                 onClick={() => handleToggleHostStatus(hostAccount.isActive)}
+                                                 className={`text-xs ${hostAccount.isActive ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'}`}
+                                             >
+                                                 {hostAccount.isActive ? '비활성화' : '활성화'}
+                                             </Button>
+                                         </div>
+                                         <div className="mt-4 space-y-2">
+                                             <Label>비밀번호</Label>
+                                             {editingHostPassword ? (
+                                                 <div className="flex gap-2 items-center">
+                                                     <Input
+                                                         type="text"
+                                                         placeholder="새 비밀번호"
+                                                         value={newHostPassword}
+                                                         onChange={(e) => setNewHostPassword(e.target.value)}
+                                                         className="flex-1"
+                                                         onKeyPress={(e) => e.key === 'Enter' && handleUpdateHostPassword()}
+                                                         onFocus={(e) => e.target.select()}
+                                                         autoFocus
+                                                     />
+                                                     <Button
+                                                         size="sm"
+                                                         onClick={handleUpdateHostPassword}
+                                                         className="text-xs bg-green-600 hover:bg-green-700"
+                                                     >
+                                                         저장
+                                                     </Button>
+                                                     <Button
+                                                         size="sm"
+                                                         variant="outline"
+                                                         onClick={() => {
+                                                             setEditingHostPassword(false);
+                                                             setNewHostPassword('');
+                                                         }}
+                                                         className="text-xs"
+                                                     >
+                                                         취소
+                                                     </Button>
+                                                 </div>
+                                             ) : (
+                                                 <div className="flex gap-2 items-center">
+                                                     <Input
+                                                         type="text"
+                                                         value={hostAccount.password || '123456'}
+                                                         readOnly
+                                                         className="flex-1 bg-muted"
+                                                     />
+                                                     <Button
+                                                         size="sm"
+                                                         variant="outline"
+                                                         onClick={() => {
+                                                             setEditingHostPassword(true);
+                                                             setNewHostPassword(hostAccount.password || '123456');
+                                                         }}
+                                                         className="text-xs"
+                                                         disabled={!hostAccount.isActive}
+                                                     >
+                                                         비밀번호 변경
+                                                     </Button>
+                                                 </div>
+                                             )}
+                                         </div>
+                                     </div>
                                  </div>
                              )}
                          </CardContent>

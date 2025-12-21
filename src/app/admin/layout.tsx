@@ -33,6 +33,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton"
 import { get, ref, update, onValue } from "firebase/database"
 import { db } from "@/lib/firebase"
+import { safeSessionStorageGetItem } from "@/lib/utils"
 
 const mainNavItems = [
   { href: "/admin/main", icon: ClipboardList, label: "메인" },
@@ -136,6 +137,22 @@ import { useRouter } from "next/navigation";
 function SidebarContentWithSidebarHooks({ isMobile, pathname, appName, selfScoringEnabled, children }: { isMobile: boolean, pathname: string, appName: string, selfScoringEnabled: boolean, children: React.ReactNode }) {
   const { setOpenMobile } = useSidebar();
   const router = useRouter();
+  const [isHost, setIsHost] = React.useState(false);
+
+  // 사회자 권한 체크
+  React.useEffect(() => {
+    try {
+      const hostData = safeSessionStorageGetItem('hostData');
+      if (hostData) {
+        const parsed = JSON.parse(hostData);
+        if (parsed && parsed.id === '사회자') {
+          setIsHost(true);
+        }
+      }
+    } catch (error) {
+      // sessionStorage 읽기 실패 시 무시
+    }
+  }, []);
 
   const handleMenuClick = (href: string) => (e: React.MouseEvent) => {
     if (isMobile) {
@@ -147,6 +164,12 @@ function SidebarContentWithSidebarHooks({ isMobile, pathname, appName, selfScori
     }
     // 데스크탑은 Link 기본 동작
   }
+
+  // 사회자인 경우 경품 행사만 필터링
+  const filteredMainNavItems = isHost ? [] : mainNavItems;
+  const filteredSecondaryNavItems = isHost 
+    ? secondaryNavItems.filter(item => item.href === '/admin/gift-event')
+    : secondaryNavItems;
 
   return (
     <div className="flex h-screen bg-background">
@@ -185,7 +208,7 @@ function SidebarContentWithSidebarHooks({ isMobile, pathname, appName, selfScori
 
             <SidebarSeparator className="my-2" />
 
-            {mainNavItems.map((item) => (
+            {filteredMainNavItems.map((item) => (
               <SidebarMenuItem key={item.href}>
                 <SidebarMenuButton
                   asChild
@@ -202,7 +225,7 @@ function SidebarContentWithSidebarHooks({ isMobile, pathname, appName, selfScori
 
             <SidebarSeparator className="my-2" />
 
-            {secondaryNavItems.map((item) => (
+            {filteredSecondaryNavItems.map((item) => (
               <SidebarMenuItem key={item.href}>
                 <SidebarMenuButton
                   asChild
@@ -216,32 +239,36 @@ function SidebarContentWithSidebarHooks({ isMobile, pathname, appName, selfScori
                 </SidebarMenuButton>
               </SidebarMenuItem>
             ))}
-            <SidebarSeparator className="my-2" />
-            <SidebarMenuItem key={refereeNavItem.href}>
-              <SidebarMenuButton
-                asChild
-                isActive={pathname === refereeNavItem.href}
-                tooltip={{ children: refereeNavItem.label }}
-              >
-                <Link href={refereeNavItem.href} className="text-black" onClick={handleMenuClick(refereeNavItem.href)}>
-                  <refereeNavItem.icon className="h-5 w-5" />
-                  <span>{refereeNavItem.label}</span>
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-            {selfScoringEnabled && (
-              <SidebarMenuItem key={selfScoringNavItem.href}>
-                <SidebarMenuButton
-                  asChild
-                  isActive={pathname === selfScoringNavItem.href}
-                  tooltip={{ children: selfScoringNavItem.label }}
-                >
-                  <Link href={selfScoringNavItem.href} className="text-black" onClick={handleMenuClick(selfScoringNavItem.href)}>
-                    <selfScoringNavItem.icon className="h-5 w-5" />
-                    <span>{selfScoringNavItem.label}</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
+            {!isHost && (
+              <>
+                <SidebarSeparator className="my-2" />
+                <SidebarMenuItem key={refereeNavItem.href}>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={pathname === refereeNavItem.href}
+                    tooltip={{ children: refereeNavItem.label }}
+                  >
+                    <Link href={refereeNavItem.href} className="text-black" onClick={handleMenuClick(refereeNavItem.href)}>
+                      <refereeNavItem.icon className="h-5 w-5" />
+                      <span>{refereeNavItem.label}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                {selfScoringEnabled && (
+                  <SidebarMenuItem key={selfScoringNavItem.href}>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={pathname === selfScoringNavItem.href}
+                      tooltip={{ children: selfScoringNavItem.label }}
+                    >
+                      <Link href={selfScoringNavItem.href} className="text-black" onClick={handleMenuClick(selfScoringNavItem.href)}>
+                        <selfScoringNavItem.icon className="h-5 w-5" />
+                        <span>{selfScoringNavItem.label}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                )}
+              </>
             )}
 
           </SidebarMenu>
