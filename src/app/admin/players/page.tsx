@@ -53,6 +53,13 @@ export default function PlayerManagementPage() {
     const [tournament, setTournament] = useState<any>({});
     const [isDownloadingRoster, setIsDownloadingRoster] = useState(false);
     
+    // 조 편성표 다운로드 모달 상태 (기존 코드와 완전히 분리)
+    const [rosterDownloadModal, setRosterDownloadModal] = useState({
+        open: false,
+        type: 'individual' as 'individual' | 'team',
+        groupSettings: {} as { [groupName: string]: { date: string; courses: string[] } } // courses는 선택 순서대로 저장
+    });
+    
     // Course assignment modal states
     const [isGroupCourseModalOpen, setGroupCourseModalOpen] = useState(false);
     const [currentEditingGroup, setCurrentEditingGroup] = useState<any>(null);
@@ -1172,8 +1179,35 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
         return translations[groupName] || groupName;
     };
 
-    // 조편성표 이미지 다운로드 함수
-    const handleDownloadRoster = async (type: 'individual' | 'team') => {
+    // 조편성표 다운로드 모달 열기 (기존 함수는 모달 열기로 변경)
+    const handleOpenRosterDownloadModal = (type: 'individual' | 'team') => {
+        const targetGroups = groupList.filter((g: any) => g.type === type);
+        if (targetGroups.length === 0) {
+            toast({ 
+                title: "알림", 
+                description: `${type === 'individual' ? '개인전' : '2인1팀'} 그룹이 없습니다.` 
+            });
+            return;
+        }
+        
+        // 그룹별 기본 설정 초기화
+        const initialSettings: { [groupName: string]: { date: string; courses: string[] } } = {};
+        targetGroups.forEach((group: any) => {
+            initialSettings[group.name] = {
+                date: '',
+                courses: []
+            };
+        });
+        
+        setRosterDownloadModal({
+            open: true,
+            type,
+            groupSettings: initialSettings
+        });
+    };
+
+    // 조편성표 이미지 다운로드 함수 (모달에서 호출)
+    const handleDownloadRosterWithSettings = async () => {
         if (isDownloadingRoster) return;
         
         setIsDownloadingRoster(true);
@@ -1183,6 +1217,7 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
 
             const tournamentName = tournament?.name || '파크골프 토너먼트';
             const printDate = new Date().toLocaleString('ko-KR');
+            const type = rosterDownloadModal.type;
             
             // 해당 타입의 그룹만 필터링
             const targetGroups = groupList.filter((g: any) => g.type === type);
@@ -1368,9 +1403,17 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                                 font-weight: 800;
                                 color: #0369a1;
                             }
+                            .jo-tbody {
+                                page-break-inside: avoid;
+                            }
                             .text-center { text-align: center; }
                             .text-left { text-align: left; }
                             .font-bold { font-weight: 700; }
+                            @media print {
+                                .jo-tbody {
+                                    page-break-inside: avoid;
+                                }
+                            }
                             .page-footer {
                                 margin-top: 15px;
                                 font-size: 12px;
@@ -1394,12 +1437,63 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                         htmlContent += `<div class="print-wrapper">`;
                     }
                     
+                    // 그룹별 설정 가져오기 (코스는 선택 순서대로)
+                    const groupSettings = rosterDownloadModal.groupSettings[groupName] || { date: '', courses: [] };
+                    const scheduleText = groupSettings.date || '일정 미지정';
+                    // 일정을 영어 날짜 형식으로 변환
+                    let scheduleTextEnglish = 'Schedule Not Set';
+                    if (groupSettings.date) {
+                        try {
+                            // 한글 날짜 형식 파싱 (예: "2026년 2월 26일" 또는 "2026-02-26")
+                            const dateStr = groupSettings.date;
+                            let date: Date | null = null;
+                            
+                            // "년 월 일" 형식 파싱
+                            const match = dateStr.match(/(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일/);
+                            if (match) {
+                                date = new Date(parseInt(match[1]), parseInt(match[2]) - 1, parseInt(match[3]));
+                            } else {
+                                // ISO 형식 또는 다른 형식 시도
+                                date = new Date(dateStr);
+                            }
+                            
+                            if (date && !isNaN(date.getTime())) {
+                                const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+                                scheduleTextEnglish = `${months[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
+                            } else {
+                                scheduleTextEnglish = dateStr; // 파싱 실패 시 원본 표시
+                            }
+                        } catch (e) {
+                            scheduleTextEnglish = groupSettings.date; // 오류 시 원본 표시
+                        }
+                    }
+                    // 코스는 선택한 순서대로 표시
+                    const coursesText = groupSettings.courses.length > 0 
+                        ? groupSettings.courses.map((cid: string) => {
+                            const course = courses.find((c: any) => c.id === cid);
+                            return course?.name || cid;
+                        }).join(', ')
+                        : '코스 미지정';
+                    // 코스명을 영어로 변환 (한글 "코스" → "Course")
+                    const coursesTextEnglish = groupSettings.courses.length > 0 
+                        ? groupSettings.courses.map((cid: string) => {
+                            const course = courses.find((c: any) => c.id === cid);
+                            const courseName = course?.name || cid;
+                            // "코스"를 "Course"로 변경
+                            return courseName.replace(/코스/g, 'Course');
+                        }).join(', ')
+                        : 'Course Not Set';
+                    
                     const groupNameEnglish = getGroupNameEnglish(groupName);
                     
                     htmlContent += `
                             <div class="group-section">
                                 <span class="group-icon">📋</span>
                                 <span class="group-title">${groupName} 조편성표 ${groupNameEnglish ? `<span style="font-size: 18px; font-weight: 500; color: #64748b; margin-left: 8px;">${groupNameEnglish}</span>` : ''}</span>
+                            </div>
+                            <div style="margin-bottom: 15px; padding: 12px; background-color: #f8fafc; border-radius: 8px; border-left: 4px solid #3b82f6;">
+                                <div style="font-size: 14px; font-weight: 600; color: #334155; margin-bottom: 6px;">📅 일정: ${scheduleText} <span style="font-size: 12px; font-weight: 500; color: #64748b; margin-left: 8px;">(${scheduleTextEnglish})</span></div>
+                                <div style="font-size: 14px; font-weight: 600; color: #334155;">⛳ 코스: ${coursesText} <span style="font-size: 12px; font-weight: 500; color: #64748b; margin-left: 8px;">(${coursesTextEnglish})</span></div>
                             </div>
                             <table class="roster-table">
                                 <colgroup>
@@ -1421,7 +1515,7 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                                 <tbody>
                     `;
 
-                    // 조별로 행 추가 (한 줄에 모든 구성원 나열)
+                    // 조별로 행 추가 (한 줄에 모든 구성원 나열) - 조 셀 분리 방지를 위해 tbody로 묶기
                     jos.forEach((jo) => {
                         const playersInJo = playersByJo[jo];
                         
@@ -1452,10 +1546,13 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                             return;
                         }
                         
+                        // 조 셀 분리 방지를 위해 각 조를 tbody로 묶기
+                        htmlContent += `<tbody class="jo-tbody">`;
                         htmlContent += `<tr>`;
                         htmlContent += `<td class="jo-header text-center font-bold">${jo}</td>`;
                         htmlContent += `<td class="text-center">${membersList.join('   ')}</td>`;
                         htmlContent += `</tr>`;
+                        htmlContent += `</tbody>`;
                     });
 
                     // 테이블 맨 아래에 헤더와 같은 배경색의 빈 행 추가 (보기 좋게)
@@ -1600,6 +1697,218 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
         }
     };
 
+    // 조 편성표 인쇄 함수 (모달에서 호출)
+    const handlePrintRosterWithSettings = async () => {
+        if (isDownloadingRoster) return;
+        
+        setIsDownloadingRoster(true);
+        try {
+            const tournamentName = tournament?.name || '파크골프 토너먼트';
+            const type = rosterDownloadModal.type;
+            const targetGroups = groupList.filter((g: any) => g.type === type);
+            
+            if (targetGroups.length === 0) {
+                toast({ 
+                    title: "알림", 
+                    description: `${type === 'individual' ? '개인전' : '2인1팀'} 그룹이 없습니다.` 
+                });
+                setIsDownloadingRoster(false);
+                return;
+            }
+
+            // 인쇄용 HTML 생성
+            let printContent = '';
+            
+            targetGroups.forEach((group: any, groupIdx: number) => {
+                const groupName = group.name;
+                const groupPlayers = allPlayers.filter((p: any) => p.type === type && p.group === groupName);
+                
+                if (groupPlayers.length === 0) return;
+                
+                // 그룹별 설정 (코스는 선택 순서대로)
+                const groupSettings = rosterDownloadModal.groupSettings[groupName] || { date: '', courses: [] };
+                const scheduleText = groupSettings.date || '일정 미지정';
+                // 일정을 영어 날짜 형식으로 변환
+                let scheduleTextEnglish = 'Schedule Not Set';
+                if (groupSettings.date) {
+                    try {
+                        // 한글 날짜 형식 파싱 (예: "2026년 2월 26일" 또는 "2026-02-26")
+                        const dateStr = groupSettings.date;
+                        let date: Date | null = null;
+                        
+                        // "년 월 일" 형식 파싱
+                        const match = dateStr.match(/(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일/);
+                        if (match) {
+                            date = new Date(parseInt(match[1]), parseInt(match[2]) - 1, parseInt(match[3]));
+                        } else {
+                            // ISO 형식 또는 다른 형식 시도
+                            date = new Date(dateStr);
+                        }
+                        
+                        if (date && !isNaN(date.getTime())) {
+                            const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+                            scheduleTextEnglish = `${months[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
+                        } else {
+                            scheduleTextEnglish = dateStr; // 파싱 실패 시 원본 표시
+                        }
+                    } catch (e) {
+                        scheduleTextEnglish = groupSettings.date; // 오류 시 원본 표시
+                    }
+                }
+                // 코스는 선택한 순서대로 표시
+                const coursesText = groupSettings.courses.length > 0 
+                    ? groupSettings.courses.map((cid: string) => {
+                        const course = courses.find((c: any) => c.id === cid);
+                        return course?.name || cid;
+                    }).join(', ')
+                    : '코스 미지정';
+                // 코스명을 영어로 변환 (한글 "코스" → "Course")
+                const coursesTextEnglish = groupSettings.courses.length > 0 
+                    ? groupSettings.courses.map((cid: string) => {
+                        const course = courses.find((c: any) => c.id === cid);
+                        const courseName = course?.name || cid;
+                        // "코스"를 "Course"로 변경
+                        return courseName.replace(/코스/g, 'Course');
+                    }).join(', ')
+                    : 'Course Not Set';
+                
+                // 조별로 그룹화
+                const playersByJo: { [jo: string]: any[] } = {};
+                groupPlayers.forEach((player: any) => {
+                    const jo = player.jo?.toString() || '미지정';
+                    if (!playersByJo[jo]) playersByJo[jo] = [];
+                    playersByJo[jo].push(player);
+                });
+                
+                const sortedJos = Object.keys(playersByJo).sort((a, b) => {
+                    const numA = parseInt(a);
+                    const numB = parseInt(b);
+                    if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+                    if (!isNaN(numA)) return -1;
+                    if (!isNaN(numB)) return 1;
+                    return a.localeCompare(b);
+                });
+                
+                if (groupIdx > 0) {
+                    printContent += '<div style="page-break-before: always;"></div>';
+                }
+                
+                const groupNameEnglish = getGroupNameEnglish(groupName);
+                printContent += `
+                    <div style="margin-bottom: 30px;">
+                        <h1 style="font-size: 32px; font-weight: 800; margin-bottom: 20px; text-align: center;">⛳ ${tournamentName}</h1>
+                        <div style="margin-bottom: 20px;">
+                            <h2 style="font-size: 24px; font-weight: 700; color: #334155; margin-bottom: 12px;">
+                                📋 ${groupName} 조편성표 ${groupNameEnglish ? `<span style="font-size: 18px; font-weight: 500; color: #64748b; margin-left: 8px;">${groupNameEnglish}</span>` : ''}
+                            </h2>
+                            <div style="padding: 12px; background-color: #f8fafc; border-radius: 8px; border-left: 4px solid #3b82f6; margin-bottom: 20px;">
+                                <div style="font-size: 14px; font-weight: 600; color: #334155; margin-bottom: 6px;">📅 일정: ${scheduleText} <span style="font-size: 12px; font-weight: 500; color: #64748b; margin-left: 8px;">(${scheduleTextEnglish})</span></div>
+                                <div style="font-size: 14px; font-weight: 600; color: #334155;">⛳ 코스: ${coursesText} <span style="font-size: 12px; font-weight: 500; color: #64748b; margin-left: 8px;">(${coursesTextEnglish})</span></div>
+                            </div>
+                        </div>
+                        <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+                            <thead>
+                                <tr>
+                                    <th style="background-color: #f1f5f9; padding: 14px; border: 1px solid #e2e8f0; text-align: center; font-weight: 700;">
+                                        <div style="display: block; font-size: 14px; margin-bottom: 3px;">조</div>
+                                        <div style="display: block; font-size: 11px; font-weight: 500; color: #64748b;">Group</div>
+                                    </th>
+                                    <th style="background-color: #f1f5f9; padding: 14px; border: 1px solid #e2e8f0; text-align: center; font-weight: 700;">
+                                        <div style="display: block; font-size: 14px; margin-bottom: 3px;">조 구성원</div>
+                                        <div style="display: block; font-size: 11px; font-weight: 500; color: #64748b;">Group Members</div>
+                                    </th>
+                                </tr>
+                            </thead>
+                `;
+                
+                sortedJos.forEach((jo) => {
+                    const playersInJo = playersByJo[jo];
+                    const membersList: string[] = [];
+                    
+                    playersInJo.forEach((player: any) => {
+                        if (type === 'individual') {
+                            membersList.push(`${player.name || '-'}(${player.affiliation || '무소속'})`);
+                        } else {
+                            membersList.push(`${player.p1_name || '-'}(${player.p1_affiliation || '무소속'}) ${player.p2_name || '-'}(${player.p2_affiliation || '무소속'})`);
+                        }
+                    });
+                    
+                    printContent += `
+                        <tbody style="page-break-inside: avoid;">
+                            <tr>
+                                <td style="background-color: #e0f2fe; padding: 12px; border: 1px solid #e2e8f0; text-align: center; font-weight: 800; color: #0369a1;">${jo}</td>
+                                <td style="padding: 12px; border: 1px solid #e2e8f0; text-align: center;">${membersList.join('   ')}</td>
+                            </tr>
+                        </tbody>
+                    `;
+                });
+                
+                printContent += `
+                        </table>
+                    </div>
+                `;
+            });
+            
+            // 인쇄 창 열기
+            const printWindow = window.open('', '_blank');
+            if (!printWindow) {
+                toast({ title: '인쇄 실패', description: '팝업이 차단되었습니다.', variant: 'destructive' });
+                setIsDownloadingRoster(false);
+                return;
+            }
+            
+            const fullHtml = `
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <meta charset="UTF-8">
+                    <title>${tournamentName} 조편성표</title>
+                    <style>
+                        @media print {
+                            @page {
+                                size: A4;
+                                margin: 1cm;
+                            }
+                            tbody {
+                                page-break-inside: avoid;
+                            }
+                        }
+                        body {
+                            font-family: 'Pretendard', 'Malgun Gothic', sans-serif;
+                            padding: 20px;
+                        }
+                    </style>
+                </head>
+                <body>
+                    ${printContent}
+                </body>
+                </html>
+            `;
+            
+            printWindow.document.write(fullHtml);
+            printWindow.document.close();
+            printWindow.focus();
+            
+            setTimeout(() => {
+                printWindow.print();
+                printWindow.close();
+            }, 500);
+            
+            setRosterDownloadModal({ ...rosterDownloadModal, open: false });
+            toast({ title: '인쇄 준비 완료', description: '인쇄 다이얼로그가 열립니다.' });
+            
+        } catch (error) {
+            console.error('인쇄 실패:', error);
+            toast({ 
+                title: "인쇄 실패", 
+                description: "인쇄 중 오류가 발생했습니다.", 
+                variant: "destructive" 
+            });
+        } finally {
+            setIsDownloadingRoster(false);
+        }
+    };
+
   return (
     <div className="space-y-6">
         <Card>
@@ -1717,11 +2026,11 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                                 <Button 
                                     variant="default" 
                                     className="bg-blue-600 hover:bg-blue-700 text-white"
-                                    onClick={() => handleDownloadRoster('individual')}
-                                    disabled={isDownloadingRoster || allPlayers.filter((p: any) => p.type === 'individual').length === 0}
+                                    onClick={() => handleOpenRosterDownloadModal('individual')}
+                                    disabled={allPlayers.filter((p: any) => p.type === 'individual').length === 0}
                                 >
                                     <FileDown className="mr-2 h-4 w-4" /> 
-                                    {isDownloadingRoster ? '생성 중...' : '조 편성표 다운'}
+                                    조 편성표 다운
                                 </Button>
                                 <input type="file" ref={setIndividualFileInput} className="hidden" accept=".xlsx, .xls" onChange={(e) => handleFileUpload(e, 'individual')} />
                             </CardContent>
@@ -2017,11 +2326,11 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                                 <Button 
                                     variant="default" 
                                     className="bg-blue-600 hover:bg-blue-700 text-white"
-                                    onClick={() => handleDownloadRoster('team')}
-                                    disabled={isDownloadingRoster || allPlayers.filter((p: any) => p.type === 'team').length === 0}
+                                    onClick={() => handleOpenRosterDownloadModal('team')}
+                                    disabled={allPlayers.filter((p: any) => p.type === 'team').length === 0}
                                 >
                                     <FileDown className="mr-2 h-4 w-4" /> 
-                                    {isDownloadingRoster ? '생성 중...' : '조 편성표 다운'}
+                                    조 편성표 다운
                                 </Button>
                                 <input type="file" ref={setTeamFileInput} className="hidden" accept=".xlsx, .xls" onChange={(e) => handleFileUpload(e, 'team')} />
                             </CardContent>
@@ -2294,6 +2603,151 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
             </DialogContent>
         </Dialog>
 
+        {/* 조 편성표 다운로드 모달 (기존 코드와 완전히 분리) */}
+        <Dialog open={rosterDownloadModal.open} onOpenChange={(open) => setRosterDownloadModal({ ...rosterDownloadModal, open })}>
+            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+                <DialogHeader>
+                    <DialogTitle>📋 조 편성표 다운로드 설정</DialogTitle>
+                    <DialogDescription>
+                        각 그룹별로 일정과 코스를 지정한 후 이미지 다운로드 또는 인쇄를 진행하세요.
+                    </DialogDescription>
+                </DialogHeader>
+                
+                <div className="space-y-4">
+                    <Tabs defaultValue={groupList.filter((g: any) => g.type === rosterDownloadModal.type)[0]?.name || ''}>
+                        <TabsList className="grid w-full grid-cols-auto gap-2 overflow-x-auto">
+                            {groupList
+                                .filter((g: any) => g.type === rosterDownloadModal.type)
+                                .map((group: any) => (
+                                    <TabsTrigger key={group.name} value={group.name} className="whitespace-nowrap">
+                                        {group.name}
+                                    </TabsTrigger>
+                                ))}
+                        </TabsList>
+                        
+                        {groupList
+                            .filter((g: any) => g.type === rosterDownloadModal.type)
+                            .map((group: any) => {
+                                const groupName = group.name;
+                                const currentSettings = rosterDownloadModal.groupSettings[groupName] || { date: '', courses: [] };
+                                
+                                return (
+                                    <TabsContent key={groupName} value={groupName} className="space-y-4">
+                                        <div className="space-y-4 p-4 border rounded-lg bg-blue-50/50">
+                                            <div className="mb-4 pb-3 border-b">
+                                                <h3 className="text-lg font-bold text-primary">{groupName} 그룹 설정</h3>
+                                                <p className="text-sm text-muted-foreground mt-1">이 그룹만의 일정과 코스를 설정합니다.</p>
+                                            </div>
+                                            <div>
+                                                <Label htmlFor={`date-${groupName}`} className="text-base font-semibold">
+                                                    📅 일정 <span className="text-sm font-normal text-muted-foreground">(Schedule)</span>
+                                                </Label>
+                                                <Input
+                                                    id={`date-${groupName}`}
+                                                    type="text"
+                                                    placeholder="예: 2024년 12월 21일"
+                                                    value={currentSettings.date}
+                                                    onChange={(e) => {
+                                                        setRosterDownloadModal({
+                                                            ...rosterDownloadModal,
+                                                            groupSettings: {
+                                                                ...rosterDownloadModal.groupSettings,
+                                                                [groupName]: {
+                                                                    ...currentSettings,
+                                                                    date: e.target.value
+                                                                }
+                                                            }
+                                                        });
+                                                    }}
+                                                    className="mt-2"
+                                                />
+                                            </div>
+                                            
+                                            <div>
+                                                <Label className="text-base font-semibold mb-2 block">
+                                                    ⛳ 코스 선택 (복수 선택 가능) <span className="text-sm font-normal text-muted-foreground">(Course Selection - Multiple Selection Available)</span>
+                                                </Label>
+                                                {currentSettings.courses.length > 0 && (
+                                                    <div className="text-sm text-muted-foreground mb-2">
+                                                        선택 순서: {currentSettings.courses.map((cid: string) => {
+                                                            const course = courses.find((c: any) => c.id === cid);
+                                                            return course?.name || cid;
+                                                        }).join(' → ')}
+                                                    </div>
+                                                )}
+                                                <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mt-2">
+                                                    {courses.map((course: any) => {
+                                                        const isSelected = currentSettings.courses.includes(course.id);
+                                                        return (
+                                                            <div key={course.id} className="flex items-center space-x-2">
+                                                                <Checkbox
+                                                                    id={`course-${groupName}-${course.id}`}
+                                                                    checked={isSelected}
+                                                                    onCheckedChange={(checked) => {
+                                                                        const newCourses = checked
+                                                                            ? [...currentSettings.courses, course.id]
+                                                                            : currentSettings.courses.filter((cid: string) => cid !== course.id);
+                                                                        setRosterDownloadModal({
+                                                                            ...rosterDownloadModal,
+                                                                            groupSettings: {
+                                                                                ...rosterDownloadModal.groupSettings,
+                                                                                [groupName]: {
+                                                                                    ...currentSettings,
+                                                                                    courses: newCourses
+                                                                                }
+                                                                            }
+                                                                        });
+                                                                    }}
+                                                                />
+                                                                <Label
+                                                                    htmlFor={`course-${groupName}-${course.id}`}
+                                                                    className="text-sm font-normal cursor-pointer"
+                                                                >
+                                                                    {course.name}
+                                                                </Label>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                                {courses.length === 0 && (
+                                                    <p className="text-sm text-muted-foreground mt-2">
+                                                        코스가 없습니다. 코스 관리 페이지에서 코스를 먼저 추가해주세요.
+                                                    </p>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </TabsContent>
+                                );
+                            })}
+                    </Tabs>
+                </div>
+                
+                <DialogFooter className="flex gap-2">
+                    <Button
+                        variant="outline"
+                        onClick={() => setRosterDownloadModal({ ...rosterDownloadModal, open: false })}
+                    >
+                        취소
+                    </Button>
+                    <Button
+                        variant="outline"
+                        onClick={handlePrintRosterWithSettings}
+                        disabled={isDownloadingRoster}
+                    >
+                        <FileDown className="mr-2 h-4 w-4" />
+                        인쇄
+                    </Button>
+                    <Button
+                        onClick={handleDownloadRosterWithSettings}
+                        disabled={isDownloadingRoster}
+                        className="bg-blue-600 hover:bg-blue-700 text-white"
+                    >
+                        <FileDown className="mr-2 h-4 w-4" />
+                        {isDownloadingRoster ? '생성 중...' : '이미지 다운로드'}
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
 
     </div>
   )
