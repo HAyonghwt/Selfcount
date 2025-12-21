@@ -427,6 +427,9 @@ export default function AdminDashboard() {
                 .page-break {
                     page-break-before: always;
                 }
+                .player-tbody {
+                    page-break-inside: avoid;
+                }
                 .print-footer {
                     margin-top: 30px;
                     text-align: center;
@@ -437,6 +440,9 @@ export default function AdminDashboard() {
                 }
                 @media print {
                     .no-print { display: none; }
+                    .player-tbody {
+                        page-break-inside: avoid;
+                    }
                 }
             </style>
         `;
@@ -511,10 +517,12 @@ export default function AdminDashboard() {
                                 </th>
                             </tr>
                         </thead>
-                        <tbody>
             `;
 
             groupPlayers.forEach((player) => {
+                // 각 선수마다 개별 tbody 시작
+                printContent += `<tbody class="player-tbody">`;
+                
                 if (player.assignedCourses.length > 0) {
                     player.assignedCourses.forEach((course: any, courseIndex: number) => {
                         const courseData = player.coursesData[course.id];
@@ -563,10 +571,12 @@ export default function AdminDashboard() {
                         </tr>
                     `;
                 }
+                
+                // 각 선수의 tbody 종료
+                printContent += `</tbody>`;
             });
 
             printContent += `
-                        </tbody>
                     </table>
                 </div>
             `;
