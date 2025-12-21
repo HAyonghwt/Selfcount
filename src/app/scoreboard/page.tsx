@@ -143,16 +143,38 @@ const tieBreak = (a: any, b: any, sortedCourses: any[]) => {
         }
     }
 
+    // 홀별 백카운트: 마지막 코스부터 역순으로 각 코스의 홀 점수 비교
+    // 모든 홀 점수가 0이면 다음 코스로 넘어감
     if (sortedCourses.length > 0) {
-        const lastCourseId = sortedCourses[0].id;
-        const aHoleScores = a.detailedScores[lastCourseId] || {};
-        const bHoleScores = b.detailedScores[lastCourseId] || {};
-        for (let i = 9; i >= 1; i--) {
-            const hole = i.toString();
-            const aHole = aHoleScores[hole] || 0;
-            const bHole = bHoleScores[hole] || 0;
-            if (aHole !== bHole) {
-                return aHole - bHole;
+        for (const course of sortedCourses) {
+            const courseId = course.id;
+            const aHoleScores = a.detailedScores[courseId] || {};
+            const bHoleScores = b.detailedScores[courseId] || {};
+            let hasNonZeroScore = false;
+            
+            // 9번 홀부터 1번 홀까지 역순으로 비교
+            for (let i = 9; i >= 1; i--) {
+                const hole = i.toString();
+                const aHole = aHoleScores[hole] || 0;
+                const bHole = bHoleScores[hole] || 0;
+                
+                // 0이 아닌 점수가 있으면 이 코스에서 비교 진행
+                if (aHole > 0 || bHole > 0) {
+                    hasNonZeroScore = true;
+                }
+                
+                // 점수가 다르면 비교 결과 반환
+                if (aHole !== bHole) {
+                    return aHole - bHole;
+                }
+            }
+            
+            // 이 코스의 모든 홀 점수가 0이면 다음 코스로 넘어감
+            // hasNonZeroScore가 false면 모두 0이므로 다음 코스 확인
+            if (hasNonZeroScore) {
+                // 이 코스에 점수가 있었는데 모두 같으면 다음 코스로
+                // (이미 위에서 차이를 확인했으므로 여기 도달하면 모두 같음)
+                break;
             }
         }
     }

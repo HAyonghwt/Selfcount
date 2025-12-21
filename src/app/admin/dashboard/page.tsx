@@ -70,22 +70,41 @@ const tieBreak = (a: any, b: any, sortedCourses: any[]) => {
         }
     }
 
-    // If still tied, compare hole scores on the last course (alphabetically), from 9 to 1.
+    // 홀별 백카운트: 마지막 코스부터 역순으로 각 코스의 홀 점수 비교
+    // 모든 홀 점수가 0이면 다음 코스로 넘어감
     if (sortedCourses.length > 0) {
-        const lastCourse = sortedCourses[0];
-        if (lastCourse && lastCourse.id !== undefined && lastCourse.id !== null) {
-            const lastCourseId = lastCourse.id;
+        for (const course of sortedCourses) {
+            if (!course || course.id === undefined || course.id === null) continue; // 안전장치
+            const courseId = course.id;
             const aDetailObj = a.detailedScores || {};
             const bDetailObj = b.detailedScores || {};
-            const aHoleScores = aDetailObj[lastCourseId] || {};
-            const bHoleScores = bDetailObj[lastCourseId] || {};
+            const aHoleScores = aDetailObj[courseId] || {};
+            const bHoleScores = bDetailObj[courseId] || {};
+            let hasNonZeroScore = false;
+            
+            // 9번 홀부터 1번 홀까지 역순으로 비교
             for (let i = 9; i >= 1; i--) {
                 const hole = i.toString();
                 const aHole = aHoleScores[hole] || 0;
                 const bHole = bHoleScores[hole] || 0;
+                
+                // 0이 아닌 점수가 있으면 이 코스에서 비교 진행
+                if (aHole > 0 || bHole > 0) {
+                    hasNonZeroScore = true;
+                }
+                
+                // 점수가 다르면 비교 결과 반환
                 if (aHole !== bHole) {
                     return aHole - bHole;
                 }
+            }
+            
+            // 이 코스의 모든 홀 점수가 0이면 다음 코스로 넘어감
+            // hasNonZeroScore가 false면 모두 0이므로 다음 코스 확인
+            if (hasNonZeroScore) {
+                // 이 코스에 점수가 있었는데 모두 같으면 다음 코스로
+                // (이미 위에서 차이를 확인했으므로 여기 도달하면 모두 같음)
+                break;
             }
         }
     }
@@ -1432,7 +1451,7 @@ export default function AdminDashboard() {
                     const curr = playersToSort[i];
                     if (
                         curr.plusMinus === prev.plusMinus &&
-                        tieBreak(curr, prev, coursesForGroup) === 0
+                        tieBreak(curr, prev, coursesForBackcount) === 0
                     ) {
                         curr.rank = playersToSort[i - 1].rank;
                     } else {
