@@ -1132,13 +1132,34 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
         // 기존 설정된 코스만 값 적용 (number 타입이고 0보다 큰 값만)
         // boolean true는 무시 (기존 호환성을 위해 boolean은 더 이상 사용하지 않음)
         const existingCourses = group.courses || {};
+        const coursesWithOrder: Array<{courseId: string, order: number}> = [];
+        
         Object.keys(existingCourses).forEach(courseId => {
             const courseIdStr = String(courseId);
             // number 타입이고 0보다 큰 경우만 적용
             if (typeof existingCourses[courseId] === 'number' && existingCourses[courseId] > 0) {
-                convertedCourses[courseIdStr] = existingCourses[courseId];
+                coursesWithOrder.push({ courseId: courseIdStr, order: existingCourses[courseId] });
             }
             // boolean 타입은 무시 (기본값 0 유지)
+        });
+        
+        // 중복 순서 검증 및 재정렬: 같은 순서가 있으면 순차적으로 재할당
+        coursesWithOrder.sort((a, b) => a.order - b.order); // 순서대로 정렬
+        
+        const usedOrders = new Set<number>();
+        coursesWithOrder.forEach((item) => {
+            if (usedOrders.has(item.order)) {
+                // 중복 발견: 다음 사용 가능한 순서로 재할당
+                let nextOrder = item.order;
+                while (usedOrders.has(nextOrder)) {
+                    nextOrder++;
+                }
+                convertedCourses[item.courseId] = nextOrder;
+                usedOrders.add(nextOrder);
+            } else {
+                convertedCourses[item.courseId] = item.order;
+                usedOrders.add(item.order);
+            }
         });
         
         setAssignedCourses(convertedCourses);

@@ -1323,8 +1323,8 @@ export default function AdminDashboard() {
                 .filter(Boolean);
             // 코스 순서대로 정렬 (order가 큰 것이 마지막 = 백카운트 기준)
             coursesForPlayer.sort((a: any, b: any) => {
-                const orderA = coursesOrder[a.id] || 0;
-                const orderB = coursesOrder[b.id] || 0;
+                const orderA = coursesOrder[String(a.id)] || 0;
+                const orderB = coursesOrder[String(b.id)] || 0;
                 const numA = typeof orderA === 'boolean' ? (orderA ? 1 : 0) : (typeof orderA === 'number' ? orderA : 0);
                 const numB = typeof orderB === 'boolean' ? (orderB ? 1 : 0) : (typeof orderB === 'number' ? orderB : 0);
                 return numA - numB; // 작은 순서가 먼저 (첫번째 코스가 위)
@@ -1423,8 +1423,8 @@ export default function AdminDashboard() {
             const allCoursesForGroup = [...(groupPlayers[0]?.assignedCourses || [])].filter(c => c && c.id !== undefined);
             // 코스 순서대로 정렬 (order가 큰 것이 마지막)
             const coursesForGroup = [...allCoursesForGroup].sort((a: any, b: any) => {
-                const orderA = coursesOrder[a.id] || 0;
-                const orderB = coursesOrder[b.id] || 0;
+                const orderA = coursesOrder[String(a.id)] || 0;
+                const orderB = coursesOrder[String(b.id)] || 0;
                 const numA = typeof orderA === 'boolean' ? (orderA ? 1 : 0) : (typeof orderA === 'number' ? orderA : 0);
                 const numB = typeof orderB === 'boolean' ? (orderB ? 1 : 0) : (typeof orderB === 'number' ? orderB : 0);
                 return numA - numB; // 작은 순서가 먼저
@@ -1611,8 +1611,8 @@ export default function AdminDashboard() {
                     const allCoursesForGroup = firstPlacePlayers[0]?.assignedCourses || Object.values(courses);
                     // 코스 순서대로 정렬 (order가 큰 것이 마지막)
                     const coursesForGroup = [...allCoursesForGroup].sort((a: any, b: any) => {
-                        const orderA = coursesOrder[a.id] || 0;
-                        const orderB = coursesOrder[b.id] || 0;
+                        const orderA = coursesOrder[String(a.id)] || 0;
+                        const orderB = coursesOrder[String(b.id)] || 0;
                         const numA = typeof orderA === 'boolean' ? (orderA ? 1 : 0) : (typeof orderA === 'number' ? orderA : 0);
                         const numB = typeof orderB === 'boolean' ? (orderB ? 1 : 0) : (typeof orderB === 'number' ? orderB : 0);
                         return numA - numB; // 작은 순서가 먼저
