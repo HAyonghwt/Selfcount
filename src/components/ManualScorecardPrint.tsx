@@ -53,12 +53,33 @@ export default function ManualScorecardPrint({
         }
     }, [selectedGroup])
 
-    // 선택된 코스 필터링 및 정렬
+    // 선택된 코스 필터링 및 정렬 (그룹에 배정된 코스의 order로 정렬)
     const selectedCourseList = useMemo(() => {
-        return courses
+        if (!selectedGroup || !groups[selectedGroup]) {
+            // 그룹이 선택되지 않았거나 그룹 정보가 없으면 기존 방식으로 정렬
+            return courses
+                .filter(c => selectedCourses[c.id])
+                .sort((a, b) => (a.order || 0) - (b.order || 0))
+        }
+
+        // 그룹에 배정된 코스 정보 가져오기
+        const groupCourses = groups[selectedGroup]?.courses || {}
+        
+        // 배정된 코스의 order 정보를 포함한 배열 생성
+        const coursesWithGroupOrder = courses
             .filter(c => selectedCourses[c.id])
-            .sort((a, b) => (a.order || 0) - (b.order || 0))
-    }, [courses, selectedCourses])
+            .map(c => {
+                const groupOrder = groupCourses[c.id]
+                // groupOrder가 number이고 0보다 크면 사용, 아니면 코스의 기본 order 사용
+                const order = (typeof groupOrder === 'number' && groupOrder > 0) 
+                    ? groupOrder 
+                    : (c.order || 999)
+                return { ...c, groupOrder: order }
+            })
+            .sort((a, b) => a.groupOrder - b.groupOrder)
+        
+        return coursesWithGroupOrder
+    }, [courses, selectedCourses, selectedGroup, groups])
 
     // 선택된 그룹의 모든 조 가져오기
     const josInGroup = useMemo(() => {

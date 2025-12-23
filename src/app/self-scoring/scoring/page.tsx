@@ -374,6 +374,19 @@ export default function SelfScoringPage() {
       const list: PlayerDb[] = Object.entries<any>(data)
         .map(([id, v]) => ({ id, ...v }))
         .filter((p) => String(p.jo) === String(selectedJo)); // 그룹은 이미 쿼리로 필터링됨
+      
+      // 수기 채점표와 동일한 순서로 정렬 (uploadOrder 우선 → 이름 순)
+      list.sort((a, b) => {
+        // uploadOrder가 있으면 그것으로 정렬
+        if (a.uploadOrder !== undefined && b.uploadOrder !== undefined) {
+          return (a.uploadOrder || 0) - (b.uploadOrder || 0);
+        }
+        // 없으면 이름으로 정렬
+        const nameA = a.type === 'team' ? `${a.p1_name}/${a.p2_name}` : (a.name || '');
+        const nameB = b.type === 'team' ? `${b.p1_name}/${b.p2_name}` : (b.name || '');
+        return nameA.localeCompare(nameB);
+      });
+      
       setPlayersInGroupJo(list as any);
 
       // 관전 모드에서는 플레이어 이름을 실시간으로 설정
@@ -402,6 +415,70 @@ export default function SelfScoringPage() {
         } else {
           // 선수가 없을 때는 기본값 유지
           setPlayerNames(["이름1", "이름2", "이름3", "이름4"]);
+        }
+      } else {
+        // 일반 모드: playersInGroupJo 순서에 맞춰 playerNames 재정렬
+        if (list.length > 0) {
+          const sortedNames: string[] = [];
+          list.forEach(p => {
+            if (p.type === 'team') {
+              // 팀전: p1_name과 p2_name을 각각 names 배열에 추가
+              if (p.p1_name) sortedNames.push(p.p1_name);
+              if (p.p2_name) sortedNames.push(p.p2_name);
+            } else {
+              // 개인전: name을 names 배열에 추가
+              if (p.name) sortedNames.push(p.name);
+            }
+          });
+
+          // 항상 4개로 채우기 (부족한 부분은 빈 문자열로)
+          const filledNames = [...sortedNames];
+          while (filledNames.length < 4) {
+            filledNames.push('');
+          }
+
+          const newPlayerNames = filledNames.slice(0, 4);
+          setPlayerNames(newPlayerNames);
+          
+          // sessionStorage 업데이트
+          try {
+            if (typeof window !== 'undefined') {
+              sessionStorage.setItem("selfScoringNames", JSON.stringify(newPlayerNames));
+            }
+          } catch (error) {
+            console.error('sessionStorage 업데이트 실패:', error);
+          }
+          
+          // signatures 배열도 동일한 순서로 재정렬
+          // 기존 signatures를 playerId 기반으로 매핑한 후 재정렬
+          const currentSignatures = [...signatures];
+          const reorderedSignatures: string[] = [];
+          
+          list.forEach((p, idx) => {
+            if (p.type === 'team') {
+              // 팀전: 각 선수별로 서명 처리
+              if (p.p1_name && idx * 2 < currentSignatures.length) {
+                reorderedSignatures.push(currentSignatures[idx * 2] || '');
+              }
+              if (p.p2_name && idx * 2 + 1 < currentSignatures.length) {
+                reorderedSignatures.push(currentSignatures[idx * 2 + 1] || '');
+              }
+            } else {
+              // 개인전: 인덱스 그대로 사용
+              if (idx < currentSignatures.length) {
+                reorderedSignatures.push(currentSignatures[idx] || '');
+              } else {
+                reorderedSignatures.push('');
+              }
+            }
+          });
+          
+          // 항상 4개로 채우기
+          while (reorderedSignatures.length < 4) {
+            reorderedSignatures.push('');
+          }
+          
+          setSignatures(reorderedSignatures.slice(0, 4));
         }
       }
     });
