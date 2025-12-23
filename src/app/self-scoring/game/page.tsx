@@ -275,6 +275,38 @@ export default function SelfScoringGameSetupPage() {
         }
     };
 
+    const handleBatchScoring = () => {
+        if (!gameMode || !selectedGroup || !selectedJo) {
+            toast({
+                title: '설정 오류',
+                description: '경기방식, 그룹, 조를 모두 선택해주세요.',
+                variant: 'destructive',
+            });
+            return;
+        }
+
+        // 선택한 정보를 세션에 저장
+        sessionStorage.setItem('selfScoringGameMode', gameMode);
+        sessionStorage.setItem('selfScoringGroup', selectedGroup);
+        sessionStorage.setItem('selfScoringJo', selectedJo);
+
+        // 조원 이름을 스코어 시트에 전달 (최대 4명, 부족하면 플레이스홀더)
+        const names = [...joMembers].slice(0, 4);
+        while (names.length < 4) names.push(`이름${names.length + 1}`);
+        try {
+            sessionStorage.setItem('selfScoringNames', JSON.stringify(names));
+            // 선택된 그룹에 배정된 코스 목록(이름, pars) 전달
+            const courseTabs = assignedCourseList.map((c: any) => ({ id: String(c.id), name: c.name, pars: c.pars }));
+            sessionStorage.setItem('selfScoringCourses', JSON.stringify(courseTabs));
+            if (courseTabs.length > 0) sessionStorage.setItem('selfScoringActiveCourseId', String(courseTabs[0].id));
+        } catch {}
+
+        // 일괄 입력 모드 페이지를 새창으로 열기
+        if (typeof window !== 'undefined') {
+            window.open('/self-scoring/batch-scoring', '_blank');
+        }
+    };
+
     const handleLogout = () => {
         sessionStorage.removeItem('selfScoringCaptain');
         sessionStorage.removeItem('selfScoringGameMode');
@@ -390,17 +422,28 @@ export default function SelfScoringGameSetupPage() {
                             </Card>
                         )}
 
-                        <div className="flex gap-3 sm:gap-4 pt-3 sm:pt-4 sticky bottom-2 z-10 bg-slate-100/80 backdrop-blur rounded-xl p-2">
-                            <Button 
-                                onClick={handleStartScoring}
-                                disabled={!gameMode || !selectedGroup || !selectedJo}
-                                className="flex-1"
-                            >
-                                점수기록 시작
-                            </Button>
+                        <div className="flex flex-col gap-3 sm:gap-4 pt-3 sm:pt-4 sticky bottom-2 z-10 bg-slate-100/80 backdrop-blur rounded-xl p-2">
+                            <div className="flex gap-3 sm:gap-4">
+                                <Button 
+                                    onClick={handleStartScoring}
+                                    disabled={!gameMode || !selectedGroup || !selectedJo}
+                                    className="flex-1"
+                                >
+                                    점수기록 시작
+                                </Button>
+                                <Button 
+                                    onClick={handleBatchScoring}
+                                    disabled={!gameMode || !selectedGroup || !selectedJo}
+                                    className="flex-1"
+                                    variant="default"
+                                >
+                                    일괄 입력 모드
+                                </Button>
+                            </div>
                             <Button 
                                 onClick={handleLogout}
                                 variant="outline"
+                                className="w-full"
                             >
                                 로그아웃
                             </Button>
