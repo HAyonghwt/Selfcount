@@ -24,6 +24,8 @@ export default function SelfScoringGameSetupPage() {
     const [allPlayers, setAllPlayers] = useState<any[]>([]);
     const [activeCourseTab, setActiveCourseTab] = useState<string>('');
     const [captainData, setCaptainData] = useState<any>(null);
+    const [captainScoringEnabled, setCaptainScoringEnabled] = useState<boolean>(true);
+    const [batchInputModeEnabled, setBatchInputModeEnabled] = useState<boolean>(true);
     // 뒤로가기 확인
     const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
     const exitGuardRef = React.useRef(false);
@@ -70,6 +72,35 @@ export default function SelfScoringGameSetupPage() {
             unsubPlayers();
         };
     }, [router]);
+
+    // 설정 로드 (조장 점수 기록 및 일괄 입력 모드 활성화 여부)
+    useEffect(() => {
+        if (!db) {
+            console.log('db가 없습니다');
+            return;
+        }
+        const dbInstance = db as import('firebase/database').Database;
+        const configRef = ref(dbInstance, 'config');
+        
+        const unsubConfig = onValue(configRef, (snapshot) => {
+            if (snapshot.exists()) {
+                const data = snapshot.val();
+                // 명시적으로 boolean으로 변환 (undefined나 null이면 true)
+                const captainEnabled = data.captainScoringEnabled !== false;
+                const batchEnabled = data.batchInputModeEnabled !== false;
+                setCaptainScoringEnabled(captainEnabled);
+                setBatchInputModeEnabled(batchEnabled);
+            } else {
+                console.log('설정 데이터가 없습니다. 기본값 사용');
+                setCaptainScoringEnabled(true);
+                setBatchInputModeEnabled(true);
+            }
+        });
+
+        return () => {
+            unsubConfig();
+        };
+    }, []);
 
     // 모바일/브라우저 뒤로가기 시 확인창 표시
     useEffect(() => {
@@ -424,21 +455,25 @@ export default function SelfScoringGameSetupPage() {
 
                         <div className="flex flex-col gap-3 sm:gap-4 pt-3 sm:pt-4 sticky bottom-2 z-10 bg-slate-100/80 backdrop-blur rounded-xl p-2">
                             <div className="flex gap-3 sm:gap-4">
-                                <Button 
-                                    onClick={handleStartScoring}
-                                    disabled={!gameMode || !selectedGroup || !selectedJo}
-                                    className="flex-1"
-                                >
-                                    점수기록 시작
-                                </Button>
-                                <Button 
-                                    onClick={handleBatchScoring}
-                                    disabled={!gameMode || !selectedGroup || !selectedJo}
-                                    className="flex-1"
-                                    variant="default"
-                                >
-                                    일괄 입력 모드
-                                </Button>
+                                {captainScoringEnabled && (
+                                    <Button 
+                                        onClick={handleStartScoring}
+                                        disabled={!gameMode || !selectedGroup || !selectedJo}
+                                        className="flex-1"
+                                    >
+                                        조장 점수기록 시작
+                                    </Button>
+                                )}
+                                {batchInputModeEnabled && (
+                                    <Button 
+                                        onClick={handleBatchScoring}
+                                        disabled={!gameMode || !selectedGroup || !selectedJo}
+                                        className="flex-1"
+                                        variant="default"
+                                    >
+                                        일괄 입력 모드
+                                    </Button>
+                                )}
                             </div>
                             <Button 
                                 onClick={handleLogout}

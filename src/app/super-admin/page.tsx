@@ -29,6 +29,8 @@ export default function SuperAdminPage() {
         selfScoringEnabled: true,
         qrCodeEnabled: true,
         manualScorecardEnabled: true,
+        captainScoringEnabled: true,
+        batchInputModeEnabled: true,
     });
     const [captainAccounts, setCaptainAccounts] = useState<any[]>([]);
     const [creatingCaptains, setCreatingCaptains] = useState(false);
@@ -67,6 +69,8 @@ export default function SuperAdminPage() {
                     selfScoringEnabled: data.selfScoringEnabled !== false, // 기본값 true
                     qrCodeEnabled: data.qrCodeEnabled !== false, // 기본값 true
                     manualScorecardEnabled: data.manualScorecardEnabled !== false, // 기본값 true
+                    captainScoringEnabled: data.captainScoringEnabled !== false, // 기본값 true
+                    batchInputModeEnabled: data.batchInputModeEnabled !== false, // 기본값 true
                 });
             } else {
                  setConfig({
@@ -79,6 +83,8 @@ export default function SuperAdminPage() {
                     selfScoringEnabled: true,
                     qrCodeEnabled: true,
                     manualScorecardEnabled: true,
+                    captainScoringEnabled: true,
+                    batchInputModeEnabled: true,
                 });
             }
             setLoading(false);
@@ -124,6 +130,8 @@ export default function SuperAdminPage() {
                 selfScoringEnabled: config.selfScoringEnabled,
                 qrCodeEnabled: config.qrCodeEnabled,
                 manualScorecardEnabled: config.manualScorecardEnabled,
+                captainScoringEnabled: config.captainScoringEnabled,
+                batchInputModeEnabled: config.batchInputModeEnabled,
             };
             await set(configRef, configData);
 
@@ -747,6 +755,46 @@ export default function SuperAdminPage() {
                                 </div>
                             </div>
 
+                        </CardContent>
+                    </Card>
+
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>조장 점수 입력 설정</CardTitle>
+                            <CardDescription>조장이 사용할 수 있는 점수 입력 방식을 설정합니다.</CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            <div className="flex items-center justify-between">
+                                <div className="space-y-0.5">
+                                    <Label htmlFor="captainScoringEnabled">조장 점수 기록</Label>
+                                    <p className="text-xs text-muted-foreground">
+                                        조장이 실시간으로 점수를 입력할 수 있는 일반 점수 기록 기능을 활성화합니다.
+                                    </p>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                    <Switch
+                                        id="captainScoringEnabled"
+                                        checked={config.captainScoringEnabled}
+                                        onCheckedChange={(checked) => setConfig(prev => ({ ...prev, captainScoringEnabled: checked }))}
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="flex items-center justify-between">
+                                <div className="space-y-0.5">
+                                    <Label htmlFor="batchInputModeEnabled">일괄 입력 모드</Label>
+                                    <p className="text-xs text-muted-foreground">
+                                        조장이 수기 채점표에서 점수를 일괄로 입력할 수 있는 기능을 활성화합니다.
+                                    </p>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                    <Switch
+                                        id="batchInputModeEnabled"
+                                        checked={config.batchInputModeEnabled}
+                                        onCheckedChange={(checked) => setConfig(prev => ({ ...prev, batchInputModeEnabled: checked }))}
+                                    />
+                                </div>
+                            </div>
                         </CardContent>
                     </Card>
 
