@@ -28,6 +28,7 @@ export default function SuperAdminPage() {
         captainPassword: '',
         selfScoringEnabled: true,
         qrCodeEnabled: true,
+        manualScorecardEnabled: true,
     });
     const [captainAccounts, setCaptainAccounts] = useState<any[]>([]);
     const [creatingCaptains, setCreatingCaptains] = useState(false);
@@ -65,6 +66,7 @@ export default function SuperAdminPage() {
                     captainPassword: data.captainPassword || '',
                     selfScoringEnabled: data.selfScoringEnabled !== false, // 기본값 true
                     qrCodeEnabled: data.qrCodeEnabled !== false, // 기본값 true
+                    manualScorecardEnabled: data.manualScorecardEnabled !== false, // 기본값 true
                 });
             } else {
                  setConfig({
@@ -76,6 +78,7 @@ export default function SuperAdminPage() {
                     captainPassword: '',
                     selfScoringEnabled: true,
                     qrCodeEnabled: true,
+                    manualScorecardEnabled: true,
                 });
             }
             setLoading(false);
@@ -120,6 +123,7 @@ export default function SuperAdminPage() {
                 captainPassword: config.captainPassword.trim(),
                 selfScoringEnabled: config.selfScoringEnabled,
                 qrCodeEnabled: config.qrCodeEnabled,
+                manualScorecardEnabled: config.manualScorecardEnabled,
             };
             await set(configRef, configData);
 
@@ -723,6 +727,22 @@ export default function SuperAdminPage() {
                                         id="qrCodeEnabled"
                                         checked={config.qrCodeEnabled}
                                         onCheckedChange={(checked) => setConfig(prev => ({ ...prev, qrCodeEnabled: checked }))}
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="flex items-center justify-between">
+                                <div className="space-y-0.5">
+                                    <Label htmlFor="manualScorecardEnabled">수기 채점표 활성화</Label>
+                                    <p className="text-xs text-muted-foreground">
+                                        관리자 메뉴에서 수기 채점표 메뉴를 표시할지 설정합니다.
+                                    </p>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                    <Switch
+                                        id="manualScorecardEnabled"
+                                        checked={config.manualScorecardEnabled}
+                                        onCheckedChange={(checked) => setConfig(prev => ({ ...prev, manualScorecardEnabled: checked }))}
                                     />
                                 </div>
                             </div>

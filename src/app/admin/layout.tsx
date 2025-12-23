@@ -13,6 +13,7 @@ import {
   LogOut,
   Flame,
   ShieldCheck,
+  FileText,
 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -49,6 +50,7 @@ const secondaryNavItems = [
 ];
 const refereeNavItem = { href: "/admin/referees", icon: ShieldCheck, label: "심판 관리" };
 const selfScoringNavItem = { href: "/admin/self-scoring", icon: ShieldCheck, label: "자율 채점" };
+const manualScorecardNavItem = { href: "/admin/manual-scorecard", icon: FileText, label: "수기 채점표" };
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const isMobile = useIsMobile();
@@ -56,6 +58,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [isClient, setIsClient] = React.useState(false);
   const [appName, setAppName] = React.useState('');
   const [selfScoringEnabled, setSelfScoringEnabled] = React.useState(true);
+  const [manualScorecardEnabled, setManualScorecardEnabled] = React.useState(true);
 
   React.useEffect(() => {
     setIsClient(true)
@@ -63,6 +66,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     // 🟢 기본값 설정 (Firebase 접근 실패 시에도 앱이 동작하도록)
     setAppName('ParkScore');
     setSelfScoringEnabled(true);
+    setManualScorecardEnabled(true);
 
     if (db) {
       // 🟢 딜레이를 두고 config 접근 (인증 완료 대기)
@@ -80,6 +84,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               // 자율 채점 활성화 설정 읽기 (기본값: true)
               const enabled = data.selfScoringEnabled !== false;
               setSelfScoringEnabled(enabled);
+              // 수기 채점표 활성화 설정 읽기 (기본값: true)
+              const manualEnabled = data.manualScorecardEnabled !== false;
+              setManualScorecardEnabled(manualEnabled);
             }
           }, (error) => {
             console.warn('설정 로드 실패 (기본값 사용):', error);
@@ -126,6 +133,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         pathname={pathname}
         appName={appName}
         selfScoringEnabled={selfScoringEnabled}
+        manualScorecardEnabled={manualScorecardEnabled}
         children={children}
       />
     </SidebarProvider>
@@ -134,7 +142,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
 import { useRouter } from "next/navigation";
 
-function SidebarContentWithSidebarHooks({ isMobile, pathname, appName, selfScoringEnabled, children }: { isMobile: boolean, pathname: string, appName: string, selfScoringEnabled: boolean, children: React.ReactNode }) {
+function SidebarContentWithSidebarHooks({ isMobile, pathname, appName, selfScoringEnabled, manualScorecardEnabled, children }: { isMobile: boolean, pathname: string, appName: string, selfScoringEnabled: boolean, manualScorecardEnabled: boolean, children: React.ReactNode }) {
   const { setOpenMobile } = useSidebar();
   const router = useRouter();
   const [isHost, setIsHost] = React.useState(false);
@@ -264,6 +272,20 @@ function SidebarContentWithSidebarHooks({ isMobile, pathname, appName, selfScori
                       <Link href={selfScoringNavItem.href} className="text-black" onClick={handleMenuClick(selfScoringNavItem.href)}>
                         <selfScoringNavItem.icon className="h-5 w-5" />
                         <span>{selfScoringNavItem.label}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                )}
+                {manualScorecardEnabled && (
+                  <SidebarMenuItem key={manualScorecardNavItem.href}>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={pathname === manualScorecardNavItem.href}
+                      tooltip={{ children: manualScorecardNavItem.label }}
+                    >
+                      <Link href={manualScorecardNavItem.href} className="text-black" onClick={handleMenuClick(manualScorecardNavItem.href)}>
+                        <manualScorecardNavItem.icon className="h-5 w-5" />
+                        <span>{manualScorecardNavItem.label}</span>
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>

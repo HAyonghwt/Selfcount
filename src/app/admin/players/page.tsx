@@ -57,6 +57,7 @@ export default function PlayerManagementPage() {
     const [rosterDownloadModal, setRosterDownloadModal] = useState({
         open: false,
         type: 'individual' as 'individual' | 'team',
+        paperSize: 'A4' as 'A4' | 'A3', // 용지 크기 추가
         groupSettings: {} as { [groupName: string]: { date: string; courses: string[] } } // courses는 선택 순서대로 저장
     });
     
@@ -69,6 +70,32 @@ export default function PlayerManagementPage() {
     // Editing states
     const [editingPlayerId, setEditingPlayerId] = useState<string | null>(null);
     const [editingPlayerData, setEditingPlayerData] = useState<any | null>(null);
+    
+    // 조 이동 모달 상태
+    const [joMoveModal, setJoMoveModal] = useState<{
+        open: boolean;
+        playerId: string | null;
+        currentJo: string;
+        currentGroup: string;
+        isNewJo?: boolean;
+    }>({
+        open: false,
+        playerId: null,
+        currentJo: '',
+        currentGroup: '',
+        isNewJo: false
+    });
+
+    // 조별 인원 초과 경고 모달 상태
+    const [joLimitWarningModal, setJoLimitWarningModal] = useState<{
+        open: boolean;
+        type: 'individual' | 'team';
+        overList: string[];
+    }>({
+        open: false,
+        type: 'individual',
+        overList: []
+    });
     
     // Refs for file inputs, compatible with React 19
     const [individualFileInput, setIndividualFileInput] = useState<HTMLInputElement | null>(null);
@@ -391,12 +418,21 @@ export default function PlayerManagementPage() {
                     }
                 }
 
+                // 그룹별 조 순서 추적 (엑셀 파일에서 나타나는 순서)
+                const groupJoOrder: { [groupName: string]: { [jo: string]: number } } = {};
+                // 그룹별 조별 선수 순서 추적 (엑셀 파일에서 나타나는 순서)
+                const groupJoPlayerOrder: { [groupName: string]: { [jo: string]: number } } = {};
+
                 wb.SheetNames.forEach(sheetName => {
                     const groupName = sheetName;
                     const ws = wb.Sheets[sheetName];
                     const jsonData = XLSX.utils.sheet_to_json(ws);
                     
                     if (jsonData.length < 1) return;
+
+                    // 조 순서 추적을 위한 변수
+                    const seenJos = new Set<string>();
+                    let joOrderIndex = 1;
 
                     if (type === 'individual') {
                         jsonData.forEach((row: any) => {
@@ -405,12 +441,26 @@ export default function PlayerManagementPage() {
                             const affiliation = row['소속']?.toString().trim() || '무소속';
 
                             if (name && jo) {
+                                const joStr = jo.toString();
+                                // 조 순서 추적 (처음 나타나는 조만 순서 저장)
+                                if (!seenJos.has(joStr)) {
+                                    if (!groupJoOrder[groupName]) groupJoOrder[groupName] = {};
+                                    groupJoOrder[groupName][joStr] = joOrderIndex++;
+                                    seenJos.add(joStr);
+                                }
+                                
+                                // 조별 선수 순서 추적
+                                if (!groupJoPlayerOrder[groupName]) groupJoPlayerOrder[groupName] = {};
+                                if (!groupJoPlayerOrder[groupName][joStr]) groupJoPlayerOrder[groupName][joStr] = 0;
+                                const playerOrder = ++groupJoPlayerOrder[groupName][joStr];
+                                
                                 newPlayers.push({
                                     type: 'individual',
                                     group: groupName,
-                                    jo: jo.toString(),
+                                    jo: joStr,
                                     name: name,
                                     affiliation: affiliation,
+                                    uploadOrder: playerOrder, // 엑셀 순서 정보 추가
                                 });
                             }
                         });
@@ -419,14 +469,28 @@ export default function PlayerManagementPage() {
                             const p1_name = row['선수1 이름']?.toString().trim();
                             const p2_name = row['선수2 이름']?.toString().trim();
                             if (p1_name && p2_name && row['조']) {
+                                const joStr = row['조'].toString();
+                                // 조 순서 추적 (처음 나타나는 조만 순서 저장)
+                                if (!seenJos.has(joStr)) {
+                                    if (!groupJoOrder[groupName]) groupJoOrder[groupName] = {};
+                                    groupJoOrder[groupName][joStr] = joOrderIndex++;
+                                    seenJos.add(joStr);
+                                }
+                                
+                                // 조별 선수 순서 추적
+                                if (!groupJoPlayerOrder[groupName]) groupJoPlayerOrder[groupName] = {};
+                                if (!groupJoPlayerOrder[groupName][joStr]) groupJoPlayerOrder[groupName][joStr] = 0;
+                                const playerOrder = ++groupJoPlayerOrder[groupName][joStr];
+                                
                                 newPlayers.push({
                                     type: 'team',
                                     group: groupName,
-                                    jo: row['조'].toString(),
+                                    jo: joStr,
                                     p1_name: p1_name,
                                     p1_affiliation: row['선수1 소속']?.toString().trim() || '무소속',
                                     p2_name: p2_name,
                                     p2_affiliation: row['선수2 소속']?.toString().trim() || '무소속',
+                                    uploadOrder: playerOrder, // 엑셀 순서 정보 추가
                                 });
                             }
                         });
@@ -492,9 +556,9 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                     }
                 });
 
-                // 새로운 그룹들 자동 생성
-                const newGroups = [...new Set(newPlayers.map(p => p.group))];
-                newGroups.forEach(groupName => {
+                // 새로운 그룹들 자동 생성 및 조 순서 정보 저장
+                const allGroupsInFile = [...new Set(newPlayers.map(p => p.group))];
+                allGroupsInFile.forEach(groupName => {
                     if (!groupsData[groupName]) {
                         const defaultCourses = courses.reduce((acc, course) => {
                             acc[course.id] = true;
@@ -503,8 +567,14 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                         updates[`/tournaments/current/groups/${groupName}`] = {
                             name: groupName,
                             type: type,
-                            courses: defaultCourses
+                            courses: defaultCourses,
+                            joOrder: groupJoOrder[groupName] || {}
                         };
+                    } else {
+                        // 기존 그룹이면 조 순서 정보만 업데이트
+                        if (groupJoOrder[groupName]) {
+                            updates[`/tournaments/current/groups/${groupName}/joOrder`] = groupJoOrder[groupName];
+                        }
                     }
                 });
 
@@ -567,6 +637,8 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
 
                 // 그룹별 조 순서 추적 (엑셀 파일에서 나타나는 순서)
                 const groupJoOrder: { [groupName: string]: { [jo: string]: number } } = {};
+                // 그룹별 조별 선수 순서 추적 (엑셀 파일에서 나타나는 순서)
+                const groupJoPlayerOrder: { [groupName: string]: { [jo: string]: number } } = {};
 
                 wb.SheetNames.forEach(sheetName => {
                     const groupName = sheetName;
@@ -594,12 +666,18 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                                     seenJos.add(joStr);
                                 }
                                 
+                                // 조별 선수 순서 추적
+                                if (!groupJoPlayerOrder[groupName]) groupJoPlayerOrder[groupName] = {};
+                                if (!groupJoPlayerOrder[groupName][joStr]) groupJoPlayerOrder[groupName][joStr] = 0;
+                                const playerOrder = ++groupJoPlayerOrder[groupName][joStr];
+                                
                                 newPlayers.push({
                                     type: 'individual',
                                     group: groupName,
                                     jo: joStr,
                                     name: name,
                                     affiliation: affiliation,
+                                    uploadOrder: playerOrder, // 엑셀 순서 정보 추가
                                 });
                             }
                         });
@@ -616,6 +694,11 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                                     seenJos.add(joStr);
                                 }
                                 
+                                // 조별 선수 순서 추적
+                                if (!groupJoPlayerOrder[groupName]) groupJoPlayerOrder[groupName] = {};
+                                if (!groupJoPlayerOrder[groupName][joStr]) groupJoPlayerOrder[groupName][joStr] = 0;
+                                const playerOrder = ++groupJoPlayerOrder[groupName][joStr];
+                                
                                 newPlayers.push({
                                     type: 'team',
                                     group: groupName,
@@ -624,6 +707,7 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                                     p1_affiliation: row['선수1 소속']?.toString().trim() || '무소속',
                                     p2_name: p2_name,
                                     p2_affiliation: row['선수2 소속']?.toString().trim() || '무소속',
+                                    uploadOrder: playerOrder, // 엑셀 순서 정보 추가
                                 });
                             }
                         });
@@ -720,9 +804,31 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                 
                 const updates: { [key: string]: any } = {};
                 
-                // 기존 선수 조 번호 업데이트
+                // 기존 선수 조 번호 및 순서 정보 업데이트
                 playersToUpdate.forEach(({ playerId, newJo }) => {
                     updates[`/players/${playerId}/jo`] = newJo;
+                    
+                    // 순서 정보도 업데이트 (newPlayers에서 찾기)
+                    const player = newPlayers.find((p: any) => {
+                        const existingPlayer = allPlayers.find((ep: any) => ep.id === playerId);
+                        if (!existingPlayer) return false;
+                        
+                        if (type === 'individual') {
+                            return existingPlayer.name === p.name && 
+                                   existingPlayer.affiliation === p.affiliation &&
+                                   p.group === existingPlayer.group;
+                        } else {
+                            return existingPlayer.p1_name === p.p1_name && 
+                                   existingPlayer.p1_affiliation === p.p1_affiliation &&
+                                   existingPlayer.p2_name === p.p2_name && 
+                                   existingPlayer.p2_affiliation === p.p2_affiliation &&
+                                   p.group === existingPlayer.group;
+                        }
+                    });
+                    
+                    if (player && player.uploadOrder !== undefined) {
+                        updates[`/players/${playerId}/uploadOrder`] = player.uploadOrder;
+                    }
                 });
                 
                 // 새 선수 추가
@@ -795,12 +901,65 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                 return acc;
             }, {} as { [key: string]: any[] });
             
-            Object.values(grouped).forEach((playerList: any[]) => {
+            Object.entries(grouped).forEach(([groupName, playerList]) => {
+                // 그룹 데이터에서 조 순서 정보 가져오기
+                const groupData = groupsData[groupName];
+                const joOrder = groupData?.joOrder || {};
+                
                 playerList.sort((a: any, b: any) => {
-                    if (a.jo !== b.jo) return a.jo - b.jo;
-                    const nameA = a.name || a.p1_name || '';
-                    const nameB = b.name || b.p1_name || '';
-                    return nameA.localeCompare(nameB);
+                    // 조 번호로 먼저 정렬
+                    if (a.jo !== b.jo) {
+                        const joA = String(a.jo);
+                        const joB = String(b.jo);
+                        
+                        // joOrder가 있으면 엑셀 순서대로 정렬
+                        if (Object.keys(joOrder).length > 0) {
+                            const orderA = joOrder[joA] || 999;
+                            const orderB = joOrder[joB] || 999;
+                            if (orderA !== orderB) {
+                                return orderA - orderB;
+                            }
+                            // 순서 정보가 같으면 조 번호로 정렬 (숫자 우선, 그 다음 문자열)
+                            const numA = parseInt(joA);
+                            const numB = parseInt(joB);
+                            if (!isNaN(numA) && !isNaN(numB)) {
+                                return numA - numB;
+                            }
+                            if (!isNaN(numA)) return -1;
+                            if (!isNaN(numB)) return 1;
+                            return joA.localeCompare(joB);
+                        } else {
+                            // joOrder가 없으면 기존 정렬 (숫자 우선, 그 다음 문자열)
+                            const numA = parseInt(joA);
+                            const numB = parseInt(joB);
+                            if (!isNaN(numA) && !isNaN(numB)) {
+                                return numA - numB;
+                            }
+                            if (!isNaN(numA)) return -1;
+                            if (!isNaN(numB)) return 1;
+                            return joA.localeCompare(joB);
+                        }
+                    }
+                    
+                    // 같은 조 내에서는 엑셀 순서 우선, 없으면 이름으로 정렬
+                    const orderA = a.uploadOrder ?? null;
+                    const orderB = b.uploadOrder ?? null;
+                    
+                    if (orderA !== null && orderB !== null) {
+                        // 둘 다 순서 정보가 있으면 순서로 정렬
+                        return orderA - orderB;
+                    } else if (orderA !== null) {
+                        // A만 순서 정보가 있으면 A가 먼저
+                        return -1;
+                    } else if (orderB !== null) {
+                        // B만 순서 정보가 있으면 B가 먼저
+                        return 1;
+                    } else {
+                        // 둘 다 순서 정보가 없으면 이름으로 정렬
+                        const nameA = a.name || a.p1_name || '';
+                        const nameB = b.name || b.p1_name || '';
+                        return nameA.localeCompare(nameB);
+                    }
                 });
             });
 
@@ -811,7 +970,7 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
             groupedIndividualPlayers: createGroupedData(individual),
             groupedTeamPlayers: createGroupedData(team),
         };
-    }, [allPlayers]);
+    }, [allPlayers, groupsData]);
 
     const filteredGroupedIndividualPlayers = useMemo(() => {
         let filtered: { [key: string]: any[] } = {};
@@ -1122,32 +1281,42 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
 
     const handleOpenCourseModal = (group: any) => {
         setCurrentEditingGroup(group);
-        // 모든 코스를 먼저 0으로 초기화 (선택 안함)
-        const allCourseIds = courses.map(c => String(c.id));
-        const convertedCourses: {[key: string]: number} = {};
-        allCourseIds.forEach(courseId => {
-            convertedCourses[courseId] = 0; // 기본값: 선택 안함
-        });
-        
-        // 기존 설정된 코스만 값 적용 (number 타입이고 0보다 큰 값만)
-        // boolean true는 무시 (기존 호환성을 위해 boolean은 더 이상 사용하지 않음)
         const existingCourses = group.courses || {};
-        const coursesWithOrder: Array<{courseId: string, order: number}> = [];
+        const convertedCourses: {[key: string]: number} = {};
         
-        Object.keys(existingCourses).forEach(courseId => {
-            const courseIdStr = String(courseId);
-            // number 타입이고 0보다 큰 경우만 적용
-            if (typeof existingCourses[courseId] === 'number' && existingCourses[courseId] > 0) {
-                coursesWithOrder.push({ courseId: courseIdStr, order: existingCourses[courseId] });
+        // 기존 설정이 있는 코스와 없는 코스를 구분
+        const coursesWithExistingOrder: Array<{courseId: string, order: number}> = [];
+        const coursesWithoutOrder: Array<{courseId: string, courseOrder: number}> = [];
+        
+        // 모든 코스를 확인
+        courses.forEach(course => {
+            const courseIdStr = String(course.id);
+            const existingOrder = existingCourses[courseIdStr];
+            
+            // 기존 설정이 있고 number 타입이고 0보다 큰 경우
+            if (typeof existingOrder === 'number' && existingOrder > 0) {
+                coursesWithExistingOrder.push({ courseId: courseIdStr, order: existingOrder });
+            } else {
+                // 기존 설정이 없거나 boolean true인 경우 → 코스의 order 값을 기본값으로 사용
+                const courseOrder = course.order || 0;
+                if (courseOrder > 0) {
+                    coursesWithoutOrder.push({ courseId: courseIdStr, courseOrder });
+                } else {
+                    // 코스의 order도 없으면 0 (선택 안함)
+                    convertedCourses[courseIdStr] = 0;
+                }
             }
-            // boolean 타입은 무시 (기본값 0 유지)
         });
         
-        // 중복 순서 검증 및 재정렬: 같은 순서가 있으면 순차적으로 재할당
-        coursesWithOrder.sort((a, b) => a.order - b.order); // 순서대로 정렬
+        // 기존 설정이 있는 코스는 기존 순서대로 정렬
+        coursesWithExistingOrder.sort((a, b) => a.order - b.order);
         
+        // 기존 설정이 없는 코스는 코스의 order 기준으로 정렬
+        coursesWithoutOrder.sort((a, b) => a.courseOrder - b.courseOrder);
+        
+        // 기존 설정이 있는 코스의 순서를 먼저 할당
         const usedOrders = new Set<number>();
-        coursesWithOrder.forEach((item) => {
+        coursesWithExistingOrder.forEach((item) => {
             if (usedOrders.has(item.order)) {
                 // 중복 발견: 다음 사용 가능한 순서로 재할당
                 let nextOrder = item.order;
@@ -1160,6 +1329,18 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                 convertedCourses[item.courseId] = item.order;
                 usedOrders.add(item.order);
             }
+        });
+        
+        // 기존 설정이 없는 코스는 코스의 order를 기준으로 순차적으로 할당
+        // 단, 기존 설정과 겹치지 않도록 다음 사용 가능한 순서로 할당
+        coursesWithoutOrder.forEach((item) => {
+            // 코스의 order를 기준으로 시작하되, 이미 사용된 순서는 건너뛰기
+            let targetOrder = item.courseOrder;
+            while (usedOrders.has(targetOrder)) {
+                targetOrder++;
+            }
+            convertedCourses[item.courseId] = targetOrder;
+            usedOrders.add(targetOrder);
         });
         
         setAssignedCourses(convertedCourses);
@@ -1184,6 +1365,172 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
 
     const groupList = Object.values(groupsData).sort((a: any, b: any) => a.name.localeCompare(b.name));
     const groupNameList = groupList.map((g: any) => g.name);
+
+    // 조 이동 모달: 선택된 그룹의 조 목록 계산
+    const availableJosForMove = useMemo(() => {
+        if (!joMoveModal.currentGroup) return [];
+        const groupPlayers = allPlayers.filter((p: any) => p.group === joMoveModal.currentGroup);
+        const seen = new Set<string>();
+        const orderedJos: string[] = [];
+        groupPlayers.forEach((p: any) => {
+            const joStr = p.jo?.toString() || '';
+            if (joStr && !seen.has(joStr)) {
+                seen.add(joStr);
+                orderedJos.push(joStr);
+            }
+        });
+        
+        // 그룹 데이터에서 조 순서 정보 가져오기
+        const groupData = groupsData[joMoveModal.currentGroup];
+        const joOrder = groupData?.joOrder || {};
+        
+        // 조 순서 정보가 있으면 엑셀 순서대로 정렬
+        if (Object.keys(joOrder).length > 0) {
+            orderedJos.sort((a, b) => {
+                const orderA = joOrder[a] || 999;
+                const orderB = joOrder[b] || 999;
+                if (orderA !== orderB) {
+                    return orderA - orderB;
+                }
+                // 순서 정보가 같으면 조 번호로 정렬 (숫자 우선, 그 다음 문자열)
+                const numA = parseInt(a);
+                const numB = parseInt(b);
+                if (!isNaN(numA) && !isNaN(numB)) {
+                    return numA - numB;
+                }
+                if (!isNaN(numA)) return -1;
+                if (!isNaN(numB)) return 1;
+                return a.localeCompare(b);
+            });
+        } else {
+            // joOrder가 없으면 기존 정렬 (숫자 우선, 그 다음 문자열)
+            orderedJos.sort((a, b) => {
+                const numA = parseInt(a);
+                const numB = parseInt(b);
+                if (!isNaN(numA) && !isNaN(numB)) {
+                    return numA - numB;
+                }
+                if (!isNaN(numA)) return -1;
+                if (!isNaN(numB)) return 1;
+                return a.localeCompare(b);
+            });
+        }
+        
+        return orderedJos;
+    }, [joMoveModal.currentGroup, allPlayers, groupsData]);
+
+    // 조 이동 핸들러 함수
+    const handleMovePlayerJo = (playerId: string, newJo: string, newGroup?: string) => {
+        if (!playerId || !newJo || newJo.trim() === '') {
+            toast({ title: '입력 오류', description: '조 번호를 입력해주세요.' });
+            return;
+        }
+
+        const finalGroup = newGroup && newGroup.trim() !== '' ? newGroup.trim() : null;
+        const finalJo = newJo.trim();
+        
+        // 이동할 조에 이미 있는 선수들의 uploadOrder 확인
+        // 현재 선수의 그룹 정보 가져오기
+        const currentPlayer = allPlayers.find((p: any) => p.id === playerId);
+        const targetGroup = finalGroup || (currentPlayer?.group || '');
+        
+        const playersInTargetJo = allPlayers.filter((p: any) => {
+            const pGroup = p.group || '';
+            const pJo = p.jo?.toString() || '';
+            return pGroup === targetGroup && pJo === finalJo && p.id !== playerId;
+        });
+        
+        // 해당 조의 최대 uploadOrder 찾기
+        let maxUploadOrder = 0;
+        playersInTargetJo.forEach((p: any) => {
+            if (p.uploadOrder && typeof p.uploadOrder === 'number' && p.uploadOrder > maxUploadOrder) {
+                maxUploadOrder = p.uploadOrder;
+            }
+        });
+        
+        // 새 조로 이동하는 선수에게 다음 순서 부여
+        const newUploadOrder = maxUploadOrder + 1;
+
+        const updates: { [key: string]: any } = {};
+        updates[`/players/${playerId}/jo`] = finalJo;
+        updates[`/players/${playerId}/uploadOrder`] = newUploadOrder;
+        
+        // 그룹도 변경하는 경우
+        if (finalGroup) {
+            updates[`/players/${playerId}/group`] = finalGroup;
+            
+            // 그룹이 없으면 자동으로 생성
+            if (!groupsData[finalGroup]) {
+                const defaultCourses = courses.reduce((acc, course) => {
+                    acc[course.id] = true;
+                    return acc;
+                }, {});
+                updates[`/tournaments/current/groups/${finalGroup}`] = {
+                    name: finalGroup,
+                    type: 'individual',
+                    courses: defaultCourses
+                };
+            }
+        }
+
+        update(ref(db!), updates)
+            .then(() => {
+                toast({ 
+                    title: '성공', 
+                    description: '선수가 이동되었습니다.',
+                    duration: 2000
+                });
+            })
+            .catch(err => {
+                toast({ 
+                    title: '이동 실패', 
+                    description: err.message,
+                    variant: 'destructive'
+                });
+            });
+    };
+
+    // 전체 조별 인원 확인 함수
+    const handleCheckAllJos = (type: 'individual' | 'team') => {
+        const groupJoLimit = type === 'individual' ? 4 : 2;
+        const groupJoMap: { [key: string]: { [key: string]: number } } = {};
+        
+        // 모든 선수를 그룹/조별로 집계
+        allPlayers.filter((p: any) => p.type === type).forEach((p: any) => {
+            const g = p.group || '';
+            const j = p.jo?.toString() || '';
+            if (g && j) {
+                if (!groupJoMap[g]) groupJoMap[g] = {};
+                if (!groupJoMap[g][j]) groupJoMap[g][j] = 0;
+                groupJoMap[g][j]++;
+            }
+        });
+        
+        // 초과 조 찾기
+        const overList: string[] = [];
+        Object.entries(groupJoMap).forEach(([g, jos]: [string, any]) => {
+            Object.entries(jos).forEach(([j, cnt]: [string, any]) => {
+                if (cnt > groupJoLimit) {
+                    overList.push(`${g} 그룹 ${j}조: ${cnt}${type === 'individual' ? '명' : '팀'} (최대 ${groupJoLimit}${type === 'individual' ? '명' : '팀'})`);
+                }
+            });
+        });
+        
+        if (overList.length > 0) {
+            // 경고 모달 표시
+            setJoLimitWarningModal({
+                open: true,
+                type,
+                overList
+            });
+        } else {
+            toast({ 
+                title: '확인 완료', 
+                description: '모든 조가 인원 제한을 준수합니다.',
+                duration: 2000
+            });
+        }
+    };
 
     // 그룹명 영어 번역 함수
     const getGroupNameEnglish = (groupName: string): string => {
@@ -1254,10 +1601,14 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
 
             toast({ title: "조편성표 생성 시작", description: `${targetGroups.length}개 그룹의 조편성표를 생성합니다...` });
 
-            // A4 사이즈 기준 (210mm x 297mm, 96dpi 기준 약 794px x 1123px)
-            // 실제 사용할 크기: 794px 너비 (여백 포함)
-            const A4_WIDTH = 794;
-            const A4_HEIGHT = 1123;
+            // 용지 크기에 따른 크기 설정
+            const paperSize = rosterDownloadModal.paperSize || 'A4';
+            const PAPER_SIZES = {
+                A4: { width: 794, height: 1123 }, // 210mm x 297mm, 96dpi 기준
+                A3: { width: 1123, height: 1587 }  // 297mm x 420mm, 96dpi 기준
+            };
+            const PAPER_WIDTH = PAPER_SIZES[paperSize].width;
+            const PAPER_HEIGHT = PAPER_SIZES[paperSize].height;
             const HEADER_HEIGHT = 120; // 헤더 높이
             const GROUP_HEADER_HEIGHT = 50; // 그룹 헤더 높이
             const TABLE_HEADER_HEIGHT = 40; // 테이블 헤더 높이
@@ -1267,7 +1618,7 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
             const BOTTOM_MARGIN = 40; // 하단 여백 (셀이 잘리지 않도록 추가 여백)
 
             // 한 페이지에 들어갈 수 있는 행 수 계산 (하단 여백 고려)
-            const availableHeight = A4_HEIGHT - HEADER_HEIGHT - GROUP_HEADER_HEIGHT - TABLE_HEADER_HEIGHT - FOOTER_HEIGHT - (MARGIN * 2) - BOTTOM_MARGIN;
+            const availableHeight = PAPER_HEIGHT - HEADER_HEIGHT - GROUP_HEADER_HEIGHT - TABLE_HEADER_HEIGHT - FOOTER_HEIGHT - (MARGIN * 2) - BOTTOM_MARGIN;
             const maxRowsPerPage = Math.floor(availableHeight / ROW_HEIGHT);
 
             // 그룹별로 처리
@@ -1316,16 +1667,39 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                     playersByJo[jo].push(player);
                 });
 
-                // 조 번호 정렬 (숫자 우선, 그 다음 문자열)
+                // 그룹 데이터에서 조 순서 정보 가져오기
+                const groupData = groupsData[groupName];
+                const joOrder = groupData?.joOrder || {};
+
+                // 조 번호 정렬 (joOrder가 있으면 엑셀 순서대로, 없으면 숫자 우선)
                 const sortedJos = Object.keys(playersByJo).sort((a, b) => {
-                    const numA = parseInt(a);
-                    const numB = parseInt(b);
-                    if (!isNaN(numA) && !isNaN(numB)) {
-                        return numA - numB;
+                    // joOrder가 있으면 엑셀 순서대로 정렬
+                    if (Object.keys(joOrder).length > 0) {
+                        const orderA = joOrder[a] || 999;
+                        const orderB = joOrder[b] || 999;
+                        if (orderA !== orderB) {
+                            return orderA - orderB;
+                        }
+                        // 순서 정보가 같으면 조 번호로 정렬 (숫자 우선, 그 다음 문자열)
+                        const numA = parseInt(a);
+                        const numB = parseInt(b);
+                        if (!isNaN(numA) && !isNaN(numB)) {
+                            return numA - numB;
+                        }
+                        if (!isNaN(numA)) return -1;
+                        if (!isNaN(numB)) return 1;
+                        return a.localeCompare(b);
+                    } else {
+                        // joOrder가 없으면 기존 정렬 (숫자 우선, 그 다음 문자열)
+                        const numA = parseInt(a);
+                        const numB = parseInt(b);
+                        if (!isNaN(numA) && !isNaN(numB)) {
+                            return numA - numB;
+                        }
+                        if (!isNaN(numA)) return -1;
+                        if (!isNaN(numB)) return 1;
+                        return a.localeCompare(b);
                     }
-                    if (!isNaN(numA)) return -1;
-                    if (!isNaN(numB)) return 1;
-                    return a.localeCompare(b);
                 });
 
                 // 조별로 행 수 계산하여 페이지 분할
@@ -1338,8 +1712,8 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                         position: absolute; 
                         left: -9999px; 
                         top: 0; 
-                        width: ${A4_WIDTH}px !important; 
-                        min-width: ${A4_WIDTH}px !important; 
+                        width: ${PAPER_WIDTH}px !important; 
+                        min-width: ${PAPER_WIDTH}px !important; 
                         max-width: none !important;
                         background-color: white; 
                         padding: ${MARGIN}px; 
@@ -1418,6 +1792,11 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                                 font-size: 14px;
                                 text-align: center;
                                 line-height: 1.5;
+                                word-wrap: break-word;
+                                word-break: break-word;
+                                overflow-wrap: break-word;
+                                white-space: normal;
+                                min-height: 35px;
                             }
                             .jo-header {
                                 background-color: #e0f2fe !important;
@@ -1598,9 +1977,9 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                         scale: 2,
                         useCORS: true,
                         backgroundColor: '#ffffff',
-                        windowWidth: A4_WIDTH,
-                        width: A4_WIDTH,
-                        height: A4_HEIGHT,
+                        windowWidth: PAPER_WIDTH,
+                        width: PAPER_WIDTH,
+                        height: PAPER_HEIGHT,
                         x: 0,
                         scrollX: 0
                     });
@@ -1801,13 +2180,39 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                     playersByJo[jo].push(player);
                 });
                 
+                // 그룹 데이터에서 조 순서 정보 가져오기
+                const groupData = groupsData[groupName];
+                const joOrder = groupData?.joOrder || {};
+                
+                // 조 번호 정렬 (joOrder가 있으면 엑셀 순서대로, 없으면 숫자 우선)
                 const sortedJos = Object.keys(playersByJo).sort((a, b) => {
-                    const numA = parseInt(a);
-                    const numB = parseInt(b);
-                    if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
-                    if (!isNaN(numA)) return -1;
-                    if (!isNaN(numB)) return 1;
-                    return a.localeCompare(b);
+                    // joOrder가 있으면 엑셀 순서대로 정렬
+                    if (Object.keys(joOrder).length > 0) {
+                        const orderA = joOrder[a] || 999;
+                        const orderB = joOrder[b] || 999;
+                        if (orderA !== orderB) {
+                            return orderA - orderB;
+                        }
+                        // 순서 정보가 같으면 조 번호로 정렬 (숫자 우선, 그 다음 문자열)
+                        const numA = parseInt(a);
+                        const numB = parseInt(b);
+                        if (!isNaN(numA) && !isNaN(numB)) {
+                            return numA - numB;
+                        }
+                        if (!isNaN(numA)) return -1;
+                        if (!isNaN(numB)) return 1;
+                        return a.localeCompare(b);
+                    } else {
+                        // joOrder가 없으면 기존 정렬 (숫자 우선, 그 다음 문자열)
+                        const numA = parseInt(a);
+                        const numB = parseInt(b);
+                        if (!isNaN(numA) && !isNaN(numB)) {
+                            return numA - numB;
+                        }
+                        if (!isNaN(numA)) return -1;
+                        if (!isNaN(numB)) return 1;
+                        return a.localeCompare(b);
+                    }
                 });
                 
                 if (groupIdx > 0) {
@@ -1857,8 +2262,8 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                     printContent += `
                         <tbody style="page-break-inside: avoid;">
                             <tr>
-                                <td style="background-color: #e0f2fe; padding: 12px; border: 1px solid #e2e8f0; text-align: center; font-weight: 800; color: #0369a1;">${jo}</td>
-                                <td style="padding: 12px; border: 1px solid #e2e8f0; text-align: center;">${membersList.join('   ')}</td>
+                                <td style="background-color: #e0f2fe; padding: 12px; border: 1px solid #e2e8f0; text-align: center; font-weight: 800; color: #0369a1; word-wrap: break-word; word-break: break-word; overflow-wrap: break-word; white-space: normal;">${jo}</td>
+                                <td style="padding: 12px; border: 1px solid #e2e8f0; text-align: center; word-wrap: break-word; word-break: break-word; overflow-wrap: break-word; white-space: normal; min-height: 35px;">${membersList.join('   ')}</td>
                             </tr>
                         </tbody>
                     `;
@@ -1878,6 +2283,7 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                 return;
             }
             
+            const paperSize = rosterDownloadModal.paperSize || 'A4';
             const fullHtml = `
                 <!DOCTYPE html>
                 <html>
@@ -1887,7 +2293,7 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                     <style>
                         @media print {
                             @page {
-                                size: A4;
+                                size: ${paperSize};
                                 margin: 1cm;
                             }
                             tbody {
@@ -2121,11 +2527,22 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                         </Card>
                          <Card>
                             <CardHeader>
-                                <CardTitle>등록된 개인전 선수 목록</CardTitle>
-                                <CardDescription>
-                                    총 {individualPlayersCount}명의 개인전 선수가 등록되었습니다.
-                                    {Object.keys(groupedIndividualPlayers).length > 0 && ` (${Object.entries(groupedIndividualPlayers).map(([group, players]) => `${group}: ${players.length}명`).join(', ')})`}
-                                </CardDescription>
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <CardTitle>등록된 개인전 선수 목록</CardTitle>
+                                        <CardDescription>
+                                            총 {individualPlayersCount}명의 개인전 선수가 등록되었습니다.
+                                            {Object.keys(groupedIndividualPlayers).length > 0 && ` (${Object.entries(groupedIndividualPlayers).map(([group, players]) => `${group}: ${players.length}명`).join(', ')})`}
+                                        </CardDescription>
+                                    </div>
+                                    <Button 
+                                        onClick={() => handleCheckAllJos('individual')}
+                                        className="bg-blue-600 hover:bg-blue-700 text-white"
+                                    >
+                                        <Check className="mr-2 h-4 w-4" />
+                                        필수: 조 이동 후 최대 인원확인
+                                    </Button>
+                                </div>
                             </CardHeader>
                             <CardContent>
                                 <div className="space-y-4 mb-4">
@@ -2209,6 +2626,19 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                                                         <TableCell className="px-4 py-2">{p.affiliation}</TableCell>
                                                         <TableCell className="text-right space-x-2 px-4 py-2">
                                                             <Button variant="outline" size="icon" onClick={() => handleEditClick(p)}><Edit className="h-4 w-4" /></Button>
+                                                            <Button 
+                                                                variant="outline" 
+                                                                size="icon" 
+                                                                onClick={() => setJoMoveModal({ 
+                                                                    open: true, 
+                                                                    playerId: p.id, 
+                                                                    currentJo: p.jo?.toString() || '', 
+                                                                    currentGroup: p.group || '', 
+                                                                    isNewJo: false 
+                                                                })}
+                                                            >
+                                                                <Users className="h-4 w-4" />
+                                                            </Button>
                                                             <AlertDialog>
                                                                 <AlertDialogTrigger asChild>
                                                                     <Button variant="destructive" size="icon"><Trash2 className="h-4 w-4" /></Button>
@@ -2415,11 +2845,22 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                         </Card>
                         <Card>
                             <CardHeader>
-                                <CardTitle>등록된 2인 1팀 목록</CardTitle>
-                                 <CardDescription>
-                                    총 {teamPlayersCount}개의 팀이 등록되었습니다.
-                                    {Object.keys(groupedTeamPlayers).length > 0 && ` (${Object.entries(groupedTeamPlayers).map(([group, players]) => `${group}: ${players.length}팀`).join(', ')})`}
-                                </CardDescription>
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <CardTitle>등록된 2인 1팀 목록</CardTitle>
+                                        <CardDescription>
+                                            총 {teamPlayersCount}개의 팀이 등록되었습니다.
+                                            {Object.keys(groupedTeamPlayers).length > 0 && ` (${Object.entries(groupedTeamPlayers).map(([group, players]) => `${group}: ${players.length}팀`).join(', ')})`}
+                                        </CardDescription>
+                                    </div>
+                                    <Button 
+                                        onClick={() => handleCheckAllJos('team')}
+                                        className="bg-blue-600 hover:bg-blue-700 text-white"
+                                    >
+                                        <Check className="mr-2 h-4 w-4" />
+                                        필수: 조 이동 후 최대 인원확인
+                                    </Button>
+                                </div>
                             </CardHeader>
                             <CardContent>
                                 <div className="space-y-4 mb-4">
@@ -2506,8 +2947,23 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                                                         <TableCell className="px-4 py-2 align-top">{t.p2_name}</TableCell>
                                                         <TableCell className="px-4 py-2 align-top">{t.p2_affiliation}</TableCell>
                                                         <TableCell className="px-4 py-2 text-right align-top">
-                                                            <Button variant="ghost" size="sm" onClick={() => handleEditClick(t)}><Edit className="w-4 h-4" /></Button>
-                                                            <Button variant="ghost" size="sm" onClick={() => handleDeletePlayer(t.id)}><Trash2 className="w-4 h-4 text-destructive" /></Button>
+                                                            <div className="flex items-center justify-end gap-1">
+                                                                <Button variant="ghost" size="sm" onClick={() => handleEditClick(t)}><Edit className="w-4 h-4" /></Button>
+                                                                <Button 
+                                                                    variant="ghost" 
+                                                                    size="sm" 
+                                                                    onClick={() => setJoMoveModal({ 
+                                                                        open: true, 
+                                                                        playerId: t.id, 
+                                                                        currentJo: t.jo?.toString() || '', 
+                                                                        currentGroup: t.group || '', 
+                                                                        isNewJo: false 
+                                                                    })}
+                                                                >
+                                                                    <Users className="w-4 h-4" />
+                                                                </Button>
+                                                                <Button variant="ghost" size="sm" onClick={() => handleDeletePlayer(t.id)}><Trash2 className="w-4 h-4 text-destructive" /></Button>
+                                                            </div>
                                                         </TableCell>
                                                     </TableRow>
                                                 )
@@ -2743,6 +3199,38 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                     </Tabs>
                 </div>
                 
+                <div className="mb-4 p-4 border rounded-lg bg-gray-50">
+                    <Label className="text-base font-semibold mb-2 block">
+                        📄 용지 크기 <span className="text-sm font-normal text-muted-foreground">(Paper Size)</span>
+                    </Label>
+                    <div className="flex gap-4">
+                        <div className="flex items-center space-x-2">
+                            <input
+                                type="radio"
+                                id="paper-a4"
+                                name="paperSize"
+                                value="A4"
+                                checked={rosterDownloadModal.paperSize === 'A4'}
+                                onChange={(e) => setRosterDownloadModal({ ...rosterDownloadModal, paperSize: e.target.value as 'A4' | 'A3' })}
+                                className="w-4 h-4"
+                            />
+                            <Label htmlFor="paper-a4" className="text-sm font-normal cursor-pointer">A4 (210mm × 297mm)</Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                            <input
+                                type="radio"
+                                id="paper-a3"
+                                name="paperSize"
+                                value="A3"
+                                checked={rosterDownloadModal.paperSize === 'A3'}
+                                onChange={(e) => setRosterDownloadModal({ ...rosterDownloadModal, paperSize: e.target.value as 'A4' | 'A3' })}
+                                className="w-4 h-4"
+                            />
+                            <Label htmlFor="paper-a3" className="text-sm font-normal cursor-pointer">A3 (297mm × 420mm)</Label>
+                        </div>
+                    </div>
+                </div>
+                
                 <DialogFooter className="flex gap-2">
                     <Button
                         variant="outline"
@@ -2769,6 +3257,142 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                 </DialogFooter>
             </DialogContent>
         </Dialog>
+
+        {/* 조 이동 모달 */}
+        <Dialog open={joMoveModal.open} onOpenChange={(open) => {
+            if (!open) {
+                setJoMoveModal({ open: false, playerId: null, currentJo: '', currentGroup: '', isNewJo: false });
+            }
+        }}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>조 이동</DialogTitle>
+                    <DialogDescription>선수를 다른 조로 이동시킵니다.</DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4">
+                    <div className="space-y-2">
+                        <Label>그룹</Label>
+                        <Select 
+                            value={joMoveModal.currentGroup || undefined} 
+                            onValueChange={(value) => {
+                                // 그룹 변경 시 조 선택 초기화
+                                setJoMoveModal({ ...joMoveModal, currentGroup: value, currentJo: '', isNewJo: false });
+                            }}
+                        >
+                            <SelectTrigger><SelectValue placeholder="그룹 선택" /></SelectTrigger>
+                            <SelectContent>
+                                {groupNameList.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <div className="space-y-2">
+                        <Label>이동할 조 선택</Label>
+                        {joMoveModal.currentGroup ? (
+                            <>
+                                {availableJosForMove.length > 0 ? (
+                                    <Select 
+                                        value={joMoveModal.isNewJo ? '__new__' : (joMoveModal.currentJo || undefined)} 
+                                        onValueChange={(value) => {
+                                            if (value === '__new__') {
+                                                // 새 조 만들기 선택 시 Input 표시
+                                                setJoMoveModal({ ...joMoveModal, currentJo: '', isNewJo: true });
+                                            } else {
+                                                setJoMoveModal({ ...joMoveModal, currentJo: value, isNewJo: false });
+                                            }
+                                        }}
+                                    >
+                                        <SelectTrigger><SelectValue placeholder="조 선택" /></SelectTrigger>
+                                        <SelectContent>
+                                            {availableJosForMove.map(jo => (
+                                                <SelectItem key={jo} value={jo}>{jo}조</SelectItem>
+                                            ))}
+                                            <SelectItem value="__new__">+ 새 조 만들기</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                ) : (
+                                    <div className="space-y-2">
+                                        <p className="text-sm text-muted-foreground">이 그룹에는 조가 없습니다. 새 조를 만들어주세요.</p>
+                                        <Input 
+                                            value={joMoveModal.currentJo} 
+                                            onChange={(e) => setJoMoveModal({ ...joMoveModal, currentJo: e.target.value, isNewJo: true })}
+                                            placeholder="새 조 이름 입력 (예: 1, A-1)"
+                                        />
+                                    </div>
+                                )}
+                                {joMoveModal.isNewJo && availableJosForMove.length > 0 && (
+                                    <Input 
+                                        value={joMoveModal.currentJo} 
+                                        onChange={(e) => setJoMoveModal({ ...joMoveModal, currentJo: e.target.value })}
+                                        placeholder="새 조 이름 입력 (예: 1, A-1)"
+                                        className="mt-2"
+                                    />
+                                )}
+                            </>
+                        ) : (
+                            <p className="text-sm text-muted-foreground">먼저 그룹을 선택해주세요.</p>
+                        )}
+                    </div>
+                </div>
+                <DialogFooter>
+                    <DialogClose asChild>
+                        <Button variant="outline">취소</Button>
+                    </DialogClose>
+                    <Button 
+                        onClick={() => {
+                            if (!joMoveModal.playerId) {
+                                toast({ title: '오류', description: '선수 정보가 없습니다.', variant: 'destructive' });
+                                return;
+                            }
+                            if (!joMoveModal.currentGroup) {
+                                toast({ title: '오류', description: '그룹을 선택해주세요.', variant: 'destructive' });
+                                return;
+                            }
+                            if (!joMoveModal.currentJo || joMoveModal.currentJo.trim() === '') {
+                                toast({ title: '오류', description: '조를 선택하거나 입력해주세요.', variant: 'destructive' });
+                                return;
+                            }
+                            handleMovePlayerJo(
+                                joMoveModal.playerId, 
+                                joMoveModal.currentJo.trim(), 
+                                joMoveModal.currentGroup
+                            );
+                            setJoMoveModal({ open: false, playerId: null, currentJo: '', currentGroup: '', isNewJo: false });
+                        }}
+                    >
+                        이동
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+
+        {/* 조별 인원 초과 경고 모달 */}
+        <AlertDialog open={joLimitWarningModal.open} onOpenChange={(open) => {
+            if (!open) {
+                setJoLimitWarningModal({ open: false, type: 'individual', overList: [] });
+            }
+        }}>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>조별 인원 초과</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        <div className="space-y-2">
+                            <p>다음 조들이 인원 제한을 초과했습니다:</p>
+                            <ul className="list-disc list-inside mt-2 space-y-1 max-h-60 overflow-y-auto">
+                                {joLimitWarningModal.overList.map((item, idx) => (
+                                    <li key={idx} className="text-destructive font-medium">{item}</li>
+                                ))}
+                            </ul>
+                            <p className="mt-4">조를 조정하여 모든 조가 {joLimitWarningModal.type === 'individual' ? '4명' : '2팀'} 이하가 되도록 해주세요.</p>
+                        </div>
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogAction onClick={() => setJoLimitWarningModal({ open: false, type: 'individual', overList: [] })}>
+                        확인
+                    </AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
 
     </div>
   )

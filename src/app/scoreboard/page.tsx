@@ -997,10 +997,28 @@ function ExternalScoreboard() {
             const allAssignedCoursesForPlayer = allCourses.filter((c: any) => assignedCourseIds.includes(c.id.toString()));
             // 코스 순서대로 정렬 (order가 큰 것이 마지막 = 백카운트 기준)
             allAssignedCoursesForPlayer.sort((a: any, b: any) => {
-                const orderA = coursesOrder[String(a.id)] || 0;
-                const orderB = coursesOrder[String(b.id)] || 0;
-                const numA = typeof orderA === 'boolean' ? (orderA ? 1 : 0) : (typeof orderA === 'number' ? orderA : 0);
-                const numB = typeof orderB === 'boolean' ? (orderB ? 1 : 0) : (typeof orderB === 'number' ? orderB : 0);
+                const orderA = coursesOrder[String(a.id)];
+                const orderB = coursesOrder[String(b.id)];
+                
+                // 그룹의 courses에서 순서 가져오기, 없으면 코스의 order 사용
+                let numA: number;
+                if (typeof orderA === 'boolean') {
+                    numA = orderA ? (a.order || 0) : 0;
+                } else if (typeof orderA === 'number' && orderA > 0) {
+                    numA = orderA;
+                } else {
+                    numA = a.order || 0;
+                }
+                
+                let numB: number;
+                if (typeof orderB === 'boolean') {
+                    numB = orderB ? (b.order || 0) : 0;
+                } else if (typeof orderB === 'number' && orderB > 0) {
+                    numB = orderB;
+                } else {
+                    numB = b.order || 0;
+                }
+                
                 return numA - numB; // 작은 순서가 먼저 (첫번째 코스가 위)
             });
 
@@ -1093,10 +1111,28 @@ function ExternalScoreboard() {
             const allCoursesForGroup = [...(groupPlayers[0]?.allAssignedCourses || [])].filter(c => c && c.id !== undefined);
             // 코스 순서대로 정렬 (order가 큰 것이 마지막)
             const coursesForGroup = [...allCoursesForGroup].sort((a: any, b: any) => {
-                const orderA = coursesOrder[String(a.id)] || 0;
-                const orderB = coursesOrder[String(b.id)] || 0;
-                const numA = typeof orderA === 'boolean' ? (orderA ? 1 : 0) : (typeof orderA === 'number' ? orderA : 0);
-                const numB = typeof orderB === 'boolean' ? (orderB ? 1 : 0) : (typeof orderB === 'number' ? orderB : 0);
+                const orderA = coursesOrder[String(a.id)];
+                const orderB = coursesOrder[String(b.id)];
+                
+                // 그룹의 courses에서 순서 가져오기, 없으면 코스의 order 사용
+                let numA: number;
+                if (typeof orderA === 'boolean') {
+                    numA = orderA ? (a.order || 0) : 0;
+                } else if (typeof orderA === 'number' && orderA > 0) {
+                    numA = orderA;
+                } else {
+                    numA = a.order || 0;
+                }
+                
+                let numB: number;
+                if (typeof orderB === 'boolean') {
+                    numB = orderB ? (b.order || 0) : 0;
+                } else if (typeof orderB === 'number' && orderB > 0) {
+                    numB = orderB;
+                } else {
+                    numB = b.order || 0;
+                }
+                
                 return numA - numB; // 작은 순서가 먼저
             });
             // 백카운트는 마지막 코스부터 역순이므로 reverse
@@ -1310,10 +1346,28 @@ function ExternalScoreboard() {
                     const allCoursesForGroup = firstPlacePlayers[0]?.allAssignedCourses || allCourses;
                     // 코스 순서대로 정렬 (order가 큰 것이 마지막)
                     const coursesForGroup = [...allCoursesForGroup].sort((a: any, b: any) => {
-                        const orderA = coursesOrder[String(a.id)] || 0;
-                        const orderB = coursesOrder[String(b.id)] || 0;
-                        const numA = typeof orderA === 'boolean' ? (orderA ? 1 : 0) : (typeof orderA === 'number' ? orderA : 0);
-                        const numB = typeof orderB === 'boolean' ? (orderB ? 1 : 0) : (typeof orderB === 'number' ? orderB : 0);
+                        const orderA = coursesOrder[String(a.id)];
+                        const orderB = coursesOrder[String(b.id)];
+                        
+                        // 그룹의 courses에서 순서 가져오기, 없으면 코스의 order 사용
+                        let numA: number;
+                        if (typeof orderA === 'boolean') {
+                            numA = orderA ? (a.order || 0) : 0;
+                        } else if (typeof orderA === 'number' && orderA > 0) {
+                            numA = orderA;
+                        } else {
+                            numA = a.order || 0;
+                        }
+                        
+                        let numB: number;
+                        if (typeof orderB === 'boolean') {
+                            numB = orderB ? (b.order || 0) : 0;
+                        } else if (typeof orderB === 'number' && orderB > 0) {
+                            numB = orderB;
+                        } else {
+                            numB = b.order || 0;
+                        }
+                        
                         return numA - numB; // 작은 순서가 먼저
                     });
                     // 백카운트는 마지막 코스부터 역순이므로 reverse
