@@ -7,12 +7,20 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { useToast } from '@/hooks/use-toast';
 import { db } from '@/lib/firebase';
 import { ref, onValue, set, push, update, remove, get } from 'firebase/database';
+import { logScoreChange } from '@/lib/scoreLogs';
 import { Users, Trash2, Trophy, UserCheck, RotateCcw, Loader2 } from 'lucide-react';
 
 interface SimulationState {
     isRunning: boolean;
     currentStep: string;
     progress: number;
+}
+
+interface StatusReport {
+    step: string;
+    status: 'success' | 'error' | 'warning';
+    message: string;
+    details?: any;
 }
 
 export default function SimulationTool() {
@@ -636,6 +644,266 @@ export default function SimulationTool() {
         }
     };
 
+    // 일괄 점수 등록 (1일차 또는 2일차) - 점수 로그 포함
+    const registerBatchScores = async (day: 1 | 2) => {
+        if (!db) {
+            toast({ title: '오류', description: '데이터베이스 연결이 없습니다.', variant: 'destructive' });
+            return;
+        }
+
+        setSimulationState({ 
+            isRunning: true, 
+            currentStep: `${day}일차 일괄 점수 등록 중...`, 
+            progress: 0 
+        });
+
+        try {
+            const courseA = courses.find(c => c.name === 'A코스' || c.id === 1);
+            const courseB = courses.find(c => c.name === 'B코스' || c.id === 2);
+            const courseC = courses.find(c => c.name === 'C코스' || c.id === 3);
+            const courseD = courses.find(c => c.name === 'D코스' || c.id === 4);
+
+            if (!courseA || !courseB || !courseC || !courseD) {
+                toast({ 
+                    title: '오류', 
+                    description: 'A, B, C, D 코스가 모두 설정되어 있어야 합니다.', 
+                    variant: 'destructive' 
+                });
+                setSimulationState({ isRunning: false, currentStep: '', progress: 0 });
+                return;
+            }
+
+            // Firebase에서 최신 선수 데이터 직접 가져오기
+            const playersSnapshot = await get(ref(db, 'players'));
+            const latestPlayersData = playersSnapshot.val() || {};
+            const latestPlayers = Object.entries(latestPlayersData).map(([id, player]) => ({ id, ...player as any }));
+            
+            const maleGroupPlayers = latestPlayers.filter(p => 
+                p.group === '남자부' && isSimulationData(p)
+            );
+            const femaleGroupPlayers = latestPlayers.filter(p => 
+                p.group === '여자부' && isSimulationData(p)
+            );
+
+            if (maleGroupPlayers.length === 0 && femaleGroupPlayers.length === 0) {
+                toast({ 
+                    title: '오류', 
+                    description: '시뮬레이션 선수가 등록되어 있지 않습니다. 먼저 선수를 등록해주세요.', 
+                    variant: 'destructive' 
+                });
+                setSimulationState({ isRunning: false, currentStep: '', progress: 0 });
+                return;
+            }
+
+            // Firebase에서 최신 점수 데이터 가져오기
+            const scoresSnapshot = await get(ref(db, 'scores'));
+            const latestScores = scoresSnapshot.val() || {};
+
+            const updates: { [key: string]: any } = {};
+            let progress = 0;
+            const total = maleGroupPlayers.length + femaleGroupPlayers.length;
+            let skippedCount = 0;
+            const logPromises: Promise<void>[] = [];
+
+            if (day === 1) {
+                // 1일차: 남자부 AB코스, 여자부 CD코스
+                for (const player of maleGroupPlayers) {
+                    for (const course of [courseA, courseB]) {
+                        const hasScore = latestScores[player.id]?.[course.id]?.['1'];
+                        if (hasScore) {
+                            skippedCount++;
+                            continue;
+                        }
+
+                        for (let hole = 1; hole <= 9; hole++) {
+                            const par = course.pars?.[hole - 1] || 4;
+                            const score = Math.max(1, Math.min(9, par + Math.floor(Math.random() * 5) - 2));
+                            updates[`/scores/${player.id}/${course.id}/${hole}`] = score;
+                            
+                            // 점수 로그 기록 (비동기로 처리)
+                            logPromises.push(
+                                logScoreChange({
+                                    matchId: "tournaments/current",
+                                    playerId: player.id,
+                                    scoreType: "holeScore",
+                                    holeNumber: hole,
+                                    oldValue: 0,
+                                    newValue: score,
+                                    modifiedBy: `시뮬레이션_일괄입력`,
+                                    modifiedByType: "captain",
+                                    comment: `일괄 입력 모드 시뮬레이션 - 코스: ${course.id}, 그룹: ${player.group}, 조: ${player.jo}`,
+                                    courseId: String(course.id),
+                                }).catch(err => {
+                                    console.error('점수 로그 기록 실패:', err);
+                                })
+                            );
+                        }
+                    }
+                    progress++;
+                    setSimulationState({ 
+                        isRunning: true, 
+                        currentStep: `1일차 남자부 일괄 점수 입력 중... (${progress}/${total})`, 
+                        progress: (progress / total) * 100 
+                    });
+                }
+
+                for (const player of femaleGroupPlayers) {
+                    for (const course of [courseC, courseD]) {
+                        const hasScore = latestScores[player.id]?.[course.id]?.['1'];
+                        if (hasScore) {
+                            skippedCount++;
+                            continue;
+                        }
+
+                        for (let hole = 1; hole <= 9; hole++) {
+                            const par = course.pars?.[hole - 1] || 4;
+                            const score = Math.max(1, Math.min(9, par + Math.floor(Math.random() * 5) - 2));
+                            updates[`/scores/${player.id}/${course.id}/${hole}`] = score;
+                            
+                            // 점수 로그 기록 (비동기로 처리)
+                            logPromises.push(
+                                logScoreChange({
+                                    matchId: "tournaments/current",
+                                    playerId: player.id,
+                                    scoreType: "holeScore",
+                                    holeNumber: hole,
+                                    oldValue: 0,
+                                    newValue: score,
+                                    modifiedBy: `시뮬레이션_일괄입력`,
+                                    modifiedByType: "captain",
+                                    comment: `일괄 입력 모드 시뮬레이션 - 코스: ${course.id}, 그룹: ${player.group}, 조: ${player.jo}`,
+                                    courseId: String(course.id),
+                                }).catch(err => {
+                                    console.error('점수 로그 기록 실패:', err);
+                                })
+                            );
+                        }
+                    }
+                    progress++;
+                    setSimulationState({ 
+                        isRunning: true, 
+                        currentStep: `1일차 여자부 일괄 점수 입력 중... (${progress}/${total})`, 
+                        progress: (progress / total) * 100 
+                    });
+                }
+            } else {
+                // 2일차: 남자부 CD코스, 여자부 AB코스
+                for (const player of maleGroupPlayers) {
+                    for (const course of [courseC, courseD]) {
+                        const hasScore = latestScores[player.id]?.[course.id]?.['1'];
+                        if (hasScore) {
+                            skippedCount++;
+                            continue;
+                        }
+
+                        for (let hole = 1; hole <= 9; hole++) {
+                            const par = course.pars?.[hole - 1] || 4;
+                            const score = Math.max(1, Math.min(9, par + Math.floor(Math.random() * 5) - 2));
+                            updates[`/scores/${player.id}/${course.id}/${hole}`] = score;
+                            
+                            // 점수 로그 기록 (비동기로 처리)
+                            logPromises.push(
+                                logScoreChange({
+                                    matchId: "tournaments/current",
+                                    playerId: player.id,
+                                    scoreType: "holeScore",
+                                    holeNumber: hole,
+                                    oldValue: 0,
+                                    newValue: score,
+                                    modifiedBy: `시뮬레이션_일괄입력`,
+                                    modifiedByType: "captain",
+                                    comment: `일괄 입력 모드 시뮬레이션 - 코스: ${course.id}, 그룹: ${player.group}, 조: ${player.jo}`,
+                                    courseId: String(course.id),
+                                }).catch(err => {
+                                    console.error('점수 로그 기록 실패:', err);
+                                })
+                            );
+                        }
+                    }
+                    progress++;
+                    setSimulationState({ 
+                        isRunning: true, 
+                        currentStep: `2일차 남자부 일괄 점수 입력 중... (${progress}/${total})`, 
+                        progress: (progress / total) * 100 
+                    });
+                }
+
+                for (const player of femaleGroupPlayers) {
+                    for (const course of [courseA, courseB]) {
+                        const hasScore = latestScores[player.id]?.[course.id]?.['1'];
+                        if (hasScore) {
+                            skippedCount++;
+                            continue;
+                        }
+
+                        for (let hole = 1; hole <= 9; hole++) {
+                            const par = course.pars?.[hole - 1] || 4;
+                            const score = Math.max(1, Math.min(9, par + Math.floor(Math.random() * 5) - 2));
+                            updates[`/scores/${player.id}/${course.id}/${hole}`] = score;
+                            
+                            // 점수 로그 기록 (비동기로 처리)
+                            logPromises.push(
+                                logScoreChange({
+                                    matchId: "tournaments/current",
+                                    playerId: player.id,
+                                    scoreType: "holeScore",
+                                    holeNumber: hole,
+                                    oldValue: 0,
+                                    newValue: score,
+                                    modifiedBy: `시뮬레이션_일괄입력`,
+                                    modifiedByType: "captain",
+                                    comment: `일괄 입력 모드 시뮬레이션 - 코스: ${course.id}, 그룹: ${player.group}, 조: ${player.jo}`,
+                                    courseId: String(course.id),
+                                }).catch(err => {
+                                    console.error('점수 로그 기록 실패:', err);
+                                })
+                            );
+                        }
+                    }
+                    progress++;
+                    setSimulationState({ 
+                        isRunning: true, 
+                        currentStep: `2일차 여자부 일괄 점수 입력 중... (${progress}/${total})`, 
+                        progress: (progress / total) * 100 
+                    });
+                }
+            }
+
+            if (Object.keys(updates).length === 0) {
+                toast({ 
+                    title: '경고', 
+                    description: skippedCount > 0 
+                        ? `이미 모든 점수가 등록되어 있습니다. (${skippedCount}개 코스 스킵됨)`
+                        : '등록할 점수가 없습니다. 선수가 등록되어 있는지 확인해주세요.', 
+                    variant: 'destructive' 
+                });
+            } else {
+                // 점수 저장
+                await update(ref(db), updates);
+                
+                // 점수 로그 기록 (병렬 처리)
+                await Promise.allSettled(logPromises);
+                
+                const message = skippedCount > 0 
+                    ? `${day}일차 일괄 점수가 등록되었습니다. (${Object.keys(updates).length}개 점수 등록, ${logPromises.length}개 로그 기록, ${skippedCount}개 코스 스킵됨)`
+                    : `${day}일차 일괄 점수가 등록되었습니다. (${Object.keys(updates).length}개 점수 등록, ${logPromises.length}개 로그 기록)`;
+                
+                toast({ 
+                    title: '점수 등록 완료', 
+                    description: message 
+                });
+            }
+        } catch (error: any) {
+            toast({ 
+                title: '점수 등록 실패', 
+                description: error.message || '알 수 없는 오류', 
+                variant: 'destructive' 
+            });
+        } finally {
+            setSimulationState({ isRunning: false, currentStep: '', progress: 0 });
+        }
+    };
+
     // 재편성 선수 등록 (1일차 순위대로 4명씩 조 재편성)
     const reorganizePlayers = async () => {
         if (!db) {
@@ -836,14 +1104,6 @@ export default function SimulationTool() {
             setShowDeleteConfirm(false);
         }
     };
-
-    // 상태 보고 인터페이스
-    interface StatusReport {
-        step: string;
-        status: 'success' | 'error' | 'warning';
-        message: string;
-        details?: any;
-    }
 
     // 전체 상태 확인 함수
     const checkSystemStatus = async (): Promise<StatusReport[]> => {
@@ -1340,6 +1600,161 @@ export default function SimulationTool() {
         }
     };
 
+    // 일괄 자동실행
+    const runBatchAutoSimulation = async () => {
+        if (!db) {
+            toast({ title: '오류', description: '데이터베이스 연결이 없습니다.', variant: 'destructive' });
+            return;
+        }
+
+        const reports: StatusReport[] = [];
+        setSimulationState({ isRunning: true, currentStep: '일괄 자동실행 시작...', progress: 0 });
+
+        try {
+            // 기존 시뮬레이션 데이터 삭제 (중복 방지)
+            const existingSimulationPlayers = allPlayers.filter(p => isSimulationData(p));
+            if (existingSimulationPlayers.length > 0) {
+                reports.push({ step: '기존 데이터 삭제', status: 'success', message: `기존 시뮬레이션 데이터 ${existingSimulationPlayers.length}명 삭제 중...` });
+                setSimulationState({ isRunning: true, currentStep: '기존 시뮬레이션 데이터 삭제 중...', progress: 0 });
+                
+                const deleteUpdates: { [key: string]: any } = {};
+                for (const player of existingSimulationPlayers) {
+                    deleteUpdates[`/players/${player.id}`] = null;
+                    if (allScores[player.id]) {
+                        deleteUpdates[`/scores/${player.id}`] = null;
+                    }
+                }
+                await update(ref(db), deleteUpdates);
+                await new Promise(resolve => setTimeout(resolve, 1000)); // 삭제 동기화 대기
+            }
+            
+            // 1단계: 300명 등록 (남자 150명, 여자 150명)
+            reports.push({ step: '1단계: 선수 등록', status: 'success', message: '300명 등록 시작 (남자 150명, 여자 150명)' });
+            setSimulationState({ isRunning: true, currentStep: '1단계: 300명 선수 등록 중... (남자 150명, 여자 150명)', progress: 0 });
+            await registerPlayers(300);
+            // Firebase 데이터 동기화 대기 (더 긴 대기 시간)
+            await new Promise(resolve => setTimeout(resolve, 3000));
+            
+            // 실제로 선수가 등록되었는지 확인
+            const playersSnapshot = await get(ref(db, 'players'));
+            const playersData = playersSnapshot.val() || {};
+            const registeredCount = Object.values(playersData).filter((p: any) => 
+                isSimulationData(p)
+            ).length;
+            
+            if (registeredCount === 0) {
+                reports.push({
+                    step: '선수 등록 확인',
+                    status: 'error',
+                    message: `선수 등록 실패: 0명 등록됨 (예상: 300명)`
+                });
+            } else {
+                reports.push({
+                    step: '선수 등록 확인',
+                    status: 'success',
+                    message: `선수 등록 성공: ${registeredCount}명 등록됨`
+                });
+            }
+            
+            // 상태 확인 (데이터 동기화 후 - 더 긴 대기)
+            await new Promise(resolve => setTimeout(resolve, 2000)); // 추가 대기 (상태 동기화 확실히)
+            const statusAfterRegister = await checkSystemStatus();
+            reports.push(...statusAfterRegister);
+
+            // 2단계: 1일차 일괄 점수 등록
+            reports.push({ step: '2단계: 1일차 일괄 점수 등록', status: 'success', message: '1일차 일괄 점수 등록 시작' });
+            setSimulationState({ isRunning: true, currentStep: '2단계: 1일차 일괄 점수 등록 중...', progress: 0 });
+            await registerBatchScores(1);
+            await new Promise(resolve => setTimeout(resolve, 2000)); // 점수 동기화 대기
+            
+            const statusAfterDay1 = await checkSystemStatus();
+            reports.push(...statusAfterDay1);
+
+            // 3단계: 조 재편성
+            reports.push({ step: '3단계: 조 재편성', status: 'success', message: '조 재편성 시작' });
+            setSimulationState({ isRunning: true, currentStep: '3단계: 조 재편성 중...', progress: 0 });
+            await reorganizePlayers();
+            await new Promise(resolve => setTimeout(resolve, 2000)); // 재편성 동기화 대기
+            
+            const statusAfterReorganize = await checkSystemStatus();
+            reports.push(...statusAfterReorganize);
+
+            // 4단계: 2일차 일괄 점수 등록
+            reports.push({ step: '4단계: 2일차 일괄 점수 등록', status: 'success', message: '2일차 일괄 점수 등록 시작' });
+            setSimulationState({ isRunning: true, currentStep: '4단계: 2일차 일괄 점수 등록 중...', progress: 0 });
+            await registerBatchScores(2);
+            await new Promise(resolve => setTimeout(resolve, 2000)); // 점수 동기화 대기
+            
+            const finalStatus = await checkSystemStatus();
+            reports.push(...finalStatus);
+
+            // 최종 보고서 생성
+            const successCount = reports.filter(r => r.status === 'success').length;
+            const warningCount = reports.filter(r => r.status === 'warning').length;
+            const errorCount = reports.filter(r => r.status === 'error').length;
+
+            // 콘솔에 상세 보고서 출력
+            console.log('========================================');
+            console.log('일괄 자동실행 완료 - 상세 보고서');
+            console.log('========================================');
+            console.log(`✅ 성공: ${successCount}개`);
+            console.log(`⚠️ 경고: ${warningCount}개`);
+            console.log(`❌ 오류: ${errorCount}개`);
+            console.log('----------------------------------------');
+            reports.forEach((r, i) => {
+                const icon = r.status === 'success' ? '✅' : r.status === 'warning' ? '⚠️' : '❌';
+                console.log(`${i + 1}. [${icon}] ${r.step}: ${r.message}`);
+                if (r.details) {
+                    console.log('   상세:', r.details);
+                }
+            });
+            console.log('========================================');
+
+            // 모달로 보고서 표시
+            setReportData({
+                title: '일괄 자동실행 완료',
+                reports: reports
+            });
+            setShowReportModal(true);
+
+            toast({ 
+                title: '일괄 자동실행 완료', 
+                description: `성공: ${successCount}개, 경고: ${warningCount}개, 오류: ${errorCount}개 (상세 보고서는 모달에서 확인하세요)`,
+                duration: 5000
+            });
+
+        } catch (error: any) {
+            reports.push({
+                step: '자동실행 오류',
+                status: 'error',
+                message: error.message || '알 수 없는 오류'
+            });
+            
+            // 콘솔에 오류 출력
+            console.error('========================================');
+            console.error('일괄 자동실행 오류 발생!');
+            console.error('========================================');
+            console.error('오류 메시지:', error.message || '알 수 없는 오류');
+            console.error('오류 스택:', error.stack);
+            console.error('========================================');
+            
+            // 모달로 오류 보고서 표시
+            setReportData({
+                title: '일괄 자동실행 오류',
+                reports: reports
+            });
+            setShowReportModal(true);
+            
+            toast({ 
+                title: '자동실행 실패', 
+                description: error.message || '알 수 없는 오류 (상세 보고서는 모달에서 확인하세요)', 
+                variant: 'destructive' 
+            });
+        } finally {
+            setSimulationState({ isRunning: false, currentStep: '', progress: 0 });
+        }
+    };
+
     const simulationPlayersCount = allPlayers.filter(p => isSimulationData(p)).length;
 
     return (
@@ -1438,6 +1853,24 @@ export default function SimulationTool() {
                         <span className="ml-2 text-xs">(2일차)</span>
                     </Button>
                     <Button
+                        onClick={() => registerBatchScores(1)}
+                        disabled={simulationState.isRunning}
+                        className="bg-cyan-600 hover:bg-cyan-700"
+                    >
+                        <Trophy className="mr-2 h-4 w-4" />
+                        일괄 점수 등록
+                        <span className="ml-2 text-xs">(1일차)</span>
+                    </Button>
+                    <Button
+                        onClick={() => registerBatchScores(2)}
+                        disabled={simulationState.isRunning}
+                        className="bg-cyan-600 hover:bg-cyan-700"
+                    >
+                        <Trophy className="mr-2 h-4 w-4" />
+                        일괄 점수 등록
+                        <span className="ml-2 text-xs">(2일차)</span>
+                    </Button>
+                    <Button
                         onClick={reorganizePlayers}
                         disabled={simulationState.isRunning}
                         className="bg-purple-600 hover:bg-purple-700"
@@ -1462,6 +1895,14 @@ export default function SimulationTool() {
                         조장 자동실행 (300명 등록 → 1일차 → 재편성 → 2일차)
                     </Button>
                     <Button
+                        onClick={runBatchAutoSimulation}
+                        disabled={simulationState.isRunning}
+                        className="bg-cyan-600 hover:bg-cyan-700 col-span-full"
+                    >
+                        <Trophy className="mr-2 h-4 w-4" />
+                        일괄 자동실행 (300명 등록 → 1일차 → 재편성 → 2일차)
+                    </Button>
+                    <Button
                         onClick={() => setShowDeleteConfirm(true)}
                         disabled={simulationState.isRunning || simulationPlayersCount === 0}
                         variant="destructive"
@@ -1478,8 +1919,10 @@ export default function SimulationTool() {
                         <li>50명/100명/300명 등록: 남자부와 여자부 선수를 자동 등록합니다.</li>
                         <li>심판 점수 등록: 1일차 점수를 입력합니다 (남자부: AB코스, 여자부: CD코스).</li>
                         <li>조장 점수 등록 (1일차): 1일차 점수를 입력합니다 (남자부: AB코스, 여자부: CD코스).</li>
+                        <li>일괄 점수 등록 (1일차): 1일차 점수를 일괄 입력 모드로 입력합니다 (점수 로그 포함).</li>
                         <li>재편성 선수 등록: 1일차 순위대로 4명씩 조를 재편성합니다.</li>
                         <li>조장 점수 등록 (2일차): 2일차 점수를 입력합니다 (남자부: CD코스, 여자부: AB코스).</li>
+                        <li>일괄 점수 등록 (2일차): 2일차 점수를 일괄 입력 모드로 입력합니다 (점수 로그 포함).</li>
                     </ol>
                 </div>
             </CardContent>
