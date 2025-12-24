@@ -1275,8 +1275,13 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
         }
 
         const groupRef = ref(db!, `tournaments/current/groups/${trimmedName}`);
+        // 코스 순서를 자동으로 설정 (코스의 order 값 또는 코스 ID를 기준으로)
         const defaultCourses = courses.reduce((acc, course) => {
-            acc[course.id] = true;
+            // 코스의 order 값이 있으면 그 값을 사용, 없으면 코스 ID를 사용
+            const courseOrder = course.order || course.id || 0;
+            if (courseOrder > 0) {
+                acc[course.id] = courseOrder;
+            }
             return acc;
         }, {});
 
@@ -1343,7 +1348,13 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                 coursesWithExistingOrder.push({ courseId: courseIdStr, order: existingOrder });
             } else {
                 // 기존 설정이 없거나 boolean true인 경우 → 코스의 order 값을 기본값으로 사용
-                const courseOrder = course.order || 0;
+                // 코스의 order가 없으면 코스 ID를 기준으로 순서 할당 (대회 및 코스 관리에서 생성된 순서)
+                let courseOrder = course.order;
+                if (!courseOrder || courseOrder <= 0) {
+                    // 코스의 order가 없으면 코스 ID를 기준으로 순서 할당
+                    // 코스 ID가 1, 2, 3, 4... 순서대로 생성되었다고 가정
+                    courseOrder = course.id || 0;
+                }
                 if (courseOrder > 0) {
                     coursesWithoutOrder.push({ courseId: courseIdStr, courseOrder });
                 } else {
