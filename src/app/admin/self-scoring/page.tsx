@@ -11,7 +11,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Eye, EyeOff, Copy, Check, RefreshCw, Download } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { getSelfScoringLogs, ScoreLog } from '@/lib/scoreLogs';
-import { getCaptainAccounts } from '@/lib/auth';
+import { getCaptainAccounts, updateCaptainPassword } from '@/lib/auth';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 // @ts-ignore
 import QRCode from 'qrcode.react';
@@ -28,6 +28,8 @@ export default function SelfScoringManagementPage() {
     const [logsLoading, setLogsLoading] = useState(false);
     const [captainAccounts, setCaptainAccounts] = useState<any[]>([]);
     const [showPasswords, setShowPasswords] = useState<{ [key: string]: boolean }>({});
+    const [editingPassword, setEditingPassword] = useState<string | null>(null);
+    const [newPassword, setNewPassword] = useState('');
     const qrRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -61,17 +63,56 @@ export default function SelfScoringManagementPage() {
     }, []);
 
     // 조장 계정 목록 불러오기
+    const loadCaptainAccounts = async () => {
+        try {
+            const accounts = await getCaptainAccounts();
+            setCaptainAccounts(accounts);
+        } catch (error) {
+            console.error('조장 계정 목록 불러오기 실패:', error);
+        }
+    };
+
     useEffect(() => {
-        const loadCaptainAccounts = async () => {
-            try {
-                const accounts = await getCaptainAccounts();
-                setCaptainAccounts(accounts);
-            } catch (error) {
-                console.error('조장 계정 목록 불러오기 실패:', error);
-            }
-        };
         loadCaptainAccounts();
     }, []);
+
+    // 조장 계정 비밀번호 변경
+    const handleUpdatePassword = async (koreanId: string) => {
+        if (!newPassword.trim()) {
+            toast({
+                title: "비밀번호 변경 실패",
+                description: "새 비밀번호를 입력해주세요.",
+                variant: "destructive",
+            });
+            return;
+        }
+
+        if (newPassword.length < 4) {
+            toast({
+                title: "비밀번호 변경 실패",
+                description: "비밀번호는 최소 4자 이상이어야 합니다.",
+                variant: "destructive",
+            });
+            return;
+        }
+
+        try {
+            await updateCaptainPassword(koreanId, newPassword);
+            toast({
+                title: "성공",
+                description: `${koreanId} 계정의 비밀번호가 변경되었습니다.`,
+            });
+            setEditingPassword(null);
+            setNewPassword('');
+            await loadCaptainAccounts(); // 목록 새로고침
+        } catch (error: any) {
+            toast({
+                title: "비밀번호 변경 실패",
+                description: error.message,
+                variant: "destructive",
+            });
+        }
+    };
 
     // 모바일(iOS 사파리 포함)에서도 동작하도록 클립보드 복사 유틸
     const copyTextUniversal = async (text: string): Promise<boolean> => {
@@ -241,19 +282,66 @@ export default function SelfScoringManagementPage() {
                                                 </TableCell>
                                                 <TableCell>
                                                     <div className="flex items-center space-x-2">
-                                                        <span className="font-mono">
-                                                            {showPasswords[account.id] ? account.password : '••••••'}
-                                                        </span>
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="sm"
-                                                            onClick={() => setShowPasswords(prev => ({
-                                                                ...prev,
-                                                                [account.id]: !prev[account.id]
-                                                            }))}
-                                                        >
-                                                            {showPasswords[account.id] ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                                                        </Button>
+                                                        {editingPassword === account.id ? (
+                                                            <div className="flex items-center space-x-2">
+                                                                <Input
+                                                                    type="text"
+                                                                    placeholder="새 비밀번호"
+                                                                    value={newPassword}
+                                                                    onChange={(e) => setNewPassword(e.target.value)}
+                                                                    className="w-24 text-xs"
+                                                                    onKeyPress={(e) => e.key === 'Enter' && handleUpdatePassword(account.id)}
+                                                                    onFocus={(e) => e.target.select()}
+                                                                    autoFocus
+                                                                />
+                                                                <Button
+                                                                    size="sm"
+                                                                    onClick={() => handleUpdatePassword(account.id)}
+                                                                    className="text-xs bg-green-600 hover:bg-green-700"
+                                                                >
+                                                                    저장
+                                                                </Button>
+                                                                <Button
+                                                                    size="sm"
+                                                                    variant="outline"
+                                                                    onClick={() => {
+                                                                        setEditingPassword(null);
+                                                                        setNewPassword('');
+                                                                    }}
+                                                                    className="text-xs"
+                                                                >
+                                                                    취소
+                                                                </Button>
+                                                            </div>
+                                                        ) : (
+                                                            <>
+                                                                <span className="font-mono">
+                                                                    {showPasswords[account.id] ? account.password : '••••••'}
+                                                                </span>
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="sm"
+                                                                    onClick={() => setShowPasswords(prev => ({
+                                                                        ...prev,
+                                                                        [account.id]: !prev[account.id]
+                                                                    }))}
+                                                                >
+                                                                    {showPasswords[account.id] ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                                                                </Button>
+                                                                <Button
+                                                                    variant="outline"
+                                                                    size="sm"
+                                                                    onClick={() => {
+                                                                        setEditingPassword(account.id);
+                                                                        setNewPassword(account.password || '123456');
+                                                                    }}
+                                                                    className="text-xs"
+                                                                    disabled={!account.isActive}
+                                                                >
+                                                                    변경
+                                                                </Button>
+                                                            </>
+                                                        )}
                                                     </div>
                                                 </TableCell>
                                                 <TableCell>

@@ -210,8 +210,15 @@ export const createBulkCaptainAccounts = async (replaceExisting: boolean = false
     // 기존 계정 삭제 옵션이 체크된 경우
     if (replaceExisting) {
       const existingDocs = await getDocs(captainsRef);
-      const deletePromises = existingDocs.docs.map(doc => deleteDoc(doc.ref));
-      await Promise.all(deletePromises);
+      const totalDocs = existingDocs.docs.length;
+      
+      // Firestore 배치 제한(500개) 고려하여 분할 처리
+      const batchSize = 500;
+      for (let i = 0; i < totalDocs; i += batchSize) {
+        const batch = existingDocs.docs.slice(i, i + batchSize);
+        const deletePromises = batch.map(doc => deleteDoc(doc.ref));
+        await Promise.all(deletePromises);
+      }
     }
     
     // 추가 생성이 아닌 경우, 기존 계정이 있는지 확인
@@ -441,8 +448,15 @@ export const createBulkRefereeAccounts = async (replaceExisting: boolean = false
     // 기존 계정 삭제 옵션이 체크된 경우
     if (replaceExisting) {
       const existingDocs = await getDocs(refereesRef);
-      const deletePromises = existingDocs.docs.map(doc => deleteDoc(doc.ref));
-      await Promise.all(deletePromises);
+      const totalDocs = existingDocs.docs.length;
+      
+      // Firestore 배치 제한(500개) 고려하여 분할 처리
+      const batchSize = 500;
+      for (let i = 0; i < totalDocs; i += batchSize) {
+        const batch = existingDocs.docs.slice(i, i + batchSize);
+        const deletePromises = batch.map(doc => deleteDoc(doc.ref));
+        await Promise.all(deletePromises);
+      }
     }
     
     // 추가 생성이 아닌 경우, 기존 계정이 있는지 확인

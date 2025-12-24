@@ -213,6 +213,8 @@ export default function SuperAdminPage() {
                 title: "성공",
                 description: `${koreanId} 계정이 ${action}되었습니다.`,
             });
+            // 약간의 지연 후 새로고침 (Firestore 업데이트 반영 시간 확보)
+            await new Promise(resolve => setTimeout(resolve, 300));
             await loadCaptainAccounts(); // 목록 새로고침
         } catch (error: any) {
             toast({
@@ -267,6 +269,8 @@ export default function SuperAdminPage() {
             });
             
             setSelectedCaptains([]);
+            // 약간의 지연 후 새로고침 (Firestore 업데이트 반영 시간 확보)
+            await new Promise(resolve => setTimeout(resolve, 300));
             await loadCaptainAccounts();
         } catch (error: any) {
             toast({

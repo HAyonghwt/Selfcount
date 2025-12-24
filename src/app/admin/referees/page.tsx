@@ -13,6 +13,7 @@ import { collection, onSnapshot, getDocs } from 'firebase/firestore';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Eye, EyeOff, Copy, Check, Download } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { updateRefereePassword } from '@/lib/auth';
 // @ts-ignore
 import QRCode from 'qrcode.react';
 
@@ -27,6 +28,8 @@ export default function RefereeManagementPage() {
     const [copied, setCopied] = useState(false);
     const [refereeAccounts, setRefereeAccounts] = useState<any[]>([]);
     const [showPasswords, setShowPasswords] = useState<{ [key: string]: boolean }>({});
+    const [editingPassword, setEditingPassword] = useState<string | null>(null);
+    const [newPassword, setNewPassword] = useState('');
     const [tournamentCourses, setTournamentCourses] = useState<any[]>([]);
     const [groupsData, setGroupsData] = useState<{ [key: string]: any }>({});
     const qrRef = useRef<HTMLDivElement>(null);
@@ -153,6 +156,44 @@ export default function RefereeManagementPage() {
             setRefereeAccounts(sortedAccounts);
         } catch (error) {
             console.error('심판 계정 목록 불러오기 실패:', error);
+        }
+    };
+
+    // 심판 계정 비밀번호 변경
+    const handleUpdatePassword = async (koreanId: string) => {
+        if (!newPassword.trim()) {
+            toast({
+                title: "비밀번호 변경 실패",
+                description: "새 비밀번호를 입력해주세요.",
+                variant: "destructive",
+            });
+            return;
+        }
+
+        if (newPassword.length < 4) {
+            toast({
+                title: "비밀번호 변경 실패",
+                description: "비밀번호는 최소 4자 이상이어야 합니다.",
+                variant: "destructive",
+            });
+            return;
+        }
+
+        try {
+            await updateRefereePassword(koreanId, newPassword);
+            toast({
+                title: "성공",
+                description: `${koreanId} 계정의 비밀번호가 변경되었습니다.`,
+            });
+            setEditingPassword(null);
+            setNewPassword('');
+            // Firestore 실시간 리스너가 자동으로 업데이트하므로 별도 새로고침 불필요
+        } catch (error: any) {
+            toast({
+                title: "비밀번호 변경 실패",
+                description: error.message,
+                variant: "destructive",
+            });
         }
     };
 
@@ -468,7 +509,7 @@ export default function RefereeManagementPage() {
                                         <Table>
                                             <TableHeader>
                                                 <TableRow>
-                                                    <TableHead className="w-32 font-bold">홀</TableHead>
+                                                    <TableHead className="font-bold whitespace-nowrap">홀</TableHead>
                                                     <TableHead className="font-bold">심판 아이디</TableHead>
                                                     <TableHead className="font-bold">비밀번호</TableHead>
                                                     <TableHead className="w-20 font-bold">상태</TableHead>
@@ -477,7 +518,7 @@ export default function RefereeManagementPage() {
                                             <TableBody>
                                                 {referees.map(referee => (
                                                     <TableRow key={referee.id} className={!referee.isActive ? 'bg-gray-50' : ''}>
-                                                        <TableCell className="font-medium">{referee.displayHole}</TableCell>
+                                                        <TableCell className="font-medium whitespace-nowrap">{referee.displayHole}</TableCell>
                                                         <TableCell>
                                                             <code className="bg-muted px-2 py-1 rounded-md text-base">{referee.id}</code>
                                                             {!referee.isActive && !referee.isPlaceholder && <span className="ml-2 text-sm text-gray-500">(비활성화)</span>}
@@ -485,22 +526,71 @@ export default function RefereeManagementPage() {
                                                         </TableCell>
                                                         <TableCell>
                                                             <div className="flex items-center gap-2">
-                                                                <span className="font-mono text-base">
-                                                                    {referee.isPlaceholder ? '••••••' : 
-                                                                     showPasswords[referee.id] ? referee.password : referee.password.replace(/./g, '•')}
-                                                                </span>
-                                                                {!referee.isPlaceholder && (
-                                                                    <button
-                                                                        type="button"
-                                                                        className="text-muted-foreground hover:text-foreground"
-                                                                        onClick={() => setShowPasswords(prev => ({
-                                                                            ...prev,
-                                                                            [referee.id]: !prev[referee.id]
-                                                                        }))}
-                                                                        aria-label={showPasswords[referee.id] ? "비밀번호 숨기기" : "비밀번호 보기"}
-                                                                    >
-                                                                        {showPasswords[referee.id] ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                                                                    </button>
+                                                                {editingPassword === referee.id ? (
+                                                                    <div className="flex items-center gap-2">
+                                                                        <Input
+                                                                            type="text"
+                                                                            placeholder="새 비밀번호"
+                                                                            value={newPassword}
+                                                                            onChange={(e) => setNewPassword(e.target.value)}
+                                                                            className="w-24 text-xs"
+                                                                            onKeyPress={(e) => e.key === 'Enter' && handleUpdatePassword(referee.id)}
+                                                                            onFocus={(e) => e.target.select()}
+                                                                            autoFocus
+                                                                        />
+                                                                        <Button
+                                                                            size="sm"
+                                                                            onClick={() => handleUpdatePassword(referee.id)}
+                                                                            className="text-xs bg-green-600 hover:bg-green-700"
+                                                                        >
+                                                                            저장
+                                                                        </Button>
+                                                                        <Button
+                                                                            size="sm"
+                                                                            variant="outline"
+                                                                            onClick={() => {
+                                                                                setEditingPassword(null);
+                                                                                setNewPassword('');
+                                                                            }}
+                                                                            className="text-xs"
+                                                                        >
+                                                                            취소
+                                                                        </Button>
+                                                                    </div>
+                                                                ) : (
+                                                                    <>
+                                                                        <span className="font-mono text-base">
+                                                                            {referee.isPlaceholder ? '••••••' : 
+                                                                             showPasswords[referee.id] ? referee.password : referee.password.replace(/./g, '•')}
+                                                                        </span>
+                                                                        {!referee.isPlaceholder && (
+                                                                            <>
+                                                                                <button
+                                                                                    type="button"
+                                                                                    className="text-muted-foreground hover:text-foreground"
+                                                                                    onClick={() => setShowPasswords(prev => ({
+                                                                                        ...prev,
+                                                                                        [referee.id]: !prev[referee.id]
+                                                                                    }))}
+                                                                                    aria-label={showPasswords[referee.id] ? "비밀번호 숨기기" : "비밀번호 보기"}
+                                                                                >
+                                                                                    {showPasswords[referee.id] ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                                                                                </button>
+                                                                                <Button
+                                                                                    variant="outline"
+                                                                                    size="sm"
+                                                                                    onClick={() => {
+                                                                                        setEditingPassword(referee.id);
+                                                                                        setNewPassword(referee.password || '123456');
+                                                                                    }}
+                                                                                    className="text-xs"
+                                                                                    disabled={!referee.isActive || referee.isPlaceholder}
+                                                                                >
+                                                                                    변경
+                                                                                </Button>
+                                                                            </>
+                                                                        )}
+                                                                    </>
                                                                 )}
                                                             </div>
                                                         </TableCell>
