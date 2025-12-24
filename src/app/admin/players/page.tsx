@@ -418,6 +418,36 @@ export default function PlayerManagementPage() {
                     }
                 }
 
+                // 각 그룹에 이미 다른 타입의 선수가 있는지 확인
+                const typeConflicts: string[] = [];
+                sheetNames.forEach((groupName: string) => {
+                    const groupData = groupsData[groupName];
+                    if (!groupData) return; // 그룹이 없으면 다음 단계에서 처리됨
+                    
+                    // 그룹 타입 확인
+                    if (groupData.type !== type) {
+                        typeConflicts.push(`${groupName} (그룹 타입: ${groupData.type === 'individual' ? '개인전' : '2인1팀'}, 업로드 타입: ${type === 'individual' ? '개인전' : '2인1팀'})`);
+                    }
+                    
+                    // 기존 선수 타입 확인
+                    const existingPlayers = allPlayers.filter((p: any) => p.group === groupName);
+                    if (existingPlayers.length > 0) {
+                        const existingType = existingPlayers[0].type;
+                        if (existingType !== type) {
+                            typeConflicts.push(`${groupName} (기존 선수 타입: ${existingType === 'individual' ? '개인전' : '2인1팀'}, 업로드 타입: ${type === 'individual' ? '개인전' : '2인1팀'})`);
+                        }
+                    }
+                });
+                
+                if (typeConflicts.length > 0) {
+                    toast({
+                        title: '타입 불일치',
+                        description: `다음 그룹에서 타입이 일치하지 않습니다:\n${typeConflicts.join('\n')}\n\n올바른 타입의 그룹을 선택하거나 기존 선수를 먼저 삭제해주세요.`,
+                        variant: 'destructive'
+                    });
+                    return;
+                }
+
                 // 그룹별 조 순서 추적 (엑셀 파일에서 나타나는 순서)
                 const groupJoOrder: { [groupName: string]: { [jo: string]: number } } = {};
                 // 그룹별 조별 선수 순서 추적 (엑셀 파일에서 나타나는 순서)
@@ -1226,6 +1256,21 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
         }
         if (groupsData[trimmedName]) {
             toast({ title: '오류', description: '이미 존재하는 그룹 이름입니다.' });
+            return;
+        }
+
+        // 해당 그룹에 이미 다른 타입의 선수가 있는지 확인
+        const existingPlayersInGroup = allPlayers.filter((p: any) => p.group === trimmedName);
+        if (existingPlayersInGroup.length > 0) {
+            const conflictingType = existingPlayersInGroup[0].type;
+            const conflictingTypeName = conflictingType === 'individual' ? '개인전' : '2인1팀';
+            const newTypeName = type === 'individual' ? '개인전' : '2인1팀';
+            
+            toast({
+                title: '타입 불일치',
+                description: `'${trimmedName}' 그룹에 이미 ${conflictingTypeName} 선수가 ${existingPlayersInGroup.length}명 등록되어 있습니다.\n${newTypeName} 그룹을 생성하려면 먼저 기존 선수를 삭제하거나 다른 그룹으로 이동시켜주세요.`,
+                variant: 'destructive'
+            });
             return;
         }
 

@@ -1101,6 +1101,41 @@ function ExternalScoreboard() {
             return acc;
         }, {} as Record<string, any[]>);
 
+        // 코스 순서 검증 함수
+        const validateCourseOrder = (coursesForGroup: any[], coursesOrder: any, groupName: string): { isValid: boolean; warnings: string[] } => {
+            const warnings: string[] = [];
+            
+            // 1. order 값이 없는 코스 확인
+            const coursesWithoutOrder = coursesForGroup.filter(c => {
+                const order = coursesOrder[String(c.id)];
+                return !order || (typeof order === 'number' && order <= 0);
+            });
+            
+            if (coursesWithoutOrder.length > 0) {
+                warnings.push(`${groupName} 그룹: ${coursesWithoutOrder.length}개 코스에 순서 정보가 없습니다. (${coursesWithoutOrder.map(c => c.name || c.id).join(', ')})`);
+            }
+            
+            // 2. order 값 중복 확인
+            const orderValues = coursesForGroup
+                .map(c => {
+                    const order = coursesOrder[String(c.id)];
+                    if (typeof order === 'number' && order > 0) return order;
+                    return null;
+                })
+                .filter((o): o is number => o !== null);
+            
+            const duplicateOrders = orderValues.filter((order, index) => orderValues.indexOf(order) !== index);
+            if (duplicateOrders.length > 0) {
+                const uniqueDuplicates = [...new Set(duplicateOrders)];
+                warnings.push(`${groupName} 그룹: 다음 순서 값이 중복됩니다: ${uniqueDuplicates.join(', ')}`);
+            }
+            
+            return {
+                isValid: warnings.length === 0,
+                warnings
+            };
+        };
+
         // 순위 정렬: 이븐 대비 ±타수 기준(작은 순)
         const rankedData: { [key: string]: ProcessedPlayer[] } = {};
         for (const groupName in groupedData) {
@@ -1135,8 +1170,34 @@ function ExternalScoreboard() {
                 
                 return numA - numB; // 작은 순서가 먼저
             });
+            
+            // 코스 순서 검증
+            const validation = validateCourseOrder(coursesForGroup, coursesOrder, groupName);
+            if (!validation.isValid) {
+                console.warn(`⚠️ 코스 순서 검증 실패 (${groupName}):`, validation.warnings);
+                // 개발 환경에서만 경고 표시
+                if (process.env.NODE_ENV === 'development') {
+                    validation.warnings.forEach(warning => {
+                        console.warn(warning);
+                    });
+                }
+            }
+            
+            // order가 있는 코스와 없는 코스 분리
+            const coursesWithOrder = coursesForGroup.filter(c => {
+                const order = coursesOrder[String(c.id)];
+                return typeof order === 'number' && order > 0;
+            });
+            const coursesWithoutOrder = coursesForGroup.filter(c => {
+                const order = coursesOrder[String(c.id)];
+                return !order || (typeof order === 'number' && order <= 0);
+            });
+            
+            // order가 있는 코스는 정렬된 순서대로, 없는 코스는 뒤로
+            const finalCoursesForGroup = [...coursesWithOrder, ...coursesWithoutOrder];
+            
             // 백카운트는 마지막 코스부터 역순이므로 reverse
-            const coursesForBackcount = [...coursesForGroup].reverse();
+            const coursesForBackcount = [...finalCoursesForGroup].reverse();
 
             const playersToSort = groupedData[groupName].filter((p: any) => p.hasAnyScore && !p.hasForfeited);
             const otherPlayers = groupedData[groupName].filter((p: any) => !p.hasAnyScore || p.hasForfeited);

@@ -1033,15 +1033,25 @@ export default function BatchScoringPage() {
       return;
     }
 
-    // Firebase 인증 확인
-    const isAuthenticated = await ensureAuthenticated();
+    // Firebase 인증 확인 (재인증 시도 포함)
+    let isAuthenticated = await ensureAuthenticated();
     if (!isAuthenticated) {
-      toast({
-        title: "인증 실패",
-        description: "Firebase 인증에 실패했습니다. 페이지를 새로고침하고 다시 시도해주세요.",
-        variant: "destructive"
-      });
-      return;
+      // 재인증 시도 (최대 2회)
+      for (let authRetry = 0; authRetry < 2; authRetry++) {
+        console.log(`인증 재시도 중... (${authRetry + 1}/2)`);
+        await new Promise(resolve => setTimeout(resolve, 1000 * (authRetry + 1))); // 1초, 2초 대기
+        isAuthenticated = await ensureAuthenticated();
+        if (isAuthenticated) break;
+      }
+      
+      if (!isAuthenticated) {
+        toast({
+          title: "인증 실패",
+          description: "Firebase 인증에 실패했습니다. 페이지를 새로고침하고 다시 시도해주세요.",
+          variant: "destructive"
+        });
+        return;
+      }
     }
 
     // 팀 모드에서 올바른 playerId 매핑
@@ -1068,7 +1078,7 @@ export default function BatchScoringPage() {
 
     // 모바일 환경 감지 및 Firebase 인증 재시도 로직
     const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-    const maxRetries = isMobile ? 5 : 1; // 모바일에서 더 많은 재시도
+    const maxRetries = isMobile ? 5 : 3; // PC에서도 재시도 (3회)
     let attempt = 0;
 
     while (attempt < maxRetries) {
@@ -1080,9 +1090,10 @@ export default function BatchScoringPage() {
         // 팀 모드에서는 원본 매트릭스에서 대표 인덱스의 기존 값을 사용해야 올바른 oldValue가 기록됨
         const prev = (rawTableScores?.[playerIndex]?.[holeIndex] ?? 0) as number;
 
-        // 모바일에서는 잠시 대기 후 재시도 (대기 시간 증가)
-        if (isMobile && attempt > 0) {
-          await new Promise(resolve => setTimeout(resolve, 1500 * attempt));
+        // 재시도 시 대기 (모바일: 더 긴 대기, PC: 짧은 대기)
+        if (attempt > 0) {
+          const delay = isMobile ? 1500 * attempt : 1000 * attempt;
+          await new Promise(resolve => setTimeout(resolve, delay));
         }
 
         await set(scoreRef, score);
@@ -1115,7 +1126,23 @@ export default function BatchScoringPage() {
           e?.message?.includes('auth') ||
           e?.message?.includes('authentication');
 
-        if (isPermissionError && attempt < maxRetries && isMobile) {
+        if (isPermissionError && attempt < maxRetries) {
+          // 인증 재시도
+          console.log(`인증 오류 감지, 재인증 시도 중... (${attempt}/${maxRetries})`);
+          const reAuthSuccess = await ensureAuthenticated(2, 500); // 최대 2회, 0.5초 간격
+          
+          if (reAuthSuccess) {
+            // 재인증 성공 시 다시 저장 시도
+            continue;
+          }
+        }
+        
+        // 네트워크 오류도 재시도
+        const isNetworkError = e?.code === 'network-request-failed' ||
+          e?.message?.includes('network') ||
+          e?.message?.includes('timeout');
+        
+        if (isNetworkError && attempt < maxRetries) {
           continue;
         }
 
@@ -1159,15 +1186,26 @@ export default function BatchScoringPage() {
       return;
     }
 
-    // Firebase 인증 확인
-    const isAuthenticated = await ensureAuthenticated();
+    // Firebase 인증 확인 (재인증 시도 포함)
+    let isAuthenticated = await ensureAuthenticated();
     if (!isAuthenticated) {
-      toast({
-        title: "인증 실패",
-        description: "Firebase 인증에 실패했습니다. 페이지를 새로고침하고 다시 시도해주세요.",
-        variant: "destructive"
-      });
-      return;
+      // 재인증 시도 (최대 2회)
+      for (let authRetry = 0; authRetry < 2; authRetry++) {
+        console.log(`인증 재시도 중... (${authRetry + 1}/2)`);
+        await new Promise(resolve => setTimeout(resolve, 1000 * (authRetry + 1)));
+        isAuthenticated = await ensureAuthenticated();
+        if (isAuthenticated) break;
+      }
+      
+      if (!isAuthenticated) {
+        toast({
+          title: "인증 실패",
+          description: "Firebase 인증에 실패했습니다. 페이지를 새로고침하고 다시 시도해주세요.",
+          variant: "destructive"
+        });
+        setIsSaving(false);
+        return;
+      }
     }
 
     setIsSaving(true);
