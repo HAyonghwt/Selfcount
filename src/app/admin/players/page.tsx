@@ -1878,6 +1878,7 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                                 background-color: #e0f2fe !important;
                                 font-weight: 800;
                                 color: #0369a1;
+                                white-space: nowrap;
                             }
                             .jo-tbody {
                                 page-break-inside: avoid;
@@ -1915,32 +1916,43 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                     
                     // 그룹별 설정 가져오기 (코스는 선택 순서대로)
                     const groupSettings = rosterDownloadModal.groupSettings[groupName] || { date: '', courses: [] };
-                    const scheduleText = groupSettings.date || '일정 미지정';
-                    // 일정을 영어 날짜 형식으로 변환
+                    
+                    // 날짜를 한글 형식으로 변환
+                    let scheduleText = '일정 미지정';
                     let scheduleTextEnglish = 'Schedule Not Set';
                     if (groupSettings.date) {
                         try {
-                            // 한글 날짜 형식 파싱 (예: "2026년 2월 26일" 또는 "2026-02-26")
                             const dateStr = groupSettings.date;
                             let date: Date | null = null;
                             
-                            // "년 월 일" 형식 파싱
-                            const match = dateStr.match(/(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일/);
-                            if (match) {
-                                date = new Date(parseInt(match[1]), parseInt(match[2]) - 1, parseInt(match[3]));
-                            } else {
-                                // ISO 형식 또는 다른 형식 시도
+                            // ISO 형식 (YYYY-MM-DD) 파싱
+                            if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
                                 date = new Date(dateStr);
+                            } else {
+                                // 한글 날짜 형식 파싱 (예: "2026년 2월 26일")
+                                const match = dateStr.match(/(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일/);
+                                if (match) {
+                                    date = new Date(parseInt(match[1]), parseInt(match[2]) - 1, parseInt(match[3]));
+                                } else {
+                                    // 다른 형식 시도
+                                    date = new Date(dateStr);
+                                }
                             }
                             
                             if (date && !isNaN(date.getTime())) {
+                                // 한글 형식: "2026년 2월 26일"
+                                scheduleText = `${date.getFullYear()}년 ${date.getMonth() + 1}월 ${date.getDate()}일`;
+                                
+                                // 영어 형식: "February 26, 2026"
                                 const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
                                 scheduleTextEnglish = `${months[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
                             } else {
-                                scheduleTextEnglish = dateStr; // 파싱 실패 시 원본 표시
+                                scheduleText = dateStr; // 파싱 실패 시 원본 표시
+                                scheduleTextEnglish = dateStr;
                             }
                         } catch (e) {
-                            scheduleTextEnglish = groupSettings.date; // 오류 시 원본 표시
+                            scheduleText = groupSettings.date; // 오류 시 원본 표시
+                            scheduleTextEnglish = groupSettings.date;
                         }
                     }
                     // 코스는 선택한 순서대로 표시
@@ -2007,13 +2019,15 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                                 const name = player.name || player.id || '-';
                                 const affiliation = player.affiliation || '무소속';
                                 // 시뮬레이션 데이터도 정상적으로 표시
-                                membersList.push(`${name}(<span style="color: #64748b;">${affiliation}</span>)`);
+                                // 각 이름을 nowrap으로 감싸서 이름 중간에 줄바꿈 방지
+                                membersList.push(`<span style="white-space: nowrap;">${name}(<span style="color: #64748b;">${affiliation}</span>)</span>`);
                             } else {
                                 const p1Name = player.p1_name || '-';
                                 const p1Affiliation = player.p1_affiliation || '무소속';
                                 const p2Name = player.p2_name || '-';
                                 const p2Affiliation = player.p2_affiliation || '무소속';
-                                membersList.push(`${p1Name}(<span style="color: #64748b;">${p1Affiliation}</span>) ${p2Name}(<span style="color: #64748b;">${p2Affiliation}</span>)`);
+                                // 각 이름을 nowrap으로 감싸서 이름 중간에 줄바꿈 방지
+                                membersList.push(`<span style="white-space: nowrap;">${p1Name}(<span style="color: #64748b;">${p1Affiliation}</span>)</span> <span style="white-space: nowrap;">${p2Name}(<span style="color: #64748b;">${p2Affiliation}</span>)</span>`);
                             }
                         });
                         
@@ -2048,6 +2062,13 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
 
                     container.innerHTML = htmlContent;
 
+                    // 실제 렌더링된 높이 측정 (렌더링 완료 대기)
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                    const actualHeight = container.scrollHeight || container.offsetHeight || PAPER_HEIGHT;
+                    
+                    // 실제 높이를 사용하되, 최대 높이 제한 (너무 긴 경우 방지)
+                    const canvasHeight = Math.min(actualHeight + 50, PAPER_HEIGHT * 2);
+
                     // 이미지 생성
                     const canvas = await html2canvas(container, {
                         scale: 2,
@@ -2055,7 +2076,7 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                         backgroundColor: '#ffffff',
                         windowWidth: PAPER_WIDTH,
                         width: PAPER_WIDTH,
-                        height: PAPER_HEIGHT,
+                        height: canvasHeight,
                         x: 0,
                         scrollX: 0
                     });
@@ -2203,32 +2224,43 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                 
                 // 그룹별 설정 (코스는 선택 순서대로)
                 const groupSettings = rosterDownloadModal.groupSettings[groupName] || { date: '', courses: [] };
-                const scheduleText = groupSettings.date || '일정 미지정';
-                // 일정을 영어 날짜 형식으로 변환
+                
+                // 날짜를 한글 형식으로 변환
+                let scheduleText = '일정 미지정';
                 let scheduleTextEnglish = 'Schedule Not Set';
                 if (groupSettings.date) {
                     try {
-                        // 한글 날짜 형식 파싱 (예: "2026년 2월 26일" 또는 "2026-02-26")
                         const dateStr = groupSettings.date;
                         let date: Date | null = null;
                         
-                        // "년 월 일" 형식 파싱
-                        const match = dateStr.match(/(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일/);
-                        if (match) {
-                            date = new Date(parseInt(match[1]), parseInt(match[2]) - 1, parseInt(match[3]));
-                        } else {
-                            // ISO 형식 또는 다른 형식 시도
+                        // ISO 형식 (YYYY-MM-DD) 파싱
+                        if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
                             date = new Date(dateStr);
+                        } else {
+                            // 한글 날짜 형식 파싱 (예: "2026년 2월 26일")
+                            const match = dateStr.match(/(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일/);
+                            if (match) {
+                                date = new Date(parseInt(match[1]), parseInt(match[2]) - 1, parseInt(match[3]));
+                            } else {
+                                // 다른 형식 시도
+                                date = new Date(dateStr);
+                            }
                         }
                         
                         if (date && !isNaN(date.getTime())) {
+                            // 한글 형식: "2026년 2월 26일"
+                            scheduleText = `${date.getFullYear()}년 ${date.getMonth() + 1}월 ${date.getDate()}일`;
+                            
+                            // 영어 형식: "February 26, 2026"
                             const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
                             scheduleTextEnglish = `${months[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
                         } else {
-                            scheduleTextEnglish = dateStr; // 파싱 실패 시 원본 표시
+                            scheduleText = dateStr; // 파싱 실패 시 원본 표시
+                            scheduleTextEnglish = dateStr;
                         }
                     } catch (e) {
-                        scheduleTextEnglish = groupSettings.date; // 오류 시 원본 표시
+                        scheduleText = groupSettings.date; // 오류 시 원본 표시
+                        scheduleTextEnglish = groupSettings.date;
                     }
                 }
                 // 코스는 선택한 순서대로 표시
@@ -2329,17 +2361,25 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                     
                     playersInJo.forEach((player: any) => {
                         if (type === 'individual') {
-                            membersList.push(`${player.name || '-'}(${player.affiliation || '무소속'})`);
+                            const name = player.name || '-';
+                            const affiliation = player.affiliation || '무소속';
+                            // 각 이름을 nowrap으로 감싸서 이름 중간에 줄바꿈 방지
+                            membersList.push(`<span style="white-space: nowrap;">${name}(${affiliation})</span>`);
                         } else {
-                            membersList.push(`${player.p1_name || '-'}(${player.p1_affiliation || '무소속'}) ${player.p2_name || '-'}(${player.p2_affiliation || '무소속'})`);
+                            const p1Name = player.p1_name || '-';
+                            const p1Affiliation = player.p1_affiliation || '무소속';
+                            const p2Name = player.p2_name || '-';
+                            const p2Affiliation = player.p2_affiliation || '무소속';
+                            // 각 이름을 nowrap으로 감싸서 이름 중간에 줄바꿈 방지
+                            membersList.push(`<span style="white-space: nowrap;">${p1Name}(${p1Affiliation})</span> <span style="white-space: nowrap;">${p2Name}(${p2Affiliation})</span>`);
                         }
                     });
                     
                     printContent += `
                         <tbody style="page-break-inside: avoid;">
                             <tr>
-                                <td style="background-color: #e0f2fe; padding: 12px; border: 1px solid #e2e8f0; text-align: center; font-weight: 800; color: #0369a1; word-wrap: break-word; word-break: break-word; overflow-wrap: break-word; white-space: normal;">${jo}</td>
-                                <td style="padding: 12px; border: 1px solid #e2e8f0; text-align: center; word-wrap: break-word; word-break: break-word; overflow-wrap: break-word; white-space: normal; min-height: 35px;">${membersList.join('   ')}</td>
+                                <td style="background-color: #e0f2fe; padding: 12px; border: 1px solid #e2e8f0; text-align: center; font-weight: 800; color: #0369a1; white-space: nowrap;">${jo}</td>
+                                <td style="padding: 12px; border: 1px solid #e2e8f0; text-align: center; min-height: 35px;">${membersList.join('   ')}</td>
                             </tr>
                         </tbody>
                     `;
@@ -3197,8 +3237,7 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                                                 </Label>
                                                 <Input
                                                     id={`date-${groupName}`}
-                                                    type="text"
-                                                    placeholder="예: 2024년 12월 21일"
+                                                    type="date"
                                                     value={currentSettings.date}
                                                     onChange={(e) => {
                                                         setRosterDownloadModal({
