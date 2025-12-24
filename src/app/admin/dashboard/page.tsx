@@ -2901,28 +2901,6 @@ export default function AdminDashboard() {
     // 로딩 상태
     const [logsLoading, setLogsLoading] = useState(false);
 
-    // 선수별 로그 미리 불러오기 (처음 한 번만)
-    useEffect(() => {
-        const fetchLogs = async () => {
-            setLogsLoading(true);
-            const playerIds = Object.values(finalDataByGroup).flat().map((p: any) => p.id);
-            const logsMap: { [playerId: string]: ScoreLog[] } = {};
-            await Promise.all(playerIds.map(async (pid) => {
-                try {
-                    const logs = await getPlayerScoreLogsOptimized(pid);
-                    logsMap[pid] = logs;
-                } catch {
-                    logsMap[pid] = [];
-                }
-            }));
-            setPlayerScoreLogs(logsMap);
-            setLogsLoading(false);
-        };
-        if (Object.keys(updateForfeitTypes).length > 0) {
-            fetchLogs();
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [finalDataByGroup]);
 
     // 기권 타입을 로그에서 추출하여 설정하는 함수
     const getForfeitTypeFromLogs = (playerId: string): 'absent' | 'disqualified' | 'forfeit' | null => {
