@@ -16,7 +16,6 @@ import { useToast } from '@/hooks/use-toast';
 import { ToastAction } from '@/components/ui/toast';
 import ExternalScoreboardInfo from '@/components/ExternalScoreboardInfo';
 import { safeLocalStorageGetItem, safeLocalStorageSetItem, safeLocalStorageRemoveItem, cn } from '@/lib/utils';
-import SimulationTool from '@/components/SimulationTool';
 
 interface ProcessedPlayer {
     id: string;
@@ -3215,9 +3214,6 @@ export default function AdminDashboard() {
     return (
         <>
             <div className="space-y-6">
-                {/* 시뮬레이션 도구 카드 - 독립적으로 동작하며 삭제해도 기존 코드에 영향 없음 */}
-                <SimulationTool />
-                
                 <Card>
                     <CardHeader>
                         <CardTitle className="text-2xl font-bold font-headline">홈 전광판 (관리자용)</CardTitle>

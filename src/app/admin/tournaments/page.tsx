@@ -306,10 +306,6 @@ export default function TournamentManagementPage() {
           <CardDescription>대회명, 코스 이름, Par 값 등 이 페이지에서 수정한 내용을 저장합니다.</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col sm:flex-row gap-4">
-           <Button size="lg" onClick={handleSaveChanges}>
-                <Save className="mr-2 h-5 w-5" />
-                변경사항 저장
-            </Button>
             <AlertDialog>
                 <AlertDialogTrigger asChild>
                     <Button variant="destructive" size="lg">
@@ -330,6 +326,10 @@ export default function TournamentManagementPage() {
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
+            <Button size="lg" onClick={handleSaveChanges} className="bg-blue-600 hover:bg-blue-700 text-white">
+                <Save className="mr-2 h-5 w-5" />
+                변경사항 저장
+            </Button>
         </CardContent>
       </Card>
     </div>
