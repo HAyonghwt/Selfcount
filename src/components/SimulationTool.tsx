@@ -893,8 +893,23 @@ export default function SimulationTool() {
                 // 점수 저장
                 await update(ref(db), updates);
                 
-                // 점수 로그 기록 (병렬 처리)
-                await Promise.allSettled(logPromises);
+                // 🚀 성능 최적화: 점수 로그 기록을 배치로 처리 (50개씩)
+                const BATCH_SIZE = 50;
+                const totalBatches = Math.ceil(logPromises.length / BATCH_SIZE);
+                
+                for (let i = 0; i < totalBatches; i++) {
+                    const batch = logPromises.slice(i * BATCH_SIZE, (i + 1) * BATCH_SIZE);
+                    await Promise.allSettled(batch);
+                    
+                    // 진행 상태 업데이트
+                    if (totalBatches > 1) {
+                        setSimulationState({ 
+                            isRunning: true, 
+                            currentStep: `${day}일차 점수 로그 기록 중... (${i + 1}/${totalBatches})`, 
+                            progress: 90 + ((i + 1) / totalBatches) * 10 
+                        });
+                    }
+                }
                 
                 const message = skippedCount > 0 
                     ? `${day}일차 일괄 점수가 등록되었습니다. (${Object.keys(updates).length}개 점수 등록, ${logPromises.length}개 로그 기록, ${skippedCount}개 코스 스킵됨)`
@@ -1050,10 +1065,12 @@ export default function SimulationTool() {
         setSimulationState({ isRunning: true, currentStep: '시뮬레이션 데이터 삭제 중...', progress: 0 });
 
         try {
-            // Firebase에서 최신 데이터 직접 가져오기 (상태 동기화 문제 해결)
-            const playersSnapshot = await get(ref(db, 'players'));
-            const scoresSnapshot = await get(ref(db, 'scores'));
-            const groupsSnapshot = await get(ref(db, 'tournaments/current/groups'));
+            // 🚀 성능 최적화: Firebase에서 최신 데이터 병렬로 가져오기
+            const [playersSnapshot, scoresSnapshot, groupsSnapshot] = await Promise.all([
+                get(ref(db, 'players')),
+                get(ref(db, 'scores')),
+                get(ref(db, 'tournaments/current/groups'))
+            ]);
             const latestPlayersData = playersSnapshot.val() || {};
             const latestScores = scoresSnapshot.val() || {};
             const latestGroupsData = groupsSnapshot.val() || {};

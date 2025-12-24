@@ -15,6 +15,7 @@ import {
   ShieldCheck,
   FileText,
   Database,
+  CreditCard,
 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -53,6 +54,7 @@ const secondaryNavItems = [
 const refereeNavItem = { href: "/admin/referees", icon: ShieldCheck, label: "심판 관리" };
 const selfScoringNavItem = { href: "/admin/self-scoring", icon: ShieldCheck, label: "자율 채점" };
 const manualScorecardNavItem = { href: "/admin/manual-scorecard", icon: FileText, label: "수기 채점표" };
+const badgeNavItem = { href: "/admin/badges", icon: CreditCard, label: "명찰 제작" };
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const isMobile = useIsMobile();
@@ -292,6 +294,18 @@ function SidebarContentWithSidebarHooks({ isMobile, pathname, appName, selfScori
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 )}
+                <SidebarMenuItem key={badgeNavItem.href}>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={pathname === badgeNavItem.href}
+                    tooltip={{ children: badgeNavItem.label }}
+                  >
+                    <Link href={badgeNavItem.href} className="text-black" onClick={handleMenuClick(badgeNavItem.href)}>
+                      <badgeNavItem.icon className="h-5 w-5" />
+                      <span>{badgeNavItem.label}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
               </>
             )}
 

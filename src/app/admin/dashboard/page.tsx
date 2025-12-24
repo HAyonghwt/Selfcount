@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { getPlayerScoreLogs, getPlayerScoreLogsOptimized, ScoreLog, logScoreChange, invalidatePlayerLogCache } from '@/lib/scoreLogs';
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip';
 import { useRouter } from 'next/navigation';
@@ -150,6 +150,51 @@ function getPlayerTotalAndPlusMinus(courses: any, player: any) {
 export default function AdminDashboard() {
     // 안전한 number 체크 함수
     const isValidNumber = (v: any) => typeof v === 'number' && !isNaN(v);
+    
+    // 🚀 성능 최적화: tieBreak 결과 캐싱
+    const tieBreakCacheRef = useRef<Map<string, number>>(new Map());
+    const MAX_CACHE_SIZE = 10000; // 최대 캐시 크기 제한
+    
+    // 🚀 성능 최적화: 캐싱된 tieBreak 함수
+    const cachedTieBreak = useCallback((a: any, b: any, sortedCourses: any[]) => {
+        // 캐시 키 생성: 두 선수 ID와 코스 순서를 조합
+        const courseOrderKey = sortedCourses.map(c => c?.id || '').join(',');
+        const cacheKey = `${a.id}-${b.id}-${courseOrderKey}`;
+        const reverseCacheKey = `${b.id}-${a.id}-${courseOrderKey}`;
+        
+        // 캐시 확인 (정방향)
+        if (tieBreakCacheRef.current.has(cacheKey)) {
+            return tieBreakCacheRef.current.get(cacheKey)!;
+        }
+        
+        // 캐시 확인 (역방향 - tieBreak(a,b) = -tieBreak(b,a))
+        if (tieBreakCacheRef.current.has(reverseCacheKey)) {
+            const cachedValue = tieBreakCacheRef.current.get(reverseCacheKey)!;
+            const result = -cachedValue;
+            // 역방향 결과도 캐시에 저장
+            if (tieBreakCacheRef.current.size < MAX_CACHE_SIZE) {
+                tieBreakCacheRef.current.set(cacheKey, result);
+            }
+            return result;
+        }
+        
+        // 캐시 미스 시 원본 tieBreak 함수 호출 (무한 재귀 방지)
+        const result = tieBreak(a, b, sortedCourses);
+        
+        // 캐시 저장 (크기 제한 확인)
+        if (tieBreakCacheRef.current.size < MAX_CACHE_SIZE) {
+            tieBreakCacheRef.current.set(cacheKey, result);
+        } else {
+            // 캐시가 가득 찬 경우 가장 오래된 항목 제거 (FIFO 방식)
+            const firstKey = tieBreakCacheRef.current.keys().next().value;
+            if (firstKey) {
+                tieBreakCacheRef.current.delete(firstKey);
+                tieBreakCacheRef.current.set(cacheKey, result);
+            }
+        }
+        
+        return result;
+    }, []);
     // 점수 수정 모달 상태
     const [scoreEditModal, setScoreEditModal] = useState({
         open: false,
@@ -1474,7 +1519,7 @@ export default function AdminDashboard() {
                 // 1. plusMinus 오름차순 정렬, tieBreak(백카운트) 적용
                 playersToSort.sort((a: any, b: any) => {
                     if (a.plusMinus !== b.plusMinus) return a.plusMinus - b.plusMinus;
-                    return tieBreak(a, b, coursesForBackcount);
+                    return cachedTieBreak(a, b, coursesForBackcount);
                 });
                 // 2. 1위 동점자 모두 rank=1, 그 다음 선수부터 등수 건너뛰기
                 const minPlusMinus = playersToSort[0].plusMinus;
@@ -1497,7 +1542,7 @@ export default function AdminDashboard() {
                     const curr = playersToSort[i];
                     if (
                         curr.plusMinus === prev.plusMinus &&
-                        tieBreak(curr, prev, coursesForBackcount) === 0
+                        cachedTieBreak(curr, prev, coursesForBackcount) === 0
                     ) {
                         curr.rank = playersToSort[i - 1].rank;
                     } else {
@@ -1510,7 +1555,12 @@ export default function AdminDashboard() {
             rankedData[groupName] = finalPlayers;
         }
         return rankedData;
-    }, [players, scores, courses, groupsData]);
+    }, [players, scores, courses, groupsData, cachedTieBreak]);
+    
+    // 🚀 성능 최적화: scores나 players 변경 시 tieBreak 캐시 초기화
+    useEffect(() => {
+        tieBreakCacheRef.current.clear();
+    }, [scores, players]);
 
     const processSuddenDeath = (suddenDeathData: any) => {
         if (!suddenDeathData) return [];
