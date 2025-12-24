@@ -106,17 +106,29 @@ export default function SimulationTool() {
 
             // 그룹 생성
             if (!groupsData[maleGroupName]) {
+                // 코스 순서를 자동으로 설정 (코스의 order 값 또는 코스 ID를 기준으로)
                 updates[`/tournaments/current/groups/${maleGroupName}`] = {
                     name: maleGroupName,
                     type: 'individual',
-                    courses: { [courseA.id]: true, [courseB.id]: true, [courseC.id]: true, [courseD.id]: true }
+                    courses: { 
+                        [courseA.id]: courseA.order || courseA.id || 1,
+                        [courseB.id]: courseB.order || courseB.id || 2,
+                        [courseC.id]: courseC.order || courseC.id || 3,
+                        [courseD.id]: courseD.order || courseD.id || 4
+                    }
                 };
             }
             if (!groupsData[femaleGroupName]) {
+                // 코스 순서를 자동으로 설정 (코스의 order 값 또는 코스 ID를 기준으로)
                 updates[`/tournaments/current/groups/${femaleGroupName}`] = {
                     name: femaleGroupName,
                     type: 'individual',
-                    courses: { [courseC.id]: true, [courseD.id]: true, [courseA.id]: true, [courseB.id]: true }
+                    courses: { 
+                        [courseC.id]: courseC.order || courseC.id || 3,
+                        [courseD.id]: courseD.order || courseD.id || 4,
+                        [courseA.id]: courseA.order || courseA.id || 1,
+                        [courseB.id]: courseB.order || courseB.id || 2
+                    }
                 };
             }
 

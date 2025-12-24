@@ -590,8 +590,12 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                 const allGroupsInFile = [...new Set(newPlayers.map(p => p.group))];
                 allGroupsInFile.forEach(groupName => {
                     if (!groupsData[groupName]) {
+                        // 코스 순서를 자동으로 설정 (코스의 order 값 또는 코스 ID를 기준으로)
                         const defaultCourses = courses.reduce((acc, course) => {
-                            acc[course.id] = true;
+                            const courseOrder = course.order || course.id || 0;
+                            if (courseOrder > 0) {
+                                acc[course.id] = courseOrder;
+                            }
                             return acc;
                         }, {});
                         updates[`/tournaments/current/groups/${groupName}`] = {
@@ -873,8 +877,12 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                 const allGroupsInFile = [...new Set(newPlayers.map(p => p.group))];
                 allGroupsInFile.forEach(groupName => {
                     if (!groupsData[groupName]) {
+                        // 코스 순서를 자동으로 설정 (코스의 order 값 또는 코스 ID를 기준으로)
                         const defaultCourses = courses.reduce((acc, course) => {
-                            acc[course.id] = true;
+                            const courseOrder = course.order || course.id || 0;
+                            if (courseOrder > 0) {
+                                acc[course.id] = courseOrder;
+                            }
                             return acc;
                         }, {});
                         updates[`/tournaments/current/groups/${groupName}`] = {
@@ -1112,8 +1120,12 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
 
         // 그룹이 없으면 자동으로 생성
         if (!groupsData[individualGroup]) {
+            // 코스 순서를 자동으로 설정 (코스의 order 값 또는 코스 ID를 기준으로)
             const defaultCourses = courses.reduce((acc, course) => {
-                acc[course.id] = true;
+                const courseOrder = course.order || course.id || 0;
+                if (courseOrder > 0) {
+                    acc[course.id] = courseOrder;
+                }
                 return acc;
             }, {});
             updates[`/tournaments/current/groups/${individualGroup}`] = {
@@ -1166,8 +1178,12 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
 
         // 그룹이 없으면 자동으로 생성
         if (!groupsData[teamGroup]) {
+            // 코스 순서를 자동으로 설정 (코스의 order 값 또는 코스 ID를 기준으로)
             const defaultCourses = courses.reduce((acc, course) => {
-                acc[course.id] = true;
+                const courseOrder = course.order || course.id || 0;
+                if (courseOrder > 0) {
+                    acc[course.id] = courseOrder;
+                }
                 return acc;
             }, {});
             updates[`/tournaments/current/groups/${teamGroup}`] = {
@@ -1517,8 +1533,12 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
             
             // 그룹이 없으면 자동으로 생성
             if (!groupsData[finalGroup]) {
+                // 코스 순서를 자동으로 설정 (코스의 order 값 또는 코스 ID를 기준으로)
                 const defaultCourses = courses.reduce((acc, course) => {
-                    acc[course.id] = true;
+                    const courseOrder = course.order || course.id || 0;
+                    if (courseOrder > 0) {
+                        acc[course.id] = courseOrder;
+                    }
                     return acc;
                 }, {});
                 updates[`/tournaments/current/groups/${finalGroup}`] = {
