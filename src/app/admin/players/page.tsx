@@ -2005,12 +2005,19 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
 
                     // 조별로 행 추가 (한 줄에 모든 구성원 나열) - 조 셀 분리 방지를 위해 tbody로 묶기
                     jos.forEach((jo) => {
-                        const playersInJo = playersByJo[jo];
+                        let playersInJo = playersByJo[jo];
                         
                         if (!playersInJo || playersInJo.length === 0) {
                             console.warn(`조 ${jo}에 선수가 없습니다.`);
                             return;
                         }
+                        
+                        // 엑셀 업로드 순서(uploadOrder)를 기준으로 정렬
+                        playersInJo = [...playersInJo].sort((a: any, b: any) => {
+                            const orderA = a.uploadOrder ?? 999999;
+                            const orderB = b.uploadOrder ?? 999999;
+                            return orderA - orderB;
+                        });
                         
                         const membersList: string[] = [];
                         
