@@ -47,7 +47,7 @@ export default function ManualScorecardPrint({
         if (selectedGroup) {
             document.title = `${selectedGroup}_수기채점표`
         }
-        
+
         return () => {
             document.title = originalTitle
         }
@@ -64,20 +64,20 @@ export default function ManualScorecardPrint({
 
         // 그룹에 배정된 코스 정보 가져오기
         const groupCourses = groups[selectedGroup]?.courses || {}
-        
+
         // 배정된 코스의 order 정보를 포함한 배열 생성
         const coursesWithGroupOrder = courses
             .filter(c => selectedCourses[c.id])
             .map(c => {
                 const groupOrder = groupCourses[c.id]
                 // groupOrder가 number이고 0보다 크면 사용, 아니면 코스의 기본 order 사용
-                const order = (typeof groupOrder === 'number' && groupOrder > 0) 
-                    ? groupOrder 
+                const order = (typeof groupOrder === 'number' && groupOrder > 0)
+                    ? groupOrder
                     : (c.order || 999)
                 return { ...c, groupOrder: order }
             })
             .sort((a, b) => a.groupOrder - b.groupOrder)
-        
+
         return coursesWithGroupOrder
     }, [courses, selectedCourses, selectedGroup, groups])
 
@@ -132,9 +132,9 @@ export default function ManualScorecardPrint({
     // 그룹명 영어 번역
     const translateGroupName = (groupName: string): string => {
         if (!groupName) return ""
-        
+
         const name = groupName.trim()
-        
+
         // 남시니어 → Male Senior
         if (name === "남시니어" || name.includes("남시니어")) {
             return "Male Senior"
@@ -167,7 +167,7 @@ export default function ManualScorecardPrint({
         if (name === "여자" || name.startsWith("여자")) {
             return name.replace("여자", "Female")
         }
-        
+
         // 기본값: 그룹명 그대로 반환
         return name
     }
@@ -212,7 +212,7 @@ export default function ManualScorecardPrint({
                         page-break-after: always;
                         width: 297mm;
                         height: 210mm;
-                        padding: 8mm;
+                        padding: 1mm;
                         box-sizing: border-box;
                         display: flex;
                         flex-direction: column;
@@ -231,12 +231,19 @@ export default function ManualScorecardPrint({
                         print-color-adjust: exact !important;
                         color-adjust: exact !important;
                     }
+                    /* 사이드바 및 불필요한 레이아웃 인쇄 시 숨기기 */
+                    [data-sidebar="trigger"], 
+                    .sidebar-wrapper,
+                    nav,
+                    header {
+                        display: none !important;
+                    }
                 }
                 @media screen {
                     .print-page {
                         width: 297mm;
                         height: 210mm;
-                        padding: 8mm;
+                        padding: 1mm;
                         margin: 20px auto;
                         background: white;
                         box-shadow: 0 0 10px rgba(0,0,0,0.1);
@@ -262,13 +269,13 @@ export default function ManualScorecardPrint({
                 coursePages.map((pageCourses, pageIndex) => (
                     <div key={`${jo}-${pageIndex}`} className="print-page">
                         {/* 헤더 */}
-                        <div className="mb-3" style={{ flexShrink: 0 }}>
+                        <div className="mb-1" style={{ flexShrink: 0 }}>
                             {/* 큰 제목: 대회명 가운데 정렬 */}
-                            <h1 className="text-3xl font-bold text-center mb-4">
+                            <h1 className="text-2xl font-bold text-center mb-1">
                                 {tournament?.name || '파크골프 토너먼트'}
                             </h1>
-                            
-                            <div className="flex justify-between items-start mb-2">
+
+                            <div className="flex justify-between items-start">
                                 {/* 왼쪽: 그룹명과 조 이름 */}
                                 <div>
                                     <div className="text-2xl font-bold">
@@ -284,28 +291,32 @@ export default function ManualScorecardPrint({
                                         Team: {jo}
                                     </div>
                                 </div>
-                                
-                                {/* 오른쪽: 심판 확인 */}
-                                <div className="text-right">
-                                    <div className="text-lg font-semibold mb-1">
-                                        심판 확인
+
+                                {/* 오른쪽: 심판 확인 및 날짜 */}
+                                <div className="flex items-end gap-4">
+                                    <div className="text-right pb-1">
+                                        <div className="text-xs text-gray-600">
+                                            날짜: {formatDate(selectedDate)}
+                                        </div>
+                                        <div className="text-xs text-gray-600">
+                                            Date: {selectedDate}
+                                        </div>
                                     </div>
-                                    <div className="text-xs text-gray-600 mb-2">
-                                        Referee Confirmation
-                                    </div>
-                                    <div className="border-2 border-black mb-2" style={{ width: '150px', height: '50px' }}></div>
-                                    <div className="text-xs text-gray-600">
-                                        날짜: {formatDate(selectedDate)}
-                                    </div>
-                                    <div className="text-xs text-gray-600">
-                                        Date: {selectedDate}
+                                    <div className="text-right">
+                                        <div className="text-sm font-semibold">
+                                            심판 확인
+                                        </div>
+                                        <div className="text-[10px] text-gray-600 mb-1">
+                                            Referee Confirmation
+                                        </div>
+                                        <div className="border-2 border-black" style={{ width: '130px', height: '45px' }}></div>
                                     </div>
                                 </div>
                             </div>
                         </div>
 
                         {/* 코스별 채점표 - 가로로 3개 배치 */}
-                        <div className="flex-1 grid grid-cols-3 gap-2" style={{ minHeight: 0 }}>
+                        <div className="flex-1 grid grid-cols-3 gap-1" style={{ minHeight: 0 }}>
                             {[0, 1, 2].map((slotIndex) => {
                                 const course = pageCourses[slotIndex]
                                 // 빈 슬롯인 경우 placeholder 표시
@@ -344,7 +355,7 @@ export default function ManualScorecardPrint({
                                                 <div>Good</div>
                                                 <div>luck</div>
                                             </div>
-                                            
+
                                             {/* 코스 헤더 */}
                                             <div
                                                 className="text-sm font-bold py-1 mb-1"
@@ -378,18 +389,18 @@ export default function ManualScorecardPrint({
                                                             ))}
                                                         </tr>
                                                         <tr style={{ backgroundColor: '#f9fafb', color: '#f2f3f6' }}>
-                                                            <th className="px-1 py-0.5 text-center font-bold" style={{ width: '12%', border: `1px solid #f9fafb` }}>
+                                                            <th className="px-1 py-0.5 text-center font-bold" style={{ width: '8%', border: `1px solid #f9fafb` }}>
                                                                 Hole
                                                             </th>
-                                                            <th className="px-1 py-0.5 text-center font-bold" style={{ width: '12%', border: `1px solid #f9fafb` }}>
+                                                            <th className="px-1 py-0.5 text-center font-bold" style={{ width: '8%', border: `1px solid #f9fafb` }}>
                                                                 Par
                                                             </th>
                                                             {[0, 1, 2, 3].map((idx) => (
-                                                                <th key={idx} className="px-0.5 text-center font-bold" style={{ 
-                                                                    width: '19%', 
-                                                                    height: '28px', 
-                                                                    fontSize: '14px', 
-                                                                    padding: '4px 2px', 
+                                                                <th key={idx} className="px-0.5 text-center font-bold" style={{
+                                                                    width: '21%',
+                                                                    height: '28px',
+                                                                    fontSize: '14px',
+                                                                    padding: '4px 2px',
                                                                     verticalAlign: 'middle',
                                                                     border: `1px solid #f9fafb`
                                                                 }}>
@@ -399,7 +410,7 @@ export default function ManualScorecardPrint({
                                                     </thead>
                                                     <tbody>
                                                         {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((holeNum) => (
-                                                            <tr key={holeNum} style={{ height: '20px' }}>
+                                                            <tr key={holeNum} style={{ height: '32px' }}>
                                                                 <td className="px-1 text-center font-bold" style={{ backgroundColor: '#f9fafb', color: '#f2f3f6', padding: '2px', verticalAlign: 'middle', border: `1px solid #f9fafb` }}>
                                                                     {holeNum}
                                                                 </td>
@@ -407,8 +418,8 @@ export default function ManualScorecardPrint({
                                                                     3
                                                                 </td>
                                                                 {[0, 1, 2, 3].map((idx) => (
-                                                                    <td key={idx} className="" style={{ padding: '0', height: '20px', verticalAlign: 'top', border: `1px solid #f9fafb` }}>
-                                                                        <div className="w-full relative" style={{ display: 'flex', height: '100%', minHeight: '20px' }}>
+                                                                    <td key={idx} className="" style={{ padding: '0', height: '32px', verticalAlign: 'top', border: `1px solid #f9fafb` }}>
+                                                                        <div className="w-full relative" style={{ display: 'flex', height: '100%', minHeight: '32px' }}>
                                                                             <div className="flex-1" style={{ borderRight: '1px solid #f9fafb', height: '100%', margin: 0 }}></div>
                                                                             <div className="flex-1" style={{ height: '100%', margin: 0 }}></div>
                                                                         </div>
@@ -417,23 +428,23 @@ export default function ManualScorecardPrint({
                                                             </tr>
                                                         ))}
                                                         {/* 합계 행 */}
-                                                        <tr style={{ height: '20px' }}>
+                                                        <tr style={{ height: '32px' }}>
                                                             <td colSpan={2} className="px-1 text-center font-bold text-xs" style={{ padding: '2px', verticalAlign: 'middle', color: '#f2f3f6', border: `1px solid #f9fafb` }}>
                                                                 합계 (Total)
                                                             </td>
                                                             {[0, 1, 2, 3].map((idx) => (
-                                                                <td key={idx} className="" style={{ padding: '0', height: '20px', verticalAlign: 'top', border: `1px solid #f9fafb` }}>
+                                                                <td key={idx} className="" style={{ padding: '0', height: '32px', verticalAlign: 'top', border: `1px solid #f9fafb` }}>
                                                                     <div className="h-full w-full"></div>
                                                                 </td>
                                                             ))}
                                                         </tr>
                                                         {/* 선수 사인 행 */}
-                                                        <tr style={{ height: '12px' }}>
+                                                        <tr style={{ height: '18px' }}>
                                                             <td colSpan={2} className="px-1 text-center font-bold text-xs" style={{ padding: '2px', verticalAlign: 'middle', color: '#f2f3f6', border: `1px solid #f9fafb` }}>
                                                                 선수 사인 (Player Signature)
                                                             </td>
                                                             {[0, 1, 2, 3].map((idx) => (
-                                                                <td key={idx} className="" style={{ padding: '0', height: '12px', verticalAlign: 'top', border: `1px solid #f9fafb` }}>
+                                                                <td key={idx} className="" style={{ padding: '0', height: '18px', verticalAlign: 'top', border: `1px solid #f9fafb` }}>
                                                                     <div className="h-full w-full"></div>
                                                                 </td>
                                                             ))}
@@ -444,11 +455,11 @@ export default function ManualScorecardPrint({
                                         </div>
                                     )
                                 }
-                                
+
                                 // 실제 코스 데이터가 있는 경우
                                 const theme = getCourseTheme(course.name || '')
                                 const coursePlayers = getPlayersByJo(jo)
-                                
+
                                 return (
                                     <div
                                         key={course.id}
@@ -478,18 +489,18 @@ export default function ManualScorecardPrint({
                                             }}
                                         >
                                             <span>{course.name || `코스 ${course.id}`}</span>
-                                            <span style={{ 
-                                                position: 'absolute', 
-                                                right: '8px', 
-                                                fontSize: '10px', 
-                                                fontWeight: 'normal', 
-                                                opacity: 0.8 
+                                            <span style={{
+                                                position: 'absolute',
+                                                right: '8px',
+                                                fontSize: '10px',
+                                                fontWeight: 'normal',
+                                                opacity: 0.8
                                             }}>
-                                                {course.name ? (course.name.includes('A') ? 'Course A' : 
-                                                 course.name.includes('B') ? 'Course B' : 
-                                                 course.name.includes('C') ? 'Course C' : 
-                                                 course.name.includes('D') ? 'Course D' : 
-                                                 'Course') : 'Course'}
+                                                {course.name ? (course.name.includes('A') ? 'Course A' :
+                                                    course.name.includes('B') ? 'Course B' :
+                                                        course.name.includes('C') ? 'Course C' :
+                                                            course.name.includes('D') ? 'Course D' :
+                                                                'Course') : 'Course'}
                                             </span>
                                         </div>
 
@@ -509,28 +520,28 @@ export default function ManualScorecardPrint({
                                                         ))}
                                                     </tr>
                                                     <tr style={{ backgroundColor: theme.border, color: theme.bg === '#ffffff' || theme.bg === '#fff8e1' || theme.bg === '#f5f5f5' ? '#000000' : '#ffffff' }}>
-                                                        <th className="border border-gray-700 px-1 py-0.5 text-center font-bold" style={{ width: '12%' }}>
+                                                        <th className="border border-gray-700 px-1 py-0.5 text-center font-bold" style={{ width: '8%' }}>
                                                             Hole
                                                         </th>
-                                                        <th className="border border-gray-700 px-1 py-0.5 text-center font-bold" style={{ width: '12%' }}>
+                                                        <th className="border border-gray-700 px-1 py-0.5 text-center font-bold" style={{ width: '8%' }}>
                                                             Par
                                                         </th>
                                                         {/* 항상 4칸으로 선수 헤더 표시 */}
                                                         {[0, 1, 2, 3].map((idx) => {
                                                             const player = coursePlayers[idx]
                                                             const playerName = player ? (
-                                                                player.type === 'team' 
-                                                                    ? `${player.p1_name}/${player.p2_name}` 
+                                                                player.type === 'team'
+                                                                    ? `${player.p1_name}/${player.p2_name}`
                                                                     : player.name
                                                             ) : ''
                                                             // 영어 이름이 긴 경우 감지 (공백이나 대문자로 구분)
                                                             const isLongName = playerName && (playerName.length > 10 || /[A-Za-z]{10,}/.test(playerName))
                                                             return (
-                                                                <th key={idx} className="border border-gray-700 px-0.5 text-center font-bold" style={{ 
-                                                                    width: '19%', 
-                                                                    height: '28px', 
-                                                                    fontSize: isLongName ? '10px' : '14px', 
-                                                                    padding: '4px 2px', 
+                                                                <th key={idx} className="border border-gray-700 px-0.5 text-center font-bold" style={{
+                                                                    width: '21%',
+                                                                    height: '28px',
+                                                                    fontSize: isLongName ? '10px' : '14px',
+                                                                    padding: '4px 2px',
                                                                     verticalAlign: 'middle',
                                                                     lineHeight: isLongName ? '1.2' : '1.4',
                                                                     wordBreak: 'break-word',
@@ -549,7 +560,7 @@ export default function ManualScorecardPrint({
                                                         const parIndex = holeNum - 1;
                                                         const holeData = course.pars?.[parIndex] ?? 3;
                                                         return (
-                                                            <tr key={holeNum} style={{ height: '20px' }}>
+                                                            <tr key={holeNum} style={{ height: '32px' }}>
                                                                 <td className="border border-gray-700 px-1 text-center font-bold" style={{ backgroundColor: theme.border, color: theme.bg === '#ffffff' || theme.bg === '#fff8e1' || theme.bg === '#f5f5f5' ? '#000000' : '#ffffff', padding: '2px', verticalAlign: 'middle' }}>
                                                                     {holeNum}
                                                                 </td>
@@ -559,8 +570,8 @@ export default function ManualScorecardPrint({
                                                                 {/* 항상 4칸으로 점수 입력 칸 표시 (가운데 세로줄로 2칸으로 나눔) */}
                                                                 {[0, 1, 2, 3].map((idx) => {
                                                                     return (
-                                                                        <td key={idx} className="border border-gray-700" style={{ padding: '0', height: '20px', verticalAlign: 'top' }}>
-                                                                            <div className="w-full relative" style={{ display: 'flex', height: '100%', minHeight: '20px' }}>
+                                                                        <td key={idx} className="border border-gray-700" style={{ padding: '0', height: '32px', verticalAlign: 'top' }}>
+                                                                            <div className="w-full relative" style={{ display: 'flex', height: '100%', minHeight: '32px' }}>
                                                                                 <div className="flex-1" style={{ borderRight: '1px solid #000000', height: '100%', margin: 0 }}></div>
                                                                                 <div className="flex-1" style={{ height: '100%', margin: 0 }}></div>
                                                                             </div>
@@ -571,28 +582,28 @@ export default function ManualScorecardPrint({
                                                         )
                                                     })}
                                                     {/* 합계 행 */}
-                                                    <tr style={{ height: '20px' }}>
+                                                    <tr style={{ height: '32px' }}>
                                                         <td colSpan={2} className="border border-gray-700 px-1 text-center font-bold text-xs" style={{ padding: '2px', verticalAlign: 'middle' }}>
                                                             합계 (Total)
                                                         </td>
                                                         {/* 항상 4칸으로 합계 입력 칸 표시 (세로줄 없음) */}
                                                         {[0, 1, 2, 3].map((idx) => {
                                                             return (
-                                                                <td key={idx} className="border border-gray-700" style={{ padding: '0', height: '20px', verticalAlign: 'top' }}>
+                                                                <td key={idx} className="border border-gray-700" style={{ padding: '0', height: '32px', verticalAlign: 'top' }}>
                                                                     <div className="h-full w-full"></div>
                                                                 </td>
                                                             )
                                                         })}
                                                     </tr>
                                                     {/* 선수 사인 행 */}
-                                                    <tr style={{ height: '12px' }}>
+                                                    <tr style={{ height: '18px' }}>
                                                         <td colSpan={2} className="border border-gray-700 px-1 text-center font-bold text-xs" style={{ padding: '2px', verticalAlign: 'middle' }}>
                                                             선수 사인 (Player Signature)
                                                         </td>
                                                         {/* 항상 4칸으로 선수 사인 칸 표시 */}
                                                         {[0, 1, 2, 3].map((idx) => {
                                                             return (
-                                                                <td key={idx} className="border border-gray-700" style={{ padding: '0', height: '12px', verticalAlign: 'top' }}>
+                                                                <td key={idx} className="border border-gray-700" style={{ padding: '0', height: '18px', verticalAlign: 'top' }}>
                                                                     <div className="h-full w-full"></div>
                                                                 </td>
                                                             )

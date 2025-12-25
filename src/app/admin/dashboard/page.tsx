@@ -2442,7 +2442,7 @@ export default function AdminDashboard() {
                         border-collapse: collapse; 
                         margin-bottom: 10px; 
                         background-color: white;
-                        font-size: 15px;
+                        font-size: 16px;
                         table-layout: fixed; 
                     }
                     .print-table th { 
@@ -2456,12 +2456,12 @@ export default function AdminDashboard() {
                     }
                     .print-table th .header-korean {
                         display: block;
-                        font-size: 15px;
+                        font-size: 18px;
                         margin-bottom: 2px;
                     }
                     .print-table th .header-english {
                         display: block;
-                        font-size: 12px;
+                        font-size: 14px;
                         font-weight: 500;
                         color: #64748b;
                     }
@@ -2471,14 +2471,68 @@ export default function AdminDashboard() {
                         vertical-align: middle;
                         color: #334155;
                         font-weight: 500;
+                        font-size: 16px;
                     }
-                    .rank-1 { color: #2563eb; font-weight: 800; }
-                    .rank-2 { color: #1e293b; font-weight: 700; }
-                    .rank-3 { color: #1e293b; font-weight: 700; }
-                    
-                    /* 컬럼 너비 조정 */
-                    .col-sum { font-weight: 700; color: #ef4444; }
-                    .col-total { font-weight: 800; color: #2563eb; background-color: #f8fafc; }
+                    /* 순위, 조: 줄바꿈 방지 */
+                    .print-table td.rank-cell,
+                    .print-table td.jo-cell {
+                        white-space: nowrap;
+                        overflow: hidden;
+                    }
+                    /* 선수명: 줄바꿈 허용 (영어 이름 대응) */
+                    .print-table td.name-cell {
+                        white-space: normal;
+                        word-break: break-word;
+                    }
+                    /* 소속, 코스: 줄바꿈 방지 */
+                    .print-table td.affiliation-cell,
+                    .print-table td.course-cell {
+                        white-space: nowrap;
+                        overflow: hidden;
+                    }
+                    /* 순위: 20px, 남색 강조 */
+                    .print-table td.rank-cell {
+                        font-size: 20px;
+                        font-weight: bold;
+                        color: #1e40af;
+                    }
+                    .rank-1 { color: #2563eb; font-weight: 800; font-size: 20px; }
+                    .rank-2 { color: #1e293b; font-weight: 700; font-size: 20px; }
+                    .rank-3 { color: #1e293b; font-weight: 700; font-size: 20px; }
+                    /* 조: 16px */
+                    .print-table td.jo-cell {
+                        font-size: 16px;
+                    }
+                    /* 이름: 18px, 줄바꿈 허용 */
+                    .print-table td.name-cell {
+                        font-size: 18px;
+                        font-weight: bold;
+                    }
+                    /* 소속: 16px */
+                    .print-table td.affiliation-cell {
+                        font-size: 16px;
+                    }
+                    /* 코스: 16px */
+                    .print-table td.course-cell {
+                        font-size: 16px;
+                    }
+                    /* 홀 점수: 16px */
+                    .print-table td.hole-score {
+                        font-size: 16px;
+                    }
+                    /* 합계: 18px, 빨강 (홀 점수보다 크고, 순위/총타수보다 작음) */
+                    .print-table td.col-sum { 
+                        font-weight: 700 !important; 
+                        font-size: 18px !important;
+                        color: #dc2626 !important; 
+                    }
+                    /* 총타수: 20px, 남색 강조 */
+                    .print-table td.col-total { 
+                        font-weight: 800 !important; 
+                        font-size: 20px !important;
+                        color: #1e40af !important; 
+                        background-color: #f8fafc !important; 
+                    }
                     
                     .text-center { text-align: center; }
                     .font-bold { font-weight: 700; }
@@ -2670,19 +2724,19 @@ export default function AdminDashboard() {
                             const rankClass = player.rank === 1 ? 'rank-1' : (player.rank <= 3 ? `rank-${player.rank}` : '');
 
                             htmlContent += `<tr>`;
-                            htmlContent += `<td rowspan="${rowSpan}" class="text-center ${rankClass}">${player.rank ? player.rank + '위' : '-'}</td>`;
-                            htmlContent += `<td rowspan="${rowSpan}" class="text-center">${player.jo}</td>`;
-                            htmlContent += `<td rowspan="${rowSpan}" class="text-center font-bold">${player.name}</td>`;
-                            htmlContent += `<td rowspan="${rowSpan}" class="text-center">${player.affiliation}</td>`;
+                            htmlContent += `<td rowspan="${rowSpan}" class="text-center rank-cell ${rankClass}">${player.rank ? player.rank + '위' : '-'}</td>`;
+                            htmlContent += `<td rowspan="${rowSpan}" class="text-center jo-cell">${player.jo}</td>`;
+                            htmlContent += `<td rowspan="${rowSpan}" class="text-center name-cell font-bold">${player.name}</td>`;
+                            htmlContent += `<td rowspan="${rowSpan}" class="text-center affiliation-cell">${player.affiliation}</td>`;
 
                             if (courses.length > 0) {
                                 const firstCourse = courses[0];
                                 const cData = player.coursesData[firstCourse.id];
-                                htmlContent += `<td class="text-center font-bold" style="color: #059669;">${cData?.courseName || firstCourse.name}</td>`;
+                                htmlContent += `<td class="text-center course-cell font-bold" style="color: #059669;">${cData?.courseName || firstCourse.name}</td>`;
 
                                 for (let i = 0; i < 9; i++) {
                                     const s = cData?.holeScores[i];
-                                    htmlContent += `<td class="text-center">${s !== null && s !== undefined ? s : '-'}</td>`;
+                                    htmlContent += `<td class="text-center hole-score">${s !== null && s !== undefined ? s : '-'}</td>`;
                                 }
 
                                 htmlContent += `<td class="text-center col-sum">${cData?.courseTotal || '-'}</td>`;
@@ -2691,7 +2745,7 @@ export default function AdminDashboard() {
                                 </td>`;
                             } else {
                                 htmlContent += `<td colspan="11" class="text-center">배정된 코스 없음</td>`;
-                                htmlContent += `<td class="text-center">-</td>`;
+                                htmlContent += `<td class="text-center col-total" style="font-weight: 800 !important; font-size: 24px !important; color: #1e40af !important; background-color: #f8fafc !important;">-</td>`;
                             }
                             htmlContent += `</tr>`;
 
@@ -2699,12 +2753,12 @@ export default function AdminDashboard() {
                                 const nextCourse = courses[k];
                                 const cData = player.coursesData[nextCourse.id];
                                 htmlContent += `<tr>`;
-                                htmlContent += `<td class="text-center font-bold" style="color: #059669;">${cData?.courseName || nextCourse.name}</td>`;
-                                for (let i = 0; i < 9; i++) {
-                                    const s = cData?.holeScores[i];
-                                    htmlContent += `<td class="text-center">${s !== null && s !== undefined ? s : '-'}</td>`;
-                                }
-                                htmlContent += `<td class="text-center col-sum">${cData?.courseTotal || '-'}</td>`;
+                            htmlContent += `<td class="text-center course-cell font-bold" style="color: #059669;">${cData?.courseName || nextCourse.name}</td>`;
+                            for (let i = 0; i < 9; i++) {
+                                const s = cData?.holeScores[i];
+                                    htmlContent += `<td class="text-center hole-score">${s !== null && s !== undefined ? s : '-'}</td>`;
+                            }
+                            htmlContent += `<td class="text-center col-sum">${cData?.courseTotal || '-'}</td>`;
                                 htmlContent += `</tr>`;
                             }
                         });
@@ -2853,19 +2907,19 @@ export default function AdminDashboard() {
                         const rankClass = player.rank === 1 ? 'rank-1' : (player.rank <= 3 ? `rank-${player.rank}` : '');
 
                         htmlContent += `<tr>`;
-                        htmlContent += `<td rowspan="${rowSpan}" class="text-center ${rankClass}">${player.rank ? player.rank + '위' : '-'}</td>`;
-                        htmlContent += `<td rowspan="${rowSpan}" class="text-center">${player.jo}</td>`;
-                        htmlContent += `<td rowspan="${rowSpan}" class="text-center font-bold">${player.name}</td>`;
-                        htmlContent += `<td rowspan="${rowSpan}" class="text-center">${player.affiliation}</td>`;
+                        htmlContent += `<td rowspan="${rowSpan}" class="text-center rank-cell ${rankClass}">${player.rank ? player.rank + '위' : '-'}</td>`;
+                        htmlContent += `<td rowspan="${rowSpan}" class="text-center jo-cell">${player.jo}</td>`;
+                        htmlContent += `<td rowspan="${rowSpan}" class="text-center name-cell font-bold">${player.name}</td>`;
+                        htmlContent += `<td rowspan="${rowSpan}" class="text-center affiliation-cell">${player.affiliation}</td>`;
 
                         if (courses.length > 0) {
                             const firstCourse = courses[0];
                             const cData = player.coursesData[firstCourse.id];
-                            htmlContent += `<td class="text-center font-bold" style="color: #059669;">${cData?.courseName || firstCourse.name}</td>`;
+                            htmlContent += `<td class="text-center course-cell font-bold" style="color: #059669;">${cData?.courseName || firstCourse.name}</td>`;
 
                             for (let i = 0; i < 9; i++) {
                                 const s = cData?.holeScores[i];
-                                htmlContent += `<td class="text-center">${s !== null && s !== undefined ? s : '-'}</td>`;
+                                htmlContent += `<td class="text-center hole-score">${s !== null && s !== undefined ? s : '-'}</td>`;
                             }
 
                             htmlContent += `<td class="text-center col-sum">${cData?.courseTotal || '-'}</td>`;
@@ -2884,10 +2938,10 @@ export default function AdminDashboard() {
                             const nextCourse = courses[k];
                             const cData = player.coursesData[nextCourse.id];
                             htmlContent += `<tr>`;
-                            htmlContent += `<td class="text-center font-bold" style="color: #059669;">${cData?.courseName || nextCourse.name}</td>`;
+                            htmlContent += `<td class="text-center course-cell font-bold" style="color: #059669;">${cData?.courseName || nextCourse.name}</td>`;
                             for (let i = 0; i < 9; i++) {
                                 const s = cData?.holeScores[i];
-                                htmlContent += `<td class="text-center">${s !== null && s !== undefined ? s : '-'}</td>`;
+                                    htmlContent += `<td class="text-center hole-score">${s !== null && s !== undefined ? s : '-'}</td>`;
                             }
                             htmlContent += `<td class="text-center col-sum">${cData?.courseTotal || '-'}</td>`;
                             htmlContent += `</tr>`;

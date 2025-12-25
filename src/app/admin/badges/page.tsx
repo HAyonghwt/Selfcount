@@ -53,19 +53,19 @@ const BACKGROUND_COLORS: { [key: string]: string } = {
 
 export default function BadgePage() {
   const { toast } = useToast();
-  
+
   // Firebase 데이터
   const [tournament, setTournament] = useState<any>({});
   const [allPlayers, setAllPlayers] = useState<any[]>([]);
   const [groupsData, setGroupsData] = useState<any>({});
-  
+
   // 설정 상태
   const [selectedBackground, setSelectedBackground] = useState<string>(BACKGROUND_IMAGES[0]);
   const [badgeWidth, setBadgeWidth] = useState<number>(88); // mm
   const [badgeHeight, setBadgeHeight] = useState<number>(58); // mm
   const [selectedGroup, setSelectedGroup] = useState<string>('');
   const [selectedType, setSelectedType] = useState<'individual' | 'team'>('individual');
-  
+
   // 텍스트 크기 설정
   const [fontSizes, setFontSizes] = useState({
     tournamentName: 12, // 작은 글자
@@ -73,7 +73,7 @@ export default function BadgePage() {
     groupName: 18, // 중간 크기
     playerName: 86, // 아주 큰 글자
   });
-  
+
   // 텍스트 색상 설정
   const [textColors, setTextColors] = useState({
     tournamentName: '#FFFFFF', // 흰색
@@ -81,7 +81,7 @@ export default function BadgePage() {
     groupName: '#666666', // 회색
     playerName: '#0066CC', // 배경테마색 (기본 파란색)
   });
-  
+
   // 미리보기용 캔버스 ref
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
   const badgeContainerRef = useRef<HTMLDivElement>(null);
@@ -89,21 +89,21 @@ export default function BadgePage() {
   // Firebase 데이터 로드
   useEffect(() => {
     if (!db) return;
-    
+
     const tournamentRef = ref(db, 'tournaments/current');
     const playersRef = ref(db, 'players');
-    
+
     const unsubTournament = onValue(tournamentRef, (snapshot) => {
       const data = snapshot.val() || {};
       setTournament(data);
       setGroupsData(data.groups || {});
     });
-    
+
     const unsubPlayers = onValue(playersRef, (snapshot) => {
       const data = snapshot.val();
       setAllPlayers(data ? Object.entries(data).map(([id, player]) => ({ id, ...player as object })) : []);
     });
-    
+
     return () => {
       unsubTournament();
       unsubPlayers();
@@ -152,6 +152,23 @@ export default function BadgePage() {
     width: number,
     height: number
   ) => {
+    const TARGET_DPI = 300;
+    const BASE_DPI = 96;
+    const ratio = TARGET_DPI / BASE_DPI;
+
+    // 픽셀 단위로 변환 (96 DPI 기준 - 기존 디자인 및 위치 계산용)
+    const mmToPx = (mm: number) => (mm * BASE_DPI) / 25.4;
+    const pxWidth = mmToPx(width);
+    const pxHeight = mmToPx(height);
+
+    // Canvas 실제 해상도는 300 DPI로 고해상도 설정
+    ctx.canvas.width = (width * TARGET_DPI) / 25.4;
+    ctx.canvas.height = (height * TARGET_DPI) / 25.4;
+
+    // 모든 좌표와 글자 크기를 96 DPI 기준으로 작성하면 
+    // 내부적으로 300 DPI 해상도에 맞춰 자동으로 확대되도록 설정
+    ctx.scale(ratio, ratio);
+
     // 배경 이미지 로드
     const img = new Image();
     await new Promise((resolve, reject) => {
@@ -159,22 +176,10 @@ export default function BadgePage() {
       img.onerror = reject;
       img.src = selectedBackground;
     });
-    
+
     // 배경 이미지 그리기
-    ctx.drawImage(img, 0, 0, width, height);
-    
-    // 픽셀 단위로 변환 (mm to px, 96 DPI 기준)
-    const mmToPx = (mm: number) => (mm * 96) / 25.4;
-    const pxWidth = mmToPx(width);
-    const pxHeight = mmToPx(height);
-    
-    // Canvas 크기 설정
-    ctx.canvas.width = pxWidth;
-    ctx.canvas.height = pxHeight;
-    
-    // 배경 이미지 다시 그리기 (새로운 크기에 맞춰)
     ctx.drawImage(img, 0, 0, pxWidth, pxHeight);
-    
+
     // 기준 크기 (88mm x 58mm)와 현재 크기의 비율 계산
     const BASE_WIDTH = 88;
     const BASE_HEIGHT = 58;
@@ -182,30 +187,30 @@ export default function BadgePage() {
     const scaleY = height / BASE_HEIGHT;
     // 가로/세로 비율의 평균을 사용하여 균등하게 스케일링
     const scale = (scaleX + scaleY) / 2;
-    
+
     // 텍스트 그리기
     const playerName = player.type === 'team' ? (player.p1_name || '') : (player.name || '');
     const jo = player.jo?.toString() || '';
     const joDisplay = jo; // 실제 조 이름만 표시
     const groupNameEn = getGroupNameEn(groupName);
-    
+
     // 영어 이름인지 판단 (한글이 없고 영문자, 공백, 하이픈만 포함된 경우)
     const isEnglishName = /^[a-zA-Z\s-]+$/.test(playerName) && playerName.trim().length > 0;
-    
+
     // 대회명 (왼쪽 위, 작은 글자) - 비율 적용
     ctx.fillStyle = textColors.tournamentName;
     ctx.font = `bold ${fontSizes.tournamentName * scale}px Arial`;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
     ctx.fillText(tournamentName, mmToPx(5) * scaleX + 15 * scale, mmToPx(5) * scaleY - 8 * scale);
-    
+
     // 조 이름 (가운데, 아주 큰 글자) - 비율 적용
     ctx.fillStyle = textColors.joName;
     ctx.font = `bold ${fontSizes.joName * scale}px Arial`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(joDisplay, pxWidth / 2, pxHeight * 0.3 - 5 * scale);
-    
+
     // 그룹명 + 영어 (이름 위, 중간 크기) - 비율 적용
     ctx.fillStyle = textColors.groupName;
     ctx.font = `300 ${fontSizes.groupName * scale}px Arial`; // 얇은 체
@@ -213,36 +218,36 @@ export default function BadgePage() {
     ctx.textBaseline = 'bottom';
     const groupText = `${groupName} ${groupNameEn}`;
     ctx.fillText(groupText, pxWidth / 2, pxHeight * 0.7 - 33 * scale);
-    
+
     // 이름 (맨 아래, 아주 큰 글자) - 비율 적용
     ctx.fillStyle = textColors.playerName;
     ctx.textAlign = 'center';
-    
+
     // 한글 이름 기본 위치 (하단 기준)
     const koreanNameY = pxHeight - mmToPx(8) * scaleY + 29 * scale;
-    
+
     if (isEnglishName) {
       // 영어 이름: 40px 크기로 2줄 표시 (성과 이름) - 비율 적용
       // 하이픈을 공백으로 변환하여 처리
       const nameWithoutHyphen = playerName.trim().replace(/-/g, ' ');
-      const nameParts = nameWithoutHyphen.split(/\s+/).filter(part => part.length > 0);
+      const nameParts = nameWithoutHyphen.split(/\s+/).filter((part: string) => part.length > 0);
       if (nameParts.length >= 2) {
         // 성과 이름이 모두 있는 경우
         const lastName = nameParts[nameParts.length - 1]; // 마지막 단어가 성
         const firstName = nameParts.slice(0, -1).join(' '); // 나머지가 이름
-        
+
         const englishNameSize = 40 * scale;
         ctx.font = `900 ${englishNameSize}px Arial`; // 매우 굵은 체
         ctx.textBaseline = 'bottom';
-        
+
         // 영어 이름 위치: 한글 이름보다 위로 올려서 2줄 전체가 보이도록 조정
         // 아래쪽 줄이 한글 이름 위치보다 3px 위에 오도록, 위쪽 줄은 그 위에 배치
         const englishNameBottomY = koreanNameY - (3 * scale); // 아래쪽 줄이 한글 이름 위치보다 3px 위
         const englishNameTopY = englishNameBottomY - (englishNameSize + 5 * scale); // 위쪽 줄 위치 (크기 + 간격)
-        
+
         // 성 (위쪽 줄)
         ctx.fillText(lastName, pxWidth / 2, englishNameTopY);
-        
+
         // 이름 (아래쪽 줄)
         ctx.fillText(firstName, pxWidth / 2, englishNameBottomY);
       } else {
@@ -282,6 +287,11 @@ export default function BadgePage() {
         format: 'a4',
       });
 
+      // 인쇄 시 '실제 크기'로 인쇄되도록 설정 (Fit to page 방지)
+      pdf.viewerPreferences({
+        'PrintScaling': 'None'
+      });
+
       const A4_WIDTH = 210;
       const A4_HEIGHT = 297;
       const MARGIN = 5; // 여백
@@ -300,7 +310,7 @@ export default function BadgePage() {
 
       for (const jo of sortedJos) {
         const players = playersByJo[jo];
-        
+
         for (const player of players) {
           if (badgeIndex % badgesPerPage === 0) {
             if (currentPage > 0) {
@@ -351,7 +361,7 @@ export default function BadgePage() {
   // 미리보기 업데이트
   useEffect(() => {
     if (!previewCanvasRef.current) return;
-    
+
     const canvas = previewCanvasRef.current;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
@@ -579,7 +589,7 @@ export default function BadgePage() {
             <CardHeader>
               <CardTitle className="text-lg">미리보기</CardTitle>
               <CardDescription>
-                {selectedGroup && filteredPlayers.length > 0 
+                {selectedGroup && filteredPlayers.length > 0
                   ? "첫 번째 선수의 명찰 미리보기 (실제 크기와 다를 수 있습니다)"
                   : "그룹을 선택하면 미리보기가 표시됩니다"}
               </CardDescription>
