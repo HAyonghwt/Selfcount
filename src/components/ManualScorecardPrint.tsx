@@ -545,7 +545,9 @@ export default function ManualScorecardPrint({
                                                 </thead>
                                                 <tbody>
                                                     {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((holeNum) => {
-                                                        const holeData = course.pars?.[holeNum] || course.pars?.[holeNum.toString()] || 3
+                                                        // pars 배열은 0부터 시작하므로 holeNum - 1을 사용해야 함
+                                                        const parIndex = holeNum - 1;
+                                                        const holeData = course.pars?.[parIndex] ?? 3;
                                                         return (
                                                             <tr key={holeNum} style={{ height: '20px' }}>
                                                                 <td className="border border-gray-700 px-1 text-center font-bold" style={{ backgroundColor: theme.border, color: theme.bg === '#ffffff' || theme.bg === '#fff8e1' || theme.bg === '#f5f5f5' ? '#000000' : '#ffffff', padding: '2px', verticalAlign: 'middle' }}>
