@@ -186,11 +186,11 @@ export default function BadgePage() {
     // 텍스트 그리기
     const playerName = player.type === 'team' ? (player.p1_name || '') : (player.name || '');
     const jo = player.jo?.toString() || '';
-    const joDisplay = `${groupName.charAt(0)}-${jo}`;
+    const joDisplay = jo; // 실제 조 이름만 표시
     const groupNameEn = getGroupNameEn(groupName);
     
-    // 영어 이름인지 판단 (한글이 없고 영문자와 공백만 포함된 경우)
-    const isEnglishName = /^[a-zA-Z\s]+$/.test(playerName) && playerName.trim().length > 0;
+    // 영어 이름인지 판단 (한글이 없고 영문자, 공백, 하이픈만 포함된 경우)
+    const isEnglishName = /^[a-zA-Z\s-]+$/.test(playerName) && playerName.trim().length > 0;
     
     // 대회명 (왼쪽 위, 작은 글자) - 비율 적용
     ctx.fillStyle = textColors.tournamentName;
@@ -218,9 +218,14 @@ export default function BadgePage() {
     ctx.fillStyle = textColors.playerName;
     ctx.textAlign = 'center';
     
+    // 한글 이름 기본 위치 (하단 기준)
+    const koreanNameY = pxHeight - mmToPx(8) * scaleY + 29 * scale;
+    
     if (isEnglishName) {
       // 영어 이름: 40px 크기로 2줄 표시 (성과 이름) - 비율 적용
-      const nameParts = playerName.trim().split(/\s+/);
+      // 하이픈을 공백으로 변환하여 처리
+      const nameWithoutHyphen = playerName.trim().replace(/-/g, ' ');
+      const nameParts = nameWithoutHyphen.split(/\s+/).filter(part => part.length > 0);
       if (nameParts.length >= 2) {
         // 성과 이름이 모두 있는 경우
         const lastName = nameParts[nameParts.length - 1]; // 마지막 단어가 성
@@ -230,22 +235,27 @@ export default function BadgePage() {
         ctx.font = `900 ${englishNameSize}px Arial`; // 매우 굵은 체
         ctx.textBaseline = 'bottom';
         
+        // 영어 이름 위치: 한글 이름보다 위로 올려서 2줄 전체가 보이도록 조정
+        // 아래쪽 줄이 한글 이름 위치보다 3px 위에 오도록, 위쪽 줄은 그 위에 배치
+        const englishNameBottomY = koreanNameY - (3 * scale); // 아래쪽 줄이 한글 이름 위치보다 3px 위
+        const englishNameTopY = englishNameBottomY - (englishNameSize + 5 * scale); // 위쪽 줄 위치 (크기 + 간격)
+        
         // 성 (위쪽 줄)
-        ctx.fillText(lastName, pxWidth / 2, pxHeight - mmToPx(8) * scaleY + 29 * scale);
+        ctx.fillText(lastName, pxWidth / 2, englishNameTopY);
         
         // 이름 (아래쪽 줄)
-        ctx.fillText(firstName, pxWidth / 2, pxHeight - mmToPx(8) * scaleY + 29 * scale + (englishNameSize + 5 * scale)); // 크기 + 간격
+        ctx.fillText(firstName, pxWidth / 2, englishNameBottomY);
       } else {
-        // 단어가 하나만 있는 경우 (기존 방식)
+        // 단어가 하나만 있는 경우: 한글 이름과 동일한 위치 사용
         ctx.font = `900 ${fontSizes.playerName * scale}px Arial`;
         ctx.textBaseline = 'bottom';
-        ctx.fillText(playerName, pxWidth / 2, pxHeight - mmToPx(8) * scaleY + 29 * scale);
+        ctx.fillText(playerName, pxWidth / 2, koreanNameY);
       }
     } else {
-      // 한글 이름: 기존 방식 - 비율 적용
+      // 한글 이름: 기존 위치 유지 - 비율 적용
       ctx.font = `900 ${fontSizes.playerName * scale}px Arial`; // 매우 굵은 체
       ctx.textBaseline = 'bottom';
-      ctx.fillText(playerName, pxWidth / 2, pxHeight - mmToPx(8) * scaleY + 29 * scale);
+      ctx.fillText(playerName, pxWidth / 2, koreanNameY);
     }
   };
 
