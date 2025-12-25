@@ -946,6 +946,15 @@ export default function AdminDashboard() {
                     color: #dc2626;
                     background-color: #fffafb;
                 }
+                .pm-score {
+                    font-size: 10px;
+                    font-weight: 700;
+                    margin-left: 2px;
+                    vertical-align: middle;
+                }
+                .pm-plus { color: #dc2626; }
+                .pm-minus { color: #2563eb; }
+                .pm-even { color: #64748b; }
                 .total-score {
                     font-weight: 800;
                     font-size: 22px;
@@ -1090,9 +1099,19 @@ export default function AdminDashboard() {
                             `;
 
                             // 홀별 점수
-                            holeScores.forEach((score: number | null) => {
-                                const scoreText = score !== null ? score.toString() : '-';
-                                printContent += `<td class="hole-score fixed-column">${scoreText}</td>`;
+                            holeScores.forEach((score: number | null, holeIdx: number) => {
+                                let scoreContent = score !== null ? score.toString() : '-';
+
+                                // ±타수 추가 (점수가 있고 Par 정보가 있는 경우)
+                                const par = (courses as any)?.[course.id]?.pars?.[holeIdx];
+                                if (score !== null && score > 0 && typeof par === 'number') {
+                                    const pm = score - par;
+                                    const pmText = pm === 0 ? 'E' : (pm > 0 ? `+${pm}` : pm);
+                                    const pmClass = pm === 0 ? 'pm-even' : (pm > 0 ? 'pm-plus' : 'pm-minus');
+                                    scoreContent += ` <span class="pm-score ${pmClass}">${pmText}</span>`;
+                                }
+
+                                printContent += `<td class="hole-score fixed-column">${scoreContent}</td>`;
                             });
 
                             // 코스 합계
@@ -2505,6 +2524,16 @@ export default function AdminDashboard() {
                         background-color: #f8fafc !important; 
                     }
                     
+                    .pm-score {
+                        font-size: 10px;
+                        font-weight: 700;
+                        margin-left: 1px;
+                        display: inline-block;
+                    }
+                    .pm-plus { color: #dc2626; }
+                    .pm-minus { color: #2563eb; }
+                    .pm-even { color: #64748b; }
+                    
                     .text-center { text-align: center; }
                     .font-bold { font-weight: 700; }
                 </style>
@@ -2906,7 +2935,16 @@ export default function AdminDashboard() {
 
                             for (let i = 0; i < 9; i++) {
                                 const s = cData?.holeScores[i];
-                                htmlContent += `<td class="text-center hole-score">${s !== null && s !== undefined ? s : '-'}</td>`;
+                                let cellContent = s !== null && s !== undefined ? s.toString() : '-';
+                                // ±타수 추가
+                                const par = (courses as any)?.[firstCourse.id]?.pars?.[i];
+                                if (typeof s === 'number' && s > 0 && typeof par === 'number') {
+                                    const pm = s - par;
+                                    const pmText = pm === 0 ? 'E' : (pm > 0 ? `+${pm}` : pm);
+                                    const pmClass = pm === 0 ? 'pm-even' : (pm > 0 ? 'pm-plus' : 'pm-minus');
+                                    cellContent += `<span class="pm-score ${pmClass}">${pmText}</span>`;
+                                }
+                                htmlContent += `<td class="text-center hole-score">${cellContent}</td>`;
                             }
 
                             htmlContent += `<td class="text-center col-sum">${cData?.courseTotal || '-'}</td>`;
@@ -2928,7 +2966,16 @@ export default function AdminDashboard() {
                             htmlContent += `<td class="text-center course-cell font-bold" style="color: #059669;">${cData?.courseName || nextCourse.name}</td>`;
                             for (let i = 0; i < 9; i++) {
                                 const s = cData?.holeScores[i];
-                                htmlContent += `<td class="text-center hole-score">${s !== null && s !== undefined ? s : '-'}</td>`;
+                                let cellContent = s !== null && s !== undefined ? s.toString() : '-';
+                                // ±타수 추가
+                                const par = (courses as any)?.[nextCourse.id]?.pars?.[i];
+                                if (typeof s === 'number' && s > 0 && typeof par === 'number') {
+                                    const pm = s - par;
+                                    const pmText = pm === 0 ? 'E' : (pm > 0 ? `+${pm}` : pm);
+                                    const pmClass = pm === 0 ? 'pm-even' : (pm > 0 ? 'pm-plus' : 'pm-minus');
+                                    cellContent += `<span class="pm-score ${pmClass}">${pmText}</span>`;
+                                }
+                                htmlContent += `<td class="text-center hole-score">${cellContent}</td>`;
                             }
                             htmlContent += `<td class="text-center col-sum">${cData?.courseTotal || '-'}</td>`;
                             htmlContent += `</tr>`;
