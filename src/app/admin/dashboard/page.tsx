@@ -41,6 +41,7 @@ interface ProcessedPlayer {
     assignedCourses: any[];
     totalPar: number; // 파합계
     plusMinus: number | null; // ±타수
+    type: 'individual' | 'team'; // 선수 타입 추가
 }
 
 // Helper function for tie-breaking using back-count method
@@ -150,41 +151,76 @@ export default function AdminDashboard() {
     // 안전한 number 체크 함수
     const isValidNumber = (v: any) => typeof v === 'number' && !isNaN(v);
 
+    const { toast } = useToast();
+    const router = useRouter();
+
+    // 🚀 핵심 상태 관리 (최상단으로 이동)
+    const [players, setPlayers] = useState<any>({});
+    const [scores, setScores] = useState<any>({});
+    const [courses, setCourses] = useState<any>({});
+    const [groupsData, setGroupsData] = useState<any>({});
+    const [filterGroup, setFilterGroup] = useState('all');
+    const [tournamentName, setTournamentName] = useState('골프 대회');
+
+    const [initialDataLoaded, setInitialDataLoaded] = useState(false);
+    const [resumeSeq, setResumeSeq] = useState(0);
+    const activeUnsubsRef = useRef<(() => void)[]>([]);
+    const [individualSuddenDeathData, setIndividualSuddenDeathData] = useState<any>(null);
+    const [teamSuddenDeathData, setTeamSuddenDeathData] = useState<any>(null);
+    const [individualBackcountApplied, setIndividualBackcountApplied] = useState<{ [groupName: string]: boolean }>({});
+    const [teamBackcountApplied, setTeamBackcountApplied] = useState<{ [groupName: string]: boolean }>({});
+    const [individualNTPData, setIndividualNTPData] = useState<any>(null);
+    const [teamNTPData, setTeamNTPData] = useState<any>(null);
+    const [notifiedSuddenDeathGroups, setNotifiedSuddenDeathGroups] = useState<string[]>([]);
+    const [scoreCheckModal, setScoreCheckModal] = useState<{ open: boolean, groupName: string, missingScores: any[], resultMsg?: string }>({ open: false, groupName: '', missingScores: [] });
+
+    // 선수별 점수 로그 캐시 상태 (playerId별) - 2404번 라인에서 이동
+    const [playerScoreLogs, setPlayerScoreLogs] = useState<{ [playerId: string]: ScoreLog[] }>({});
+
+    // 🚀 데이터 사용량 모니터링 - 2407번 라인에서 이동
+    const [dataUsage, setDataUsage] = useState({
+        totalDownloaded: 0,
+        lastUpdate: Date.now(),
+        downloadsPerMinute: 0
+    });
+
+    const [searchPlayer, setSearchPlayer] = useState('');
+    const [highlightedPlayerId, setHighlightedPlayerId] = useState<number | null>(null);
+    const playerRowRefs = useRef<Record<string, (HTMLTableRowElement | null)[]>>({});
+
+    // 🚀 모든 그룹 목록 추출 (스코프 문제 해결)
+    const allGroupsList = useMemo(() => {
+        return Object.keys(groupsData).sort();
+    }, [groupsData]);
+
     // 🚀 성능 최적화: tieBreak 결과 캐싱
     const tieBreakCacheRef = useRef<Map<string, number>>(new Map());
-    const MAX_CACHE_SIZE = 10000; // 최대 캐시 크기 제한
+    const MAX_CACHE_SIZE = 10000;
 
     // 🚀 성능 최적화: 캐싱된 tieBreak 함수
     const cachedTieBreak = useCallback((a: any, b: any, sortedCourses: any[]) => {
-        // 캐시 키 생성: 두 선수 ID와 코스 순서를 조합
         const courseOrderKey = sortedCourses.map(c => c?.id || '').join(',');
         const cacheKey = `${a.id}-${b.id}-${courseOrderKey}`;
         const reverseCacheKey = `${b.id}-${a.id}-${courseOrderKey}`;
 
-        // 캐시 확인 (정방향)
         if (tieBreakCacheRef.current.has(cacheKey)) {
             return tieBreakCacheRef.current.get(cacheKey)!;
         }
 
-        // 캐시 확인 (역방향 - tieBreak(a,b) = -tieBreak(b,a))
         if (tieBreakCacheRef.current.has(reverseCacheKey)) {
             const cachedValue = tieBreakCacheRef.current.get(reverseCacheKey)!;
             const result = -cachedValue;
-            // 역방향 결과도 캐시에 저장
             if (tieBreakCacheRef.current.size < MAX_CACHE_SIZE) {
                 tieBreakCacheRef.current.set(cacheKey, result);
             }
             return result;
         }
 
-        // 캐시 미스 시 원본 tieBreak 함수 호출 (무한 재귀 방지)
         const result = tieBreak(a, b, sortedCourses);
 
-        // 캐시 저장 (크기 제한 확인)
         if (tieBreakCacheRef.current.size < MAX_CACHE_SIZE) {
             tieBreakCacheRef.current.set(cacheKey, result);
         } else {
-            // 캐시가 가득 찬 경우 가장 오래된 항목 제거 (FIFO 방식)
             const firstKey = tieBreakCacheRef.current.keys().next().value;
             if (firstKey) {
                 tieBreakCacheRef.current.delete(firstKey);
@@ -194,6 +230,442 @@ export default function AdminDashboard() {
 
         return result;
     }, []);
+
+    // 🟢 메모리 최적화 - 의존성 최소화 및 조건부 계산 (스코프 문제 해결을 위해 상단 이동)
+    const processedDataByGroup = useMemo(() => {
+        const allCoursesList = Object.values(courses).filter(Boolean);
+        if (Object.keys(players).length === 0 || allCoursesList.length === 0) return {};
+
+        // 모든 선수 처리 (filterGroup은 표시용 필터이지 데이터 처리 필터가 아님)
+        const playersToProcess = Object.entries(players);
+
+        const allProcessedPlayers: any[] = playersToProcess.map(([playerId, player]: [string, any]) => {
+            const playerGroupData = groupsData[player.group];
+            // 코스 순서 정보 가져오기 (기존 호환성: boolean → number 변환)
+            const coursesOrder = playerGroupData?.courses || {};
+            const assignedCourseIds = Object.keys(coursesOrder).filter((cid: string) => {
+                const order = coursesOrder[cid];
+                // boolean이면 true인 것만, number면 0보다 큰 것만
+                return typeof order === 'boolean' ? order : (typeof order === 'number' && order > 0);
+            });
+            // courses 객체에서 해당 id만 찾아 배열로 만듦 (id 타입 일치 보장)
+            const coursesForPlayer = assignedCourseIds
+                .map(cid => {
+                    const key = Object.keys(courses).find(k => String(k) === String(cid));
+                    return key ? courses[key] : undefined;
+                })
+                .filter(Boolean);
+            // 코스 순서대로 정렬 (order가 큰 것이 마지막 = 백카운트 기준)
+            coursesForPlayer.sort((a: any, b: any) => {
+                const orderA = coursesOrder[String(a.id)];
+                const orderB = coursesOrder[String(b.id)];
+
+                // 그룹의 courses에서 순서 가져오기, 없으면 코스의 order 사용
+                let numA: number;
+                if (typeof orderA === 'boolean') {
+                    numA = orderA ? (a.order || 0) : 0;
+                } else if (typeof orderA === 'number' && orderA > 0) {
+                    numA = orderA;
+                } else {
+                    numA = a.order || 0;
+                }
+
+                let numB: number;
+                if (typeof orderB === 'boolean') {
+                    numB = orderB ? (b.order || 0) : 0;
+                } else if (typeof orderB === 'number' && orderB > 0) {
+                    numB = orderB;
+                } else {
+                    numB = b.order || 0;
+                }
+
+                return numA - numB; // 작은 순서가 먼저
+            });
+            // 백카운트를 위한 상세 점수 구성
+            const courseScores: { [key: string]: number } = {};
+            const detailedScores: { [key: string]: { [hole: string]: number } } = {};
+            let total = 0;
+            let playedAnyHole = false;
+
+            coursesForPlayer.forEach((course: any) => {
+                const pScores = scores[playerId]?.[course.id] || {};
+                let cTotal = 0;
+                detailedScores[course.id] = {};
+
+                for (let h = 1; h <= 9; h++) {
+                    const s = pScores[h];
+                    if (isValidNumber(s)) {
+                        cTotal += s;
+                        total += s;
+                        detailedScores[course.id][h] = s;
+                        playedAnyHole = true;
+                    }
+                }
+                courseScores[course.id] = cTotal;
+            });
+
+            // coursesData 필드 구성 (UI 렌더링용)
+            const coursesDataForPlayer: { [key: string]: any } = {};
+            coursesForPlayer.forEach((course: any) => {
+                const pScores = scores[playerId]?.[course.id] || {};
+                const holeScores = Array.from({ length: 9 }, (_, i) => {
+                    const s = pScores[i + 1];
+                    return isValidNumber(s) ? s : null;
+                });
+                coursesDataForPlayer[course.id] = {
+                    courseName: course.name,
+                    courseTotal: courseScores[course.id] || 0,
+                    holeScores: holeScores
+                };
+            });
+
+            // 외부 전광판과 동일한 ± 및 총타수 계산
+            const { total: totalScore, plusMinus } = getPlayerTotalAndPlusMinus(courses, {
+                assignedCourses: coursesForPlayer,
+                coursesData: coursesDataForPlayer
+            });
+
+            return {
+                id: playerId,
+                ...player,
+                totalScore: totalScore ?? 0,
+                hasAnyScore: playedAnyHole,
+                hasForfeited: (() => {
+                    // 모든 배정 코스의 모든 홀이 0점인지 확인
+                    if (coursesForPlayer.length === 0) return false;
+                    let hasZeroScore = false;
+                    for (const course of coursesForPlayer) {
+                        const pScores = scores[playerId]?.[course.id] || {};
+                        for (let h = 1; h <= 9; h++) {
+                            if (pScores[h] === 0) {
+                                hasZeroScore = true;
+                                break;
+                            }
+                        }
+                        if (hasZeroScore) break;
+                    }
+
+                    // 0점이 있으면 기권 타입 추출 (나중에 로그에서 가져올 예정)
+                    return hasZeroScore ? 'pending' : null;
+                })(),
+                assignedCourses: coursesForPlayer,
+                plusMinus,
+                // 백카운트 계산을 위한 데이터 추가
+                courseScores,
+                detailedScores,
+                coursesData: coursesDataForPlayer, // UI 렌더링을 위해 추가
+                total: total // tieBreak 함수에서 사용
+            };
+        });
+        const groupedData = allProcessedPlayers.reduce((acc, player) => {
+            const groupName = player.group || '미지정';
+            if (!acc[groupName]) {
+                acc[groupName] = [];
+            }
+            acc[groupName].push(player);
+            return acc;
+        }, {} as Record<string, any[]>);
+
+        // 모든 그룹 순위 계산 (filterGroup은 표시용 필터이지 데이터 처리 필터가 아님)
+        const rankedData: { [key: string]: ProcessedPlayer[] } = {};
+        const groupsToRank = Object.keys(groupedData);
+
+        for (const groupName of groupsToRank) {
+            // 코스 순서 기반으로 정렬 (order가 큰 것이 마지막 = 백카운트 기준)
+            const groupPlayers = groupedData[groupName];
+            const groupData = groupsData[groupName];
+            const coursesOrder = groupData?.courses || {};
+            const allCoursesForGroup = [...(groupPlayers[0]?.assignedCourses || [])].filter(c => c && c.id !== undefined);
+            // 코스 순서대로 정렬 (order가 큰 것이 마지막)
+            const coursesForGroup = [...allCoursesForGroup].sort((a: any, b: any) => {
+                const orderA = coursesOrder[String(a.id)];
+                const orderB = coursesOrder[String(b.id)];
+
+                // 그룹의 courses에서 순서 가져오기, 없으면 코스의 order 사용
+                let numA: number;
+                if (typeof orderA === 'boolean') {
+                    numA = orderA ? (a.order || 0) : 0;
+                } else if (typeof orderA === 'number' && orderA > 0) {
+                    numA = orderA;
+                } else {
+                    numA = a.order || 0;
+                }
+
+                let numB: number;
+                if (typeof orderB === 'boolean') {
+                    numB = orderB ? (b.order || 0) : 0;
+                } else if (typeof orderB === 'number' && orderB > 0) {
+                    numB = orderB;
+                } else {
+                    numB = b.order || 0;
+                }
+
+                return numA - numB; // 작은 순서가 먼저
+            });
+            // 백카운트는 마지막 코스부터 역순이므로 reverse
+            const coursesForBackcount = [...coursesForGroup].reverse();
+
+            const playersToSort = groupedData[groupName].filter((p: any) => p.hasAnyScore && !p.hasForfeited);
+            const otherPlayers = groupedData[groupName].filter((p: any) => !p.hasAnyScore || p.hasForfeited);
+            if (playersToSort.length > 0) {
+                // 1. plusMinus 오름차순 정렬, tieBreak(백카운트) 적용
+                playersToSort.sort((a: any, b: any) => {
+                    if (a.plusMinus !== b.plusMinus) return a.plusMinus - b.plusMinus;
+                    return cachedTieBreak(a, b, coursesForBackcount);
+                });
+                // 2. 1위 동점자 모두 rank=1, 그 다음 선수부터 등수 건너뛰기
+                const minPlusMinus = playersToSort[0].plusMinus;
+                let rank = 1;
+                let oneRankCount = 0;
+                // 1위 동점자 처리
+                for (let i = 0; i < playersToSort.length; i++) {
+                    if (playersToSort[i].plusMinus === minPlusMinus) {
+                        playersToSort[i].rank = 1;
+                        oneRankCount++;
+                    } else {
+                        break;
+                    }
+                }
+                // 2위 이하(실제로는 1위 동점자 수+1 등수부터) 백카운트 등수 부여
+                rank = oneRankCount + 1;
+                for (let i = oneRankCount; i < playersToSort.length; i++) {
+                    // 바로 앞 선수와 plusMinus, tieBreak 모두 같으면 같은 등수, 아니면 증가
+                    const prev = playersToSort[i - 1];
+                    const curr = playersToSort[i];
+                    if (
+                        curr.plusMinus === prev.plusMinus &&
+                        cachedTieBreak(curr, prev, coursesForBackcount) === 0
+                    ) {
+                        curr.rank = playersToSort[i - 1].rank;
+                    } else {
+                        curr.rank = rank;
+                    }
+                    rank++;
+                }
+            }
+            const finalPlayers = [...playersToSort, ...otherPlayers.map((p: any) => ({ ...p, rank: null }))];
+            rankedData[groupName] = finalPlayers;
+        }
+        return rankedData;
+    }, [players, scores, courses, groupsData, cachedTieBreak]);
+
+    const processSuddenDeath = (suddenDeathData: any) => {
+        if (!suddenDeathData) return [];
+
+        const processOne = (sd: any) => {
+            if (!sd?.isActive || !sd.players || !sd.holes || !Array.isArray(sd.holes)) return [];
+            const participatingPlayerIds = Object.keys(sd.players).filter(id => sd.players[id]);
+            const results: any[] = participatingPlayerIds.map(id => {
+                const playerInfo: any = players[id];
+                if (!playerInfo) return null;
+                const name = playerInfo.type === 'team' ? `${playerInfo.p1_name} / ${playerInfo.p2_name}` : playerInfo.name;
+                let totalScore = 0;
+                let holesPlayed = 0;
+                sd.holes.forEach((hole: number) => {
+                    const score = sd.scores?.[id]?.[hole];
+                    if (score !== undefined && score !== null) {
+                        totalScore += score;
+                        holesPlayed++;
+                    }
+                });
+                return { id, name, totalScore, holesPlayed };
+            }).filter(Boolean);
+
+            results.sort((a, b) => {
+                if (a.holesPlayed !== b.holesPlayed) return b.holesPlayed - a.holesPlayed;
+                if (a.totalScore !== b.totalScore) return a.totalScore - b.totalScore;
+                return a.name.localeCompare(b.name);
+            });
+
+            let rank = 1;
+            for (let i = 0; i < results.length; i++) {
+                if (i > 0 && (results[i].holesPlayed < results[i - 1].holesPlayed || (results[i].holesPlayed === results[i - 1].holesPlayed && results[i].totalScore > results[i - 1].totalScore))) {
+                    rank = i + 1;
+                }
+                results[i].rank = rank;
+            }
+            return results;
+        };
+
+        if (suddenDeathData.isActive) return processOne(suddenDeathData);
+        if (typeof suddenDeathData === 'object') {
+            let allResults: any[] = [];
+            Object.values(suddenDeathData).forEach((groupSd: any) => {
+                if (groupSd && groupSd.isActive) allResults = allResults.concat(processOne(groupSd));
+            });
+            return allResults;
+        }
+        return [];
+    };
+
+    const processedIndividualSuddenDeathData = useMemo(() => processSuddenDeath(individualSuddenDeathData), [individualSuddenDeathData, players]);
+    const processedTeamSuddenDeathData = useMemo(() => processSuddenDeath(teamSuddenDeathData), [teamSuddenDeathData, players]);
+
+    const applyPlayoffRanking = (data: any) => {
+        const finalData = JSON.parse(JSON.stringify(data));
+        for (const groupName in finalData) {
+            const groupPlayers = finalData[groupName];
+            if (!groupPlayers || groupPlayers.length === 0) continue;
+            const firstPlacePlayers = groupPlayers.filter((p: any) => p.rank === 1);
+            if (firstPlacePlayers.length > 1) {
+                const playerType = firstPlacePlayers[0].type;
+                const isIndividual = playerType === 'individual';
+                const baseNtpData = isIndividual ? individualNTPData : teamNTPData;
+                let ntpDataForGroup: any = null;
+                if (baseNtpData) {
+                    if (baseNtpData.isActive && baseNtpData.rankings) ntpDataForGroup = baseNtpData;
+                    else if (typeof baseNtpData === 'object' && !baseNtpData.isActive) {
+                        const groupNtp = baseNtpData[groupName];
+                        if (groupNtp?.isActive && groupNtp.rankings) ntpDataForGroup = groupNtp;
+                    }
+                }
+                const shouldApplyNTP = !!(ntpDataForGroup && ntpDataForGroup.isActive && ntpDataForGroup.rankings);
+                const backcountState = isIndividual ? individualBackcountApplied : teamBackcountApplied;
+                const shouldApplyBackcount = !!(backcountState && (backcountState[groupName] || backcountState['*']));
+
+                if (shouldApplyNTP) {
+                    const ntpRankings = ntpDataForGroup.rankings;
+                    firstPlacePlayers.forEach((player: any) => {
+                        const ntpRank = ntpRankings[player.id];
+                        if (ntpRank !== undefined && ntpRank !== null) player.rank = ntpRank;
+                    });
+                    groupPlayers.sort((a: any, b: any) => {
+                        const rankA = a.rank === null ? Infinity : a.rank;
+                        const rankB = b.rank === null ? Infinity : b.rank;
+                        if (rankA !== rankB) return rankA - rankB;
+                        return (a.totalScore || Infinity) - (b.totalScore || Infinity);
+                    });
+                } else if (shouldApplyBackcount) {
+                    const groupData = groupsData[groupName];
+                    const coursesOrder = groupData?.courses || {};
+                    const allCoursesForGroup = firstPlacePlayers[0]?.assignedCourses || Object.values(courses);
+                    const coursesForGroup = [...allCoursesForGroup].sort((a: any, b: any) => {
+                        const orderA = coursesOrder[String(a.id)];
+                        const orderB = coursesOrder[String(b.id)];
+                        let numA = typeof orderA === 'number' ? orderA : (orderA ? (a.order || 0) : 0);
+                        let numB = typeof orderB === 'number' ? orderB : (orderB ? (b.order || 0) : 0);
+                        return numA - numB;
+                    });
+                    const sortedCoursesForBackcount = [...coursesForGroup].reverse();
+
+                    firstPlacePlayers.sort((a: any, b: any) => {
+                        if (a.plusMinus !== b.plusMinus) return a.plusMinus - b.plusMinus;
+                        for (const course of sortedCoursesForBackcount) {
+                            if (!course?.id) continue;
+                            const aScore = (a.courseScores || {})[course.id] ?? 0;
+                            const bScore = (b.courseScores || {})[course.id] ?? 0;
+                            if (aScore !== bScore) return aScore - bScore;
+                        }
+                        if (sortedCoursesForBackcount.length > 0) {
+                            const lastCourseId = sortedCoursesForBackcount[0].id;
+                            const aHoleScores = (a.detailedScores || {})[lastCourseId] || {};
+                            const bHoleScores = (b.detailedScores || {})[lastCourseId] || {};
+                            for (let i = 9; i >= 1; i--) {
+                                const aH = aHoleScores[i.toString()] || 0;
+                                const bH = bHoleScores[i.toString()] || 0;
+                                if (aH !== bH) return aH - bH;
+                            }
+                        }
+                        return 0;
+                    });
+
+                    let rank = 1;
+                    firstPlacePlayers[0].rank = rank;
+                    for (let i = 1; i < firstPlacePlayers.length; i++) {
+                        const prev = firstPlacePlayers[i - 1];
+                        const curr = firstPlacePlayers[i];
+                        if (curr.plusMinus !== prev.plusMinus) rank = i + 1;
+                        else {
+                            let isDifferent = false;
+                            for (const course of sortedCoursesForBackcount) {
+                                if (!course?.id) continue;
+                                if (((curr.courseScores || {})[course.id] ?? 0) !== ((prev.courseScores || {})[course.id] ?? 0)) {
+                                    isDifferent = true;
+                                    break;
+                                }
+                            }
+                            if (!isDifferent && sortedCoursesForBackcount.length > 0) {
+                                const lastCourseId = sortedCoursesForBackcount[0].id;
+                                for (let j = 9; j >= 1; j--) {
+                                    if (((curr.detailedScores || {})[lastCourseId]?.[j.toString()] || 0) !== ((prev.detailedScores || {})[lastCourseId]?.[j.toString()] || 0)) {
+                                        isDifferent = true;
+                                        break;
+                                    }
+                                }
+                            }
+                            if (isDifferent) rank = i + 1;
+                        }
+                        curr.rank = rank;
+                    }
+                    groupPlayers.sort((a: any, b: any) => {
+                        const rankA = a.rank === null ? Infinity : a.rank;
+                        const rankB = b.rank === null ? Infinity : b.rank;
+                        if (rankA !== rankB) return rankA - rankB;
+                        return (a.totalScore || Infinity) - (b.totalScore || Infinity);
+                    });
+                }
+            }
+        }
+        return finalData;
+    };
+
+    // 기권 타입을 로그에서 추출하여 설정하는 함수
+    const getForfeitTypeFromLogs = useCallback((playerId: string): 'absent' | 'disqualified' | 'forfeit' | null => {
+        const logs = playerScoreLogs[playerId] || [];
+        const forfeitLogs = logs
+            .filter(l => l.newValue === 0 && (l.modifiedByType === 'judge' || l.modifiedByType === 'admin') && l.comment)
+            .sort((a, b) => b.modifiedAt - a.modifiedAt); // 최신순 정렬
+
+        if (forfeitLogs.length > 0) {
+            const latestLog = forfeitLogs[0];
+            if (latestLog.comment?.includes('불참')) return 'absent';
+            if (latestLog.comment?.includes('실격')) return 'disqualified';
+            if (latestLog.comment?.includes('기권')) return 'forfeit';
+        }
+        return null;
+    }, [playerScoreLogs]);
+
+    const finalDataByGroup = useMemo(() => {
+        const rankMap = new Map();
+        [...processedIndividualSuddenDeathData, ...processedTeamSuddenDeathData].forEach(p => rankMap.set(p.id, p.rank));
+
+        let finalData = processedDataByGroup;
+        if (rankMap.size > 0) {
+            finalData = JSON.parse(JSON.stringify(processedDataByGroup));
+            for (const groupName in finalData) {
+                finalData[groupName].forEach((player: ProcessedPlayer) => {
+                    if (rankMap.has(player.id)) player.rank = rankMap.get(player.id);
+                });
+                finalData[groupName].sort((a, b) => {
+                    const rA = a.rank === null ? Infinity : a.rank;
+                    const rB = b.rank === null ? Infinity : b.rank;
+                    if (rA !== rB) return rA - rB;
+                    return (a.totalScore || Infinity) - (b.totalScore || Infinity);
+                });
+            }
+        }
+
+        // 🟢 기권 타입 업데이트 통합
+        const playoffApplied = applyPlayoffRanking(finalData);
+        if (playerScoreLogs && Object.keys(playerScoreLogs).length > 0) {
+            const finalWithForfeits = { ...playoffApplied };
+            Object.keys(finalWithForfeits).forEach(groupName => {
+                finalWithForfeits[groupName] = finalWithForfeits[groupName].map((player: ProcessedPlayer) => {
+                    if (player.hasForfeited) {
+                        const forfeitType = getForfeitTypeFromLogs(player.id);
+                        return { ...player, forfeitType: forfeitType || 'forfeit' };
+                    }
+                    return player;
+                });
+            });
+            return finalWithForfeits;
+        }
+
+        return playoffApplied;
+    }, [processedDataByGroup, processedIndividualSuddenDeathData, processedTeamSuddenDeathData, individualBackcountApplied, teamBackcountApplied, individualNTPData, teamNTPData, courses, groupsData, playerScoreLogs, getForfeitTypeFromLogs]);
+
+
+
     // 점수 수정 모달 상태
     const [scoreEditModal, setScoreEditModal] = useState({
         open: false,
@@ -213,11 +685,11 @@ export default function AdminDashboard() {
         orientation: 'portrait' as 'portrait' | 'landscape',
         paperSize: 'A4' as 'A4' | 'A3',
         selectedGroups: [] as string[],
-        showAllGroups: true
+        showAllGroups: true,
+        selectedCourses: [] as string[],
+        showAllCourses: true
     });
 
-    // 대회명 상태
-    const [tournamentName, setTournamentName] = useState('골프 대회');
 
     // 기권 처리 모달 상태
     // const [forfeitModal, setForfeitModal] = useState<{ open: boolean, player: any | null }>({ open: false, player: null });
@@ -266,7 +738,7 @@ export default function AdminDashboard() {
                 scores,
                 courses,
                 groups: groupsData,
-                processedByGroup: updateForfeitTypes // 그룹별 순위/점수 등 가공 데이터 추가 저장 (실격/불참/기권 구분 포함)
+                processedByGroup: finalDataByGroup // 그룹별 순위/점수 등 가공 데이터 추가 저장 (실격/불참/기권 구분 포함)
             };
             await set(ref(db, `archives/${archiveId}`), archiveData);
             toast({ title: '기록 보관 완료', description: `대회명: ${tournamentName || '대회'} / 참가자: ${playerCount}명` });
@@ -275,16 +747,29 @@ export default function AdminDashboard() {
         }
     };
 
-    // 인쇄 기능
     const handlePrint = () => {
         // 현재 선택된 그룹에 따라 인쇄할 그룹 설정
         const groupsToPrint = filterGroup === 'all' ? allGroupsList : [filterGroup];
+
+        // 가용한 코스 목록 추출
+        const availableCoursesList = new Set<string>();
+        Object.values(finalDataByGroup).forEach((playersList: any) => {
+            playersList.forEach((p: any) => {
+                p.assignedCourses?.forEach((c: any) => {
+                    const cName = p.coursesData[c.id]?.courseName || c.name;
+                    if (cName) availableCoursesList.add(cName);
+                });
+            });
+        });
+
         setPrintModal({
             open: true,
             orientation: 'portrait',
             paperSize: 'A4',
             selectedGroups: groupsToPrint,
-            showAllGroups: filterGroup === 'all'
+            showAllGroups: filterGroup === 'all',
+            selectedCourses: Array.from(availableCoursesList).sort(),
+            showAllCourses: true
         });
     };
 
@@ -511,7 +996,7 @@ export default function AdminDashboard() {
 
         // 각 그룹별 점수표 생성
         groupsToPrint.forEach((groupName, groupIndex) => {
-            const groupPlayers = updateForfeitTypes[groupName];
+            const groupPlayers = finalDataByGroup[groupName];
             if (!groupPlayers || groupPlayers.length === 0) return;
 
             // 그룹 섹션 시작 (첫 번째 그룹이 아니면 페이지 나누기)
@@ -573,57 +1058,80 @@ export default function AdminDashboard() {
                         </thead>
             `;
 
-            groupPlayers.forEach((player) => {
+            groupPlayers.forEach((player: any) => {
                 // 각 선수마다 개별 tbody 시작
                 printContent += `<tbody class="player-tbody">`;
 
                 if (player.assignedCourses.length > 0) {
-                    player.assignedCourses.forEach((course: any, courseIndex: number) => {
-                        const courseData = player.coursesData[course.id];
-                        const holeScores = courseData?.holeScores || Array(9).fill(null);
-
-                        printContent += `
-                            <tr>
-                                ${courseIndex === 0 ? `
-                                    <td rowspan="${player.assignedCourses.length}" class="rank-cell responsive-column">
-                                        ${player.rank !== null ? `${player.rank}위` : (player.hasForfeited ? (player.forfeitType === 'absent' ? '불참' : player.forfeitType === 'disqualified' ? '실격' : '기권') : '')}
-                                    </td>
-                                    <td rowspan="${player.assignedCourses.length}" class="responsive-column">${player.jo}</td>
-                                    <td rowspan="${player.assignedCourses.length}" class="player-name responsive-column">${player.name}</td>
-                                    <td rowspan="${player.assignedCourses.length}" class="affiliation responsive-column">${player.affiliation || '-'}</td>
-                                ` : ''}
-                                <td class="course-name responsive-column">${courseData?.courseName || (course.name ? (course.name.includes('-') ? course.name.split('-')[1] : course.name) : 'Course')}</td>
-                        `;
-
-                        // 홀별 점수
-                        holeScores.forEach((score: number | null) => {
-                            const scoreText = score !== null ? score.toString() : '-';
-                            printContent += `<td class="hole-score fixed-column">${scoreText}</td>`;
+                    // 선택된 코스만 필터링
+                    const filteredCourses = printModal.showAllCourses
+                        ? player.assignedCourses
+                        : player.assignedCourses.filter((c: any) => {
+                            const cName = player.coursesData[c.id]?.courseName || c.name;
+                            return printModal.selectedCourses.includes(cName);
                         });
 
-                        // 코스 합계
-                        const courseTotal = courseData?.courseTotal || 0;
-                        printContent += `<td class="course-total fixed-column">${courseTotal}</td>`;
+                    if (filteredCourses.length > 0) {
+                        filteredCourses.forEach((course: any, courseIndex: number) => {
+                            const courseData = player.coursesData[course.id];
+                            const holeScores = courseData?.holeScores || Array(9).fill(null);
 
-                        // 총타수 (첫 번째 코스에서만 표시)
-                        if (courseIndex === 0) {
-                            const totalText = player.hasForfeited ? (player.forfeitType === 'absent' ? '불참' : player.forfeitType === 'disqualified' ? '실격' : '기권') : (player.hasAnyScore ? player.totalScore : '-');
-                            printContent += `<td rowspan="${player.assignedCourses.length}" class="total-score fixed-column">${totalText}</td>`;
-                        }
+                            printContent += `
+                                <tr>
+                                    ${courseIndex === 0 ? `
+                                        <td rowspan="${filteredCourses.length}" class="rank-cell responsive-column">
+                                            ${player.rank !== null ? `${player.rank}위` : (player.hasForfeited ? (player.forfeitType === 'absent' ? '불참' : player.forfeitType === 'disqualified' ? '실격' : '기권') : '')}
+                                        </td>
+                                        <td rowspan="${filteredCourses.length}" class="responsive-column">${player.jo}</td>
+                                        <td rowspan="${filteredCourses.length}" class="player-name responsive-column">${player.name}</td>
+                                        <td rowspan="${filteredCourses.length}" class="affiliation responsive-column">${player.affiliation || '-'}</td>
+                                    ` : ''}
+                                    <td class="course-name responsive-column">${courseData?.courseName || (course.name ? (course.name.includes('-') ? course.name.split('-')[1] : course.name) : 'Course')}</td>
+                            `;
 
-                        printContent += '</tr>';
-                    });
-                } else {
-                    printContent += `
+                            // 홀별 점수
+                            holeScores.forEach((score: number | null) => {
+                                const scoreText = score !== null ? score.toString() : '-';
+                                printContent += `<td class="hole-score fixed-column">${scoreText}</td>`;
+                            });
+
+                            // 코스 합계
+                            const courseTotal = courseData?.courseTotal || 0;
+                            printContent += `<td class="course-total fixed-column">${courseTotal}</td>`;
+
+                            // 총타수 (첫 번째 코스에서만 표시)
+                            if (courseIndex === 0) {
+                                const totalText = player.hasForfeited ? (player.forfeitType === 'absent' ? '불참' : player.forfeitType === 'disqualified' ? '실격' : '기권') : (player.hasAnyScore ? player.totalScore : '-');
+                                printContent += `<td rowspan="${filteredCourses.length}" class="total-score responsive-column">${totalText}</td>`;
+                            }
+
+                            printContent += '</tr>';
+                        });
+                    } else {
+                        // 선택된 코스가 선수에게 없는 경우
+                        printContent += `
                         <tr>
                             <td class="rank-cell responsive-column">${player.rank !== null ? `${player.rank}위` : (player.hasForfeited ? (player.forfeitType === 'absent' ? '불참' : player.forfeitType === 'disqualified' ? '실격' : '기권') : '')}</td>
                             <td class="responsive-column">${player.jo}</td>
                             <td class="player-name responsive-column">${player.name}</td>
-                            <td class="affiliation responsive-column">${player.affiliation}</td>
-                            <td colspan="11" style="text-align: center; color: #64748b;" class="responsive-column">배정된 코스 없음</td>
-                            <td class="total-score fixed-column">${player.hasForfeited ? (player.forfeitType === 'absent' ? '불참' : player.forfeitType === 'disqualified' ? '실격' : '기권') : (player.hasAnyScore ? player.totalScore : '-')}</td>
+                            <td class="affiliation responsive-column">${player.affiliation || '-'}</td>
+                            <td colspan="11" style="text-align: center; color: #64748b;">선택된 코스 데이터 없음</td>
+                            <td class="total-score responsive-column">${player.hasForfeited ? (player.forfeitType === 'absent' ? '불참' : player.forfeitType === 'disqualified' ? '실격' : '기권') : (player.hasAnyScore ? player.totalScore : '-')}</td>
                         </tr>
                     `;
+                    }
+                } else {
+                    // 배정된 코스가 없는 경우
+                    printContent += `
+                    <tr>
+                        <td class="rank-cell responsive-column">${player.rank !== null ? `${player.rank}위` : (player.hasForfeited ? (player.forfeitType === 'absent' ? '불참' : player.forfeitType === 'disqualified' ? '실격' : '기권') : '')}</td>
+                        <td class="responsive-column">${player.jo}</td>
+                        <td class="player-name responsive-column">${player.name}</td>
+                        <td class="affiliation responsive-column">${player.affiliation || '-'}</td>
+                        <td colspan="11" style="text-align: center; color: #64748b;">배정된 코스 없음</td>
+                        <td class="total-score responsive-column">${player.hasForfeited ? (player.forfeitType === 'absent' ? '불참' : player.forfeitType === 'disqualified' ? '실격' : '기권') : (player.hasAnyScore ? player.totalScore : '-')}</td>
+                    </tr>
+                `;
                 }
 
                 // 각 선수의 tbody 종료
@@ -1049,27 +1557,6 @@ export default function AdminDashboard() {
     const externalScoreboardUrl = typeof window !== 'undefined'
         ? `${window.location.origin}/scoreboard`
         : '/scoreboard';
-    const { toast } = useToast();
-    const router = useRouter();
-    const [players, setPlayers] = useState<any>({});
-    const [scores, setScores] = useState<any>({});
-    const [courses, setCourses] = useState<any>({});
-    const [groupsData, setGroupsData] = useState<any>({});
-    const [filterGroup, setFilterGroup] = useState('all');
-
-    // 🛡️ 외부 전광판과 동일한 최적화 상태 관리 (useEffect보다 먼저 선언)
-    const [initialDataLoaded, setInitialDataLoaded] = useState(false);
-    const [resumeSeq, setResumeSeq] = useState(0);
-    const activeUnsubsRef = useRef<(() => void)[]>([]);
-    const [individualSuddenDeathData, setIndividualSuddenDeathData] = useState<any>(null);
-    const [teamSuddenDeathData, setTeamSuddenDeathData] = useState<any>(null);
-    // 백카운트/NTP 상태: 그룹별로 관리 (외부 전광판/플레이오프 관리와 동일한 구조)
-    const [individualBackcountApplied, setIndividualBackcountApplied] = useState<{ [groupName: string]: boolean }>({});
-    const [teamBackcountApplied, setTeamBackcountApplied] = useState<{ [groupName: string]: boolean }>({});
-    const [individualNTPData, setIndividualNTPData] = useState<any>(null);
-    const [teamNTPData, setTeamNTPData] = useState<any>(null);
-    const [notifiedSuddenDeathGroups, setNotifiedSuddenDeathGroups] = useState<string[]>([]);
-    const [scoreCheckModal, setScoreCheckModal] = useState<{ open: boolean, groupName: string, missingScores: any[], resultMsg?: string }>({ open: false, groupName: '', missingScores: [] });
     const [autoFilling, setAutoFilling] = useState(false);
 
     // 그룹별 순위/백카운트/서든데스 상태 체크 함수
@@ -1351,517 +1838,6 @@ export default function AdminDashboard() {
         return () => stopSubscriptions();
     }, [db, initialDataLoaded, resumeSeq]);
 
-    // 🟢 메모리 최적화 - 의존성 최소화 및 조건부 계산
-    const processedDataByGroup = useMemo(() => {
-        const allCoursesList = Object.values(courses).filter(Boolean);
-        if (Object.keys(players).length === 0 || allCoursesList.length === 0) return {};
-
-        // 모든 선수 처리 (filterGroup은 표시용 필터이지 데이터 처리 필터가 아님)
-        const playersToProcess = Object.entries(players);
-
-        const allProcessedPlayers: any[] = playersToProcess.map(([playerId, player]: [string, any]) => {
-            const playerGroupData = groupsData[player.group];
-            // 코스 순서 정보 가져오기 (기존 호환성: boolean → number 변환)
-            const coursesOrder = playerGroupData?.courses || {};
-            const assignedCourseIds = Object.keys(coursesOrder).filter((cid: string) => {
-                const order = coursesOrder[cid];
-                // boolean이면 true인 것만, number면 0보다 큰 것만
-                return typeof order === 'boolean' ? order : (typeof order === 'number' && order > 0);
-            });
-            // courses 객체에서 해당 id만 찾아 배열로 만듦 (id 타입 일치 보장)
-            const coursesForPlayer = assignedCourseIds
-                .map(cid => {
-                    const key = Object.keys(courses).find(k => String(k) === String(cid));
-                    return key ? courses[key] : undefined;
-                })
-                .filter(Boolean);
-            // 코스 순서대로 정렬 (order가 큰 것이 마지막 = 백카운트 기준)
-            coursesForPlayer.sort((a: any, b: any) => {
-                const orderA = coursesOrder[String(a.id)];
-                const orderB = coursesOrder[String(b.id)];
-
-                // 그룹의 courses에서 순서 가져오기, 없으면 코스의 order 사용
-                let numA: number;
-                if (typeof orderA === 'boolean') {
-                    numA = orderA ? (a.order || 0) : 0;
-                } else if (typeof orderA === 'number' && orderA > 0) {
-                    numA = orderA;
-                } else {
-                    numA = a.order || 0;
-                }
-
-                let numB: number;
-                if (typeof orderB === 'boolean') {
-                    numB = orderB ? (b.order || 0) : 0;
-                } else if (typeof orderB === 'number' && orderB > 0) {
-                    numB = orderB;
-                } else {
-                    numB = b.order || 0;
-                }
-
-                return numA - numB; // 작은 순서가 먼저 (첫번째 코스가 위)
-            });
-            const playerScoresData = scores[playerId] || {};
-            const coursesData: any = {};
-            // 백카운트 계산을 위한 데이터 추가
-            const courseScores: { [courseId: string]: number } = {};
-            const detailedScores: { [courseId: string]: { [holeNumber: string]: number } } = {};
-
-            coursesForPlayer.forEach((course: any) => {
-                const courseId = course.id;
-                const scoresForCourse = playerScoresData[courseId] || {};
-                coursesData[courseId] = {
-                    courseName: course.name,
-                    courseTotal: Object.values(scoresForCourse).reduce((acc: number, s: any) => typeof s === 'number' ? acc + s : acc, 0),
-                    holeScores: Array.from({ length: 9 }, (_, i) => {
-                        const holeScore = scoresForCourse[(i + 1).toString()];
-                        return typeof holeScore === 'number' ? holeScore : null;
-                    })
-                };
-
-                // 백카운트용 코스별 총점
-                courseScores[courseId] = coursesData[courseId].courseTotal;
-
-                // 백카운트용 홀별 점수
-                detailedScores[courseId] = {};
-                for (let i = 1; i <= 9; i++) {
-                    const holeScore = scoresForCourse[i.toString()];
-                    detailedScores[courseId][i.toString()] = typeof holeScore === 'number' ? holeScore : 0;
-                }
-            });
-            // 외부 전광판과 동일하게 ± 및 총타수 계산
-            const { total, plusMinus } = getPlayerTotalAndPlusMinus(courses, {
-                ...player,
-                assignedCourses: coursesForPlayer,
-                coursesData
-            });
-            return {
-                id: playerId,
-                jo: player.jo,
-                name: player.type === 'team' ? `${player.p1_name} / ${player.p2_name}` : player.name,
-                affiliation: player.type === 'team' ? player.p1_affiliation : player.affiliation,
-                group: player.group,
-                type: player.type,
-                totalScore: total,
-                coursesData,
-                hasAnyScore: total !== null,
-                hasForfeited: Object.values(coursesData).some((cd: any) => cd.holeScores.some((s: any) => s === 0)),
-                forfeitType: (() => {
-                    // 기권 타입을 로그에서 추출
-                    const playerScoresData = scores[playerId] || {};
-                    let hasZeroScore = false;
-
-                    // 모든 배정 코스에서 0점이 있는지 확인
-                    for (const course of coursesForPlayer) {
-                        const scoresForCourse = playerScoresData[course.id] || {};
-                        for (let h = 1; h <= 9; h++) {
-                            if (scoresForCourse[h.toString()] === 0) {
-                                hasZeroScore = true;
-                                break;
-                            }
-                        }
-                        if (hasZeroScore) break;
-                    }
-
-                    // 0점이 있으면 기권 타입 추출 (나중에 로그에서 가져올 예정)
-                    return hasZeroScore ? 'pending' : null;
-                })(),
-                assignedCourses: coursesForPlayer,
-                plusMinus,
-                // 백카운트 계산을 위한 데이터 추가
-                courseScores,
-                detailedScores,
-                total: total // tieBreak 함수에서 사용
-            };
-        });
-        const groupedData = allProcessedPlayers.reduce((acc, player) => {
-            const groupName = player.group || '미지정';
-            if (!acc[groupName]) {
-                acc[groupName] = [];
-            }
-            acc[groupName].push(player);
-            return acc;
-        }, {} as Record<string, any[]>);
-
-        // 모든 그룹 순위 계산 (filterGroup은 표시용 필터이지 데이터 처리 필터가 아님)
-        const rankedData: { [key: string]: ProcessedPlayer[] } = {};
-        const groupsToRank = Object.keys(groupedData);
-
-        for (const groupName of groupsToRank) {
-            // 코스 순서 기반으로 정렬 (order가 큰 것이 마지막 = 백카운트 기준)
-            const groupPlayers = groupedData[groupName];
-            const groupData = groupsData[groupName];
-            const coursesOrder = groupData?.courses || {};
-            const allCoursesForGroup = [...(groupPlayers[0]?.assignedCourses || [])].filter(c => c && c.id !== undefined);
-            // 코스 순서대로 정렬 (order가 큰 것이 마지막)
-            const coursesForGroup = [...allCoursesForGroup].sort((a: any, b: any) => {
-                const orderA = coursesOrder[String(a.id)];
-                const orderB = coursesOrder[String(b.id)];
-
-                // 그룹의 courses에서 순서 가져오기, 없으면 코스의 order 사용
-                let numA: number;
-                if (typeof orderA === 'boolean') {
-                    numA = orderA ? (a.order || 0) : 0;
-                } else if (typeof orderA === 'number' && orderA > 0) {
-                    numA = orderA;
-                } else {
-                    numA = a.order || 0;
-                }
-
-                let numB: number;
-                if (typeof orderB === 'boolean') {
-                    numB = orderB ? (b.order || 0) : 0;
-                } else if (typeof orderB === 'number' && orderB > 0) {
-                    numB = orderB;
-                } else {
-                    numB = b.order || 0;
-                }
-
-                return numA - numB; // 작은 순서가 먼저
-            });
-            // 백카운트는 마지막 코스부터 역순이므로 reverse
-            const coursesForBackcount = [...coursesForGroup].reverse();
-
-            const playersToSort = groupedData[groupName].filter((p: any) => p.hasAnyScore && !p.hasForfeited);
-            const otherPlayers = groupedData[groupName].filter((p: any) => !p.hasAnyScore || p.hasForfeited);
-            if (playersToSort.length > 0) {
-                // 1. plusMinus 오름차순 정렬, tieBreak(백카운트) 적용
-                playersToSort.sort((a: any, b: any) => {
-                    if (a.plusMinus !== b.plusMinus) return a.plusMinus - b.plusMinus;
-                    return cachedTieBreak(a, b, coursesForBackcount);
-                });
-                // 2. 1위 동점자 모두 rank=1, 그 다음 선수부터 등수 건너뛰기
-                const minPlusMinus = playersToSort[0].plusMinus;
-                let rank = 1;
-                let oneRankCount = 0;
-                // 1위 동점자 처리
-                for (let i = 0; i < playersToSort.length; i++) {
-                    if (playersToSort[i].plusMinus === minPlusMinus) {
-                        playersToSort[i].rank = 1;
-                        oneRankCount++;
-                    } else {
-                        break;
-                    }
-                }
-                // 2위 이하(실제로는 1위 동점자 수+1 등수부터) 백카운트 등수 부여
-                rank = oneRankCount + 1;
-                for (let i = oneRankCount; i < playersToSort.length; i++) {
-                    // 바로 앞 선수와 plusMinus, tieBreak 모두 같으면 같은 등수, 아니면 증가
-                    const prev = playersToSort[i - 1];
-                    const curr = playersToSort[i];
-                    if (
-                        curr.plusMinus === prev.plusMinus &&
-                        cachedTieBreak(curr, prev, coursesForBackcount) === 0
-                    ) {
-                        curr.rank = playersToSort[i - 1].rank;
-                    } else {
-                        curr.rank = rank;
-                    }
-                    rank++;
-                }
-            }
-            const finalPlayers = [...playersToSort, ...otherPlayers.map((p: any) => ({ ...p, rank: null }))];
-            rankedData[groupName] = finalPlayers;
-        }
-        return rankedData;
-    }, [players, scores, courses, groupsData, cachedTieBreak]);
-
-    // 🚀 성능 최적화: scores나 players 변경 시 tieBreak 캐시 초기화
-    useEffect(() => {
-        tieBreakCacheRef.current.clear();
-    }, [scores, players]);
-
-    const processSuddenDeath = (suddenDeathData: any) => {
-        if (!suddenDeathData) return [];
-
-        // 단일(레거시) 구조 또는 그룹별 구조 모두 지원
-        const processOne = (sd: any) => {
-            if (!sd?.isActive || !sd.players || !sd.holes || !Array.isArray(sd.holes)) return [];
-
-            const participatingPlayerIds = Object.keys(sd.players).filter(id => sd.players[id]);
-            const allPlayersMap = new Map(Object.entries(players).map(([id, p]) => [id, p]));
-
-            const results: any[] = participatingPlayerIds.map(id => {
-                const playerInfo: any = allPlayersMap.get(id);
-                if (!playerInfo) return null;
-
-                const name = playerInfo.type === 'team' ? `${playerInfo.p1_name} / ${playerInfo.p2_name}` : playerInfo.name;
-
-                let totalScore = 0;
-                let holesPlayed = 0;
-                sd.holes.forEach((hole: number) => {
-                    const score = sd.scores?.[id]?.[hole];
-                    if (score !== undefined && score !== null) {
-                        totalScore += score;
-                        holesPlayed++;
-                    }
-                });
-                return { id, name, totalScore, holesPlayed };
-            }).filter(Boolean);
-
-            results.sort((a, b) => {
-                if (a.holesPlayed !== b.holesPlayed) return b.holesPlayed - a.holesPlayed;
-                if (a.totalScore !== b.totalScore) return a.totalScore - b.totalScore;
-                return a.name.localeCompare(b.name);
-            });
-
-            let rank = 1;
-            for (let i = 0; i < results.length; i++) {
-                if (i > 0 && (results[i].holesPlayed < results[i - 1].holesPlayed || (results[i].holesPlayed === results[i - 1].holesPlayed && results[i].totalScore > results[i - 1].totalScore))) {
-                    rank = i + 1;
-                }
-                results[i].rank = rank;
-            }
-
-            return results;
-        };
-
-        // 레거시: 전체에 대해 하나의 서든데스 데이터
-        if (suddenDeathData.isActive) {
-            return processOne(suddenDeathData);
-        }
-
-        // 그룹별 구조: { groupName: { isActive, players, holes, scores } }
-        if (typeof suddenDeathData === 'object') {
-            let allResults: any[] = [];
-            Object.values(suddenDeathData).forEach((groupSd: any) => {
-                if (groupSd && groupSd.isActive) {
-                    allResults = allResults.concat(processOne(groupSd));
-                }
-            });
-            return allResults;
-        }
-
-        return [];
-    }
-
-    const processedIndividualSuddenDeathData = useMemo(() => processSuddenDeath(individualSuddenDeathData), [individualSuddenDeathData, players]);
-    const processedTeamSuddenDeathData = useMemo(() => processSuddenDeath(teamSuddenDeathData), [teamSuddenDeathData, players]);
-
-    // 백카운트/NTP 적용된 1위 동점자들의 순위를 다시 계산하는 함수 (기존 로직 활용)
-    const applyPlayoffRanking = (data: any) => {
-        const finalData = JSON.parse(JSON.stringify(data));
-
-        for (const groupName in finalData) {
-            const groupPlayers = finalData[groupName];
-            if (!groupPlayers || groupPlayers.length === 0) continue;
-
-            // 1위 동점자들 찾기
-            const firstPlacePlayers = groupPlayers.filter((p: any) => p.rank === 1);
-
-            if (firstPlacePlayers.length > 1) {
-                const playerType = firstPlacePlayers[0].type;
-                const isIndividual = playerType === 'individual';
-
-                // NTP 순위 적용 확인 (외부 전광판과 동일한 방식 + 그룹별 구조 지원)
-                const baseNtpData = isIndividual ? individualNTPData : teamNTPData;
-                let ntpDataForGroup: any = null;
-                if (baseNtpData) {
-                    // 레거시 단일 구조: { isActive, rankings }
-                    if (baseNtpData.isActive && baseNtpData.rankings) {
-                        ntpDataForGroup = baseNtpData;
-                    } else if (typeof baseNtpData === 'object' && !baseNtpData.isActive) {
-                        // 그룹별 구조: { [groupName]: { isActive, rankings } }
-                        const groupNtp = baseNtpData[groupName];
-                        if (groupNtp?.isActive && groupNtp.rankings) {
-                            ntpDataForGroup = groupNtp;
-                        }
-                    }
-                }
-                const shouldApplyNTP = !!(ntpDataForGroup && ntpDataForGroup.isActive && ntpDataForGroup.rankings);
-
-                // 백카운트 적용 확인 (그룹별 적용)
-                const backcountState = isIndividual ? individualBackcountApplied : teamBackcountApplied;
-                const groupNameForBackcount = firstPlacePlayers[0]?.group;
-                const shouldApplyBackcount = !!(
-                    backcountState &&
-                    (backcountState[groupNameForBackcount] || backcountState['*'])
-                );
-
-                if (shouldApplyNTP) {
-                    // NTP 순위 적용 (외부 전광판과 동일하게 1위 동점자에게만 적용)
-                    const ntpRankings = ntpDataForGroup.rankings;
-                    firstPlacePlayers.forEach((player: any) => {
-                        const ntpRank = ntpRankings[player.id];
-                        if (ntpRank !== undefined && ntpRank !== null) {
-                            player.rank = ntpRank;
-                        }
-                    });
-
-                    // 전체 그룹을 다시 정렬
-                    groupPlayers.sort((a: any, b: any) => {
-                        const rankA = a.rank === null ? Infinity : a.rank;
-                        const rankB = b.rank === null ? Infinity : b.rank;
-                        if (rankA !== rankB) return rankA - rankB;
-
-                        const scoreA = a.hasAnyScore && !a.hasForfeited ? a.totalScore : Infinity;
-                        const scoreB = b.hasAnyScore && !b.hasForfeited ? b.totalScore : Infinity;
-                        return scoreA - scoreB;
-                    });
-                } else if (shouldApplyBackcount) {
-                    // 플레이오프 백카운트: 코스 순서 기반으로 마지막 코스부터 역순으로 비교
-                    const groupName = firstPlacePlayers[0]?.group;
-                    const groupData = groupsData[groupName];
-                    const coursesOrder = groupData?.courses || {};
-                    const allCoursesForGroup = firstPlacePlayers[0]?.assignedCourses || Object.values(courses);
-                    // 코스 순서대로 정렬 (order가 큰 것이 마지막)
-                    const coursesForGroup = [...allCoursesForGroup].sort((a: any, b: any) => {
-                        const orderA = coursesOrder[String(a.id)];
-                        const orderB = coursesOrder[String(b.id)];
-
-                        // 그룹의 courses에서 순서 가져오기, 없으면 코스의 order 사용
-                        let numA: number;
-                        if (typeof orderA === 'boolean') {
-                            numA = orderA ? (a.order || 0) : 0;
-                        } else if (typeof orderA === 'number' && orderA > 0) {
-                            numA = orderA;
-                        } else {
-                            numA = a.order || 0;
-                        }
-
-                        let numB: number;
-                        if (typeof orderB === 'boolean') {
-                            numB = orderB ? (b.order || 0) : 0;
-                        } else if (typeof orderB === 'number' && orderB > 0) {
-                            numB = orderB;
-                        } else {
-                            numB = b.order || 0;
-                        }
-
-                        return numA - numB; // 작은 순서가 먼저
-                    });
-                    // 백카운트는 마지막 코스부터 역순이므로 reverse
-                    const sortedCoursesForBackcount = [...coursesForGroup].reverse();
-
-                    firstPlacePlayers.sort((a: any, b: any) => {
-                        if (a.plusMinus !== b.plusMinus) return a.plusMinus - b.plusMinus;
-                        // 백카운트: 마지막 코스부터 역순으로 비교
-                        for (const course of sortedCoursesForBackcount) {
-                            if (!course || course.id === undefined || course.id === null) continue;
-                            const courseId = course.id;
-                            const aCourseScore = (a.courseScores || {})[courseId] ?? 0;
-                            const bCourseScore = (b.courseScores || {})[courseId] ?? 0;
-                            if (aCourseScore !== bCourseScore) {
-                                return aCourseScore - bCourseScore; // 작은 타수가 상위
-                            }
-                        }
-                        // 모든 코스 합계가 같으면 마지막 코스의 홀 점수를 역순으로 비교
-                        if (sortedCoursesForBackcount.length > 0) {
-                            const lastCourse = sortedCoursesForBackcount[0];
-                            if (lastCourse && lastCourse.id !== undefined && lastCourse.id !== null) {
-                                const lastCourseId = lastCourse.id;
-                                const aHoleScores = (a.detailedScores || {})[lastCourseId] || {};
-                                const bHoleScores = (b.detailedScores || {})[lastCourseId] || {};
-                                for (let i = 9; i >= 1; i--) {
-                                    const hole = i.toString();
-                                    const aHole = aHoleScores[hole] || 0;
-                                    const bHole = bHoleScores[hole] || 0;
-                                    if (aHole !== bHole) {
-                                        return aHole - bHole; // 작은 타수가 상위
-                                    }
-                                }
-                            }
-                        }
-                        return 0;
-                    });
-
-                    // 새로운 순위 부여
-                    let rank = 1;
-                    firstPlacePlayers[0].rank = rank;
-                    for (let i = 1; i < firstPlacePlayers.length; i++) {
-                        const prev = firstPlacePlayers[i - 1];
-                        const curr = firstPlacePlayers[i];
-                        // plusMinus가 다르거나 백카운트 비교 결과가 다르면 순위 증가
-                        if (curr.plusMinus !== prev.plusMinus) {
-                            rank = i + 1;
-                        } else {
-                            // 백카운트 비교
-                            let isDifferent = false;
-                            for (const course of sortedCoursesForBackcount) {
-                                if (!course || course.id === undefined || course.id === null) continue;
-                                const courseId = course.id;
-                                const currCourseScore = (curr.courseScores || {})[courseId] ?? 0;
-                                const prevCourseScore = (prev.courseScores || {})[courseId] ?? 0;
-                                if (currCourseScore !== prevCourseScore) {
-                                    isDifferent = true;
-                                    break;
-                                }
-                            }
-                            if (!isDifferent && sortedCoursesForBackcount.length > 0) {
-                                const lastCourse = sortedCoursesForBackcount[0];
-                                if (lastCourse && lastCourse.id !== undefined && lastCourse.id !== null) {
-                                    const lastCourseId = lastCourse.id;
-                                    const currHoleScores = (curr.detailedScores || {})[lastCourseId] || {};
-                                    const prevHoleScores = (prev.detailedScores || {})[lastCourseId] || {};
-                                    for (let i = 9; i >= 1; i--) {
-                                        const hole = i.toString();
-                                        if ((currHoleScores[hole] || 0) !== (prevHoleScores[hole] || 0)) {
-                                            isDifferent = true;
-                                            break;
-                                        }
-                                    }
-                                }
-                            }
-                            if (isDifferent) {
-                                rank = i + 1;
-                            }
-                        }
-                        curr.rank = rank;
-                    }
-
-                    // 전체 그룹을 다시 정렬
-                    groupPlayers.sort((a: any, b: any) => {
-                        const rankA = a.rank === null ? Infinity : a.rank;
-                        const rankB = b.rank === null ? Infinity : b.rank;
-                        if (rankA !== rankB) return rankA - rankB;
-
-                        const scoreA = a.hasAnyScore && !a.hasForfeited ? a.totalScore : Infinity;
-                        const scoreB = b.hasAnyScore && !b.hasForfeited ? b.totalScore : Infinity;
-                        return scoreA - scoreB;
-                    });
-                }
-            }
-        }
-
-        return finalData;
-    };
-
-    const finalDataByGroup = useMemo(() => {
-        const individualRankMap = new Map(processedIndividualSuddenDeathData.map(p => [p.id, p.rank]));
-        const teamRankMap = new Map(processedTeamSuddenDeathData.map(p => [p.id, p.rank]));
-        const combinedRankMap = new Map([...individualRankMap, ...teamRankMap]);
-
-        let finalData = processedDataByGroup;
-
-        // 서든데스 순위가 있는 경우 적용
-        if (combinedRankMap.size > 0) {
-            finalData = JSON.parse(JSON.stringify(processedDataByGroup));
-
-            for (const groupName in finalData) {
-                finalData[groupName].forEach((player: ProcessedPlayer) => {
-                    if (combinedRankMap.has(player.id)) {
-                        player.rank = combinedRankMap.get(player.id) as number;
-                    }
-                });
-
-                // Re-sort the groups based on the new ranks from sudden death
-                finalData[groupName].sort((a, b) => {
-                    const rankA = a.rank === null ? Infinity : a.rank;
-                    const rankB = b.rank === null ? Infinity : b.rank;
-                    if (rankA !== rankB) return rankA - rankB;
-
-                    const scoreA = a.hasAnyScore && !a.hasForfeited ? a.totalScore : Infinity;
-                    const scoreB = b.hasAnyScore && !b.hasForfeited ? b.totalScore : Infinity;
-                    return scoreA - scoreB;
-                })
-            }
-        }
-
-        // 백카운트/NTP 적용
-        finalData = applyPlayoffRanking(finalData);
-
-        return finalData;
-    }, [processedDataByGroup, processedIndividualSuddenDeathData, processedTeamSuddenDeathData, individualBackcountApplied, teamBackcountApplied, individualNTPData, teamNTPData, courses]);
 
     // Firebase에 순위 저장 (다른 페이지에서 사용하기 위해) - useEffect로 분리하여 부작용 제거
     const prevRanksRef = useRef<string>('');
@@ -2167,8 +2143,8 @@ export default function AdminDashboard() {
         const wb = XLSX.utils.book_new();
 
         const dataToExport = (filterGroup === 'all')
-            ? updateForfeitTypes
-            : { [filterGroup]: updateForfeitTypes[filterGroup] };
+            ? finalDataByGroup
+            : { [filterGroup]: finalDataByGroup[filterGroup] };
 
         for (const groupName in dataToExport) {
             const groupPlayers = dataToExport[groupName];
@@ -2358,21 +2334,6 @@ export default function AdminDashboard() {
         XLSX.writeFile(wb, `${tournamentName}_전체결과_${new Date().toISOString().slice(0, 10)}.xlsx`);
     };
 
-    const [searchPlayer, setSearchPlayer] = useState('');
-    const [highlightedPlayerId, setHighlightedPlayerId] = useState<number | null>(null);
-    const playerRowRefs = useRef<Record<string, (HTMLTableRowElement | null)[]>>({});
-
-    // 선수별 점수 로그 캐시 상태 (playerId별)
-    const [playerScoreLogs, setPlayerScoreLogs] = useState<{ [playerId: string]: ScoreLog[] }>({});
-
-    // 🚀 데이터 사용량 모니터링
-    const [dataUsage, setDataUsage] = useState({
-        totalDownloaded: 0,
-        lastUpdate: Date.now(),
-        downloadsPerMinute: 0
-    });
-
-    // 이미 위에서 선언됨 - 중복 제거
 
     // 🛡️ 안전한 구독 중단 함수 (외부 전광판과 동일)
     const stopSubscriptions = () => {
@@ -2553,7 +2514,7 @@ export default function AdminDashboard() {
             for (let i = 0; i < totalGroups; i++) {
                 const groupName = groupsToPrint[i];
                 // 시뮬레이션 데이터 포함하여 모든 선수 데이터 가져오기
-                const groupPlayers = (updateForfeitTypes[groupName] || finalDataByGroup[groupName] || []).filter((p: any) => {
+                const groupPlayers = (finalDataByGroup[groupName] || []).filter((p: any) => {
                     // 시뮬레이션 데이터도 포함하되, 점수가 있는 선수만 표시
                     return p && (p.hasAnyScore || p.coursesData);
                 });
@@ -2729,7 +2690,14 @@ export default function AdminDashboard() {
                         `;
 
                         pagePlayers.forEach((player: any) => {
-                            const courses = player.assignedCourses || [];
+                            const allCourses = player.assignedCourses || [];
+                            const courses = printModal.showAllCourses
+                                ? allCourses
+                                : allCourses.filter((c: any) => {
+                                    const cName = player.coursesData[c.id]?.courseName || c.name;
+                                    return printModal.selectedCourses.includes(cName);
+                                });
+
                             const rowSpan = courses.length || 1;
                             const rankClass = player.rank === 1 ? 'rank-1' : (player.rank <= 3 ? `rank-${player.rank}` : '');
 
@@ -2737,7 +2705,7 @@ export default function AdminDashboard() {
                             htmlContent += `<td rowspan="${rowSpan}" class="text-center rank-cell ${rankClass}">${player.rank ? player.rank + '위' : '-'}</td>`;
                             htmlContent += `<td rowspan="${rowSpan}" class="text-center jo-cell">${player.jo}</td>`;
                             htmlContent += `<td rowspan="${rowSpan}" class="text-center name-cell font-bold">${player.name}</td>`;
-                            htmlContent += `<td rowspan="${rowSpan}" class="text-center affiliation-cell">${player.affiliation}</td>`;
+                            htmlContent += `<td rowspan="${rowSpan}" class="text-center affiliation-cell">${player.affiliation || '-'}</td>`;
 
                             if (courses.length > 0) {
                                 const firstCourse = courses[0];
@@ -2751,11 +2719,13 @@ export default function AdminDashboard() {
 
                                 htmlContent += `<td class="text-center col-sum">${cData?.courseTotal || '-'}</td>`;
                                 htmlContent += `<td rowspan="${rowSpan}" class="text-center col-total">
-                                    ${player.hasAnyScore ? player.totalScore : '-'}
+                                    ${player.hasForfeited
+                                        ? '<span style="color:red">기권</span>'
+                                        : (player.hasAnyScore ? player.totalScore : '-')}
                                 </td>`;
                             } else {
-                                htmlContent += `<td colspan="11" class="text-center">배정된 코스 없음</td>`;
-                                htmlContent += `<td class="text-center col-total" style="font-weight: 800 !important; font-size: 24px !important; color: #1e40af !important; background-color: #f8fafc !important;">-</td>`;
+                                htmlContent += `<td colspan="11" class="text-center">선택된 코스 없음</td>`;
+                                htmlContent += `<td class="text-center">${player.hasForfeited ? '<span style="color:red">기권</span>' : (player.hasAnyScore ? player.totalScore : '-')}</td>`;
                             }
                             htmlContent += `</tr>`;
 
@@ -2912,7 +2882,14 @@ export default function AdminDashboard() {
                     `;
 
                     pagePlayers.forEach((player: any) => {
-                        const courses = player.assignedCourses || [];
+                        const allCourses = player.assignedCourses || [];
+                        const courses = printModal.showAllCourses
+                            ? allCourses
+                            : allCourses.filter((c: any) => {
+                                const cName = player.coursesData[c.id]?.courseName || c.name;
+                                return printModal.selectedCourses.includes(cName);
+                            });
+
                         const rowSpan = courses.length || 1;
                         const rankClass = player.rank === 1 ? 'rank-1' : (player.rank <= 3 ? `rank-${player.rank}` : '');
 
@@ -2920,7 +2897,7 @@ export default function AdminDashboard() {
                         htmlContent += `<td rowspan="${rowSpan}" class="text-center rank-cell ${rankClass}">${player.rank ? player.rank + '위' : '-'}</td>`;
                         htmlContent += `<td rowspan="${rowSpan}" class="text-center jo-cell">${player.jo}</td>`;
                         htmlContent += `<td rowspan="${rowSpan}" class="text-center name-cell font-bold">${player.name}</td>`;
-                        htmlContent += `<td rowspan="${rowSpan}" class="text-center affiliation-cell">${player.affiliation}</td>`;
+                        htmlContent += `<td rowspan="${rowSpan}" class="text-center affiliation-cell">${player.affiliation || '-'}</td>`;
 
                         if (courses.length > 0) {
                             const firstCourse = courses[0];
@@ -2939,8 +2916,8 @@ export default function AdminDashboard() {
                                     : (player.hasAnyScore ? player.totalScore : '-')}
                             </td>`;
                         } else {
-                            htmlContent += `<td colspan="11" class="text-center">배정된 코스 없음</td>`;
-                            htmlContent += `<td class="text-center">-</td>`;
+                            htmlContent += `<td colspan="11" class="text-center">선택된 코스 없음</td>`;
+                            htmlContent += `<td class="text-center">${player.hasForfeited ? '<span style="color:red">기권</span>' : (player.hasAnyScore ? player.totalScore : '-')}</td>`;
                         }
                         htmlContent += `</tr>`;
 
@@ -3015,43 +2992,7 @@ export default function AdminDashboard() {
     const [logsLoading, setLogsLoading] = useState(false);
 
 
-    // 기권 타입을 로그에서 추출하여 설정하는 함수
-    const getForfeitTypeFromLogs = (playerId: string): 'absent' | 'disqualified' | 'forfeit' | null => {
-        const logs = playerScoreLogs[playerId] || [];
-        const forfeitLogs = logs
-            .filter(l => l.newValue === 0 && (l.modifiedByType === 'judge' || l.modifiedByType === 'admin') && l.comment)
-            .sort((a, b) => b.modifiedAt - a.modifiedAt); // 최신순 정렬
 
-        if (forfeitLogs.length > 0) {
-            const latestLog = forfeitLogs[0];
-            if (latestLog.comment?.includes('불참')) return 'absent';
-            if (latestLog.comment?.includes('실격')) return 'disqualified';
-            if (latestLog.comment?.includes('기권')) return 'forfeit';
-        }
-        return null;
-    };
-
-    // finalDataByGroup에서 기권 타입을 업데이트하는 함수
-    const updateForfeitTypes = useMemo(() => {
-        if (!playerScoreLogs || Object.keys(playerScoreLogs).length === 0) {
-            return finalDataByGroup;
-        }
-
-        const updatedData = { ...finalDataByGroup };
-        Object.keys(updatedData).forEach(groupName => {
-            updatedData[groupName] = updatedData[groupName].map((player: any) => {
-                if (player.hasForfeited) {
-                    const forfeitType = getForfeitTypeFromLogs(player.id);
-                    // forfeitType이 null이면 기본값 'forfeit'로 설정
-                    return { ...player, forfeitType: forfeitType || 'forfeit' };
-                }
-                return player;
-            });
-        });
-        return updatedData;
-    }, [finalDataByGroup, playerScoreLogs]);
-
-    const allGroupsList = Object.keys(updateForfeitTypes);
 
     // 🛡️ ScoreLogs 최적화 - 외부 전광판과 완전히 동일한 방식
     // 선수별 로그 최적화된 로딩 (finalDataByGroup 변경 시 기본 로딩)
@@ -3155,10 +3096,10 @@ export default function AdminDashboard() {
     const filteredPlayerResults = useMemo(() => {
         if (!searchPlayer) return [];
         const lowerCaseSearch = searchPlayer.toLowerCase();
-        return Object.values(updateForfeitTypes).flat().filter(player => {
+        return Object.values(finalDataByGroup).flat().filter((player: any) => {
             return player.name.toLowerCase().includes(lowerCaseSearch) || player.affiliation.toLowerCase().includes(lowerCaseSearch);
         });
-    }, [searchPlayer, updateForfeitTypes]);
+    }, [searchPlayer, finalDataByGroup]);
 
     const handlePlayerSearchSelect = (playerId: string | number) => {
         const id = String(playerId);
@@ -3371,7 +3312,7 @@ export default function AdminDashboard() {
                 </Card>
 
                 {(filterGroup === 'all' ? allGroupsList : [filterGroup]).map(groupName => {
-                    const groupPlayers = updateForfeitTypes[groupName];
+                    const groupPlayers = finalDataByGroup[groupName];
                     if (!groupPlayers || groupPlayers.length === 0) return null;
 
                     return (
@@ -3408,7 +3349,7 @@ export default function AdminDashboard() {
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
-                                            {groupPlayers.map((player) => (
+                                            {groupPlayers.map((player: any) => (
                                                 <React.Fragment key={player.id}>
                                                     {player.assignedCourses.length > 0 ? player.assignedCourses.map((course: any, courseIndex: number) => (
                                                         <TableRow
@@ -3448,7 +3389,7 @@ export default function AdminDashboard() {
 
                                                             <TableCell className="font-medium px-2 py-1 border-r text-center whitespace-nowrap" style={{ minWidth: '80px', maxWidth: '200px', flexGrow: 1 }}>{player.coursesData[course.id]?.courseName}</TableCell>
 
-                                                            {player.coursesData[course.id]?.holeScores.map((score, i) => {
+                                                            {player.coursesData[course.id]?.holeScores.map((score: any, i: number) => {
                                                                 // 해당 셀(플레이어/코스/홀)에 대한 최근 로그 찾기
                                                                 const logs = playerScoreLogs[player.id] || [];
                                                                 const cellLog = logs.find(l => String(l.courseId) === String(course.id) && Number(l.holeNumber) === i + 1);
@@ -4034,6 +3975,87 @@ export default function AdminDashboard() {
                                         ? `${printModal.selectedGroups.length}개 그룹이 선택되었습니다. 각 그룹은 별도 페이지로 인쇄됩니다.`
                                         : '인쇄할 그룹을 선택해주세요.'
                                 }
+                            </p>
+                        </div>
+
+                        {/* 출력할 코스 선택 */}
+                        <div>
+                            <label className="text-sm font-medium mb-2 block">출력할 코스 선택</label>
+                            <div className="space-y-2 border rounded p-2">
+                                <div className="flex items-center">
+                                    <input
+                                        type="checkbox"
+                                        checked={printModal.showAllCourses}
+                                        onChange={(e) => {
+                                            const availableCoursesList = new Set<string>();
+                                            Object.values(finalDataByGroup).forEach((playersList: any) => {
+                                                playersList.forEach((p: any) => {
+                                                    p.assignedCourses?.forEach((c: any) => {
+                                                        const cName = p.coursesData[c.id]?.courseName || c.name;
+                                                        if (cName) availableCoursesList.add(cName);
+                                                    });
+                                                });
+                                            });
+
+                                            if (e.target.checked) {
+                                                setPrintModal({
+                                                    ...printModal,
+                                                    showAllCourses: true,
+                                                    selectedCourses: Array.from(availableCoursesList).sort()
+                                                });
+                                            } else {
+                                                setPrintModal({
+                                                    ...printModal,
+                                                    showAllCourses: false,
+                                                    selectedCourses: []
+                                                });
+                                            }
+                                        }}
+                                        className="mr-2"
+                                    />
+                                    <span className="text-sm font-bold">모든 코스</span>
+                                </div>
+                                {!printModal.showAllCourses && (
+                                    <div className="ml-4 flex flex-wrap gap-x-4 gap-y-1">
+                                        {(() => {
+                                            const availableCoursesList = new Set<string>();
+                                            Object.values(finalDataByGroup).forEach((playersList: any) => {
+                                                playersList.forEach((p: any) => {
+                                                    p.assignedCourses?.forEach((c: any) => {
+                                                        const cName = p.coursesData[c.id]?.courseName || c.name;
+                                                        if (cName) availableCoursesList.add(cName);
+                                                    });
+                                                });
+                                            });
+                                            return Array.from(availableCoursesList).sort().map((courseName) => (
+                                                <div key={courseName} className="flex items-center">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={printModal.selectedCourses.includes(courseName)}
+                                                        onChange={(e) => {
+                                                            if (e.target.checked) {
+                                                                setPrintModal({
+                                                                    ...printModal,
+                                                                    selectedCourses: [...printModal.selectedCourses, courseName]
+                                                                });
+                                                            } else {
+                                                                setPrintModal({
+                                                                    ...printModal,
+                                                                    selectedCourses: printModal.selectedCourses.filter(c => c !== courseName)
+                                                                });
+                                                            }
+                                                        }}
+                                                        className="mr-2"
+                                                    />
+                                                    <span className="text-sm">{courseName}</span>
+                                                </div>
+                                            ));
+                                        })()}
+                                    </div>
+                                )}
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-1 text-blue-600 font-medium italic">
+                                * 선택한 코스만 인쇄되지만, 순위와 총타수는 전체 코스 성적으로 계산됩니다.
                             </p>
                         </div>
                     </div>

@@ -22,7 +22,9 @@ export default function ScorePrintTool() {
         orientation: 'portrait' as 'portrait' | 'landscape',
         paperSize: 'A4' as 'A4' | 'A3',
         selectedGroups: [] as string[],
-        showAllGroups: true
+        showAllGroups: true,
+        selectedCourses: [] as string[],
+        showAllCourses: true
     });
     const [isLoading, setIsLoading] = useState(false);
     const [isSavingImage, setIsSavingImage] = useState(false);
@@ -357,6 +359,7 @@ export default function ScorePrintTool() {
     // 인쇄 HTML 생성
     const generatePrintHTML = () => {
         const groupsToPrint = printModal.showAllGroups ? allGroupsList : printModal.selectedGroups;
+        const selectedCourses = printModal.showAllCourses ? [] : printModal.selectedCourses;
         const tournamentName = tournament.name || '골프 대회';
         let printContent = '';
 
@@ -628,41 +631,63 @@ export default function ScorePrintTool() {
                 printContent += `<tbody class="player-tbody">`;
 
                 if (player.assignedCourses.length > 0) {
-                    player.assignedCourses.forEach((course: any, courseIndex: number) => {
-                        const courseData = player.coursesData[course.id];
-                        const holeScores = courseData?.holeScores || Array(9).fill(null);
-
-                        printContent += `
-                            <tr>
-                                ${courseIndex === 0 ? `
-                                    <td rowspan="${player.assignedCourses.length}" class="rank-cell">
-                                        ${player.rank !== null ? `${player.rank}위` : (player.hasForfeited ? (player.forfeitType === 'absent' ? '불참' : player.forfeitType === 'disqualified' ? '실격' : '기권') : '')}
-                                    </td>
-                                    <td rowspan="${player.assignedCourses.length}" class="jo-cell">${player.jo}</td>
-                                    <td rowspan="${player.assignedCourses.length}" class="name-cell">${player.name}</td>
-                                    <td rowspan="${player.assignedCourses.length}" class="affiliation-cell">${player.affiliation || '-'}</td>
-                                ` : ''}
-                                <td class="course-cell">${courseData?.courseName || (course.name ? (course.name.includes('-') ? course.name.split('-')[1] : course.name) : 'Course')}</td>
-                        `;
-
-                        // 홀별 점수
-                        holeScores.forEach((score: number | null) => {
-                            const scoreText = score !== null ? score.toString() : '-';
-                            printContent += `<td class="hole-score">${scoreText}</td>`;
+                    // 선택된 코스만 필터링 (비어있으면 전체)
+                    const filteredCourses = printModal.showAllCourses
+                        ? player.assignedCourses
+                        : player.assignedCourses.filter((c: any) => {
+                            const cName = player.coursesData[c.id]?.courseName || c.name;
+                            return printModal.selectedCourses.includes(cName);
                         });
 
-                        // 코스 합계
-                        const courseTotal = courseData?.courseTotal || 0;
-                        printContent += `<td class="course-total">${courseTotal}</td>`;
+                    if (filteredCourses.length > 0) {
+                        filteredCourses.forEach((course: any, courseIndex: number) => {
+                            const courseData = player.coursesData[course.id];
+                            const holeScores = courseData?.holeScores || Array(9).fill(null);
 
-                        // 총타수 (첫 번째 코스에서만 표시)
-                        if (courseIndex === 0) {
-                            const totalText = player.hasForfeited ? (player.forfeitType === 'absent' ? '불참' : player.forfeitType === 'disqualified' ? '실격' : '기권') : (player.hasAnyScore ? player.totalScore : '-');
-                            printContent += `<td rowspan="${player.assignedCourses.length}" class="total-score">${totalText}</td>`;
-                        }
+                            printContent += `
+                                <tr>
+                                    ${courseIndex === 0 ? `
+                                        <td rowspan="${filteredCourses.length}" class="rank-cell">
+                                            ${player.rank !== null ? `${player.rank}위` : (player.hasForfeited ? (player.forfeitType === 'absent' ? '불참' : player.forfeitType === 'disqualified' ? '실격' : '기권') : '')}
+                                        </td>
+                                        <td rowspan="${filteredCourses.length}" class="jo-cell">${player.jo}</td>
+                                        <td rowspan="${filteredCourses.length}" class="name-cell">${player.name}</td>
+                                        <td rowspan="${filteredCourses.length}" class="affiliation-cell">${player.affiliation || '-'}</td>
+                                    ` : ''}
+                                    <td class="course-cell">${courseData?.courseName || (course.name ? (course.name.includes('-') ? course.name.split('-')[1] : course.name) : 'Course')}</td>
+                            `;
 
-                        printContent += '</tr>';
-                    });
+                            // 홀별 점수
+                            holeScores.forEach((score: number | null) => {
+                                const scoreText = score !== null ? score.toString() : '-';
+                                printContent += `<td class="hole-score">${scoreText}</td>`;
+                            });
+
+                            // 코스 합계
+                            const courseTotal = courseData?.courseTotal || 0;
+                            printContent += `<td class="course-total">${courseTotal}</td>`;
+
+                            // 총타수 (첫 번째 코스에서만 표시)
+                            if (courseIndex === 0) {
+                                const totalText = player.hasForfeited ? (player.forfeitType === 'absent' ? '불참' : player.forfeitType === 'disqualified' ? '실격' : '기권') : (player.hasAnyScore ? player.totalScore : '-');
+                                printContent += `<td rowspan="${filteredCourses.length}" class="total-score">${totalText}</td>`;
+                            }
+
+                            printContent += '</tr>';
+                        });
+                    } else {
+                        // 선택한 코스가 이 선수에게 없는 경우
+                        printContent += `
+                            <tr>
+                                <td class="rank-cell">${player.rank !== null ? `${player.rank}위` : (player.hasForfeited ? (player.forfeitType === 'absent' ? '불참' : player.forfeitType === 'disqualified' ? '실격' : '기권') : '')}</td>
+                                <td class="jo-cell">${player.jo}</td>
+                                <td class="name-cell">${player.name}</td>
+                                <td class="affiliation-cell">${player.affiliation || '-'}</td>
+                                <td colspan="11" style="text-align: center; color: #64748b;">선택된 코스 데이터 없음</td>
+                                <td class="total-score">${player.hasForfeited ? (player.forfeitType === 'absent' ? '불참' : player.forfeitType === 'disqualified' ? '실격' : '기권') : (player.hasAnyScore ? player.totalScore : '-')}</td>
+                            </tr>
+                        `;
+                    }
                 } else {
                     printContent += `
                         <tr>
@@ -751,12 +776,25 @@ export default function ScorePrintTool() {
             toast({ title: '알림', description: '인쇄할 그룹이 없습니다.', variant: 'default' });
             return;
         }
+        // 가용한 코스 목록 추출
+        const availableCourses = new Set<string>();
+        Object.values(processedData).forEach(groupPlayers => {
+            groupPlayers.forEach(player => {
+                player.assignedCourses?.forEach((c: any) => {
+                    const cName = player.coursesData[c.id]?.courseName || c.name;
+                    if (cName) availableCourses.add(cName);
+                });
+            });
+        });
+
         setPrintModal({
             open: true,
             orientation: 'portrait',
             paperSize: 'A4',
             selectedGroups: allGroupsList,
-            showAllGroups: true
+            showAllGroups: true,
+            selectedCourses: Array.from(availableCourses).sort(),
+            showAllCourses: true
         });
     };
 
@@ -1009,7 +1047,14 @@ export default function ScorePrintTool() {
                     `;
 
                     pagePlayers.forEach((player: any) => {
-                        const courses = player.assignedCourses || [];
+                        const allCourses = player.assignedCourses || [];
+                        const courses = printModal.showAllCourses
+                            ? allCourses
+                            : allCourses.filter((c: any) => {
+                                const cName = player.coursesData[c.id]?.courseName || c.name;
+                                return printModal.selectedCourses.includes(cName);
+                            });
+
                         const rowSpan = courses.length || 1;
                         const rankClass = player.rank === 1 ? 'rank-1' : (player.rank <= 3 ? `rank-${player.rank}` : '');
 
@@ -1017,7 +1062,7 @@ export default function ScorePrintTool() {
                         htmlContent += `<td rowspan="${rowSpan}" class="text-center rank-cell ${rankClass}">${player.rank ? player.rank + '위' : '-'}</td>`;
                         htmlContent += `<td rowspan="${rowSpan}" class="text-center jo-cell">${player.jo}</td>`;
                         htmlContent += `<td rowspan="${rowSpan}" class="text-center name-cell font-bold">${player.name}</td>`;
-                        htmlContent += `<td rowspan="${rowSpan}" class="text-center affiliation-cell">${player.affiliation}</td>`;
+                        htmlContent += `<td rowspan="${rowSpan}" class="text-center affiliation-cell">${player.affiliation || '-'}</td>`;
 
                         if (courses.length > 0) {
                             const firstCourse = courses[0];
@@ -1036,8 +1081,8 @@ export default function ScorePrintTool() {
                                     : (player.hasAnyScore ? player.totalScore : '-')}
                             </td>`;
                         } else {
-                            htmlContent += `<td colspan="11" class="text-center">배정된 코스 없음</td>`;
-                            htmlContent += `<td class="text-center">-</td>`;
+                            htmlContent += `<td colspan="11" class="text-center">선택된 코스 없음</td>`;
+                            htmlContent += `<td class="text-center">${player.hasForfeited ? '<span style="color:red">기권</span>' : (player.hasAnyScore ? player.totalScore : '-')}</td>`;
                         }
                         htmlContent += `</tr>`;
 
@@ -1048,7 +1093,7 @@ export default function ScorePrintTool() {
                             htmlContent += `<td class="text-center course-cell font-bold" style="color: #059669;">${cData?.courseName || nextCourse.name}</td>`;
                             for (let i = 0; i < 9; i++) {
                                 const s = cData?.holeScores[i];
-                                htmlContent += `<td class="text-center">${s !== null && s !== undefined ? s : '-'}</td>`;
+                                htmlContent += `<td class="text-center hole-score">${s !== null && s !== undefined ? s : '-'}</td>`;
                             }
                             htmlContent += `<td class="text-center col-sum">${cData?.courseTotal || '-'}</td>`;
                             htmlContent += `</tr>`;
@@ -1241,6 +1286,87 @@ export default function ScorePrintTool() {
                                         ? `${printModal.selectedGroups.length}개 그룹이 선택되었습니다. 각 그룹은 별도 페이지로 인쇄됩니다.`
                                         : '인쇄할 그룹을 선택해주세요.'
                                 }
+                            </p>
+                        </div>
+
+                        {/* 출력할 코스 선택 */}
+                        <div>
+                            <label className="text-sm font-medium mb-2 block">출력할 코스 선택</label>
+                            <div className="space-y-2 border rounded p-2">
+                                <div className="flex items-center">
+                                    <input
+                                        type="checkbox"
+                                        checked={printModal.showAllCourses}
+                                        onChange={(e) => {
+                                            const availableCourses = new Set<string>();
+                                            Object.values(processedData).forEach(groupPlayers => {
+                                                groupPlayers.forEach(player => {
+                                                    player.assignedCourses?.forEach((c: any) => {
+                                                        const cName = player.coursesData[c.id]?.courseName || c.name;
+                                                        if (cName) availableCourses.add(cName);
+                                                    });
+                                                });
+                                            });
+
+                                            if (e.target.checked) {
+                                                setPrintModal({
+                                                    ...printModal,
+                                                    showAllCourses: true,
+                                                    selectedCourses: Array.from(availableCourses).sort()
+                                                });
+                                            } else {
+                                                setPrintModal({
+                                                    ...printModal,
+                                                    showAllCourses: false,
+                                                    selectedCourses: []
+                                                });
+                                            }
+                                        }}
+                                        className="mr-2"
+                                    />
+                                    <span className="text-sm font-bold">모든 코스</span>
+                                </div>
+                                {!printModal.showAllCourses && (
+                                    <div className="ml-4 flex flex-wrap gap-x-4 gap-y-1">
+                                        {(() => {
+                                            const availableCourses = new Set<string>();
+                                            Object.values(processedData).forEach(groupPlayers => {
+                                                groupPlayers.forEach(player => {
+                                                    player.assignedCourses?.forEach((c: any) => {
+                                                        const cName = player.coursesData[c.id]?.courseName || c.name;
+                                                        if (cName) availableCourses.add(cName);
+                                                    });
+                                                });
+                                            });
+                                            return Array.from(availableCourses).sort().map((courseName) => (
+                                                <div key={courseName} className="flex items-center">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={printModal.selectedCourses.includes(courseName)}
+                                                        onChange={(e) => {
+                                                            if (e.target.checked) {
+                                                                setPrintModal({
+                                                                    ...printModal,
+                                                                    selectedCourses: [...printModal.selectedCourses, courseName]
+                                                                });
+                                                            } else {
+                                                                setPrintModal({
+                                                                    ...printModal,
+                                                                    selectedCourses: printModal.selectedCourses.filter(c => c !== courseName)
+                                                                });
+                                                            }
+                                                        }}
+                                                        className="mr-2"
+                                                    />
+                                                    <span className="text-sm">{courseName}</span>
+                                                </div>
+                                            ));
+                                        })()}
+                                    </div>
+                                )}
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-1 text-blue-600 font-medium italic">
+                                * 선택한 코스만 인쇄되지만, 순위와 총타수는 전체 코스 성적으로 계산됩니다.
                             </p>
                         </div>
                     </div>
