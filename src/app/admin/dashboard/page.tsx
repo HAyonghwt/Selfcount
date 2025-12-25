@@ -80,24 +80,24 @@ const tieBreak = (a: any, b: any, sortedCourses: any[]) => {
             const aHoleScores = aDetailObj[courseId] || {};
             const bHoleScores = bDetailObj[courseId] || {};
             let hasNonZeroScore = false;
-            
+
             // 9번 홀부터 1번 홀까지 역순으로 비교
             for (let i = 9; i >= 1; i--) {
                 const hole = i.toString();
                 const aHole = aHoleScores[hole] || 0;
                 const bHole = bHoleScores[hole] || 0;
-                
+
                 // 0이 아닌 점수가 있으면 이 코스에서 비교 진행
                 if (aHole > 0 || bHole > 0) {
                     hasNonZeroScore = true;
                 }
-                
+
                 // 점수가 다르면 비교 결과 반환
                 if (aHole !== bHole) {
                     return aHole - bHole;
                 }
             }
-            
+
             // 이 코스의 모든 홀 점수가 0이면 다음 코스로 넘어감
             // hasNonZeroScore가 false면 모두 0이므로 다음 코스 확인
             if (hasNonZeroScore) {
@@ -149,23 +149,23 @@ function getPlayerTotalAndPlusMinus(courses: any, player: any) {
 export default function AdminDashboard() {
     // 안전한 number 체크 함수
     const isValidNumber = (v: any) => typeof v === 'number' && !isNaN(v);
-    
+
     // 🚀 성능 최적화: tieBreak 결과 캐싱
     const tieBreakCacheRef = useRef<Map<string, number>>(new Map());
     const MAX_CACHE_SIZE = 10000; // 최대 캐시 크기 제한
-    
+
     // 🚀 성능 최적화: 캐싱된 tieBreak 함수
     const cachedTieBreak = useCallback((a: any, b: any, sortedCourses: any[]) => {
         // 캐시 키 생성: 두 선수 ID와 코스 순서를 조합
         const courseOrderKey = sortedCourses.map(c => c?.id || '').join(',');
         const cacheKey = `${a.id}-${b.id}-${courseOrderKey}`;
         const reverseCacheKey = `${b.id}-${a.id}-${courseOrderKey}`;
-        
+
         // 캐시 확인 (정방향)
         if (tieBreakCacheRef.current.has(cacheKey)) {
             return tieBreakCacheRef.current.get(cacheKey)!;
         }
-        
+
         // 캐시 확인 (역방향 - tieBreak(a,b) = -tieBreak(b,a))
         if (tieBreakCacheRef.current.has(reverseCacheKey)) {
             const cachedValue = tieBreakCacheRef.current.get(reverseCacheKey)!;
@@ -176,10 +176,10 @@ export default function AdminDashboard() {
             }
             return result;
         }
-        
+
         // 캐시 미스 시 원본 tieBreak 함수 호출 (무한 재귀 방지)
         const result = tieBreak(a, b, sortedCourses);
-        
+
         // 캐시 저장 (크기 제한 확인)
         if (tieBreakCacheRef.current.size < MAX_CACHE_SIZE) {
             tieBreakCacheRef.current.set(cacheKey, result);
@@ -191,7 +191,7 @@ export default function AdminDashboard() {
                 tieBreakCacheRef.current.set(cacheKey, result);
             }
         }
-        
+
         return result;
     }, []);
     // 점수 수정 모달 상태
@@ -308,35 +308,35 @@ export default function AdminDashboard() {
                     padding: 20px;
                 }
                 .print-header {
-                    background: linear-gradient(135deg, #1e3a8a, #3b82f6, #60a5fa);
+                    background: linear-gradient(135deg, #1e3a8a, #3b82f6);
                     color: white;
-                    padding: 20px;
+                    padding: 12px;
                     text-align: center;
-                    margin-bottom: 30px;
+                    margin-bottom: 15px;
                     border-radius: 8px;
                 }
                 .print-header h1 {
                     margin: 0;
-                    font-size: 28px;
+                    font-size: 24px;
                     font-weight: bold;
                 }
                 .print-header p {
-                    margin: 5px 0 0 0;
-                    font-size: 16px;
+                    margin: 2px 0 0 0;
+                    font-size: 14px;
                     opacity: 0.9;
                 }
                 .group-section {
                     page-break-inside: avoid;
-                    margin-bottom: 40px;
+                    margin-bottom: 25px;
                 }
                 .group-title {
                     background: #f8fafc;
                     color: #1e293b;
-                    padding: 15px;
-                    font-size: 20px;
+                    padding: 8px 12px;
+                    font-size: 18px;
                     font-weight: bold;
                     border-left: 4px solid #3b82f6;
-                    margin-bottom: 20px;
+                    margin-bottom: 10px;
                     display: flex;
                     align-items: center;
                     justify-content: space-between;
@@ -347,50 +347,46 @@ export default function AdminDashboard() {
                     gap: 8px;
                 }
                 .group-title-english {
-                    font-size: 16px;
+                    font-size: 14px;
                     font-weight: 500;
                     color: #64748b;
-                    margin-left: 12px;
+                    margin-left: 10px;
                 }
                 .score-table {
                     width: 100%;
                     border-collapse: collapse;
-                    margin-bottom: 20px;
-                    font-size: 12px;
-                    table-layout: fixed;
+                    margin-bottom: 15px;
+                    font-size: 14px;
+                    table-layout: auto;
                 }
                 .score-table th {
-                    background: #e2e8f0;
+                    background: #f1f5f9;
                     color: #1e293b;
-                    padding: 12px 4px;
-                    border: 1px solid #cbd5e1;
+                    padding: 6px 2px;
+                    border: 1px solid #94a3b8;
                     text-align: center;
                     font-weight: bold;
-                    font-size: 11px;
+                    font-size: 13px;
                     white-space: nowrap;
-                    overflow: hidden;
-                    text-overflow: ellipsis;
-                    line-height: 1.4;
+                    line-height: 1.2;
                 }
                 .score-table th .header-korean {
                     display: block;
-                    font-size: 11px;
-                    margin-bottom: 2px;
+                    font-size: 13px;
+                    margin-bottom: 1px;
                 }
                 .score-table th .header-english {
                     display: block;
-                    font-size: 9px;
+                    font-size: 10px;
                     font-weight: 500;
                     color: #64748b;
                 }
                 .score-table td {
-                    padding: 6px 4px;
-                    border: 1px solid #cbd5e1;
+                    padding: 5px 4px;
+                    border: 1px solid #94a3b8;
                     text-align: center;
                     vertical-align: middle;
-                    white-space: nowrap;
-                    overflow: hidden;
-                    text-overflow: ellipsis;
+                    font-size: 15px;
                 }
                 /* 반응형 컬럼 스타일 */
                 .responsive-column {
@@ -435,34 +431,41 @@ export default function AdminDashboard() {
                     min-width: 100px;
                 }
                 .rank-cell {
-                    font-weight: bold;
-                    font-size: 14px;
+                    font-weight: 800;
+                    font-size: 22px;
                     color: #1e40af;
+                    background-color: #f8fafc;
                 }
                 .player-name {
                     font-weight: bold;
+                    font-size: 16px;
                     color: #1e293b;
                 }
                 .affiliation {
                     color: #64748b;
-                    font-size: 11px;
+                    font-size: 14px;
                 }
                 .course-name {
                     font-weight: bold;
+                    font-size: 14px;
                     color: #059669;
                 }
                 .hole-score {
                     font-family: 'Courier New', monospace;
                     font-weight: bold;
+                    font-size: 15px;
                 }
                 .course-total {
-                    font-weight: bold;
+                    font-weight: 800;
+                    font-size: 18px;
                     color: #dc2626;
+                    background-color: #fffafb;
                 }
                 .total-score {
-                    font-weight: bold;
-                    font-size: 16px;
+                    font-weight: 800;
+                    font-size: 22px;
                     color: #1e40af;
+                    background-color: #f0f7ff;
                 }
                 .forfeit {
                     color: #dc2626;
@@ -483,7 +486,14 @@ export default function AdminDashboard() {
                     padding-top: 10px;
                 }
                 @media print {
-                    .no-print { display: none; }
+                    .no-print { display: none !important; }
+                    [data-sidebar="trigger"], 
+                    .sidebar-wrapper,
+                    nav,
+                    header,
+                    button {
+                        display: none !important;
+                    }
                     .player-tbody {
                         page-break-inside: avoid;
                     }
@@ -566,7 +576,7 @@ export default function AdminDashboard() {
             groupPlayers.forEach((player) => {
                 // 각 선수마다 개별 tbody 시작
                 printContent += `<tbody class="player-tbody">`;
-                
+
                 if (player.assignedCourses.length > 0) {
                     player.assignedCourses.forEach((course: any, courseIndex: number) => {
                         const courseData = player.coursesData[course.id];
@@ -580,9 +590,9 @@ export default function AdminDashboard() {
                                     </td>
                                     <td rowspan="${player.assignedCourses.length}" class="responsive-column">${player.jo}</td>
                                     <td rowspan="${player.assignedCourses.length}" class="player-name responsive-column">${player.name}</td>
-                                    <td rowspan="${player.assignedCourses.length}" class="affiliation responsive-column">${player.affiliation}</td>
+                                    <td rowspan="${player.assignedCourses.length}" class="affiliation responsive-column">${player.affiliation || '-'}</td>
                                 ` : ''}
-                                <td class="course-name responsive-column">${courseData?.courseName || course.name}</td>
+                                <td class="course-name responsive-column">${courseData?.courseName || (course.name ? (course.name.includes('-') ? course.name.split('-')[1] : course.name) : 'Course')}</td>
                         `;
 
                         // 홀별 점수
@@ -615,7 +625,7 @@ export default function AdminDashboard() {
                         </tr>
                     `;
                 }
-                
+
                 // 각 선수의 tbody 종료
                 printContent += `</tbody>`;
             });
@@ -1369,7 +1379,7 @@ export default function AdminDashboard() {
             coursesForPlayer.sort((a: any, b: any) => {
                 const orderA = coursesOrder[String(a.id)];
                 const orderB = coursesOrder[String(b.id)];
-                
+
                 // 그룹의 courses에서 순서 가져오기, 없으면 코스의 order 사용
                 let numA: number;
                 if (typeof orderA === 'boolean') {
@@ -1379,7 +1389,7 @@ export default function AdminDashboard() {
                 } else {
                     numA = a.order || 0;
                 }
-                
+
                 let numB: number;
                 if (typeof orderB === 'boolean') {
                     numB = orderB ? (b.order || 0) : 0;
@@ -1388,7 +1398,7 @@ export default function AdminDashboard() {
                 } else {
                     numB = b.order || 0;
                 }
-                
+
                 return numA - numB; // 작은 순서가 먼저 (첫번째 코스가 위)
             });
             const playerScoresData = scores[playerId] || {};
@@ -1487,7 +1497,7 @@ export default function AdminDashboard() {
             const coursesForGroup = [...allCoursesForGroup].sort((a: any, b: any) => {
                 const orderA = coursesOrder[String(a.id)];
                 const orderB = coursesOrder[String(b.id)];
-                
+
                 // 그룹의 courses에서 순서 가져오기, 없으면 코스의 order 사용
                 let numA: number;
                 if (typeof orderA === 'boolean') {
@@ -1497,7 +1507,7 @@ export default function AdminDashboard() {
                 } else {
                     numA = a.order || 0;
                 }
-                
+
                 let numB: number;
                 if (typeof orderB === 'boolean') {
                     numB = orderB ? (b.order || 0) : 0;
@@ -1506,7 +1516,7 @@ export default function AdminDashboard() {
                 } else {
                     numB = b.order || 0;
                 }
-                
+
                 return numA - numB; // 작은 순서가 먼저
             });
             // 백카운트는 마지막 코스부터 역순이므로 reverse
@@ -1555,7 +1565,7 @@ export default function AdminDashboard() {
         }
         return rankedData;
     }, [players, scores, courses, groupsData, cachedTieBreak]);
-    
+
     // 🚀 성능 최적화: scores나 players 변경 시 tieBreak 캐시 초기화
     useEffect(() => {
         tieBreakCacheRef.current.clear();
@@ -1698,7 +1708,7 @@ export default function AdminDashboard() {
                     const coursesForGroup = [...allCoursesForGroup].sort((a: any, b: any) => {
                         const orderA = coursesOrder[String(a.id)];
                         const orderB = coursesOrder[String(b.id)];
-                        
+
                         // 그룹의 courses에서 순서 가져오기, 없으면 코스의 order 사용
                         let numA: number;
                         if (typeof orderA === 'boolean') {
@@ -1708,7 +1718,7 @@ export default function AdminDashboard() {
                         } else {
                             numA = a.order || 0;
                         }
-                        
+
                         let numB: number;
                         if (typeof orderB === 'boolean') {
                             numB = orderB ? (b.order || 0) : 0;
@@ -1717,7 +1727,7 @@ export default function AdminDashboard() {
                         } else {
                             numB = b.order || 0;
                         }
-                        
+
                         return numA - numB; // 작은 순서가 먼저
                     });
                     // 백카운트는 마지막 코스부터 역순이므로 reverse
@@ -2550,11 +2560,11 @@ export default function AdminDashboard() {
 
                 if (groupPlayers.length === 0) {
                     // 시뮬레이션 데이터 확인
-                    const simulationPlayers = Object.values(players).filter((p: any) => 
+                    const simulationPlayers = Object.values(players).filter((p: any) =>
                         p.group === groupName && (p.name?.includes('시뮬') || p.affiliation?.includes('시뮬'))
                     );
                     if (simulationPlayers.length === 0) continue;
-                    
+
                     // 시뮬레이션 선수 데이터 직접 생성
                     const simProcessedPlayers = simulationPlayers.map((player: any) => {
                         const playerScoresData = scores[player.id] || {};
@@ -2570,7 +2580,7 @@ export default function AdminDashboard() {
                                 return key ? courses[key] : undefined;
                             })
                             .filter(Boolean);
-                        
+
                         const coursesData: any = {};
                         let totalScore = 0;
                         let hasAnyScore = false;
@@ -2608,7 +2618,7 @@ export default function AdminDashboard() {
                     }).filter((p: any) => p.hasAnyScore);
 
                     if (simProcessedPlayers.length === 0) continue;
-                    
+
                     // 순위 계산
                     simProcessedPlayers.sort((a: any, b: any) => a.totalScore - b.totalScore);
                     let currentRank = 1;
@@ -2648,7 +2658,7 @@ export default function AdminDashboard() {
                         document.body.appendChild(container);
 
                         let htmlContent = styleContent;
-                        
+
                         if (isFirstPage) {
                             htmlContent += `
                                 <div class="print-wrapper">
@@ -2753,12 +2763,12 @@ export default function AdminDashboard() {
                                 const nextCourse = courses[k];
                                 const cData = player.coursesData[nextCourse.id];
                                 htmlContent += `<tr>`;
-                            htmlContent += `<td class="text-center course-cell font-bold" style="color: #059669;">${cData?.courseName || nextCourse.name}</td>`;
-                            for (let i = 0; i < 9; i++) {
-                                const s = cData?.holeScores[i];
+                                htmlContent += `<td class="text-center course-cell font-bold" style="color: #059669;">${cData?.courseName || nextCourse.name}</td>`;
+                                for (let i = 0; i < 9; i++) {
+                                    const s = cData?.holeScores[i];
                                     htmlContent += `<td class="text-center hole-score">${s !== null && s !== undefined ? s : '-'}</td>`;
-                            }
-                            htmlContent += `<td class="text-center col-sum">${cData?.courseTotal || '-'}</td>`;
+                                }
+                                htmlContent += `<td class="text-center col-sum">${cData?.courseTotal || '-'}</td>`;
                                 htmlContent += `</tr>`;
                             }
                         });
@@ -2830,7 +2840,7 @@ export default function AdminDashboard() {
 
                     // HTML 구성
                     let htmlContent = styleContent;
-                    
+
                     // 첫 페이지에만 대회 제목 표시
                     if (isFirstPage) {
                         htmlContent += `
@@ -2941,7 +2951,7 @@ export default function AdminDashboard() {
                             htmlContent += `<td class="text-center course-cell font-bold" style="color: #059669;">${cData?.courseName || nextCourse.name}</td>`;
                             for (let i = 0; i < 9; i++) {
                                 const s = cData?.holeScores[i];
-                                    htmlContent += `<td class="text-center hole-score">${s !== null && s !== undefined ? s : '-'}</td>`;
+                                htmlContent += `<td class="text-center hole-score">${s !== null && s !== undefined ? s : '-'}</td>`;
                             }
                             htmlContent += `<td class="text-center col-sum">${cData?.courseTotal || '-'}</td>`;
                             htmlContent += `</tr>`;

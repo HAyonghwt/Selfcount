@@ -109,22 +109,22 @@ export default function ScorePrintTool() {
                 const aHoleScores = aDetailObj[courseId] || {};
                 const bHoleScores = bDetailObj[courseId] || {};
                 let hasNonZeroScore = false;
-                
+
                 // 9번 홀부터 1번 홀까지 역순으로 비교
                 for (let i = 9; i >= 1; i--) {
                     const hole = i.toString();
                     const aHole = aHoleScores[hole] || 0;
                     const bHole = bHoleScores[hole] || 0;
-                    
+
                     if (aHole > 0 || bHole > 0) {
                         hasNonZeroScore = true;
                     }
-                    
+
                     if (aHole !== bHole) {
                         return aHole - bHole;
                     }
                 }
-                
+
                 if (hasNonZeroScore) {
                     break;
                 }
@@ -160,7 +160,7 @@ export default function ScorePrintTool() {
                 const order = coursesOrder[cid];
                 return typeof order === 'boolean' ? order : (typeof order === 'number' && order > 0);
             });
-            
+
             const coursesForPlayer = assignedCourseIds
                 .map(cid => {
                     const key = Object.keys(courses).find(k => String(k) === String(cid));
@@ -172,7 +172,7 @@ export default function ScorePrintTool() {
             coursesForPlayer.sort((a: any, b: any) => {
                 const orderA = coursesOrder[String(a.id)];
                 const orderB = coursesOrder[String(b.id)];
-                
+
                 let numA: number;
                 if (typeof orderA === 'boolean') {
                     numA = orderA ? (a.order || 0) : 0;
@@ -181,7 +181,7 @@ export default function ScorePrintTool() {
                 } else {
                     numA = a.order || 0;
                 }
-                
+
                 let numB: number;
                 if (typeof orderB === 'boolean') {
                     numB = orderB ? (b.order || 0) : 0;
@@ -190,7 +190,7 @@ export default function ScorePrintTool() {
                 } else {
                     numB = b.order || 0;
                 }
-                
+
                 return numA - numB; // 작은 순서가 먼저
             });
 
@@ -245,7 +245,7 @@ export default function ScorePrintTool() {
             });
 
             // 기권 여부 확인
-            const hasForfeited = Object.values(coursesData).some((cd: any) => 
+            const hasForfeited = Object.values(coursesData).some((cd: any) =>
                 cd.holeScores.some((s: any) => s === 0)
             );
 
@@ -278,13 +278,13 @@ export default function ScorePrintTool() {
             const groupPlayers = processed[groupName];
             const groupData = groupsData[groupName];
             const coursesOrder = groupData?.courses || {};
-            
+
             // 그룹의 코스 정렬 (외부 전광판과 동일: order 값 기준)
             const allCoursesForGroup = groupPlayers[0]?.assignedCourses || [];
             const coursesForGroup = [...allCoursesForGroup].sort((a: any, b: any) => {
                 const orderA = coursesOrder[String(a.id)];
                 const orderB = coursesOrder[String(b.id)];
-                
+
                 let numA: number;
                 if (typeof orderA === 'boolean') {
                     numA = orderA ? (a.order || 0) : 0;
@@ -293,7 +293,7 @@ export default function ScorePrintTool() {
                 } else {
                     numA = a.order || 0;
                 }
-                
+
                 let numB: number;
                 if (typeof orderB === 'boolean') {
                     numB = orderB ? (b.order || 0) : 0;
@@ -302,10 +302,10 @@ export default function ScorePrintTool() {
                 } else {
                     numB = b.order || 0;
                 }
-                
+
                 return numA - numB; // 작은 순서가 먼저
             });
-            
+
             // 백카운트는 마지막 코스부터 역순이므로 reverse (외부 전광판과 동일)
             const coursesForBackcount = [...coursesForGroup].reverse();
 
@@ -375,35 +375,35 @@ export default function ScorePrintTool() {
                     padding: 20px;
                 }
                 .print-header {
-                    background: linear-gradient(135deg, #1e3a8a, #3b82f6, #60a5fa);
+                    background: linear-gradient(135deg, #1e3a8a, #3b82f6);
                     color: white;
-                    padding: 20px;
+                    padding: 12px;
                     text-align: center;
-                    margin-bottom: 30px;
+                    margin-bottom: 15px;
                     border-radius: 8px;
                 }
                 .print-header h1 {
                     margin: 0;
-                    font-size: 28px;
+                    font-size: 24px;
                     font-weight: bold;
                 }
                 .print-header p {
-                    margin: 5px 0 0 0;
-                    font-size: 16px;
+                    margin: 2px 0 0 0;
+                    font-size: 14px;
                     opacity: 0.9;
                 }
                 .group-section {
                     page-break-inside: avoid;
-                    margin-bottom: 40px;
+                    margin-bottom: 25px;
                 }
                 .group-title {
                     background: #f8fafc;
                     color: #1e293b;
-                    padding: 15px;
-                    font-size: 20px;
+                    padding: 8px 12px;
+                    font-size: 18px;
                     font-weight: bold;
                     border-left: 4px solid #3b82f6;
-                    margin-bottom: 20px;
+                    margin-bottom: 10px;
                     display: flex;
                     align-items: center;
                     justify-content: space-between;
@@ -414,48 +414,46 @@ export default function ScorePrintTool() {
                     gap: 8px;
                 }
                 .group-title-english {
-                    font-size: 16px;
+                    font-size: 14px;
                     font-weight: 500;
                     color: #64748b;
-                    margin-left: 12px;
+                    margin-left: 10px;
                 }
                 .score-table {
                     width: 100%;
                     border-collapse: collapse;
-                    margin-bottom: 20px;
-                    font-size: 16px;
+                    margin-bottom: 15px;
+                    font-size: 14px;
                     table-layout: auto;
                 }
                 .score-table th {
-                    background: #e2e8f0;
+                    background: #f1f5f9;
                     color: #1e293b;
-                    padding: 12px 4px;
-                    border: 1px solid #cbd5e1;
+                    padding: 6px 2px;
+                    border: 1px solid #94a3b8;
                     text-align: center;
                     font-weight: bold;
-                    font-size: 16px;
+                    font-size: 13px;
                     white-space: nowrap;
-                    overflow: hidden;
-                    text-overflow: ellipsis;
-                    line-height: 1.4;
+                    line-height: 1.2;
                 }
                 .score-table th .header-korean {
                     display: block;
-                    font-size: 16px;
-                    margin-bottom: 2px;
+                    font-size: 13px;
+                    margin-bottom: 1px;
                 }
                 .score-table th .header-english {
                     display: block;
-                    font-size: 12px;
+                    font-size: 10px;
                     font-weight: 500;
                     color: #64748b;
                 }
                 .score-table td {
-                    padding: 10px 6px;
-                    border: 1px solid #cbd5e1;
+                    padding: 5px 4px;
+                    border: 1px solid #94a3b8;
                     text-align: center;
                     vertical-align: middle;
-                    font-size: 16px;
+                    font-size: 15px;
                 }
                 /* 순위, 조: 줄바꿈 방지 */
                 .score-table td.rank-cell,
@@ -463,64 +461,52 @@ export default function ScorePrintTool() {
                     white-space: nowrap;
                     overflow: hidden;
                 }
-                /* 선수명: 줄바꿈 허용 (영어 이름 2줄까지) */
+                /* 선수명: 줄바꿈 허용 */
                 .score-table td.name-cell {
                     white-space: normal;
                     word-break: break-word;
-                    line-height: 1.3;
-                    max-height: 2.6em;
-                    overflow: hidden;
+                    line-height: 1.2;
+                    font-weight: bold;
+                    font-size: 16px;
                 }
                 /* 소속, 코스: 줄바꿈 방지 */
                 .score-table td.affiliation-cell,
                 .score-table td.course-cell {
                     white-space: nowrap;
                     overflow: hidden;
+                    font-size: 14px;
                 }
-                /* 순위: 20px, 남색 강조 */
+                /* 순위: 22px, 강조 */
                 .score-table td.rank-cell {
-                    font-weight: bold;
-                    font-size: 20px;
+                    font-weight: 800;
+                    font-size: 22px;
                     color: #1e40af;
+                    background-color: #f8fafc;
                 }
-                /* 조: 16px */
-                .score-table td.jo-cell {
-                    font-size: 16px;
-                }
-                /* 이름: 18px, 줄바꿈 허용 */
-                .score-table td.name-cell {
-                    font-weight: bold;
-                    font-size: 18px;
-                    color: #1e293b;
-                }
-                /* 소속: 16px */
-                .score-table td.affiliation-cell {
-                    color: #64748b;
-                    font-size: 16px;
-                }
-                /* 코스: 16px */
+                /* 코스: 15px */
                 .score-table td.course-cell {
                     font-weight: bold;
-                    font-size: 16px;
                     color: #059669;
                 }
-                /* 홀 점수: 16px */
+                /* 홀 점수: 15px */
                 .score-table td.hole-score {
                     font-family: 'Courier New', monospace;
                     font-weight: bold;
-                    font-size: 16px;
+                    font-size: 15px;
                 }
                 /* 합계: 18px, 빨강 */
                 .score-table td.course-total {
-                    font-weight: bold;
+                    font-weight: 800;
                     font-size: 18px;
                     color: #dc2626;
+                    background-color: #fffafb;
                 }
-                /* 총타수: 20px, 남색 강조 */
+                /* 총타수: 22px, 남색 강조 */
                 .score-table td.total-score {
-                    font-weight: bold;
-                    font-size: 20px;
+                    font-weight: 800;
+                    font-size: 22px;
                     color: #1e40af;
+                    background-color: #f0f7ff;
                 }
                 .forfeit {
                     color: #dc2626;
@@ -541,7 +527,14 @@ export default function ScorePrintTool() {
                     padding-top: 10px;
                 }
                 @media print {
-                    .no-print { display: none; }
+                    .no-print { display: none !important; }
+                    [data-sidebar="trigger"], 
+                    .sidebar-wrapper,
+                    nav,
+                    header,
+                    button {
+                        display: none !important;
+                    }
                     .player-tbody {
                         page-break-inside: avoid;
                     }
@@ -579,14 +572,14 @@ export default function ScorePrintTool() {
                     </div>
                     <table class="score-table">
                         <colgroup>
-                            <col style="width: 60px;">
-                            <col style="width: 60px;">
+                            <col style="width: 55px;">
+                            <col style="width: 45px;">
                             <col style="width: auto;">
-                            <col style="width: 120px;">
-                            <col style="width: 100px;">
-                            ${Array.from({ length: 9 }).map(() => `<col style="width: 45px;">`).join('')}
-                            <col style="width: 60px;">
-                            <col style="width: 70px;">
+                            <col style="width: 110px;">
+                            <col style="width: 90px;">
+                            ${Array.from({ length: 9 }).map(() => `<col style="width: 40px;">`).join('')}
+                            <col style="width: 55px;">
+                            <col style="width: 65px;">
                         </colgroup>
                         <thead>
                             <tr>
@@ -633,7 +626,7 @@ export default function ScorePrintTool() {
 
             groupPlayers.forEach((player) => {
                 printContent += `<tbody class="player-tbody">`;
-                
+
                 if (player.assignedCourses.length > 0) {
                     player.assignedCourses.forEach((course: any, courseIndex: number) => {
                         const courseData = player.coursesData[course.id];
@@ -647,9 +640,9 @@ export default function ScorePrintTool() {
                                     </td>
                                     <td rowspan="${player.assignedCourses.length}" class="jo-cell">${player.jo}</td>
                                     <td rowspan="${player.assignedCourses.length}" class="name-cell">${player.name}</td>
-                                    <td rowspan="${player.assignedCourses.length}" class="affiliation-cell">${player.affiliation}</td>
+                                    <td rowspan="${player.assignedCourses.length}" class="affiliation-cell">${player.affiliation || '-'}</td>
                                 ` : ''}
-                                <td class="course-cell">${courseData?.courseName || course.name}</td>
+                                <td class="course-cell">${courseData?.courseName || (course.name ? (course.name.includes('-') ? course.name.split('-')[1] : course.name) : 'Course')}</td>
                         `;
 
                         // 홀별 점수
@@ -682,7 +675,7 @@ export default function ScorePrintTool() {
                         </tr>
                     `;
                 }
-                
+
                 printContent += `</tbody>`;
             });
 
@@ -945,7 +938,7 @@ export default function ScorePrintTool() {
                     document.body.appendChild(container);
 
                     let htmlContent = styleContent;
-                    
+
                     if (isFirstPage) {
                         htmlContent += `
                             <div class="print-wrapper">
@@ -1121,8 +1114,8 @@ export default function ScorePrintTool() {
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <Button 
-                        onClick={handleOpenPrint} 
+                    <Button
+                        onClick={handleOpenPrint}
                         disabled={isLoading || allGroupsList.length === 0}
                         className="w-full bg-blue-600 hover:bg-blue-700 text-white"
                     >
