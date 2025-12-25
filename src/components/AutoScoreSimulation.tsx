@@ -4,11 +4,13 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { db, ensureAuthenticated } from '@/lib/firebase';
 import { ref, get, set, onValue } from 'firebase/database';
 import { logScoreChange, invalidatePlayerLogCache } from '@/lib/scoreLogs';
-import { Loader2 } from 'lucide-react';
+import { Loader2, ChevronDown, ChevronUp, X } from 'lucide-react';
 
 interface SimulationState {
     isRunning: boolean;
@@ -38,9 +40,28 @@ export default function AutoScoreSimulation() {
         type: '',
         day: 1
     });
+    
+    // 이중 확인 다이얼로그 (첫 번째 확인)
+    const [showFirstConfirmDialog, setShowFirstConfirmDialog] = useState<{
+        open: boolean;
+        type: string;
+        day: 1 | 2;
+    }>({
+        open: false,
+        type: '',
+        day: 1
+    });
 
     const [courses, setCourses] = useState<any[]>([]);
     const [groupsData, setGroupsData] = useState<any>({});
+    
+    // 코스 선택 상태 (1차, 2차 각각)
+    const [selectedCourses1, setSelectedCourses1] = useState<number[]>([]);
+    const [selectedCourses2, setSelectedCourses2] = useState<number[]>([]);
+    
+    // 카드 열림/닫힘 상태 (기본값: 닫힘)
+    const [isCardExpanded, setIsCardExpanded] = useState<boolean>(false);
+    const [showActivateDialog, setShowActivateDialog] = useState<boolean>(false);
 
     // Firebase 데이터 로드
     useEffect(() => {
@@ -101,7 +122,7 @@ export default function AutoScoreSimulation() {
 
                 // 점수 변경 로그 기록 (실제 심판 페이지와 동일)
                 if (prevScore !== score) {
-                    const refereeId = `시뮬레이션_심판${day}일차`;
+                    const refereeId = `시뮬레이션_심판${day}차`;
                     await logScoreChange({
                         matchId: 'tournaments/current',
                         playerId: playerId,
@@ -199,7 +220,7 @@ export default function AutoScoreSimulation() {
                     holeNumber: hole,
                     oldValue: typeof prevScore === "number" ? prevScore : 0,
                     newValue: score,
-                    modifiedBy: isBatchMode ? `시뮬레이션_일괄입력${day}일차` : `시뮬레이션_조장${day}일차`,
+                    modifiedBy: isBatchMode ? `시뮬레이션_일괄입력${day}차` : `시뮬레이션_조장${day}차`,
                     modifiedByType: "captain",
                     comment: isBatchMode 
                         ? `일괄 입력 모드 시뮬레이션 - 코스: ${courseId}, 그룹: ${playerGroup}, 조: ${playerJo}`
@@ -265,20 +286,31 @@ export default function AutoScoreSimulation() {
 
         setSimulationState({ 
             isRunning: true, 
-            currentStep: `심판 ${day}일차 점수 입력 시뮬레이션 중...`, 
+            currentStep: `심판 ${day}차 점수 입력 시뮬레이션 중...`, 
             progress: 0 
         });
 
         try {
-            const courseA = courses.find(c => c.name === 'A코스' || c.id === 1);
-            const courseB = courses.find(c => c.name === 'B코스' || c.id === 2);
-            const courseC = courses.find(c => c.name === 'C코스' || c.id === 3);
-            const courseD = courses.find(c => c.name === 'D코스' || c.id === 4);
-
-            if (!courseA || !courseB || !courseC || !courseD) {
+            // 선택된 코스 가져오기
+            const selectedCourseIds = day === 1 ? selectedCourses1 : selectedCourses2;
+            
+            if (selectedCourseIds.length === 0) {
                 toast({ 
                     title: '오류', 
-                    description: 'A, B, C, D 코스가 모두 설정되어 있어야 합니다.', 
+                    description: `${day}차에 선택된 코스가 없습니다. 코스를 선택해주세요.`, 
+                    variant: 'destructive' 
+                });
+                setSimulationState({ isRunning: false, currentStep: '', progress: 0 });
+                return;
+            }
+
+            // 선택된 코스 ID로 코스 객체 찾기
+            const targetCourses = courses.filter(c => selectedCourseIds.includes(c.id));
+            
+            if (targetCourses.length === 0) {
+                toast({ 
+                    title: '오류', 
+                    description: '선택된 코스를 찾을 수 없습니다.', 
                     variant: 'destructive' 
                 });
                 setSimulationState({ isRunning: false, currentStep: '', progress: 0 });
@@ -306,9 +338,6 @@ export default function AutoScoreSimulation() {
             // Firebase에서 최신 점수 데이터 가져오기
             const scoresSnapshot = await get(ref(db, 'scores'));
             const latestScores = scoresSnapshot.val() || {};
-
-            // 1일차: A, B 코스 / 2일차: C, D 코스
-            const targetCourses = day === 1 ? [courseA, courseB] : [courseC, courseD];
 
             // 모든 점수 저장 작업을 배열로 수집
             const scoreTasks: Array<() => Promise<void>> = [];
@@ -362,7 +391,7 @@ export default function AutoScoreSimulation() {
                 // 진행률 업데이트
                 setSimulationState({ 
                     isRunning: true, 
-                    currentStep: `심판 ${day}일차 점수 입력 중... (${processedScores}/${scoreTasks.length}개 완료)`, 
+                    currentStep: `심판 ${day}차 점수 입력 중... (${processedScores}/${scoreTasks.length}개 완료)`, 
                     progress: (processedScores / totalExpectedScores) * 100 
                 });
 
@@ -374,7 +403,7 @@ export default function AutoScoreSimulation() {
             
             toast({ 
                 title: '완료', 
-                description: `심판 ${day}일차 점수 입력이 완료되었습니다. (${totalScores}개 점수 등록)` 
+                description: `심판 ${day}차 점수 입력이 완료되었습니다. (${totalScores}개 점수 등록)` 
             });
         } catch (error: any) {
             toast({ 
@@ -396,20 +425,31 @@ export default function AutoScoreSimulation() {
 
         setSimulationState({ 
             isRunning: true, 
-            currentStep: `조장 ${day}일차 점수 입력 시뮬레이션 중...`, 
+            currentStep: `조장 ${day}차 점수 입력 시뮬레이션 중...`, 
             progress: 0 
         });
 
         try {
-            const courseA = courses.find(c => c.name === 'A코스' || c.id === 1);
-            const courseB = courses.find(c => c.name === 'B코스' || c.id === 2);
-            const courseC = courses.find(c => c.name === 'C코스' || c.id === 3);
-            const courseD = courses.find(c => c.name === 'D코스' || c.id === 4);
-
-            if (!courseA || !courseB || !courseC || !courseD) {
+            // 선택된 코스 가져오기
+            const selectedCourseIds = day === 1 ? selectedCourses1 : selectedCourses2;
+            
+            if (selectedCourseIds.length === 0) {
                 toast({ 
                     title: '오류', 
-                    description: 'A, B, C, D 코스가 모두 설정되어 있어야 합니다.', 
+                    description: `${day}차에 선택된 코스가 없습니다. 코스를 선택해주세요.`, 
+                    variant: 'destructive' 
+                });
+                setSimulationState({ isRunning: false, currentStep: '', progress: 0 });
+                return;
+            }
+
+            // 선택된 코스 ID로 코스 객체 찾기
+            const targetCourses = courses.filter(c => selectedCourseIds.includes(c.id));
+            
+            if (targetCourses.length === 0) {
+                toast({ 
+                    title: '오류', 
+                    description: '선택된 코스를 찾을 수 없습니다.', 
                     variant: 'destructive' 
                 });
                 setSimulationState({ isRunning: false, currentStep: '', progress: 0 });
@@ -437,9 +477,6 @@ export default function AutoScoreSimulation() {
             // Firebase에서 최신 점수 데이터 가져오기
             const scoresSnapshot = await get(ref(db, 'scores'));
             const latestScores = scoresSnapshot.val() || {};
-
-            // 1일차: A, B 코스 / 2일차: C, D 코스
-            const targetCourses = day === 1 ? [courseA, courseB] : [courseC, courseD];
 
             // 모든 점수 저장 작업을 배열로 수집
             const scoreTasks: Array<() => Promise<void>> = [];
@@ -495,7 +532,7 @@ export default function AutoScoreSimulation() {
                 // 진행률 업데이트
                 setSimulationState({ 
                     isRunning: true, 
-                    currentStep: `조장 ${day}일차 점수 입력 중... (${processedScores}/${scoreTasks.length}개 완료)`, 
+                    currentStep: `조장 ${day}차 점수 입력 중... (${processedScores}/${scoreTasks.length}개 완료)`, 
                     progress: (processedScores / totalExpectedScores) * 100 
                 });
 
@@ -507,7 +544,7 @@ export default function AutoScoreSimulation() {
             
             toast({ 
                 title: '완료', 
-                description: `조장 ${day}일차 점수 입력이 완료되었습니다. (${totalScores}개 점수 등록)` 
+                description: `조장 ${day}차 점수 입력이 완료되었습니다. (${totalScores}개 점수 등록)` 
             });
         } catch (error: any) {
             toast({ 
@@ -529,20 +566,31 @@ export default function AutoScoreSimulation() {
 
         setSimulationState({ 
             isRunning: true, 
-            currentStep: `일괄 입력 모드 ${day}일차 점수 입력 시뮬레이션 중...`, 
+            currentStep: `일괄 입력 모드 ${day}차 점수 입력 시뮬레이션 중...`, 
             progress: 0 
         });
 
         try {
-            const courseA = courses.find(c => c.name === 'A코스' || c.id === 1);
-            const courseB = courses.find(c => c.name === 'B코스' || c.id === 2);
-            const courseC = courses.find(c => c.name === 'C코스' || c.id === 3);
-            const courseD = courses.find(c => c.name === 'D코스' || c.id === 4);
-
-            if (!courseA || !courseB || !courseC || !courseD) {
+            // 선택된 코스 가져오기
+            const selectedCourseIds = day === 1 ? selectedCourses1 : selectedCourses2;
+            
+            if (selectedCourseIds.length === 0) {
                 toast({ 
                     title: '오류', 
-                    description: 'A, B, C, D 코스가 모두 설정되어 있어야 합니다.', 
+                    description: `${day}차에 선택된 코스가 없습니다. 코스를 선택해주세요.`, 
+                    variant: 'destructive' 
+                });
+                setSimulationState({ isRunning: false, currentStep: '', progress: 0 });
+                return;
+            }
+
+            // 선택된 코스 ID로 코스 객체 찾기
+            const targetCourses = courses.filter(c => selectedCourseIds.includes(c.id));
+            
+            if (targetCourses.length === 0) {
+                toast({ 
+                    title: '오류', 
+                    description: '선택된 코스를 찾을 수 없습니다.', 
                     variant: 'destructive' 
                 });
                 setSimulationState({ isRunning: false, currentStep: '', progress: 0 });
@@ -570,9 +618,6 @@ export default function AutoScoreSimulation() {
             // Firebase에서 최신 점수 데이터 가져오기
             const scoresSnapshot = await get(ref(db, 'scores'));
             const latestScores = scoresSnapshot.val() || {};
-
-            // 1일차: A, B 코스 / 2일차: C, D 코스
-            const targetCourses = day === 1 ? [courseA, courseB] : [courseC, courseD];
 
             // 모든 점수 저장 작업을 배열로 수집
             const scoreTasks: Array<() => Promise<void>> = [];
@@ -628,7 +673,7 @@ export default function AutoScoreSimulation() {
                 // 진행률 업데이트
                 setSimulationState({ 
                     isRunning: true, 
-                    currentStep: `일괄 입력 모드 ${day}일차 점수 입력 중... (${processedScores}/${scoreTasks.length}개 완료)`, 
+                    currentStep: `일괄 입력 모드 ${day}차 점수 입력 중... (${processedScores}/${scoreTasks.length}개 완료)`, 
                     progress: (processedScores / totalExpectedScores) * 100 
                 });
 
@@ -640,7 +685,7 @@ export default function AutoScoreSimulation() {
             
             toast({ 
                 title: '완료', 
-                description: `일괄 입력 모드 ${day}일차 점수 입력이 완료되었습니다. (${totalScores}개 점수 등록)` 
+                description: `일괄 입력 모드 ${day}차 점수 입력이 완료되었습니다. (${totalScores}개 점수 등록)` 
             });
         } catch (error: any) {
             toast({ 
@@ -653,7 +698,79 @@ export default function AutoScoreSimulation() {
         }
     };
 
-    const handleButtonClick = (type: string, day: 1 | 2) => {
+    const handleButtonClick = (type: string, day: 1 | 2, e?: React.MouseEvent) => {
+        // 이벤트 전파 방지 (다른 버튼 클릭과 충돌 방지)
+        if (e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+        
+        // 🔒 안전장치 1: 이미 실행 중이면 차단
+        if (simulationState.isRunning) {
+            toast({ 
+                title: '알림', 
+                description: '이미 시뮬레이션이 실행 중입니다.', 
+                variant: 'default' 
+            });
+            return;
+        }
+        
+        // 🔒 안전장치 2: 카드가 닫혀있으면 실행 불가
+        if (!isCardExpanded) {
+            console.warn('시뮬레이션: 카드가 닫혀있어 실행 불가');
+            return;
+        }
+        
+        // 🔒 안전장치 3: 코스가 선택되지 않았으면 실행 불가
+        const selectedCourseIds = day === 1 ? selectedCourses1 : selectedCourses2;
+        if (selectedCourseIds.length === 0) {
+            toast({ 
+                title: '알림', 
+                description: `${day}차에 코스를 선택해주세요.`, 
+                variant: 'default' 
+            });
+            return;
+        }
+        
+        // 🔒 안전장치 4: 첫 번째 확인 다이얼로그 표시
+        setShowFirstConfirmDialog({ open: true, type, day });
+    };
+    
+    // 첫 번째 확인 다이얼로그에서 확인 클릭 시
+    const handleFirstConfirm = () => {
+        const { type, day } = showFirstConfirmDialog;
+        setShowFirstConfirmDialog({ open: false, type: '', day: 1 });
+        
+        // 🔒 안전장치 5: 다시 한 번 상태 검증
+        if (simulationState.isRunning) {
+            toast({ 
+                title: '오류', 
+                description: '시뮬레이션이 이미 실행 중입니다.', 
+                variant: 'destructive' 
+            });
+            return;
+        }
+        
+        if (!isCardExpanded) {
+            toast({ 
+                title: '오류', 
+                description: '카드가 닫혀있어 실행할 수 없습니다.', 
+                variant: 'destructive' 
+            });
+            return;
+        }
+        
+        const selectedCourseIds = day === 1 ? selectedCourses1 : selectedCourses2;
+        if (selectedCourseIds.length === 0) {
+            toast({ 
+                title: '오류', 
+                description: '코스가 선택되지 않았습니다.', 
+                variant: 'destructive' 
+            });
+            return;
+        }
+        
+        // 두 번째 확인 다이얼로그 표시
         setShowConfirmDialog({ open: true, type, day });
     };
 
@@ -661,6 +778,44 @@ export default function AutoScoreSimulation() {
         const { type, day } = showConfirmDialog;
         setShowConfirmDialog({ open: false, type: '', day: 1 });
         
+        // 🔒 안전장치 6: 최종 실행 전 마지막 검증
+        if (simulationState.isRunning) {
+            toast({ 
+                title: '오류', 
+                description: '시뮬레이션이 이미 실행 중입니다.', 
+                variant: 'destructive' 
+            });
+            return;
+        }
+        
+        if (!isCardExpanded) {
+            toast({ 
+                title: '오류', 
+                description: '카드가 닫혀있어 실행할 수 없습니다.', 
+                variant: 'destructive' 
+            });
+            return;
+        }
+        
+        const selectedCourseIds = day === 1 ? selectedCourses1 : selectedCourses2;
+        if (selectedCourseIds.length === 0) {
+            toast({ 
+                title: '오류', 
+                description: '코스가 선택되지 않았습니다.', 
+                variant: 'destructive' 
+            });
+            return;
+        }
+        
+        // 🔒 안전장치 7: 실행 함수 호출 전 상태 설정 (중복 실행 방지)
+        setSimulationState(prev => {
+            if (prev.isRunning) {
+                return prev; // 이미 실행 중이면 상태 변경 안 함
+            }
+            return prev;
+        });
+        
+        // 실행
         if (type === 'referee') {
             simulateRefereeScores(day);
         } else if (type === 'captain') {
@@ -670,111 +825,291 @@ export default function AutoScoreSimulation() {
         }
     };
 
+    const handleActivate = (e?: React.MouseEvent) => {
+        // 이벤트 전파 방지
+        if (e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+        setShowActivateDialog(true);
+    };
+
+    const handleActivateConfirm = () => {
+        setShowActivateDialog(false);
+        setIsCardExpanded(true);
+    };
+
+    const handleClose = () => {
+        setIsCardExpanded(false);
+        // 코스 선택도 초기화 (선택사항)
+        // setSelectedCourses1([]);
+        // setSelectedCourses2([]);
+    };
+
+    const handleCourseToggle = (courseId: number, day: 1 | 2) => {
+        if (day === 1) {
+            setSelectedCourses1(prev => 
+                prev.includes(courseId) 
+                    ? prev.filter(id => id !== courseId)
+                    : [...prev, courseId]
+            );
+        } else {
+            setSelectedCourses2(prev => 
+                prev.includes(courseId) 
+                    ? prev.filter(id => id !== courseId)
+                    : [...prev, courseId]
+            );
+        }
+    };
+
     return (
-        <Card>
-            <CardHeader>
-                <CardTitle>자동 점수 입력 시뮬레이션</CardTitle>
-                <CardDescription>
-                    현재 등록된 모든 선수에게 자동으로 점수를 입력합니다. (엑셀 업로드 선수 포함)
-                    <br />
-                    실제 심판/조장/일괄입력 페이지와 동일한 방식으로 점수가 저장됩니다.
-                </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-                {simulationState.isRunning && (
-                    <div className="space-y-2">
-                        <div className="flex items-center gap-2">
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                            <span className="text-sm">{simulationState.currentStep}</span>
-                        </div>
-                        <div className="w-full bg-gray-200 rounded-full h-2">
-                            <div 
-                                className="bg-primary h-2 rounded-full transition-all"
-                                style={{ width: `${simulationState.progress}%` }}
-                            />
-                        </div>
-                    </div>
-                )}
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    {/* 1일차 */}
-                    <div className="space-y-2">
-                        <h3 className="font-semibold text-lg">1일차 (A코스, B코스)</h3>
-                        <Button
-                            onClick={() => handleButtonClick('referee', 1)}
-                            disabled={simulationState.isRunning}
-                            className="w-full"
-                            variant="outline"
-                        >
-                            심판 1차 점수 입력
-                        </Button>
-                        <Button
-                            onClick={() => handleButtonClick('captain', 1)}
-                            disabled={simulationState.isRunning}
-                            className="w-full"
-                            variant="outline"
-                        >
-                            조장 1차 점수 입력
-                        </Button>
-                        <Button
-                            onClick={() => handleButtonClick('batch', 1)}
-                            disabled={simulationState.isRunning}
-                            className="w-full"
-                            variant="outline"
-                        >
-                            일괄 입력 모드 1차 입력
-                        </Button>
-                    </div>
-
-                    {/* 2일차 */}
-                    <div className="space-y-2">
-                        <h3 className="font-semibold text-lg">2일차 (C코스, D코스)</h3>
-                        <Button
-                            onClick={() => handleButtonClick('referee', 2)}
-                            disabled={simulationState.isRunning}
-                            className="w-full"
-                            variant="outline"
-                        >
-                            심판 2차 점수 입력
-                        </Button>
-                        <Button
-                            onClick={() => handleButtonClick('captain', 2)}
-                            disabled={simulationState.isRunning}
-                            className="w-full"
-                            variant="outline"
-                        >
-                            조장 2차 점수 입력
-                        </Button>
-                        <Button
-                            onClick={() => handleButtonClick('batch', 2)}
-                            disabled={simulationState.isRunning}
-                            className="w-full"
-                            variant="outline"
-                        >
-                            일괄 입력 모드 2차 입력
-                        </Button>
-                    </div>
-                </div>
-
-                <AlertDialog open={showConfirmDialog.open} onOpenChange={(open) => setShowConfirmDialog({ ...showConfirmDialog, open })}>
-                    <AlertDialogContent>
-                        <AlertDialogHeader>
-                            <AlertDialogTitle>자동 점수 입력 확인</AlertDialogTitle>
-                            <AlertDialogDescription>
-                                {showConfirmDialog.type === 'referee' && `심판 ${showConfirmDialog.day}일차 점수 입력을 시작하시겠습니까?`}
-                                {showConfirmDialog.type === 'captain' && `조장 ${showConfirmDialog.day}일차 점수 입력을 시작하시겠습니까?`}
-                                {showConfirmDialog.type === 'batch' && `일괄 입력 모드 ${showConfirmDialog.day}일차 점수 입력을 시작하시겠습니까?`}
+        <>
+            <Card>
+                <CardHeader>
+                    <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                            <CardTitle>자동 점수 입력 시뮬레이션</CardTitle>
+                            <CardDescription>
+                                현재 등록된 모든 선수에게 자동으로 점수를 입력합니다. (엑셀 업로드 선수 포함)
                                 <br />
-                                현재 등록된 모든 선수에게 자동으로 점수가 입력됩니다.
-                            </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                            <AlertDialogCancel>취소</AlertDialogCancel>
-                            <AlertDialogAction onClick={handleConfirm}>확인</AlertDialogAction>
-                        </AlertDialogFooter>
-                    </AlertDialogContent>
-                </AlertDialog>
-            </CardContent>
-        </Card>
+                                실제 심판/조장/일괄입력 페이지와 동일한 방식으로 점수가 저장됩니다.
+                            </CardDescription>
+                        </div>
+                        {!isCardExpanded ? (
+                            <Button
+                                onClick={(e) => handleActivate(e)}
+                                variant="outline"
+                                size="sm"
+                                className="ml-4"
+                                type="button"
+                            >
+                                활성화
+                            </Button>
+                        ) : (
+                            <Button
+                                onClick={(e) => {
+                                    e?.preventDefault();
+                                    e?.stopPropagation();
+                                    handleClose();
+                                }}
+                                variant="outline"
+                                size="sm"
+                                className="ml-4"
+                                type="button"
+                            >
+                                <X className="mr-2 h-4 w-4" />
+                                닫기
+                            </Button>
+                        )}
+                    </div>
+                </CardHeader>
+                {isCardExpanded && (
+                    <CardContent className="space-y-4">
+                        {simulationState.isRunning && (
+                            <div className="space-y-2">
+                                <div className="flex items-center gap-2">
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                    <span className="text-sm">{simulationState.currentStep}</span>
+                                </div>
+                                <div className="w-full bg-gray-200 rounded-full h-2">
+                                    <div 
+                                        className="bg-primary h-2 rounded-full transition-all"
+                                        style={{ width: `${simulationState.progress}%` }}
+                                    />
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            {/* 1차 */}
+                            <div className="space-y-3">
+                                <h3 className="font-semibold text-lg">1차</h3>
+                                <div className="space-y-2 border rounded-lg p-3">
+                                    <Label className="text-sm font-medium">코스 선택</Label>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        {courses.map((course) => (
+                                            <div key={course.id} className="flex items-center space-x-2">
+                                                <Checkbox
+                                                    id={`course-1-${course.id}`}
+                                                    checked={selectedCourses1.includes(course.id)}
+                                                    onCheckedChange={() => handleCourseToggle(course.id, 1)}
+                                                />
+                                                <Label
+                                                    htmlFor={`course-1-${course.id}`}
+                                                    className="text-sm font-normal cursor-pointer"
+                                                >
+                                                    {course.name || `코스 ${course.id}`}
+                                                </Label>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    {selectedCourses1.length === 0 && (
+                                        <p className="text-xs text-muted-foreground">코스를 선택해주세요.</p>
+                                    )}
+                                    {selectedCourses1.length > 0 && (
+                                        <p className="text-xs text-muted-foreground">
+                                            선택된 코스: {courses.filter(c => selectedCourses1.includes(c.id)).map(c => c.name).join(', ')}
+                                        </p>
+                                    )}
+                                </div>
+                                <div className="space-y-2">
+                                    <Button
+                                        onClick={(e) => handleButtonClick('referee', 1, e)}
+                                        disabled={simulationState.isRunning || selectedCourses1.length === 0 || !isCardExpanded}
+                                        className="w-full"
+                                        variant="outline"
+                                        type="button"
+                                    >
+                                        심판 1차 점수 입력
+                                    </Button>
+                                    <Button
+                                        onClick={(e) => handleButtonClick('captain', 1, e)}
+                                        disabled={simulationState.isRunning || selectedCourses1.length === 0 || !isCardExpanded}
+                                        className="w-full"
+                                        variant="outline"
+                                        type="button"
+                                    >
+                                        조장 1차 점수 입력
+                                    </Button>
+                                    <Button
+                                        onClick={(e) => handleButtonClick('batch', 1, e)}
+                                        disabled={simulationState.isRunning || selectedCourses1.length === 0 || !isCardExpanded}
+                                        className="w-full"
+                                        variant="outline"
+                                        type="button"
+                                    >
+                                        일괄 입력 모드 1차 입력
+                                    </Button>
+                                </div>
+                            </div>
+
+                            {/* 2차 */}
+                            <div className="space-y-3">
+                                <h3 className="font-semibold text-lg">2차</h3>
+                                <div className="space-y-2 border rounded-lg p-3">
+                                    <Label className="text-sm font-medium">코스 선택</Label>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        {courses.map((course) => (
+                                            <div key={course.id} className="flex items-center space-x-2">
+                                                <Checkbox
+                                                    id={`course-2-${course.id}`}
+                                                    checked={selectedCourses2.includes(course.id)}
+                                                    onCheckedChange={() => handleCourseToggle(course.id, 2)}
+                                                />
+                                                <Label
+                                                    htmlFor={`course-2-${course.id}`}
+                                                    className="text-sm font-normal cursor-pointer"
+                                                >
+                                                    {course.name || `코스 ${course.id}`}
+                                                </Label>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    {selectedCourses2.length === 0 && (
+                                        <p className="text-xs text-muted-foreground">코스를 선택해주세요.</p>
+                                    )}
+                                    {selectedCourses2.length > 0 && (
+                                        <p className="text-xs text-muted-foreground">
+                                            선택된 코스: {courses.filter(c => selectedCourses2.includes(c.id)).map(c => c.name).join(', ')}
+                                        </p>
+                                    )}
+                                </div>
+                                <div className="space-y-2">
+                                    <Button
+                                        onClick={(e) => handleButtonClick('referee', 2, e)}
+                                        disabled={simulationState.isRunning || selectedCourses2.length === 0 || !isCardExpanded}
+                                        className="w-full"
+                                        variant="outline"
+                                        type="button"
+                                    >
+                                        심판 2차 점수 입력
+                                    </Button>
+                                    <Button
+                                        onClick={(e) => handleButtonClick('captain', 2, e)}
+                                        disabled={simulationState.isRunning || selectedCourses2.length === 0 || !isCardExpanded}
+                                        className="w-full"
+                                        variant="outline"
+                                        type="button"
+                                    >
+                                        조장 2차 점수 입력
+                                    </Button>
+                                    <Button
+                                        onClick={(e) => handleButtonClick('batch', 2, e)}
+                                        disabled={simulationState.isRunning || selectedCourses2.length === 0 || !isCardExpanded}
+                                        className="w-full"
+                                        variant="outline"
+                                        type="button"
+                                    >
+                                        일괄 입력 모드 2차 입력
+                                    </Button>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* 첫 번째 확인 다이얼로그 */}
+                        <AlertDialog open={showFirstConfirmDialog.open} onOpenChange={(open) => setShowFirstConfirmDialog({ ...showFirstConfirmDialog, open })}>
+                            <AlertDialogContent>
+                                <AlertDialogHeader>
+                                    <AlertDialogTitle>⚠️ 시뮬레이션 실행 확인</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                        {showFirstConfirmDialog.type === 'referee' && `심판 ${showFirstConfirmDialog.day}차 점수 입력 시뮬레이션을 실행하시겠습니까?`}
+                                        {showFirstConfirmDialog.type === 'captain' && `조장 ${showFirstConfirmDialog.day}차 점수 입력 시뮬레이션을 실행하시겠습니까?`}
+                                        {showFirstConfirmDialog.type === 'batch' && `일괄 입력 모드 ${showFirstConfirmDialog.day}차 점수 입력 시뮬레이션을 실행하시겠습니까?`}
+                                        <br />
+                                        <span className="font-semibold text-orange-600">이 작업은 실제 Firebase에 점수를 저장합니다.</span>
+                                    </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                    <AlertDialogCancel>취소</AlertDialogCancel>
+                                    <AlertDialogAction onClick={handleFirstConfirm}>계속</AlertDialogAction>
+                                </AlertDialogFooter>
+                            </AlertDialogContent>
+                        </AlertDialog>
+
+                        {/* 두 번째 확인 다이얼로그 (최종 확인) */}
+                        <AlertDialog open={showConfirmDialog.open} onOpenChange={(open) => setShowConfirmDialog({ ...showConfirmDialog, open })}>
+                            <AlertDialogContent>
+                                <AlertDialogHeader>
+                                    <AlertDialogTitle>🚨 최종 확인</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                        {showConfirmDialog.type === 'referee' && `심판 ${showConfirmDialog.day}차 점수 입력을 시작하시겠습니까?`}
+                                        {showConfirmDialog.type === 'captain' && `조장 ${showConfirmDialog.day}차 점수 입력을 시작하시겠습니까?`}
+                                        {showConfirmDialog.type === 'batch' && `일괄 입력 모드 ${showConfirmDialog.day}차 점수 입력을 시작하시겠습니까?`}
+                                        <br />
+                                        <span className="font-semibold text-red-600">현재 등록된 모든 선수에게 자동으로 점수가 입력됩니다.</span>
+                                        <br />
+                                        <span className="text-sm text-muted-foreground">이 작업은 되돌릴 수 없습니다.</span>
+                                    </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                    <AlertDialogCancel>취소</AlertDialogCancel>
+                                    <AlertDialogAction onClick={handleConfirm} className="bg-red-600 hover:bg-red-700">실행</AlertDialogAction>
+                                </AlertDialogFooter>
+                            </AlertDialogContent>
+                        </AlertDialog>
+                    </CardContent>
+                )}
+            </Card>
+
+            {/* 활성화 확인 다이얼로그 */}
+            <AlertDialog open={showActivateDialog} onOpenChange={setShowActivateDialog}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>시뮬레이션 도구 활성화</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            자동 점수 입력 시뮬레이션 도구를 활성화하시겠습니까?
+                            <br />
+                            <span className="font-semibold text-red-600">이 도구는 실제 Firebase에 점수를 저장합니다.</span>
+                            <br />
+                            대회 중에는 사용하지 마세요.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>취소</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleActivateConfirm}>활성화</AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+        </>
     );
 }
