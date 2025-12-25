@@ -1,7 +1,7 @@
 "use client"
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { db, ensureAuthenticated } from '@/lib/firebase';
-import { ref, onValue, onChildChanged, onChildAdded, off, query, orderByKey, limitToLast, set } from 'firebase/database';
+import { ref, onValue, onChildChanged, off, query } from 'firebase/database';
 import { Flame, ChevronUp, ChevronDown, Globe, Palette } from 'lucide-react';
 import { cn, safeLocalStorageGetItem, safeLocalStorageSetItem } from '@/lib/utils';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -151,24 +151,24 @@ const tieBreak = (a: any, b: any, sortedCourses: any[]) => {
             const aHoleScores = a.detailedScores[courseId] || {};
             const bHoleScores = b.detailedScores[courseId] || {};
             let hasNonZeroScore = false;
-            
+
             // 9번 홀부터 1번 홀까지 역순으로 비교
             for (let i = 9; i >= 1; i--) {
                 const hole = i.toString();
                 const aHole = aHoleScores[hole] || 0;
                 const bHole = bHoleScores[hole] || 0;
-                
+
                 // 0이 아닌 점수가 있으면 이 코스에서 비교 진행
                 if (aHole > 0 || bHole > 0) {
                     hasNonZeroScore = true;
                 }
-                
+
                 // 점수가 다르면 비교 결과 반환
                 if (aHole !== bHole) {
                     return aHole - bHole;
                 }
             }
-            
+
             // 이 코스의 모든 홀 점수가 0이면 다음 코스로 넘어감
             // hasNonZeroScore가 false면 모두 0이므로 다음 코스 확인
             if (hasNonZeroScore) {
@@ -188,16 +188,6 @@ function getParForHole(tournament: any, courseId: string, holeIdx: number) {
     if (!course || !Array.isArray(course.pars)) return null;
     return course.pars[holeIdx] ?? null;
 }
-function getTotalParForPlayer(tournament: any, assignedCourses: any[]) {
-    let total = 0;
-    assignedCourses.forEach(course => {
-        const courseData = tournament?.courses?.[course.id];
-        if (courseData && Array.isArray(courseData.pars)) {
-            total += courseData.pars.reduce((a: number, b: number) => a + (b || 0), 0);
-        }
-    });
-    return total;
-}
 
 // 코스별 합계 및 ±타수 계산 함수
 function getCourseSumAndPlusMinus(tournament: any, course: any, holeScores: (number | null)[]) {
@@ -213,30 +203,6 @@ function getCourseSumAndPlusMinus(tournament: any, course: any, holeScores: (num
         }
     }
     return { sum, pm: parSum > 0 ? sum - parSum : null };
-}
-
-// 총타수/±타수 계산을 '입력된 홀만' 기준으로 변경
-function getPlayerTotalAndPlusMinus(tournament: any, player: any) {
-    let total = 0;
-    let parTotal = 0;
-    let playedHoles = 0;
-    player.assignedCourses.forEach((course: any) => {
-        const courseData = tournament?.courses?.[course.id];
-        const holeScores = player.coursesData[course.id]?.holeScores || [];
-        if (courseData && Array.isArray(courseData.pars)) {
-            for (let i = 0; i < 9; i++) {
-                const score = holeScores[i];
-                const par = courseData.pars[i] ?? null;
-                if (score !== null && score !== undefined && par !== null && par !== undefined) {
-                    total += score;
-                    parTotal += par;
-                    playedHoles++;
-                }
-            }
-        }
-    });
-    // playedHoles가 0이면 null 반환
-    return playedHoles > 0 ? { total, pm: total - parTotal } : { total: 0, pm: null };
 }
 
 // getPlayerTotalAndPlusMinusAllCourses 함수 추가 (assignedCourses가 아니라 전체 배정 코스 기준)
@@ -306,7 +272,7 @@ const getForfeitTypeFromLogs = (logs: ScoreLog[]): 'absent' | 'disqualified' | '
     return null;
 };
 
-// 기존 점수표 함수는 이름만 변경해서 아래에 유지
+// 외부 전광판 컴포넌트
 function ExternalScoreboard() {
     const [loading, setLoading] = useState(true);
     const [players, setPlayers] = useState({});
@@ -999,7 +965,7 @@ function ExternalScoreboard() {
             allAssignedCoursesForPlayer.sort((a: any, b: any) => {
                 const orderA = coursesOrder[String(a.id)];
                 const orderB = coursesOrder[String(b.id)];
-                
+
                 // 그룹의 courses에서 순서 가져오기, 없으면 코스의 order 사용
                 let numA: number;
                 if (typeof orderA === 'boolean') {
@@ -1009,7 +975,7 @@ function ExternalScoreboard() {
                 } else {
                     numA = a.order || 0;
                 }
-                
+
                 let numB: number;
                 if (typeof orderB === 'boolean') {
                     numB = orderB ? (b.order || 0) : 0;
@@ -1018,7 +984,7 @@ function ExternalScoreboard() {
                 } else {
                     numB = b.order || 0;
                 }
-                
+
                 return numA - numB; // 작은 순서가 먼저 (첫번째 코스가 위)
             });
 
@@ -1104,17 +1070,17 @@ function ExternalScoreboard() {
         // 코스 순서 검증 함수
         const validateCourseOrder = (coursesForGroup: any[], coursesOrder: any, groupName: string): { isValid: boolean; warnings: string[] } => {
             const warnings: string[] = [];
-            
+
             // 1. order 값이 없는 코스 확인
             const coursesWithoutOrder = coursesForGroup.filter(c => {
                 const order = coursesOrder[String(c.id)];
                 return !order || (typeof order === 'number' && order <= 0);
             });
-            
+
             if (coursesWithoutOrder.length > 0) {
                 warnings.push(`${groupName} 그룹: ${coursesWithoutOrder.length}개 코스에 순서 정보가 없습니다. (${coursesWithoutOrder.map(c => c.name || c.id).join(', ')})`);
             }
-            
+
             // 2. order 값 중복 확인
             const orderValues = coursesForGroup
                 .map(c => {
@@ -1123,13 +1089,13 @@ function ExternalScoreboard() {
                     return null;
                 })
                 .filter((o): o is number => o !== null);
-            
+
             const duplicateOrders = orderValues.filter((order, index) => orderValues.indexOf(order) !== index);
             if (duplicateOrders.length > 0) {
                 const uniqueDuplicates = [...new Set(duplicateOrders)];
                 warnings.push(`${groupName} 그룹: 다음 순서 값이 중복됩니다: ${uniqueDuplicates.join(', ')}`);
             }
-            
+
             return {
                 isValid: warnings.length === 0,
                 warnings
@@ -1148,7 +1114,7 @@ function ExternalScoreboard() {
             const coursesForGroup = [...allCoursesForGroup].sort((a: any, b: any) => {
                 const orderA = coursesOrder[String(a.id)];
                 const orderB = coursesOrder[String(b.id)];
-                
+
                 // 그룹의 courses에서 순서 가져오기, 없으면 코스의 order 사용
                 let numA: number;
                 if (typeof orderA === 'boolean') {
@@ -1158,7 +1124,7 @@ function ExternalScoreboard() {
                 } else {
                     numA = a.order || 0;
                 }
-                
+
                 let numB: number;
                 if (typeof orderB === 'boolean') {
                     numB = orderB ? (b.order || 0) : 0;
@@ -1167,10 +1133,10 @@ function ExternalScoreboard() {
                 } else {
                     numB = b.order || 0;
                 }
-                
+
                 return numA - numB; // 작은 순서가 먼저
             });
-            
+
             // 코스 순서 검증
             const validation = validateCourseOrder(coursesForGroup, coursesOrder, groupName);
             if (!validation.isValid) {
@@ -1182,7 +1148,7 @@ function ExternalScoreboard() {
                     });
                 }
             }
-            
+
             // order가 있는 코스와 없는 코스 분리
             const coursesWithOrder = coursesForGroup.filter(c => {
                 const order = coursesOrder[String(c.id)];
@@ -1192,10 +1158,10 @@ function ExternalScoreboard() {
                 const order = coursesOrder[String(c.id)];
                 return !order || (typeof order === 'number' && order <= 0);
             });
-            
+
             // order가 있는 코스는 정렬된 순서대로, 없는 코스는 뒤로
             const finalCoursesForGroup = [...coursesWithOrder, ...coursesWithoutOrder];
-            
+
             // 백카운트는 마지막 코스부터 역순이므로 reverse
             const coursesForBackcount = [...finalCoursesForGroup].reverse();
 
@@ -1409,7 +1375,7 @@ function ExternalScoreboard() {
                     const coursesForGroup = [...allCoursesForGroup].sort((a: any, b: any) => {
                         const orderA = coursesOrder[String(a.id)];
                         const orderB = coursesOrder[String(b.id)];
-                        
+
                         // 그룹의 courses에서 순서 가져오기, 없으면 코스의 order 사용
                         let numA: number;
                         if (typeof orderA === 'boolean') {
@@ -1419,7 +1385,7 @@ function ExternalScoreboard() {
                         } else {
                             numA = a.order || 0;
                         }
-                        
+
                         let numB: number;
                         if (typeof orderB === 'boolean') {
                             numB = orderB ? (b.order || 0) : 0;
@@ -1428,7 +1394,7 @@ function ExternalScoreboard() {
                         } else {
                             numB = b.order || 0;
                         }
-                        
+
                         return numA - numB; // 작은 순서가 먼저
                     });
                     // 백카운트는 마지막 코스부터 역순이므로 reverse
@@ -1838,7 +1804,6 @@ function ExternalScoreboard() {
     }, [finalDataByGroup, lastUpdateTime]);
 
     // 실시간 업데이트를 위한 점수 변경 감지 (Firebase 호출 최소화)
-    // 심판 수정과 관리자 수정 모두 동일하게 작동 (처음 작동했던 간단한 버전)
     useEffect(() => {
         if (changedPlayerIds.length === 0) return;
 
