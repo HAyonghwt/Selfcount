@@ -310,11 +310,11 @@ export default function AutoScoreSimulation() {
             // 1일차: A, B 코스 / 2일차: C, D 코스
             const targetCourses = day === 1 ? [courseA, courseB] : [courseC, courseD];
 
-            let totalScores = 0;
-            let processedScores = 0;
+            // 모든 점수 저장 작업을 배열로 수집
+            const scoreTasks: Array<() => Promise<void>> = [];
             const totalPlayers = allIndividualPlayers.length;
+            const totalExpectedScores = totalPlayers * targetCourses.length * 9;
 
-            // 각 선수별로 점수 입력 (실제 심판 페이지와 동일한 방식)
             for (const player of allIndividualPlayers) {
                 for (const course of targetCourses) {
                     // 이미 점수가 있는 경우 스킵
@@ -324,12 +324,11 @@ export default function AutoScoreSimulation() {
                     for (let hole = 1; hole <= 9; hole++) {
                         const par = course.pars?.[hole - 1] || 4;
                         const score = Math.max(1, Math.min(9, par + Math.floor(Math.random() * 5) - 2));
-                        
                         const prevScore = latestScores[player.id]?.[course.id]?.[String(hole)] ?? null;
 
-                        try {
-                            // 실제 심판 페이지와 동일한 방식으로 저장
-                            await saveScoreAsReferee(
+                        // 점수 저장 작업을 배열에 추가
+                        scoreTasks.push(() => 
+                            saveScoreAsReferee(
                                 player.id,
                                 String(course.id),
                                 hole,
@@ -337,24 +336,39 @@ export default function AutoScoreSimulation() {
                                 prevScore,
                                 latestScores,
                                 day
-                            );
-
-                            totalScores++;
-                            processedScores++;
-                        } catch (error: any) {
-                            console.error(`점수 저장 실패 (선수: ${player.id}, 코스: ${course.id}, 홀: ${hole}):`, error);
-                            // 개별 점수 저장 실패는 계속 진행
-                        }
-
-                        // 진행률 업데이트
-                        if (processedScores % 10 === 0 || processedScores === totalScores) {
-                            setSimulationState({ 
-                                isRunning: true, 
-                                currentStep: `심판 ${day}일차 점수 입력 중... (${processedScores}개 완료)`, 
-                                progress: (processedScores / (totalPlayers * targetCourses.length * 9)) * 100 
-                            });
-                        }
+                            ).catch((error: any) => {
+                                console.error(`점수 저장 실패 (선수: ${player.id}, 코스: ${course.id}, 홀: ${hole}):`, error);
+                            })
+                        );
                     }
+                }
+            }
+
+            // 배치 단위로 병렬 처리 (배치 크기: 20개, 배치 간 지연: 50ms)
+            const BATCH_SIZE = 20;
+            const BATCH_DELAY = 50;
+            let processedScores = 0;
+            let totalScores = 0;
+
+            for (let i = 0; i < scoreTasks.length; i += BATCH_SIZE) {
+                const batch = scoreTasks.slice(i, i + BATCH_SIZE);
+                
+                // 현재 배치를 병렬로 실행
+                const results = await Promise.allSettled(batch.map(task => task()));
+                const successCount = results.filter(r => r.status === 'fulfilled').length;
+                totalScores += successCount;
+                processedScores += batch.length;
+
+                // 진행률 업데이트
+                setSimulationState({ 
+                    isRunning: true, 
+                    currentStep: `심판 ${day}일차 점수 입력 중... (${processedScores}/${scoreTasks.length}개 완료)`, 
+                    progress: (processedScores / totalExpectedScores) * 100 
+                });
+
+                // 마지막 배치가 아니면 지연 (실제 환경 모방)
+                if (i + BATCH_SIZE < scoreTasks.length) {
+                    await new Promise(resolve => setTimeout(resolve, BATCH_DELAY));
                 }
             }
             
@@ -427,11 +441,11 @@ export default function AutoScoreSimulation() {
             // 1일차: A, B 코스 / 2일차: C, D 코스
             const targetCourses = day === 1 ? [courseA, courseB] : [courseC, courseD];
 
-            let totalScores = 0;
-            let processedScores = 0;
+            // 모든 점수 저장 작업을 배열로 수집
+            const scoreTasks: Array<() => Promise<void>> = [];
             const totalPlayers = allIndividualPlayers.length;
+            const totalExpectedScores = totalPlayers * targetCourses.length * 9;
 
-            // 각 선수별로 점수 입력 (실제 조장 페이지와 동일한 방식)
             for (const player of allIndividualPlayers) {
                 for (const course of targetCourses) {
                     // 이미 점수가 있는 경우 스킵
@@ -441,12 +455,11 @@ export default function AutoScoreSimulation() {
                     for (let hole = 1; hole <= 9; hole++) {
                         const par = course.pars?.[hole - 1] || 4;
                         const score = Math.max(1, Math.min(9, par + Math.floor(Math.random() * 5) - 2));
-                        
                         const prevScore = latestScores[player.id]?.[course.id]?.[String(hole)] ?? null;
 
-                        try {
-                            // 실제 조장 페이지와 동일한 방식으로 저장
-                            await saveScoreAsCaptain(
+                        // 점수 저장 작업을 배열에 추가
+                        scoreTasks.push(() => 
+                            saveScoreAsCaptain(
                                 player.id,
                                 String(course.id),
                                 hole,
@@ -456,24 +469,39 @@ export default function AutoScoreSimulation() {
                                 player.jo || 0,
                                 day,
                                 false // 조장 모드
-                            );
-
-                            totalScores++;
-                            processedScores++;
-                        } catch (error: any) {
-                            console.error(`점수 저장 실패 (선수: ${player.id}, 코스: ${course.id}, 홀: ${hole}):`, error);
-                            // 개별 점수 저장 실패는 계속 진행
-                        }
-
-                        // 진행률 업데이트
-                        if (processedScores % 10 === 0 || processedScores === totalScores) {
-                            setSimulationState({ 
-                                isRunning: true, 
-                                currentStep: `조장 ${day}일차 점수 입력 중... (${processedScores}개 완료)`, 
-                                progress: (processedScores / (totalPlayers * targetCourses.length * 9)) * 100 
-                            });
-                        }
+                            ).catch((error: any) => {
+                                console.error(`점수 저장 실패 (선수: ${player.id}, 코스: ${course.id}, 홀: ${hole}):`, error);
+                            })
+                        );
                     }
+                }
+            }
+
+            // 배치 단위로 병렬 처리 (배치 크기: 20개, 배치 간 지연: 50ms)
+            const BATCH_SIZE = 20;
+            const BATCH_DELAY = 50;
+            let processedScores = 0;
+            let totalScores = 0;
+
+            for (let i = 0; i < scoreTasks.length; i += BATCH_SIZE) {
+                const batch = scoreTasks.slice(i, i + BATCH_SIZE);
+                
+                // 현재 배치를 병렬로 실행
+                const results = await Promise.allSettled(batch.map(task => task()));
+                const successCount = results.filter(r => r.status === 'fulfilled').length;
+                totalScores += successCount;
+                processedScores += batch.length;
+
+                // 진행률 업데이트
+                setSimulationState({ 
+                    isRunning: true, 
+                    currentStep: `조장 ${day}일차 점수 입력 중... (${processedScores}/${scoreTasks.length}개 완료)`, 
+                    progress: (processedScores / totalExpectedScores) * 100 
+                });
+
+                // 마지막 배치가 아니면 지연 (실제 환경 모방)
+                if (i + BATCH_SIZE < scoreTasks.length) {
+                    await new Promise(resolve => setTimeout(resolve, BATCH_DELAY));
                 }
             }
             
@@ -546,11 +574,11 @@ export default function AutoScoreSimulation() {
             // 1일차: A, B 코스 / 2일차: C, D 코스
             const targetCourses = day === 1 ? [courseA, courseB] : [courseC, courseD];
 
-            let totalScores = 0;
-            let processedScores = 0;
+            // 모든 점수 저장 작업을 배열로 수집
+            const scoreTasks: Array<() => Promise<void>> = [];
             const totalPlayers = allIndividualPlayers.length;
+            const totalExpectedScores = totalPlayers * targetCourses.length * 9;
 
-            // 각 선수별로 점수 입력 (실제 일괄 입력 모드와 동일한 방식)
             for (const player of allIndividualPlayers) {
                 for (const course of targetCourses) {
                     // 이미 점수가 있는 경우 스킵
@@ -560,12 +588,11 @@ export default function AutoScoreSimulation() {
                     for (let hole = 1; hole <= 9; hole++) {
                         const par = course.pars?.[hole - 1] || 4;
                         const score = Math.max(1, Math.min(9, par + Math.floor(Math.random() * 5) - 2));
-                        
                         const prevScore = latestScores[player.id]?.[course.id]?.[String(hole)] ?? null;
 
-                        try {
-                            // 실제 일괄 입력 모드와 동일한 방식으로 저장
-                            await saveScoreAsCaptain(
+                        // 점수 저장 작업을 배열에 추가
+                        scoreTasks.push(() => 
+                            saveScoreAsCaptain(
                                 player.id,
                                 String(course.id),
                                 hole,
@@ -575,24 +602,39 @@ export default function AutoScoreSimulation() {
                                 player.jo || 0,
                                 day,
                                 true // 일괄 입력 모드
-                            );
-
-                            totalScores++;
-                            processedScores++;
-                        } catch (error: any) {
-                            console.error(`점수 저장 실패 (선수: ${player.id}, 코스: ${course.id}, 홀: ${hole}):`, error);
-                            // 개별 점수 저장 실패는 계속 진행
-                        }
-
-                        // 진행률 업데이트
-                        if (processedScores % 10 === 0 || processedScores === totalScores) {
-                            setSimulationState({ 
-                                isRunning: true, 
-                                currentStep: `일괄 입력 모드 ${day}일차 점수 입력 중... (${processedScores}개 완료)`, 
-                                progress: (processedScores / (totalPlayers * targetCourses.length * 9)) * 100 
-                            });
-                        }
+                            ).catch((error: any) => {
+                                console.error(`점수 저장 실패 (선수: ${player.id}, 코스: ${course.id}, 홀: ${hole}):`, error);
+                            })
+                        );
                     }
+                }
+            }
+
+            // 배치 단위로 병렬 처리 (배치 크기: 20개, 배치 간 지연: 50ms)
+            const BATCH_SIZE = 20;
+            const BATCH_DELAY = 50;
+            let processedScores = 0;
+            let totalScores = 0;
+
+            for (let i = 0; i < scoreTasks.length; i += BATCH_SIZE) {
+                const batch = scoreTasks.slice(i, i + BATCH_SIZE);
+                
+                // 현재 배치를 병렬로 실행
+                const results = await Promise.allSettled(batch.map(task => task()));
+                const successCount = results.filter(r => r.status === 'fulfilled').length;
+                totalScores += successCount;
+                processedScores += batch.length;
+
+                // 진행률 업데이트
+                setSimulationState({ 
+                    isRunning: true, 
+                    currentStep: `일괄 입력 모드 ${day}일차 점수 입력 중... (${processedScores}/${scoreTasks.length}개 완료)`, 
+                    progress: (processedScores / totalExpectedScores) * 100 
+                });
+
+                // 마지막 배치가 아니면 지연 (실제 환경 모방)
+                if (i + BATCH_SIZE < scoreTasks.length) {
+                    await new Promise(resolve => setTimeout(resolve, BATCH_DELAY));
                 }
             }
             
