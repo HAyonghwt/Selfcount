@@ -68,36 +68,34 @@ export default function GiftEventDraw({ winner, onAnimationEnd }: GiftEventDrawP
     const animate = (currentTime: number) => {
       const elapsed = currentTime - startTime;
 
-      // 1단계: 빠른 회전 (0-1초)
-      if (elapsed <= 1000) {
+      // 전체 애니메이션 시간 유지하되 멈춤 직전까지 역동성 극대화
+      // 1단계: 초고속 회전 (0.8초)
+      if (elapsed <= 800) {
         setCurrentIndex(prev => (prev + 1) % participants.length);
         animationId = requestAnimationFrame(animate);
       }
-      // 2단계: 서서히 느려짐 (1-2초)
+      // 2단계: 고속 회전 (0.8-2초) - 서서히 인지 가능한 수준으로
       else if (elapsed <= 2000) {
-        const progress = (elapsed - 1000) / 1000; // 0-1
-        // 속도를 점진적으로 늦춤: 50ms -> 200ms -> 500ms
-        const delay = 50 + progress * 450;
+        const progress = (elapsed - 800) / 1200;
+        const delay = 30 + progress * 120; // 30ms -> 150ms
         setTimeout(() => {
           setCurrentIndex(prev => (prev + 1) % participants.length);
           animationId = requestAnimationFrame(animate);
         }, delay);
       }
-      // 3단계: 느리게 (2-3.5초) - 글자가 조금씩 보임
+      // 3단계: 가시적 회전 (2-3.5초) - 긴장감 조성
       else if (elapsed <= 3500) {
-        const progress = (elapsed - 2000) / 1500; // 0-1
-        // 속도를 느리게: 500ms -> 800ms -> 1200ms
-        const delay = 500 + progress * 700;
+        const progress = (elapsed - 2000) / 1500;
+        const delay = 150 + progress * 250; // 150ms -> 400ms
         setTimeout(() => {
           setCurrentIndex(prev => (prev + 1) % participants.length);
           animationId = requestAnimationFrame(animate);
         }, delay);
       }
-      // 4단계: 매우 느리게 (3.5-5초) - 탁탁탁 효과, 글자 식별 가능
+      // 4단계: 최종 감속 (3.5-5초) - "탁, 탁, 탁" 리듬감 있게 멈춤 (최대 대기시간 1초 미만으로 제한)
       else if (elapsed <= 5000) {
-        const progress = (elapsed - 3500) / 1500; // 0-1
-        // 속도를 매우 느리게: 1200ms -> 2000ms -> 3000ms
-        const delay = 1200 + progress * 1800;
+        const progress = (elapsed - 3500) / 1500;
+        const delay = 400 + progress * 400; // 400ms -> 800ms
         setTimeout(() => {
           setCurrentIndex(prev => (prev + 1) % participants.length);
           animationId = requestAnimationFrame(animate);
@@ -206,9 +204,9 @@ export default function GiftEventDraw({ winner, onAnimationEnd }: GiftEventDrawP
                 <Flower className="w-[8vh] h-[8vh] md:w-[12vh] md:h-[12vh]" />
               </div>
 
-              {/* 당첨자 정보 - VH 기반 성명 조절 */}
-              <div className="flex flex-col items-center justify-center gap-[4vh] py-[5vh] border-[0.4vh] border-white/10 rounded-[4vh] bg-white/10 backdrop-blur-sm h-full">
-                <div className="text-[3vh] md:text-[5vh] text-white/90 bg-black/40 px-[4vh] py-[1vh] rounded-full backdrop-blur-xl border border-white/30 max-w-full font-bold">
+              {/* 당첨자 정보 영역 - 패딩 비율(pt-pb) 조절로 시각적 상향 보정 */}
+              <div className="flex flex-col items-center justify-center pt-[2vh] pb-[8vh] border-[0.4vh] border-white/10 rounded-[4vh] bg-white/10 backdrop-blur-sm h-full relative overflow-hidden">
+                <div className="text-[3vh] md:text-[4.5vh] text-white/90 bg-black/40 px-[4vh] py-[1vh] rounded-full backdrop-blur-xl border border-white/30 max-w-full font-bold mb-[2vh]">
                   {winner.club}
                 </div>
                 <div className={
@@ -260,29 +258,33 @@ export default function GiftEventDraw({ winner, onAnimationEnd }: GiftEventDrawP
 
                       return (
                         <div className="flex items-center justify-center gap-6 md:gap-8">
-                          <div className="w-32 md:w-44 h-40 md:h-56 bg-gradient-to-b from-yellow-300 to-orange-500 rounded-[2rem] flex items-center justify-center shadow-2xl border-4 border-yellow-200">
-                            <span className="text-7xl md:text-[8rem] font-black text-white leading-none">{slot1}</span>
+                          <div className={`w-32 md:w-44 h-40 md:h-56 bg-gradient-to-b from-yellow-300 to-orange-500 rounded-[2.5rem] flex items-center justify-center shadow-2xl border-4 border-yellow-200 relative overflow-hidden ${rolling ? 'animate-slot-roll' : ''}`}>
+                            <span className={`text-7xl md:text-[8rem] font-black text-white leading-none ${rolling ? 'blur-[2px]' : 'blur-0'} transition-all duration-100`}>{slot1}</span>
+                            {rolling && <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/30 pointer-events-none" />}
                           </div>
-                          <div className="w-32 md:w-44 h-40 md:h-56 bg-gradient-to-b from-blue-400 to-indigo-600 rounded-[2rem] flex items-center justify-center shadow-2xl border-4 border-blue-200">
-                            <span className="text-7xl md:text-[8rem] font-black text-white leading-none">{slot2}</span>
+                          <div className={`w-32 md:w-44 h-40 md:h-56 bg-gradient-to-b from-blue-400 to-indigo-600 rounded-[2.5rem] flex items-center justify-center shadow-2xl border-4 border-blue-200 relative overflow-hidden ${rolling ? 'animate-slot-roll' : ''}`} style={{ animationDelay: '0.1s' }}>
+                            <span className={`text-7xl md:text-[8rem] font-black text-white leading-none ${rolling ? 'blur-[2px]' : 'blur-0'} transition-all duration-100`}>{slot2}</span>
+                            {rolling && <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/30 pointer-events-none" />}
                           </div>
-                          <div className="w-32 md:w-44 h-40 md:h-56 bg-gradient-to-b from-emerald-400 to-teal-600 rounded-[2rem] flex items-center justify-center shadow-2xl border-4 border-emerald-200">
-                            <span className="text-7xl md:text-[8rem] font-black text-white leading-none">{slot3}</span>
+                          <div className={`w-32 md:w-44 h-40 md:h-56 bg-gradient-to-b from-emerald-400 to-teal-600 rounded-[2.5rem] flex items-center justify-center shadow-2xl border-4 border-emerald-200 relative overflow-hidden ${rolling ? 'animate-slot-roll' : ''}`} style={{ animationDelay: '0.2s' }}>
+                            <span className={`text-7xl md:text-[8rem] font-black text-white leading-none ${rolling ? 'blur-[2px]' : 'blur-0'} transition-all duration-100`}>{slot3}</span>
+                            {rolling && <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/30 pointer-events-none" />}
                           </div>
                         </div>
                       );
                     } else {
                       // 영어 또는 긴 이름: 단일 가로 슬롯, 텍스트 크기 자동 조절
-                      // 글자 수에 따라 폰트 크기 동적 조절
-                      const fontSize = currentName.length > 15 ? 'text-4xl md:text-5xl' :
-                        currentName.length > 10 ? 'text-5xl md:text-6xl' :
-                          'text-6xl md:text-[8rem]';
+                      const fontSize = currentName.length > 20 ? 'text-3xl md:text-4xl' :
+                        currentName.length > 15 ? 'text-4xl md:text-5xl' :
+                          currentName.length > 10 ? 'text-5xl md:text-6xl' :
+                            'text-6xl md:text-[7rem]';
 
                       return (
-                        <div className="w-full h-40 md:h-56 bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 rounded-[2rem] flex items-center justify-center shadow-2xl border-4 border-white/40 px-10">
-                          <span className={`${fontSize} font-black text-white tracking-tight text-center break-words drop-shadow-lg`}>
+                        <div className={`w-full h-40 md:h-56 bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 rounded-[2.5rem] flex items-center justify-center shadow-2xl border-4 border-white/40 px-10 relative overflow-hidden ${rolling ? 'animate-slot-roll-subtle' : ''}`}>
+                          <span className={`${fontSize} font-black text-white tracking-tight text-center break-words drop-shadow-lg ${rolling ? 'blur-[1px]' : 'blur-0'} transition-all duration-100`}>
                             {currentName}
                           </span>
+                          {rolling && <div className="absolute inset-x-0 inset-y-0 bg-gradient-to-b from-black/20 via-transparent to-black/20 pointer-events-none" />}
                         </div>
                       );
                     }
@@ -403,6 +405,22 @@ export default function GiftEventDraw({ winner, onAnimationEnd }: GiftEventDrawP
         }
         .animate-fade-in-up {
           animation: fade-in-up 0.5s ease-out forwards;
+        }
+        @keyframes slot-roll {
+          0% { transform: translateY(-5%); }
+          50% { transform: translateY(5%); }
+          100% { transform: translateY(-5%); }
+        }
+        .animate-slot-roll {
+          animation: slot-roll 0.04s linear infinite;
+        }
+        @keyframes slot-roll-subtle {
+          0% { transform: scale(0.98) translateY(-2%); }
+          50% { transform: scale(1) translateY(2%); }
+          100% { transform: scale(0.98) translateY(-2%); }
+        }
+        .animate-slot-roll-subtle {
+          animation: slot-roll-subtle 0.05s ease-in-out infinite;
         }
       `}</style>
     </div>
