@@ -311,7 +311,8 @@ export default function BadgePage() {
     groupName: string,
     tournamentName: string,
     width: number,
-    height: number
+    height: number,
+    logoUrl?: string
   ) => {
     const TARGET_DPI = 300;
     const BASE_DPI = 96;
@@ -340,6 +341,33 @@ export default function BadgePage() {
 
     // 배경 이미지 그리기
     ctx.drawImage(img, 0, 0, pxWidth, pxHeight);
+
+    // 로고가 있으면 배경으로 추가 (opacity 0.10)
+    if (logoUrl) {
+      try {
+        const logoImg = new Image();
+        logoImg.crossOrigin = 'anonymous';
+        await new Promise((resolve, reject) => {
+          logoImg.onload = resolve;
+          logoImg.onerror = reject;
+          logoImg.src = logoUrl;
+        });
+
+        // 로고를 희미하게 그리기 (opacity 0.10)
+        ctx.save();
+        ctx.globalAlpha = 0.10;
+        
+        // 로고 크기 계산 (명찰 크기의 80% 정도로 더 크게)
+        const logoSize = Math.min(pxWidth, pxHeight) * 0.8;
+        const logoX = (pxWidth - logoSize) / 2; // 가로 중앙
+        const logoY = (pxHeight - logoSize) / 2; // 세로 중앙 (정 가운데)
+        
+        ctx.drawImage(logoImg, logoX, logoY, logoSize, logoSize);
+        ctx.restore();
+      } catch (error) {
+        console.error('로고 로드 실패:', error);
+      }
+    }
 
     // 기준 크기 (88mm x 58mm)와 현재 크기의 비율 계산
     const BASE_WIDTH = 88;
@@ -492,7 +520,9 @@ export default function BadgePage() {
           const ctx = canvas.getContext('2d');
           if (!ctx) continue;
 
-          await drawBadge(ctx, player, selectedGroup, tournament.name || '대회명', badgeWidth, badgeHeight);
+          // 첫 번째 로고 사용
+          const logoUrl = uploadedLogos.length > 0 ? uploadedLogos[0].url : undefined;
+          await drawBadge(ctx, player, selectedGroup, tournament.name || '대회명', badgeWidth, badgeHeight, logoUrl);
 
           // Canvas를 이미지로 변환하여 PDF에 추가
           const imgData = canvas.toDataURL('image/png');
@@ -534,8 +564,10 @@ export default function BadgePage() {
     }
 
     const firstPlayer = filteredPlayers[0];
-    drawBadge(ctx, firstPlayer, selectedGroup, tournament.name || '대회명', badgeWidth, badgeHeight).catch(console.error);
-  }, [selectedBackground, badgeWidth, badgeHeight, selectedGroup, filteredPlayers, fontSizes, textColors, tournament.name]);
+    // 첫 번째 로고 사용
+    const logoUrl = uploadedLogos.length > 0 ? uploadedLogos[0].url : undefined;
+    drawBadge(ctx, firstPlayer, selectedGroup, tournament.name || '대회명', badgeWidth, badgeHeight, logoUrl).catch(console.error);
+  }, [selectedBackground, badgeWidth, badgeHeight, selectedGroup, filteredPlayers, fontSizes, textColors, tournament.name, uploadedLogos]);
 
   return (
     <div className="space-y-6">
@@ -770,6 +802,34 @@ export default function BadgePage() {
             </CardContent>
           </Card>
 
+          {/* 통계 및 생성 버튼 */}
+          {selectedGroup && (
+            <Card>
+              <CardContent className="pt-6">
+                <div className="space-y-4">
+                  <div className="text-sm text-muted-foreground">
+                    선택된 그룹: <span className="font-semibold">{selectedGroup}</span>
+                  </div>
+                  <div className="text-sm text-muted-foreground">
+                    총 선수 수: <span className="font-semibold">{filteredPlayers.length}명</span>
+                  </div>
+                  <div className="text-sm text-muted-foreground">
+                    조 수: <span className="font-semibold">{Object.keys(playersByJo).length}개</span>
+                  </div>
+                  <Button
+                    onClick={generatePDF}
+                    className="w-full"
+                    size="lg"
+                    disabled={!selectedGroup || filteredPlayers.length === 0}
+                  >
+                    <Download className="mr-2 h-4 w-4" />
+                    PDF 다운로드
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* 로고 관리 */}
           <Card>
             <CardHeader>
@@ -843,34 +903,6 @@ export default function BadgePage() {
               )}
             </CardContent>
           </Card>
-
-          {/* 통계 및 생성 버튼 */}
-          {selectedGroup && (
-            <Card>
-              <CardContent className="pt-6">
-                <div className="space-y-4">
-                  <div className="text-sm text-muted-foreground">
-                    선택된 그룹: <span className="font-semibold">{selectedGroup}</span>
-                  </div>
-                  <div className="text-sm text-muted-foreground">
-                    총 선수 수: <span className="font-semibold">{filteredPlayers.length}명</span>
-                  </div>
-                  <div className="text-sm text-muted-foreground">
-                    조 수: <span className="font-semibold">{Object.keys(playersByJo).length}개</span>
-                  </div>
-                  <Button
-                    onClick={generatePDF}
-                    className="w-full"
-                    size="lg"
-                    disabled={!selectedGroup || filteredPlayers.length === 0}
-                  >
-                    <Download className="mr-2 h-4 w-4" />
-                    PDF 다운로드
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          )}
         </CardContent>
       </Card>
     </div>
