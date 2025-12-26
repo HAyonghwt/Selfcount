@@ -50,40 +50,62 @@ export default function GiftEventDisplay() {
     }
   }, [status, currentWinner]);
 
-  // 대기 화면
+  // 대기 화면 - 더 크고 웅장하게
   if (status === "waiting") {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 flex items-center justify-center">
-        <div className="text-center">
-          <div className="mb-8">
-            <Trophy className="w-24 h-24 md:w-32 md:h-32 text-yellow-400 mx-auto mb-6 animate-pulse" />
-            <h1 className="text-4xl md:text-6xl font-bold text-white mb-4">
-          경품 추첨 대기 중
+      <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 flex items-center justify-center overflow-hidden">
+        <div className="text-center relative z-10">
+          <div className="mb-12">
+            <Trophy className="w-32 h-32 md:w-48 md:h-48 text-yellow-400 mx-auto mb-10 animate-bounce drop-shadow-[0_0_30px_rgba(250,204,21,0.5)]" />
+            <h1 className="text-6xl md:text-[8rem] font-black text-white mb-6 tracking-tighter drop-shadow-2xl">
+              <span className="bg-clip-text text-transparent bg-gradient-to-b from-white via-yellow-100 to-yellow-500">
+                경품 추첨 대기 중
+              </span>
             </h1>
-            <p className="text-xl md:text-2xl text-yellow-200 font-medium">
-              잠시 후 경품 추첨이 있겠습니다
+            <p className="text-2xl md:text-5xl text-yellow-200 font-bold tracking-[0.2em] mb-4">
+              RAFFLE WAITING
+            </p>
+            <p className="text-xl md:text-2xl text-white/60 font-medium animate-pulse">
+              잠시 후 경품 추첨이 시작됩니다
             </p>
           </div>
-          
-          {/* 배경 효과 */}
-          <div className="absolute inset-0 overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-to-br from-purple-500/20 via-blue-500/20 to-indigo-500/20 animate-pulse"></div>
-            <div className="absolute top-0 left-0 w-full h-full">
-              {[...Array(30)].map((_, i) => (
-                <div
-                  key={i}
-                  className="absolute w-2 h-2 bg-yellow-400 rounded-full animate-ping"
-                  style={{
-                    left: `${Math.random() * 100}%`,
-                    top: `${Math.random() * 100}%`,
-                    animationDelay: `${Math.random() * 3}s`,
-                    animationDuration: `${2 + Math.random() * 2}s`
-                  }}
-                />
-              ))}
-            </div>
+
+          {/* 배경 장식 요소 */}
+          <div className="flex justify-center gap-8">
+            <Sparkles className="w-12 h-12 text-yellow-300 animate-spin-slow" />
+            <Crown className="w-12 h-12 text-yellow-300 animate-bounce" />
+            <Star className="w-12 h-12 text-yellow-300 animate-pulse" />
+          </div>
         </div>
+
+        {/* 배경 효과 */}
+        <div className="absolute inset-0 overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-br from-purple-500/20 via-blue-500/20 to-indigo-500/20 animate-pulse"></div>
+          <div className="absolute top-0 left-0 w-full h-full">
+            {[...Array(50)].map((_, i) => (
+              <div
+                key={i}
+                className="absolute w-2 h-2 bg-yellow-400 rounded-full animate-ping"
+                style={{
+                  left: `${Math.random() * 100}%`,
+                  top: `${Math.random() * 100}%`,
+                  animationDelay: `${Math.random() * 3}s`,
+                  animationDuration: `${2 + Math.random() * 2}s`
+                }}
+              />
+            ))}
+          </div>
         </div>
+
+        <style jsx>{`
+          @keyframes spin-slow {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+          }
+          .animate-spin-slow {
+            animation: spin-slow 8s linear infinite;
+          }
+        `}</style>
       </div>
     );
   }
@@ -91,7 +113,7 @@ export default function GiftEventDisplay() {
   // 당첨자 발표 시 DB에 기록하는 함수
   const handleWinnerAnnounce = async () => {
     if (!currentWinner || !db) return;
-    
+
     const winnersRef = ref(db, "giftEvent/winners");
     let winnersList: any[] = [];
     try {
@@ -103,7 +125,7 @@ export default function GiftEventDisplay() {
     }
     const alreadyExists = winnersList.some((w: any) => w.id === currentWinner.id);
     const updatedWinners = alreadyExists ? winnersList : [...winnersList, currentWinner];
-    
+
     const remainingRef = ref(db, "giftEvent/remaining");
     let remainingList: string[] = [];
     try {
@@ -114,9 +136,9 @@ export default function GiftEventDisplay() {
       remainingList = [];
     }
     const updatedRemaining = remainingList.filter(id => id !== currentWinner.id);
-    
+
     if (!db) return;
-    await import("firebase/database").then(m => m.update(ref(db, 'giftEvent'), {
+    await import("firebase/database").then(m => m.update(ref(db as any, 'giftEvent'), {
       status: updatedRemaining.length === 0 ? 'finished' : 'winner',
       remaining: updatedRemaining,
       winners: updatedWinners,
@@ -140,17 +162,20 @@ export default function GiftEventDisplay() {
       <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 flex items-center justify-center">
         <div className="text-center">
           <div className="mb-8">
-            <Trophy className="w-24 h-24 md:w-32 md:h-32 text-yellow-400 mx-auto mb-6" />
-            <h1 className="text-4xl md:text-6xl font-bold text-white mb-4">
-              경품 추첨 진행 중
+            <Trophy className="w-32 h-32 md:w-48 md:h-48 text-yellow-400 mx-auto mb-10 animate-pulse drop-shadow-2xl" />
+            <h1 className="text-5xl md:text-8xl font-black text-white mb-6 drop-shadow-lg uppercase tracking-tighter">
+              경품 추첨 대기 중
             </h1>
-            <p className="text-xl md:text-2xl text-yellow-200 font-medium">
-              잠시만 기다려주세요
+            <p className="text-2xl md:text-4xl text-yellow-200 font-bold tracking-[0.3em] mb-4 animate-pulse">
+              RAFFLE WAITING
+            </p>
+            <p className="text-xl md:text-2xl text-white/60 font-medium">
+              DETERMINING THE WINNER...
             </p>
           </div>
-          
+
           {/* 당첨자 명단 (오른쪽 아래) */}
-        {showWinners && (
+          {showWinners && (
             <div className="fixed bottom-4 right-4 z-50 hidden md:block">
               <div className="bg-white/90 backdrop-blur-sm rounded-2xl p-4 md:p-6 shadow-2xl border border-white/30 max-w-2xl">
                 <div className="flex items-center gap-2 mb-3">
@@ -161,26 +186,26 @@ export default function GiftEventDisplay() {
                   {winners.length === 0 ? (
                     <p className="text-gray-500 text-sm">아직 없음</p>
                   ) : (
-                                      <div className="space-y-2">
-                    {winners.slice(-8).map((w: any, index: number) => (
-                      <div key={`${w.id}_${index}`} className="flex items-center gap-2 p-2 bg-gradient-to-r from-yellow-50 to-orange-50 rounded-lg">
-                        <div className="w-6 h-6 bg-yellow-500 text-white rounded-full flex items-center justify-center text-xs font-bold">
-                          {winners.length - 8 + index + 1}
+                    <div className="space-y-2">
+                      {winners.slice(-8).map((w: any, index: number) => (
+                        <div key={`${w.id}_${index}`} className="flex items-center gap-2 p-2 bg-gradient-to-r from-yellow-50 to-orange-50 rounded-lg">
+                          <div className="w-6 h-6 bg-yellow-500 text-white rounded-full flex items-center justify-center text-xs font-bold">
+                            {winners.length - 8 + index + 1}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="font-semibold text-gray-800 text-sm truncate">{w.name}</div>
+                            <div className="text-xs text-gray-500 truncate">{w.club}</div>
+                          </div>
+                          <Star className="w-4 h-4 text-yellow-500" />
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="font-semibold text-gray-800 text-sm truncate">{w.name}</div>
-                          <div className="text-xs text-gray-500 truncate">{w.club}</div>
-                        </div>
-                        <Star className="w-4 h-4 text-yellow-500" />
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
                   )}
                 </div>
               </div>
             </div>
           )}
-          
+
           {/* 배경 효과 */}
           <div className="absolute inset-0 overflow-hidden">
             <div className="absolute inset-0 bg-gradient-to-br from-purple-500/20 via-blue-500/20 to-indigo-500/20 animate-pulse"></div>
@@ -209,17 +234,20 @@ export default function GiftEventDisplay() {
     <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 flex items-center justify-center">
       <div className="text-center">
         <div className="mb-8">
-          <Trophy className="w-24 h-24 md:w-32 md:h-32 text-yellow-400 mx-auto mb-6" />
-          <h1 className="text-4xl md:text-6xl font-bold text-white mb-4">
-            경품 추첨
+          <Trophy className="w-32 h-32 md:w-48 md:h-48 text-yellow-400 mx-auto mb-10 drop-shadow-2xl animate-bounce" />
+          <h1 className="text-5xl md:text-8xl font-black text-white mb-6 tracking-tighter drop-shadow-lg">
+            경품 추첨 대기 중
           </h1>
-          <p className="text-xl md:text-2xl text-yellow-200 font-medium">
-            준비 중입니다
+          <p className="text-2xl md:text-4xl text-yellow-200 font-bold tracking-[0.2em] mb-4">
+            RAFFLE WAITING
+          </p>
+          <p className="text-xl md:text-2xl text-white/60 font-medium animate-pulse">
+            READY TO START
           </p>
         </div>
-        
+
         {/* 당첨자 명단 (오른쪽 아래) */}
-      {showWinners && (
+        {showWinners && (
           <div className="fixed bottom-4 right-4 z-50">
             <div className="bg-black/80 backdrop-blur-sm rounded-lg border border-yellow-500/50 p-3 max-w-64">
               <div className="flex items-center gap-2 mb-2">
@@ -249,7 +277,7 @@ export default function GiftEventDisplay() {
             </div>
           </div>
         )}
-        
+
         {/* 배경 효과 */}
         <div className="absolute inset-0 overflow-hidden">
           <div className="absolute inset-0 bg-gradient-to-br from-purple-500/20 via-blue-500/20 to-indigo-500/20 animate-pulse"></div>
