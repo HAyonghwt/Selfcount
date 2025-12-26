@@ -14,8 +14,8 @@ import {
 } from "@/components/ui/select"
 import { useToast } from "@/hooks/use-toast";
 import { db } from "@/lib/firebase";
-import { ref, onValue } from "firebase/database";
-import { Download, Settings } from "lucide-react";
+import { ref, onValue, get, set, remove } from "firebase/database";
+import { Download, Settings, Upload, Trash2, X } from "lucide-react";
 import jsPDF from "jspdf";
 
 // 그룹명 영어 번역 매핑
@@ -94,6 +94,10 @@ export default function BadgePage() {
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
   const badgeContainerRef = useRef<HTMLDivElement>(null);
 
+  // 로고 관리 상태
+  const [uploadedLogos, setUploadedLogos] = useState<Array<{ name: string; url: string; thumbnail?: string }>>([]);
+  const [isUploading, setIsUploading] = useState(false);
+
   // Firebase 데이터 로드
   useEffect(() => {
     if (!db) return;
@@ -117,6 +121,155 @@ export default function BadgePage() {
       unsubPlayers();
     };
   }, []);
+
+  // 로고 목록 불러오기
+  useEffect(() => {
+    const loadLogos = async () => {
+      if (!db) return;
+      
+      try {
+        const logosRef = ref(db, 'logos');
+        const snapshot = await get(logosRef);
+        
+        if (snapshot.exists()) {
+          const logosData = snapshot.val();
+          const logos = Object.entries(logosData).map(([name, data]: [string, any]) => ({
+            name,
+            url: data.url || data.base64,
+            thumbnail: data.url || data.base64 // 썸네일도 같은 URL 사용
+          }));
+          setUploadedLogos(logos);
+        }
+      } catch (error) {
+        console.error('로고 목록 불러오기 실패:', error);
+      }
+    };
+
+    loadLogos();
+  }, []);
+
+  // 로고 업로드 함수
+  const handleLogoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // 이미지 파일만 허용
+    if (!file.type.startsWith('image/')) {
+      toast({
+        title: "오류",
+        description: "이미지 파일만 업로드할 수 있습니다.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // 파일 크기 제한 (2MB - base64는 원본보다 약 33% 크므로)
+    if (file.size > 2 * 1024 * 1024) {
+      toast({
+        title: "오류",
+        description: "파일 크기는 2MB 이하여야 합니다.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsUploading(true);
+    try {
+      if (!db) {
+        throw new Error('Firebase Database가 초기화되지 않았습니다.');
+      }
+
+      // 파일을 base64로 변환
+      const reader = new FileReader();
+      const base64 = await new Promise<string>((resolve, reject) => {
+        reader.onload = () => {
+          const result = reader.result as string;
+          resolve(result);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      const timestamp = Date.now();
+      // Firebase Realtime Database 경로에는 . # $ [ ] 문자가 허용되지 않음
+      // 파일명에서 확장자를 제거하고 안전한 키 생성
+      const fileExtension = file.name.split('.').pop() || 'png';
+      const baseFileName = file.name
+        .replace(/\.[^/.]+$/, '') // 확장자 제거
+        .replace(/[^a-zA-Z0-9_-]/g, '_') // 특수문자 제거 (. # $ [ ] 포함)
+        .replace(/_{2,}/g, '_')
+        .replace(/^_+|_+$/g, '') || 'logo';
+      
+      // 경로 키는 확장자 없이 생성 (특수문자 제거)
+      const logoKey = `logo_${timestamp}_${baseFileName}`;
+      
+      // Firebase Realtime Database에 저장
+      const logoRef = ref(db, `logos/${logoKey}`);
+      await set(logoRef, {
+        url: base64,
+        fileName: `${baseFileName}.${fileExtension}`, // 원본 파일명 (확장자 포함)
+        uploadedAt: timestamp,
+        fileSize: file.size,
+        fileType: file.type
+      });
+      
+      console.log('로고 업로드 완료:', logoKey);
+      
+      setUploadedLogos(prev => [...prev, { name: logoKey, url: base64, thumbnail: base64 }]);
+      
+      toast({
+        title: "성공",
+        description: "로고가 업로드되었습니다.",
+      });
+    } catch (error: any) {
+      console.error('로고 업로드 실패:', error);
+      
+      let errorMessage = "로고 업로드에 실패했습니다.";
+      if (error?.message) {
+        errorMessage = error.message;
+      }
+      
+      toast({
+        title: "오류",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    } finally {
+      setIsUploading(false);
+      // 파일 입력 초기화
+      if (event.target) {
+        event.target.value = '';
+      }
+    }
+  };
+
+  // 로고 삭제 함수
+  const handleLogoDelete = async (logoName: string) => {
+    if (!confirm('이 로고를 삭제하시겠습니까?')) return;
+
+    try {
+      if (!db) {
+        throw new Error('Firebase Database가 초기화되지 않았습니다.');
+      }
+
+      const logoRef = ref(db, `logos/${logoName}`);
+      await remove(logoRef);
+      
+      setUploadedLogos(prev => prev.filter(logo => logo.name !== logoName));
+      
+      toast({
+        title: "성공",
+        description: "로고가 삭제되었습니다.",
+      });
+    } catch (error: any) {
+      console.error('로고 삭제 실패:', error);
+      toast({
+        title: "오류",
+        description: error.message || "로고 삭제에 실패했습니다.",
+        variant: "destructive",
+      });
+    }
+  };
 
   // 배경 이미지 변경 시 이름 색상 자동 설정
   useEffect(() => {
@@ -614,6 +767,80 @@ export default function BadgePage() {
                   }}
                 />
               </div>
+            </CardContent>
+          </Card>
+
+          {/* 로고 관리 */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">로고 관리</CardTitle>
+              <CardDescription>
+                배경 로고를 업로드하고 관리하세요. 업로드한 로고는 명찰, 수기 채점표, 점수표, 조 편성표의 배경에 사용됩니다.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* 로고 업로드 */}
+              <div className="space-y-2">
+                <Label>로고 업로드</Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleLogoUpload}
+                    disabled={isUploading}
+                    className="flex-1"
+                  />
+                  {isUploading && (
+                    <span className="text-sm text-muted-foreground">업로드 중...</span>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  이미지 파일만 업로드 가능합니다. (최대 2MB)
+                </p>
+              </div>
+
+              {/* 업로드된 로고 목록 */}
+              {uploadedLogos.length > 0 && (
+                <div className="space-y-2">
+                  <Label>업로드된 로고</Label>
+                  <div className="grid grid-cols-3 gap-4">
+                    {uploadedLogos.map((logo) => (
+                      <div
+                        key={logo.name}
+                        className="relative border rounded-lg p-2 hover:bg-gray-50 transition-colors"
+                      >
+                        <div className="aspect-square relative mb-2">
+                          <img
+                            src={logo.thumbnail || logo.url}
+                            alt={logo.name}
+                            className="w-full h-full object-contain rounded"
+                          />
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-muted-foreground truncate flex-1">
+                            {logo.name.replace(/^logo_\d+_/, '')}
+                          </span>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleLogoDelete(logo.name)}
+                            className="h-6 w-6 p-0"
+                          >
+                            <Trash2 className="h-4 w-4 text-red-500" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {uploadedLogos.length === 0 && (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Upload className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">업로드된 로고가 없습니다.</p>
+                </div>
+              )}
             </CardContent>
           </Card>
 
