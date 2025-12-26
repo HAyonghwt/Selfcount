@@ -96,7 +96,7 @@ export default function GiftEventDraw({ winner, onAnimationEnd }: GiftEventDrawP
       const elapsed = currentTime - startTime;
 
       // 6초 강제 종료 보장 (사용자 요청: 5초 -> 6초)
-      if (elapsed >= 6000) {
+      if (elapsed >= 5000) {
         setRolling(false);
         setFinal(true);
         setShowWinnerList(true);
@@ -109,7 +109,7 @@ export default function GiftEventDraw({ winner, onAnimationEnd }: GiftEventDrawP
 
       // 시간 기반 위치 계산 (절대 시간 준수)
       // 6초 기준 속도 곡선 재조정
-      const progress = elapsed / 6000;
+      const progress = elapsed / 5000;
 
       // 속도 곡선 로직: 시간이 지날수록 딜레이 증가
       let currentDelay = 0;

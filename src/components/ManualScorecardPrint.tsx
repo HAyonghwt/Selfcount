@@ -322,6 +322,12 @@ export default function ManualScorecardPrint({
                                 // 빈 슬롯인 경우 placeholder 표시
                                 if (!course) {
                                     const coursePlayers = getPlayersByJo(jo)
+                                    
+                                    // 조명 생성: 조 이름만 표시 (예: A-1-3)
+                                    // 모든 빈 슬롯에 조명 표시 (Good luck이 있던 자리)
+                                    // 조 이름만 표시
+                                    const joNameText = jo
+                                    
                                     return (
                                         <div
                                             key={`placeholder-${slotIndex}`}
@@ -337,24 +343,30 @@ export default function ManualScorecardPrint({
                                                 position: 'relative'
                                             }}
                                         >
-                                            {/* "Good luck" 문양 */}
-                                            <div style={{
-                                                position: 'absolute',
-                                                top: '50%',
-                                                left: '50%',
-                                                transform: 'translate(-50%, -50%)',
-                                                fontSize: '54px',
-                                                fontWeight: 'bold',
-                                                color: '#f2f3f6',
-                                                zIndex: 1,
-                                                pointerEvents: 'none',
-                                                userSelect: 'none',
-                                                textAlign: 'center',
-                                                lineHeight: '1.2'
-                                            }}>
-                                                <div>Good</div>
-                                                <div>luck</div>
-                                            </div>
+                                            {/* 조명 표시 (모든 빈 슬롯에 - Good luck이 있던 자리) */}
+                                            {coursePlayers.length > 0 && (
+                                                <div style={{
+                                                    position: 'absolute',
+                                                    top: '50%',
+                                                    left: '50%',
+                                                    transform: 'translate(-50%, -50%)',
+                                                    zIndex: 10,
+                                                    pointerEvents: 'none',
+                                                    userSelect: 'none',
+                                                    textAlign: 'center',
+                                                    lineHeight: '1.3'
+                                                }}>
+                                                    <div style={{
+                                                        fontSize: '40px',
+                                                        fontWeight: 'bold',
+                                                        color: '#a8a7a7',
+                                                        whiteSpace: 'nowrap',
+                                                        textShadow: '0 1px 2px rgba(0,0,0,0.1)'
+                                                    }}>
+                                                        {joNameText}
+                                                    </div>
+                                                </div>
+                                            )}
 
                                             {/* 코스 헤더 */}
                                             <div
