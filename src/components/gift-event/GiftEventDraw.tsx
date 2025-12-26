@@ -53,9 +53,32 @@ export default function GiftEventDraw({ winner, onAnimationEnd }: GiftEventDrawP
     setWindowSize({ width: window.innerWidth, height: window.innerHeight });
   }, []);
 
+  // 최신 값 참조를 위한 refs (의존성 제거용)
+  const onAnimationEndRef = React.useRef(onAnimationEnd);
+  const participantsRef = React.useRef(participants);
+  // 애니메이션 시작 여부 추적 (재시작 방지)
+  const animationStartedRef = React.useRef(false);
+
+  useEffect(() => {
+    onAnimationEndRef.current = onAnimationEnd;
+  }, [onAnimationEnd]);
+
+  useEffect(() => {
+    participantsRef.current = participants;
+  }, [participants]);
+
+  // 새로운 당첨자가 설정되면 시작 플래그 리셋 (컴포넌트가 재사용될 경우 대비)
+  useEffect(() => {
+    animationStartedRef.current = false;
+  }, [winner?.id]);
+
   // 물레방아 애니메이션 시작
   useEffect(() => {
-    if (!winner || participants.length === 0) return;
+    // 데이터가 준비되지 않았거나 이미 시작했다면 중단
+    if (!winner || participantsRef.current.length === 0 || animationStartedRef.current) return;
+
+    // 시작 플래그 설정 (이후 리렌더링에서 재진입 차단)
+    animationStartedRef.current = true;
 
     setRolling(true);
     setFinal(false);
@@ -63,65 +86,69 @@ export default function GiftEventDraw({ winner, onAnimationEnd }: GiftEventDrawP
     setCurrentIndex(0);
 
     const startTime = performance.now();
-    let animationId: number;
+    // 애니메이션 중복 실행 방지 및 ID 관리를 위한 refs
+    const animationFrameRef = { current: null as number | null };
+    const timeoutRef = { current: null as (NodeJS.Timeout | number | null) };
+    const isAnimatingRef = { current: true };
 
     const animate = (currentTime: number) => {
+      if (!isAnimatingRef.current) return;
       const elapsed = currentTime - startTime;
 
-      // 전체 애니메이션 시간 유지하되 멈춤 직전까지 역동성 극대화
-      // 1단계: 초고속 회전 (0.8초)
-      if (elapsed <= 800) {
-        setCurrentIndex(prev => (prev + 1) % participants.length);
-        animationId = requestAnimationFrame(animate);
-      }
-      // 2단계: 고속 회전 (0.8-2초) - 서서히 인지 가능한 수준으로
-      else if (elapsed <= 2000) {
-        const progress = (elapsed - 800) / 1200;
-        const delay = 30 + progress * 120; // 30ms -> 150ms
-        setTimeout(() => {
-          setCurrentIndex(prev => (prev + 1) % participants.length);
-          animationId = requestAnimationFrame(animate);
-        }, delay);
-      }
-      // 3단계: 가시적 회전 (2-3.5초) - 긴장감 조성
-      else if (elapsed <= 3500) {
-        const progress = (elapsed - 2000) / 1500;
-        const delay = 150 + progress * 250; // 150ms -> 400ms
-        setTimeout(() => {
-          setCurrentIndex(prev => (prev + 1) % participants.length);
-          animationId = requestAnimationFrame(animate);
-        }, delay);
-      }
-      // 4단계: 최종 감속 (3.5-5초) - "탁, 탁, 탁" 리듬감 있게 멈춤 (최대 대기시간 1초 미만으로 제한)
-      else if (elapsed <= 5000) {
-        const progress = (elapsed - 3500) / 1500;
-        const delay = 400 + progress * 400; // 400ms -> 800ms
-        setTimeout(() => {
-          setCurrentIndex(prev => (prev + 1) % participants.length);
-          animationId = requestAnimationFrame(animate);
-        }, delay);
-      }
-      // 5단계: 최종 멈춤
-      else {
+      // 6초 강제 종료 보장 (사용자 요청: 5초 -> 6초)
+      if (elapsed >= 6000) {
         setRolling(false);
         setFinal(true);
         setShowWinnerList(true);
-        setTimeout(() => {
-          onAnimationEnd();
-        }, 1000); // 1초 후 결과 처리
+        timeoutRef.current = setTimeout(() => {
+          if (onAnimationEndRef.current) onAnimationEndRef.current();
+        }, 1000);
+        isAnimatingRef.current = false;
         return;
       }
+
+      // 시간 기반 위치 계산 (절대 시간 준수)
+      // 6초 기준 속도 곡선 재조정
+      const progress = elapsed / 6000;
+
+      // 속도 곡선 로직: 시간이 지날수록 딜레이 증가
+      let currentDelay = 0;
+      if (elapsed < 1000) currentDelay = 30; // 1초까지 초고속
+      else if (elapsed < 2500) currentDelay = 30 + (elapsed - 1000) / 1500 * 100; // ~2.5초
+      else if (elapsed < 4500) currentDelay = 130 + (elapsed - 2500) / 2000 * 200; // ~4.5초
+      else currentDelay = 330 + (elapsed - 4500) / 1500 * 500; // ~6초
+
+      // 마지막 업데이트 시점 기록이 없으면 초기화
+      if (timeoutRef.current === null || typeof timeoutRef.current !== 'number') {
+        timeoutRef.current = startTime;
+      }
+
+      const lastUpdate = timeoutRef.current as number;
+      const currentParticipants = participantsRef.current;
+      if (currentTime - lastUpdate >= currentDelay && currentParticipants.length > 0) {
+        setCurrentIndex(prev => (prev + 1) % currentParticipants.length);
+        timeoutRef.current = currentTime;
+      }
+
+      animationFrameRef.current = requestAnimationFrame(animate);
     };
 
     // 애니메이션 시작
-    animationId = requestAnimationFrame(animate);
+    animationFrameRef.current = requestAnimationFrame(animate);
 
     return () => {
-      if (animationId) {
-        cancelAnimationFrame(animationId);
+      isAnimatingRef.current = false;
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+      if (timeoutRef.current && typeof timeoutRef.current !== 'number') {
+        clearTimeout(timeoutRef.current as NodeJS.Timeout);
       }
     };
-  }, [winner, participants, onAnimationEnd]);
+    // 의존성에 participants.length 추가: 데이터가 로드되면 실행 시도
+    // 단, 내부의 animationStartedRef 체크로 인해 중복 실행은 방지됨
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [winner?.id, participants.length]);
 
   // 한글 여부 확인
   const isSimpleKorean = (name: string) => {

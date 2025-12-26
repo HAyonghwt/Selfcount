@@ -2,9 +2,15 @@
 import React, { useEffect, useState } from "react";
 import Confetti from "react-confetti";
 import { db } from "@/lib/firebase";
-import { ref, onValue } from "firebase/database";
+import { ref, onValue, get, update } from "firebase/database";
 import GiftEventDraw from './GiftEventDraw';
 import { Trophy, Sparkles, Crown, Star } from "lucide-react";
+
+interface Participant {
+  id: string;
+  name: string;
+  club: string;
+}
 
 export default function GiftEventDisplay() {
   const [status, setStatus] = useState("waiting");
@@ -41,14 +47,42 @@ export default function GiftEventDisplay() {
     }
   }, [currentWinner, status]);
 
-  useEffect(() => {
-    if ((status === "drawing" || status === "winner") && currentWinner) {
-      const timer = setTimeout(() => {
-        handleWinnerAnnounce();
-      }, 2000);
-      return () => clearTimeout(timer);
+  // 이펙트 제거: 부모 컴포넌트에서 별도로 타이머를 돌리면 자식 컴포넌트의 애니메이션(6초)과 충돌함.
+  // 당첨자 발표는 오직 GiftEventDraw 컴포넌트의 onAnimationEnd 콜백에 의해서만 실행되어야 함.
+
+  // 당첨자 발표 시 DB에 기록하는 함수 (Hook 규칙 준수를 위해 상단 이동)
+  const handleWinnerAnnounce = React.useCallback(async () => {
+    if (!currentWinner || !db) return;
+
+    try {
+      const winnersRef = ref(db, "giftEvent/winners");
+      const winnersSnap = await get(winnersRef);
+      const winnersList: Participant[] = winnersSnap.exists() && Array.isArray(winnersSnap.val())
+        ? winnersSnap.val()
+        : [];
+
+      const alreadyExists = winnersList.some(w => w.id === currentWinner.id);
+      const updatedWinners = alreadyExists ? winnersList : [...winnersList, currentWinner];
+
+      const remainingRef = ref(db, "giftEvent/remaining");
+      const remainingSnap = await get(remainingRef);
+      const remainingList: string[] = remainingSnap.exists() && Array.isArray(remainingSnap.val())
+        ? remainingSnap.val()
+        : [];
+
+      const updatedRemaining = remainingList.filter(id => id !== currentWinner.id);
+
+      await update(ref(db, 'giftEvent'), {
+        status: updatedRemaining.length === 0 ? 'finished' : 'winner',
+        remaining: updatedRemaining,
+        winners: updatedWinners,
+        currentWinner: null,
+      });
+      setShowWinners(true);
+    } catch (error) {
+      console.error("Error updating winner:", error);
     }
-  }, [status, currentWinner]);
+  }, [currentWinner]);
 
   // 대기 화면 - 더 크고 웅장하게
   if (status === "waiting") {
@@ -110,42 +144,7 @@ export default function GiftEventDisplay() {
     );
   }
 
-  // 당첨자 발표 시 DB에 기록하는 함수
-  const handleWinnerAnnounce = async () => {
-    if (!currentWinner || !db) return;
 
-    const winnersRef = ref(db, "giftEvent/winners");
-    let winnersList: any[] = [];
-    try {
-      const snap = await import("firebase/database").then(m => m.get(winnersRef));
-      winnersList = snap.exists() ? snap.val() : [];
-      if (!Array.isArray(winnersList)) winnersList = [];
-    } catch {
-      winnersList = [];
-    }
-    const alreadyExists = winnersList.some((w: any) => w.id === currentWinner.id);
-    const updatedWinners = alreadyExists ? winnersList : [...winnersList, currentWinner];
-
-    const remainingRef = ref(db, "giftEvent/remaining");
-    let remainingList: string[] = [];
-    try {
-      const snap = await import("firebase/database").then(m => m.get(remainingRef));
-      remainingList = snap.exists() ? snap.val() : [];
-      if (!Array.isArray(remainingList)) remainingList = [];
-    } catch {
-      remainingList = [];
-    }
-    const updatedRemaining = remainingList.filter(id => id !== currentWinner.id);
-
-    if (!db) return;
-    await import("firebase/database").then(m => m.update(ref(db as any, 'giftEvent'), {
-      status: updatedRemaining.length === 0 ? 'finished' : 'winner',
-      remaining: updatedRemaining,
-      winners: updatedWinners,
-      currentWinner: null,
-    }));
-    setShowWinners(true);
-  };
 
   // 추첨 애니메이션/축하 메시지 화면
   if (currentWinner || (status === "winner" && lastWinner)) {
