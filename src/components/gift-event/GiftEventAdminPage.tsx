@@ -205,7 +205,7 @@ export default function GiftEventAdminPage() {
         </div>
 
         {/* 추첨 화면 영역 */}
-        <div className="w-full h-60 md:h-80 bg-gray-100 rounded-lg border-2 border-dashed border-gray-300 flex items-center justify-center mb-4 md:mb-6">
+        <div className="w-full h-72 md:h-96 bg-gray-100 rounded-lg border-2 border-dashed border-gray-300 flex items-center justify-center mb-4 md:mb-6">
           {currentWinner ? (
             <div className="w-full h-full">
               <GiftEventDrawSmall
@@ -241,18 +241,18 @@ export default function GiftEventAdminPage() {
           <div className="lg:col-span-1 space-y-4 md:space-y-6">
             {/* 행사 제어 카드 */}
             <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-lg">
-              <CardHeader className="pb-2 md:pb-4">
+              <CardHeader className="pb-3 md:pb-4">
                 <CardTitle className="text-base md:text-xl font-semibold text-gray-800 flex items-center gap-2">
                   <Gift className="w-4 h-4 md:w-5 md:h-5 text-blue-600" />
                   행사 제어
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3 md:space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 md:gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <Button
                     onClick={handleStartEvent}
                     disabled={status !== 'waiting'}
-                    className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-medium h-10 md:h-12 text-sm md:text-base"
+                    className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-medium h-11 md:h-12 text-sm md:text-base touch-manipulation"
                   >
                     추첨 준비
                   </Button>
@@ -260,7 +260,7 @@ export default function GiftEventAdminPage() {
                   <Button
                     onClick={handleDrawNext}
                     disabled={remaining.length === 0 || !(status === 'winner' || status === 'drawing' || status === 'waiting')}
-                    className="bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-medium h-10 md:h-12 text-sm md:text-base"
+                    className="bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-medium h-11 md:h-12 text-sm md:text-base touch-manipulation"
                   >
                     추첨 시작
                   </Button>
@@ -282,7 +282,7 @@ export default function GiftEventAdminPage() {
                 <Button
                   onClick={() => setShowResetConfirm(true)}
                   variant="destructive"
-                  className="w-full bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white font-medium h-10 md:h-12 text-sm md:text-base"
+                  className="w-full bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white font-medium h-11 md:h-12 text-sm md:text-base touch-manipulation"
                 >
                   <RefreshCw className="mr-0.5 h-4 w-4" />
                   초기화
@@ -310,11 +310,11 @@ export default function GiftEventAdminPage() {
                     </div>
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-4">
+                <CardContent className="space-y-3">
                   {logoSettings.enabled && (
                     <>
-                      <div className="space-y-1">
-                        <div className="flex justify-between text-xs text-gray-500">
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center text-xs md:text-sm text-gray-500">
                           <span>크기 ({Math.round(logoSettings.size * 100)}%)</span>
                           <input
                             type="range"
@@ -323,12 +323,12 @@ export default function GiftEventAdminPage() {
                             step="0.1"
                             value={logoSettings.size}
                             onChange={(e) => updateLogoSettings({ ...logoSettings, size: parseFloat(e.target.value) })}
-                            className="w-32"
+                            className="w-32 md:w-40 h-6 md:h-auto"
                           />
                         </div>
                       </div>
-                      <div className="space-y-1">
-                        <div className="flex justify-between text-xs text-gray-500">
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center text-xs md:text-sm text-gray-500">
                           <span>투명도 ({Math.round(logoSettings.opacity * 100)}%)</span>
                           <input
                             type="range"
@@ -337,36 +337,36 @@ export default function GiftEventAdminPage() {
                             step="0.1"
                             value={logoSettings.opacity}
                             onChange={(e) => updateLogoSettings({ ...logoSettings, opacity: parseFloat(e.target.value) })}
-                            className="w-32"
+                            className="w-32 md:w-40 h-6 md:h-auto"
                           />
                         </div>
                       </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div className="space-y-1">
-                          <span className="text-xs text-gray-500 block">가로 위치 ({logoSettings.offsetX})</span>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-2">
+                          <span className="text-xs md:text-sm text-gray-500 block">가로 위치 ({logoSettings.offsetX})</span>
                           <input
                             type="range"
                             min="-400"
                             max="400"
                             value={logoSettings.offsetX}
                             onChange={(e) => updateLogoSettings({ ...logoSettings, offsetX: parseInt(e.target.value) })}
-                            className="w-full"
+                            className="w-full h-6 md:h-auto"
                           />
                         </div>
-                        <div className="space-y-1">
-                          <span className="text-xs text-gray-500 block">세로 위치 ({logoSettings.offsetY})</span>
+                        <div className="space-y-2">
+                          <span className="text-xs md:text-sm text-gray-500 block">세로 위치 ({logoSettings.offsetY})</span>
                           <input
                             type="range"
                             min="-800"
                             max="800"
                             value={logoSettings.offsetY}
                             onChange={(e) => updateLogoSettings({ ...logoSettings, offsetY: parseInt(e.target.value) })}
-                            className="w-full"
+                            className="w-full h-6 md:h-auto"
                           />
                         </div>
                       </div>
-                      <div className="space-y-1">
-                        <div className="flex justify-between text-xs text-gray-500">
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center text-xs md:text-sm text-gray-500">
                           <span>색상 강도 ({logoSettings.saturation}%)</span>
                           <input
                             type="range"
@@ -375,12 +375,12 @@ export default function GiftEventAdminPage() {
                             step="10"
                             value={logoSettings.saturation ?? 200}
                             onChange={(e) => updateLogoSettings({ ...logoSettings, saturation: parseInt(e.target.value) })}
-                            className="w-32"
+                            className="w-32 md:w-40 h-6 md:h-auto"
                           />
                         </div>
                       </div>
-                      <div className="space-y-1">
-                        <div className="flex justify-between text-xs text-gray-500">
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center text-xs md:text-sm text-gray-500">
                           <span>진하기 ({logoSettings.intensity ?? 150}%)</span>
                           <input
                             type="range"
@@ -389,7 +389,7 @@ export default function GiftEventAdminPage() {
                             step="10"
                             value={logoSettings.intensity ?? 150}
                             onChange={(e) => updateLogoSettings({ ...logoSettings, intensity: parseInt(e.target.value) })}
-                            className="w-32"
+                            className="w-32 md:w-40 h-6 md:h-auto"
                           />
                         </div>
                       </div>
@@ -445,20 +445,20 @@ export default function GiftEventAdminPage() {
                       <p>아직 당첨자가 없습니다</p>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 md:gap-3">
                       {winners.map((w, index) => (
-                        <div key={`${w.id}_${index}`} className="flex items-center justify-between p-3 bg-gradient-to-r from-yellow-50 to-orange-50 rounded-lg border border-yellow-200">
-                          <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 bg-yellow-500 text-white rounded-full flex items-center justify-center text-sm font-bold">
+                        <div key={`${w.id}_${index}`} className="flex items-center justify-between p-2.5 md:p-3 bg-gradient-to-r from-yellow-50 to-orange-50 rounded-lg border border-yellow-200">
+                          <div className="flex items-center gap-2 md:gap-3">
+                            <div className="w-7 h-7 md:w-8 md:h-8 bg-yellow-500 text-white rounded-full flex items-center justify-center text-xs md:text-sm font-bold">
                               {index + 1}
                             </div>
                             <div>
-                              <div className="font-semibold text-gray-800">{w.name}</div>
-                              <div className="text-sm text-gray-500">{w.club}</div>
+                              <div className="font-semibold text-sm md:text-base text-gray-800">{w.name}</div>
+                              <div className="text-xs md:text-sm text-gray-500">{w.club}</div>
                             </div>
                           </div>
-                          <div className="text-yellow-600">
-                            <Trophy className="w-5 h-5" />
+                          <div className="text-yellow-600 flex-shrink-0">
+                            <Trophy className="w-4 h-4 md:w-5 md:h-5" />
                           </div>
                         </div>
                       ))}
@@ -484,20 +484,20 @@ export default function GiftEventAdminPage() {
                       <p>추첨 대상자가 없습니다</p>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 md:gap-3">
                       {remainingParticipants.map(p => (
-                        <div key={p.id} className="flex items-center justify-between p-3 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
-                          <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 bg-blue-500 text-white rounded-full flex items-center justify-center text-sm font-bold">
+                        <div key={p.id} className="flex items-center justify-between p-2.5 md:p-3 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
+                          <div className="flex items-center gap-2 md:gap-3">
+                            <div className="w-7 h-7 md:w-8 md:h-8 bg-blue-500 text-white rounded-full flex items-center justify-center text-xs md:text-sm font-bold">
                               ?
                             </div>
                             <div>
-                              <div className="font-semibold text-gray-800">{p.name}</div>
-                              <div className="text-sm text-gray-500">{p.club}</div>
+                              <div className="font-semibold text-sm md:text-base text-gray-800">{p.name}</div>
+                              <div className="text-xs md:text-sm text-gray-500">{p.club}</div>
                             </div>
                           </div>
-                          <div className="text-blue-600">
-                            <Sparkles className="w-5 h-5" />
+                          <div className="text-blue-600 flex-shrink-0">
+                            <Sparkles className="w-4 h-4 md:w-5 md:h-5" />
                           </div>
                         </div>
                       ))}
