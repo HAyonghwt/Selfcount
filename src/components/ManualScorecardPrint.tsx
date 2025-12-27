@@ -1,8 +1,10 @@
 "use client"
 
-import { useMemo, useEffect } from "react"
+import { useMemo, useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { X } from "lucide-react"
+import { db } from "@/lib/firebase"
+import { ref, get } from "firebase/database"
 
 interface ManualScorecardPrintProps {
     tournament: any
@@ -41,6 +43,55 @@ export default function ManualScorecardPrint({
     players,
     onClose
 }: ManualScorecardPrintProps) {
+    const [backgroundLogoUrl, setBackgroundLogoUrl] = useState<string>('')
+    const [logoImageLoaded, setLogoImageLoaded] = useState(false)
+
+    // 배경 로고 불러오기 (Firebase Realtime Database에서)
+    useEffect(() => {
+        const loadLogo = async () => {
+            if (!db) {
+                console.log('수기 채점표 - Database not initialized');
+                return;
+            }
+            
+            try {
+                const logosRef = ref(db, 'logos');
+                const snapshot = await get(logosRef);
+                if (snapshot.exists()) {
+                    const logosData = snapshot.val();
+                    console.log('수기 채점표 - 로고 데이터 키:', Object.keys(logosData));
+                    const firstLogo = Object.values(logosData)[0] as any;
+                    console.log('수기 채점표 - 첫 번째 로고:', firstLogo);
+                    // url 또는 base64 필드 확인
+                    const logoUrl = firstLogo?.url || firstLogo?.base64;
+                    if (logoUrl) {
+                        console.log('수기 채점표 - 로고 URL 발견, 이미지 로드 시작:', logoUrl.substring(0, 50) + '...');
+                        // 이미지가 완전히 로드되었는지 확인
+                        const img = new Image();
+                        img.onload = () => {
+                            console.log('수기 채점표 - 로고 이미지 로드 성공');
+                            setBackgroundLogoUrl(logoUrl);
+                            setLogoImageLoaded(true);
+                            console.log('수기 채점표 - backgroundLogoUrl 및 logoImageLoaded 설정 완료');
+                        };
+                        img.onerror = (error) => {
+                            console.error('수기 채점표 - 로고 이미지 로드 실패:', error);
+                        };
+                        img.src = logoUrl;
+                    } else {
+                        console.log('수기 채점표 - 로고 URL이 없습니다. firstLogo:', firstLogo);
+                    }
+                } else {
+                    console.log('수기 채점표 - 로고 데이터가 없습니다');
+                }
+            } catch (error) {
+                console.error('수기 채점표 - 로고 불러오기 실패:', error);
+            }
+        };
+
+        loadLogo();
+    }, []);
+
     // PDF 파일명을 그룹명으로 설정
     useEffect(() => {
         const originalTitle = document.title
@@ -231,6 +282,14 @@ export default function ManualScorecardPrint({
                         print-color-adjust: exact !important;
                         color-adjust: exact !important;
                     }
+                    /* 배경 이미지 인쇄 강제 */
+                    .logo-background {
+                        -webkit-print-color-adjust: exact !important;
+                        print-color-adjust: exact !important;
+                        color-adjust: exact !important;
+                        opacity: 0.10 !important;
+                        display: block !important;
+                    }
                     /* 사이드바 및 불필요한 레이아웃 인쇄 시 숨기기 */
                     [data-sidebar="trigger"], 
                     .sidebar-wrapper,
@@ -343,6 +402,30 @@ export default function ManualScorecardPrint({
                                                 position: 'relative'
                                             }}
                                         >
+                                            {/* 배경 로고 (조 이름 뒤에) */}
+                                            {backgroundLogoUrl && logoImageLoaded && (
+                                                <img
+                                                    src={backgroundLogoUrl}
+                                                    alt=""
+                                                    className="logo-background"
+                                                    style={{
+                                                        position: 'absolute',
+                                                        top: '50%',
+                                                        left: '50%',
+                                                        transform: 'translate(-50%, -50%)',
+                                                        width: '80%',
+                                                        height: 'auto',
+                                                        maxWidth: '80%',
+                                                        maxHeight: '80%',
+                                                        objectFit: 'contain',
+                                                        opacity: 0.10,
+                                                        zIndex: 1,
+                                                        pointerEvents: 'none',
+                                                        userSelect: 'none'
+                                                    }}
+                                                />
+                                            )}
+
                                             {/* 조명 표시 (모든 빈 슬롯에 - Good luck이 있던 자리) */}
                                             {coursePlayers.length > 0 && (
                                                 <div style={{
@@ -350,7 +433,7 @@ export default function ManualScorecardPrint({
                                                     top: '50%',
                                                     left: '50%',
                                                     transform: 'translate(-50%, -50%)',
-                                                    zIndex: 10,
+                                                    zIndex: 20,
                                                     pointerEvents: 'none',
                                                     userSelect: 'none',
                                                     textAlign: 'center',

@@ -90,6 +90,14 @@ export default function BadgePage() {
     playerName: '#0066CC', // 배경테마색 (기본 파란색)
   });
 
+  // 로고 설정
+  const [logoSettings, setLogoSettings] = useState({
+    size: 0.8, // 명찰 크기 대비 비율 (0.1 ~ 1.0)
+    offsetX: 0, // 가로 오프셋 (픽셀, -50 ~ 50)
+    offsetY: 0, // 세로 오프셋 (픽셀, -50 ~ 50)
+    opacity: 0.10, // 투명도 (0.0 ~ 1.0)
+  });
+
   // 미리보기용 캔버스 ref
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
   const badgeContainerRef = useRef<HTMLDivElement>(null);
@@ -312,7 +320,11 @@ export default function BadgePage() {
     tournamentName: string,
     width: number,
     height: number,
-    logoUrl?: string
+    logoUrl?: string,
+    logoSize?: number,
+    logoOffsetX?: number,
+    logoOffsetY?: number,
+    logoOpacity?: number
   ) => {
     const TARGET_DPI = 300;
     const BASE_DPI = 96;
@@ -353,16 +365,50 @@ export default function BadgePage() {
           logoImg.src = logoUrl;
         });
 
-        // 로고를 희미하게 그리기 (opacity 0.10)
+        // 로고를 희미하게 그리기 (설정된 opacity 사용)
         ctx.save();
-        ctx.globalAlpha = 0.10;
+        const opacity = logoOpacity !== undefined ? logoOpacity : 0.10;
+        ctx.globalAlpha = opacity;
         
-        // 로고 크기 계산 (명찰 크기의 80% 정도로 더 크게)
-        const logoSize = Math.min(pxWidth, pxHeight) * 0.8;
-        const logoX = (pxWidth - logoSize) / 2; // 가로 중앙
-        const logoY = (pxHeight - logoSize) / 2; // 세로 중앙 (정 가운데)
+        // 로고 원본 비율 계산
+        const logoAspectRatio = logoImg.width / logoImg.height;
+        const badgeAspectRatio = pxWidth / pxHeight;
         
-        ctx.drawImage(logoImg, logoX, logoY, logoSize, logoSize);
+        // 로고 크기 설정 (기본값 0.8, 파라미터로 받은 값 사용)
+        const sizeRatio = logoSize !== undefined ? logoSize : 0.8;
+        
+        // 명찰 크기의 설정된 비율을 기준으로 하되, 원본 비율 유지
+        let logoWidth: number;
+        let logoHeight: number;
+        
+        if (logoAspectRatio > badgeAspectRatio) {
+          // 로고가 명찰보다 가로로 더 긴 경우: 가로를 기준으로 크기 결정
+          logoWidth = pxWidth * sizeRatio;
+          logoHeight = logoWidth / logoAspectRatio;
+        } else {
+          // 로고가 명찰보다 세로로 더 긴 경우: 세로를 기준으로 크기 결정
+          logoHeight = pxHeight * sizeRatio;
+          logoWidth = logoHeight * logoAspectRatio;
+        }
+        
+        // 명찰 크기를 넘지 않도록 한 번 더 체크
+        if (logoWidth > pxWidth) {
+          logoWidth = pxWidth * sizeRatio;
+          logoHeight = logoWidth / logoAspectRatio;
+        }
+        if (logoHeight > pxHeight) {
+          logoHeight = pxHeight * sizeRatio;
+          logoWidth = logoHeight * logoAspectRatio;
+        }
+        
+        // 위치 오프셋 적용 (기본값 0, 파라미터로 받은 값 사용)
+        const offsetX = logoOffsetX !== undefined ? logoOffsetX : 0;
+        const offsetY = logoOffsetY !== undefined ? logoOffsetY : 0;
+        
+        const logoX = (pxWidth - logoWidth) / 2 + offsetX; // 가로 중앙 + 오프셋
+        const logoY = (pxHeight - logoHeight) / 2 + offsetY; // 세로 중앙 + 오프셋
+        
+        ctx.drawImage(logoImg, logoX, logoY, logoWidth, logoHeight);
         ctx.restore();
       } catch (error) {
         console.error('로고 로드 실패:', error);
@@ -522,7 +568,7 @@ export default function BadgePage() {
 
           // 첫 번째 로고 사용
           const logoUrl = uploadedLogos.length > 0 ? uploadedLogos[0].url : undefined;
-          await drawBadge(ctx, player, selectedGroup, tournament.name || '대회명', badgeWidth, badgeHeight, logoUrl);
+          await drawBadge(ctx, player, selectedGroup, tournament.name || '대회명', badgeWidth, badgeHeight, logoUrl, logoSettings.size, logoSettings.offsetX, logoSettings.offsetY, logoSettings.opacity);
 
           // Canvas를 이미지로 변환하여 PDF에 추가
           const imgData = canvas.toDataURL('image/png');
@@ -566,8 +612,8 @@ export default function BadgePage() {
     const firstPlayer = filteredPlayers[0];
     // 첫 번째 로고 사용
     const logoUrl = uploadedLogos.length > 0 ? uploadedLogos[0].url : undefined;
-    drawBadge(ctx, firstPlayer, selectedGroup, tournament.name || '대회명', badgeWidth, badgeHeight, logoUrl).catch(console.error);
-  }, [selectedBackground, badgeWidth, badgeHeight, selectedGroup, filteredPlayers, fontSizes, textColors, tournament.name, uploadedLogos]);
+    drawBadge(ctx, firstPlayer, selectedGroup, tournament.name || '대회명', badgeWidth, badgeHeight, logoUrl, logoSettings.size, logoSettings.offsetX, logoSettings.offsetY, logoSettings.opacity).catch(console.error);
+  }, [selectedBackground, badgeWidth, badgeHeight, selectedGroup, filteredPlayers, fontSizes, textColors, tournament.name, uploadedLogos, logoSettings]);
 
   return (
     <div className="space-y-6">
@@ -773,6 +819,120 @@ export default function BadgePage() {
                     placeholder="#0066CC"
                   />
                 </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* 로고 설정 */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">로고 설정</CardTitle>
+              <CardDescription>배경 로고의 크기, 위치, 진하기를 조정할 수 있습니다</CardDescription>
+            </CardHeader>
+            <CardContent className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>로고 크기 ({Math.round(logoSettings.size * 100)}%)</Label>
+                <Input
+                  type="range"
+                  min="0.1"
+                  max="1.0"
+                  step="0.05"
+                  value={logoSettings.size}
+                  onChange={(e) => setLogoSettings({ ...logoSettings, size: Number(e.target.value) })}
+                  className="w-full"
+                />
+                <Input
+                  type="number"
+                  min="0.1"
+                  max="1.0"
+                  step="0.05"
+                  value={logoSettings.size}
+                  onChange={(e) => {
+                    const val = Number(e.target.value);
+                    if (val >= 0.1 && val <= 1.0) {
+                      setLogoSettings({ ...logoSettings, size: val });
+                    }
+                  }}
+                  className="w-full"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>로고 진하기 ({Math.round(logoSettings.opacity * 100)}%)</Label>
+                <Input
+                  type="range"
+                  min="0.0"
+                  max="1.0"
+                  step="0.01"
+                  value={logoSettings.opacity}
+                  onChange={(e) => setLogoSettings({ ...logoSettings, opacity: Number(e.target.value) })}
+                  className="w-full"
+                />
+                <Input
+                  type="number"
+                  min="0.0"
+                  max="1.0"
+                  step="0.01"
+                  value={logoSettings.opacity}
+                  onChange={(e) => {
+                    const val = Number(e.target.value);
+                    if (val >= 0.0 && val <= 1.0) {
+                      setLogoSettings({ ...logoSettings, opacity: val });
+                    }
+                  }}
+                  className="w-full"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>가로 위치 (X: {logoSettings.offsetX}px)</Label>
+                <Input
+                  type="range"
+                  min="-50"
+                  max="50"
+                  step="1"
+                  value={logoSettings.offsetX}
+                  onChange={(e) => setLogoSettings({ ...logoSettings, offsetX: Number(e.target.value) })}
+                  className="w-full"
+                />
+                <Input
+                  type="number"
+                  min="-50"
+                  max="50"
+                  step="1"
+                  value={logoSettings.offsetX}
+                  onChange={(e) => {
+                    const val = Number(e.target.value);
+                    if (val >= -50 && val <= 50) {
+                      setLogoSettings({ ...logoSettings, offsetX: val });
+                    }
+                  }}
+                  className="w-full"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>세로 위치 (Y: {logoSettings.offsetY}px)</Label>
+                <Input
+                  type="range"
+                  min="-50"
+                  max="50"
+                  step="1"
+                  value={logoSettings.offsetY}
+                  onChange={(e) => setLogoSettings({ ...logoSettings, offsetY: Number(e.target.value) })}
+                  className="w-full"
+                />
+                <Input
+                  type="number"
+                  min="-50"
+                  max="50"
+                  step="1"
+                  value={logoSettings.offsetY}
+                  onChange={(e) => {
+                    const val = Number(e.target.value);
+                    if (val >= -50 && val <= 50) {
+                      setLogoSettings({ ...logoSettings, offsetY: val });
+                    }
+                  }}
+                  className="w-full"
+                />
               </div>
             </CardContent>
           </Card>
