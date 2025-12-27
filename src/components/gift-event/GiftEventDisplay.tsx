@@ -19,19 +19,25 @@ export default function GiftEventDisplay() {
   const [lastWinner, setLastWinner] = useState(null);
   const [showWinners, setShowWinners] = useState(false);
   const [showWinner, setShowWinner] = useState(false);
+  const [drawStartTime, setDrawStartTime] = useState<number | null>(null);
 
   useEffect(() => {
     if (!db) return;
     const statusRef = ref(db, "giftEvent/status");
     const winnersRef = ref(db, "giftEvent/winners");
     const currentWinnerRef = ref(db, "giftEvent/currentWinner");
+    const drawStartTimeRef = ref(db, "giftEvent/drawStartTime");
+
     const unsubStatus = onValue(statusRef, snap => setStatus(snap.val() || "waiting"));
     const unsubWinners = onValue(winnersRef, snap => setWinners(snap.val() || []));
     const unsubCurrentWinner = onValue(currentWinnerRef, snap => setCurrentWinner(snap.val() || null));
+    const unsubDrawStartTime = onValue(drawStartTimeRef, snap => setDrawStartTime(snap.val() || null));
+
     return () => {
       unsubStatus();
       unsubWinners();
       unsubCurrentWinner();
+      unsubDrawStartTime();
     };
   }, []);
 
@@ -150,7 +156,11 @@ export default function GiftEventDisplay() {
   if (currentWinner || (status === "winner" && lastWinner)) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900">
-        <GiftEventDraw winner={currentWinner || lastWinner} onAnimationEnd={handleWinnerAnnounce} />
+        <GiftEventDraw
+          winner={currentWinner || lastWinner}
+          onAnimationEnd={handleWinnerAnnounce}
+          drawStartTime={drawStartTime}
+        />
       </div>
     );
   }

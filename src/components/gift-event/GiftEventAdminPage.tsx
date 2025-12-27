@@ -22,6 +22,7 @@ export default function GiftEventAdminPage() {
   const [remaining, setRemaining] = useState<string[]>([]);
   const [currentWinner, setCurrentWinner] = useState<Participant | null>(null);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [drawStartTime, setDrawStartTime] = useState<number | null>(null);
 
   // Load initial data from Firebase
   useEffect(() => {
@@ -36,7 +37,8 @@ export default function GiftEventAdminPage() {
       setStatus(data.status || 'waiting');
       setWinners(data.winners || []);
       setRemaining(data.remaining || []);
-      
+      setDrawStartTime(data.drawStartTime || null);
+
       // 현재 당첨자 상태 복원
       if (data.currentWinner) {
         setCurrentWinner(data.currentWinner);
@@ -81,6 +83,7 @@ export default function GiftEventAdminPage() {
       status: 'waiting',
       remaining: allParticipantIds,
       winners: [],
+      drawStartTime: null
     });
   };
 
@@ -92,7 +95,7 @@ export default function GiftEventAdminPage() {
 
     // 20% 확률로 실제 멈춘 이름이 당첨자가 되도록 수정
     const shouldUseRealWinner = Math.random() < 0.2; // 20% 확률
-    
+
     let winnerData;
     if (shouldUseRealWinner && remaining.length > 0) {
       // 실제 멈춘 이름 중에서 선택 (3~5명 중 하나)
@@ -107,9 +110,11 @@ export default function GiftEventAdminPage() {
 
     if (winnerData) {
       setCurrentWinner(winnerData);
+      const startTime = Date.now();
       update(ref(db, 'giftEvent'), {
         status: 'drawing',
-        currentWinner: winnerData
+        currentWinner: winnerData,
+        drawStartTime: startTime
       });
     }
   };
@@ -131,7 +136,7 @@ export default function GiftEventAdminPage() {
     });
   };
 
-  const handleResetEvent = () => { 
+  const handleResetEvent = () => {
     if (!db) return;
     remove(ref(db, 'giftEvent'));
     setCurrentWinner(null);
@@ -159,11 +164,19 @@ export default function GiftEventAdminPage() {
         <div className="w-full h-60 md:h-80 bg-gray-100 rounded-lg border-2 border-dashed border-gray-300 flex items-center justify-center mb-4 md:mb-6">
           {currentWinner ? (
             <div className="w-full h-full">
-              <GiftEventDrawSmall winner={currentWinner} onAnimationEnd={handleWinnerAnnounce} />
+              <GiftEventDrawSmall
+                winner={currentWinner}
+                onAnimationEnd={handleWinnerAnnounce}
+                drawStartTime={drawStartTime}
+              />
             </div>
           ) : status === 'winner' && winners.length > 0 ? (
             <div className="w-full h-full">
-              <GiftEventDrawSmall winner={winners[winners.length - 1]} onAnimationEnd={() => {}} />
+              <GiftEventDrawSmall
+                winner={winners[winners.length - 1]}
+                onAnimationEnd={() => { }}
+                drawStartTime={null}
+              />
             </div>
           ) : (
             <div className="text-center text-gray-500">
@@ -185,26 +198,26 @@ export default function GiftEventAdminPage() {
                   <Gift className="w-4 h-4 md:w-5 md:h-5 text-blue-600" />
                   행사 제어
                 </CardTitle>
-        </CardHeader>
+              </CardHeader>
               <CardContent className="space-y-3 md:space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 md:gap-3">
-                  <Button 
-                    onClick={handleStartEvent} 
-                    disabled={status !== 'waiting'} 
+                  <Button
+                    onClick={handleStartEvent}
+                    disabled={status !== 'waiting'}
                     className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-medium h-10 md:h-12 text-sm md:text-base"
                   >
                     추첨 준비
-          </Button>
-                  
-                  <Button 
-                    onClick={handleDrawNext} 
+                  </Button>
+
+                  <Button
+                    onClick={handleDrawNext}
                     disabled={remaining.length === 0 || !(status === 'winner' || status === 'drawing' || status === 'waiting')}
                     className="bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-medium h-10 md:h-12 text-sm md:text-base"
                   >
                     추첨 시작
-          </Button>
+                  </Button>
                 </div>
-                
+
                 {/* 상태 표시 */}
                 <div className="mt-3 md:mt-4 p-2 md:p-3 bg-gray-50 rounded-lg">
                   <div className="text-xs md:text-sm text-gray-600 mb-1">현재 상태</div>
@@ -216,18 +229,18 @@ export default function GiftEventAdminPage() {
                     {status === 'finished' && '완료'}
                   </div>
                 </div>
-                
+
                 {/* 초기화 버튼 */}
-                <Button 
-                  onClick={() => setShowResetConfirm(true)} 
+                <Button
+                  onClick={() => setShowResetConfirm(true)}
                   variant="destructive"
                   className="w-full bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white font-medium h-10 md:h-12 text-sm md:text-base"
                 >
                   <RefreshCw className="mr-0.5 h-4 w-4" />
                   초기화
-          </Button>
-        </CardContent>
-      </Card>
+                </Button>
+              </CardContent>
+            </Card>
 
             {/* 통계 카드 */}
             <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-lg">
@@ -260,8 +273,8 @@ export default function GiftEventAdminPage() {
                 <CardTitle className="text-lg md:text-xl font-semibold text-gray-800 flex items-center gap-2">
                   <User className="w-5 h-5 text-yellow-600" />
                   당첨자 ({winners.length}명)
-      </CardTitle>
-    </CardHeader>
+                </CardTitle>
+              </CardHeader>
               <CardContent>
                 <div className="max-h-64 md:max-h-80 overflow-y-auto">
                   {winners.length === 0 ? (
@@ -271,7 +284,7 @@ export default function GiftEventAdminPage() {
                     </div>
                   ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        {winners.map((w, index) => (
+                      {winners.map((w, index) => (
                         <div key={`${w.id}_${index}`} className="flex items-center justify-between p-3 bg-gradient-to-r from-yellow-50 to-orange-50 rounded-lg border border-yellow-200">
                           <div className="flex items-center gap-3">
                             <div className="w-8 h-8 bg-yellow-500 text-white rounded-full flex items-center justify-center text-sm font-bold">
@@ -286,12 +299,12 @@ export default function GiftEventAdminPage() {
                             <Trophy className="w-5 h-5" />
                           </div>
                         </div>
-        ))}
+                      ))}
                     </div>
                   )}
                 </div>
-    </CardContent>
-  </Card>
+              </CardContent>
+            </Card>
 
             {/* 추첨 대상자 리스트 */}
             <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-lg">
@@ -299,8 +312,8 @@ export default function GiftEventAdminPage() {
                 <CardTitle className="text-lg md:text-xl font-semibold text-gray-800 flex items-center gap-2">
                   <Users className="w-5 h-5 text-blue-600" />
                   추첨 대상자 ({remaining.length}명)
-      </CardTitle>
-    </CardHeader>
+                </CardTitle>
+              </CardHeader>
               <CardContent>
                 <div className="max-h-64 md:max-h-80 overflow-y-auto">
                   {remainingParticipants.length === 0 ? (
@@ -310,7 +323,7 @@ export default function GiftEventAdminPage() {
                     </div>
                   ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        {remainingParticipants.map(p => (
+                      {remainingParticipants.map(p => (
                         <div key={p.id} className="flex items-center justify-between p-3 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
                           <div className="flex items-center gap-3">
                             <div className="w-8 h-8 bg-blue-500 text-white rounded-full flex items-center justify-center text-sm font-bold">
@@ -325,12 +338,12 @@ export default function GiftEventAdminPage() {
                             <Sparkles className="w-5 h-5" />
                           </div>
                         </div>
-        ))}
+                      ))}
                     </div>
                   )}
                 </div>
-    </CardContent>
-  </Card>
+              </CardContent>
+            </Card>
           </div>
         </div>
 

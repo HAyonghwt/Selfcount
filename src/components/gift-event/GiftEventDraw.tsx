@@ -14,9 +14,10 @@ interface Participant {
 interface GiftEventDrawProps {
   winner: Participant | null;
   onAnimationEnd: () => void;
+  drawStartTime?: number | null;
 }
 
-export default function GiftEventDraw({ winner, onAnimationEnd }: GiftEventDrawProps) {
+export default function GiftEventDraw({ winner, onAnimationEnd, drawStartTime }: GiftEventDrawProps) {
   const [rolling, setRolling] = useState(false);
   const [final, setFinal] = useState(false);
   const [winners, setWinners] = useState<Participant[]>([]);
@@ -24,6 +25,7 @@ export default function GiftEventDraw({ winner, onAnimationEnd }: GiftEventDrawP
   const [currentIndex, setCurrentIndex] = useState(0);
   const [windowSize, setWindowSize] = useState({ width: 0, height: 0 });
   const [showWinnerList, setShowWinnerList] = useState(false);
+  const skipAnimationRef = React.useRef(false);
 
   // 당첨자 명단 구독
   useEffect(() => {
@@ -67,15 +69,36 @@ export default function GiftEventDraw({ winner, onAnimationEnd }: GiftEventDrawP
     participantsRef.current = participants;
   }, [participants]);
 
-  // 새로운 당첨자가 설정되면 시작 플래그 리셋 (컴포넌트가 재사용될 경우 대비)
+  // 새로운 당첨자가 설정되면 시작 플래그 리셋
   useEffect(() => {
     animationStartedRef.current = false;
+    skipAnimationRef.current = false;
   }, [winner?.id]);
 
   // 물레방아 애니메이션 시작
   useEffect(() => {
     // 데이터가 준비되지 않았거나 이미 시작했다면 중단
     if (!winner || participantsRef.current.length === 0 || animationStartedRef.current) return;
+
+    // 타임스탬프 기반 동기화 로직
+    const now = Date.now();
+    const startTimeOverride = drawStartTime || now;
+    const elapsedAtStart = now - startTimeOverride;
+
+    // 이미 애니메이션이 끝난 시간(6초)이면 바로 결과 표시
+    if (drawStartTime && elapsedAtStart >= 5800) {
+      setRolling(false);
+      setFinal(true);
+      setShowWinnerList(true);
+      animationStartedRef.current = true;
+      skipAnimationRef.current = true;
+
+      // onAnimationEnd를 바로 호출하지 않고 약간의 지연 후 호출하여 렌더링 안정화
+      setTimeout(() => {
+        if (onAnimationEndRef.current) onAnimationEndRef.current();
+      }, 100);
+      return;
+    }
 
     // 시작 플래그 설정 (이후 리렌더링에서 재진입 차단)
     animationStartedRef.current = true;
@@ -85,7 +108,7 @@ export default function GiftEventDraw({ winner, onAnimationEnd }: GiftEventDrawP
     setShowWinnerList(false);
     setCurrentIndex(0);
 
-    const startTime = performance.now();
+    const startTime = performance.now() - (drawStartTime ? elapsedAtStart : 0);
     // 애니메이션 중복 실행 방지 및 ID 관리를 위한 refs
     const animationFrameRef = { current: null as number | null };
     const timeoutRef = { current: null as (NodeJS.Timeout | number | null) };
@@ -148,7 +171,7 @@ export default function GiftEventDraw({ winner, onAnimationEnd }: GiftEventDrawP
     // 의존성에 participants.length 추가: 데이터가 로드되면 실행 시도
     // 단, 내부의 animationStartedRef 체크로 인해 중복 실행은 방지됨
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [winner?.id, participants.length]);
+  }, [winner?.id, participants.length, drawStartTime]);
 
   // 한글 여부 확인
   const isSimpleKorean = (name: string) => {

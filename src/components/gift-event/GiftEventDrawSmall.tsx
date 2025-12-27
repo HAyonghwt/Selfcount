@@ -14,9 +14,10 @@ interface Participant {
 interface GiftEventDrawSmallProps {
   winner: Participant | null;
   onAnimationEnd: () => void;
+  drawStartTime?: number | null;
 }
 
-export default function GiftEventDrawSmall({ winner, onAnimationEnd }: GiftEventDrawSmallProps) {
+export default function GiftEventDrawSmall({ winner, onAnimationEnd, drawStartTime }: GiftEventDrawSmallProps) {
   const [rolling, setRolling] = useState(false);
   const [final, setFinal] = useState(false);
   const [winners, setWinners] = useState<Participant[]>([]);
@@ -51,18 +52,33 @@ export default function GiftEventDrawSmall({ winner, onAnimationEnd }: GiftEvent
   // 물레방아 애니메이션 시작
   useEffect(() => {
     if (!winner || participants.length === 0) return;
-    
+
+    // 타임스탬프 기반 동기화 로직
+    const now = Date.now();
+    const startTime = drawStartTime || now; // 없으면 현재 시간(기존 로직 호환)
+    const elapsedAtStart = now - startTime;
+    const ANIMATION_DURATION = 3500; // 전체 애니메이션 시간 (2.5초 + 1초 대기)
+
+    // 이미 애니메이션이 끝난 시간이면 바로 결과 표시
+    if (drawStartTime && elapsedAtStart >= 2500) {
+      setRolling(false);
+      setFinal(true);
+      setShowWinnerList(true);
+      setTimeout(() => onAnimationEnd(), 100);
+      return;
+    }
+
     setRolling(true);
     setFinal(false);
     setShowWinnerList(false);
     setCurrentIndex(0);
-    
-    const startTime = performance.now();
+
     let animationId: number;
-    
+    let localStartTime = performance.now() - (drawStartTime ? elapsedAtStart : 0);
+
     const animate = (currentTime: number) => {
-      const elapsed = currentTime - startTime;
-      
+      const elapsed = currentTime - localStartTime;
+
       // 1단계: 빠른 회전 (0-0.75초)
       if (elapsed <= 750) {
         setCurrentIndex(prev => (prev + 1) % participants.length);
@@ -99,16 +115,16 @@ export default function GiftEventDrawSmall({ winner, onAnimationEnd }: GiftEvent
         return;
       }
     };
-    
+
     // 애니메이션 시작
     animationId = requestAnimationFrame(animate);
-    
+
     return () => {
       if (animationId) {
         cancelAnimationFrame(animationId);
       }
     };
-  }, [winner, participants, onAnimationEnd]);
+  }, [winner, participants, onAnimationEnd, drawStartTime]);
 
   if (!winner || participants.length === 0) return null;
 
@@ -195,18 +211,18 @@ export default function GiftEventDrawSmall({ winner, onAnimationEnd }: GiftEvent
                           {rolling ? participants[currentIndex]?.club || '크로바' : winner?.club || ''}
                         </span>
                       </div>
-                      
+
                       {/* 이름 슬롯들 (아래에) */}
                       <div className="flex items-center justify-center gap-2 md:gap-3">
                         {(() => {
                           const currentName = rolling ? participants[currentIndex]?.name || '김철수' : winner?.name || '';
                           const nameArray = currentName.split('');
-                          
+
                           // 3개 슬롯으로 나누기 (성씨, 첫글자, 둘째글자)
                           const slot1 = nameArray[0] || '김';
                           const slot2 = nameArray[1] || '철';
                           const slot3 = nameArray[2] || '수';
-                          
+
                           return (
                             <>
                               {/* 성씨 슬롯 */}
@@ -226,7 +242,7 @@ export default function GiftEventDrawSmall({ winner, onAnimationEnd }: GiftEvent
                         })()}
                       </div>
                     </div>
-                    
+
                     {rolling && (
                       <div className="text-xs md:text-sm text-yellow-600 font-semibold animate-pulse mt-1">
                         추첨 중...
@@ -234,7 +250,7 @@ export default function GiftEventDrawSmall({ winner, onAnimationEnd }: GiftEvent
                     )}
                   </div>
                 </div>
-                
+
                 {/* 중앙 하이라이트 */}
                 <div className="absolute inset-0 flex items-center justify-center">
                   <div className="w-56 md:w-64 h-32 md:h-40 bg-gradient-to-r from-yellow-400/20 to-orange-400/20 rounded-2xl border-2 border-yellow-400/40 animate-pulse"></div>
