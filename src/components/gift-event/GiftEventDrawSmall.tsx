@@ -15,9 +15,19 @@ interface GiftEventDrawSmallProps {
   winner: Participant | null;
   onAnimationEnd: () => void;
   drawStartTime?: number | null;
+  logoUrl?: string;
+  logoSettings?: {
+    enabled: boolean;
+    size: number;
+    opacity: number;
+    offsetX: number;
+    offsetY: number;
+    saturation?: number;
+    intensity?: number;
+  };
 }
 
-export default function GiftEventDrawSmall({ winner, onAnimationEnd, drawStartTime }: GiftEventDrawSmallProps) {
+export default function GiftEventDrawSmall({ winner, onAnimationEnd, drawStartTime, logoUrl, logoSettings }: GiftEventDrawSmallProps) {
   const [rolling, setRolling] = useState(false);
   const [final, setFinal] = useState(false);
   const [winners, setWinners] = useState<Participant[]>([]);
@@ -128,7 +138,27 @@ export default function GiftEventDrawSmall({ winner, onAnimationEnd, drawStartTi
 
   if (!winner || participants.length === 0) return null;
 
+  // 로고 스타일 생성
+  const getLogoStyle = () => {
+    if (!logoUrl || !logoSettings?.enabled) return {};
 
+    return {
+      position: 'absolute' as const,
+      top: '50%',
+      left: '50%',
+      transform: `translate(-50%, -50%) translate(${logoSettings.offsetX / 20}vw, ${logoSettings.offsetY / 20}vh) scale(${logoSettings.size})`,
+      width: '60%',
+      height: '60%',
+      backgroundImage: `url('${logoUrl.replace(/'/g, "\\'")}')`,
+      backgroundPosition: 'center',
+      backgroundRepeat: 'no-repeat',
+      backgroundSize: 'contain',
+      opacity: logoSettings.opacity,
+      filter: `grayscale(100%) sepia(100%) saturate(${logoSettings.saturation ?? 400}%) hue-rotate(-10deg) brightness(${(logoSettings.intensity ?? 200) / 100}) contrast(${(logoSettings.intensity ?? 200) / 100})`,
+      pointerEvents: 'none' as const,
+      zIndex: 0
+    };
+  };
 
   return (
     <div className="relative w-full h-full bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 rounded-lg overflow-hidden">
@@ -168,26 +198,33 @@ export default function GiftEventDrawSmall({ winner, onAnimationEnd, drawStartTi
         {/* 추첨 결과 표시 */}
         {final ? (
           <div className="text-center flex-1 flex flex-col justify-center">
-            <div className="bg-gradient-to-r from-yellow-400 to-orange-400 p-4 rounded-xl shadow-lg mb-4 mx-4">
-              <div className="text-4xl font-bold text-white mb-2">
-                🎉
-              </div>
-              {/* PC뷰: 가로 배치 */}
-              <div className="hidden md:flex items-center justify-center gap-3">
-                <div className="text-xl text-white/90">
-                  {winner.club}
+            <div className="bg-gradient-to-r from-yellow-400 to-orange-400 p-4 rounded-xl shadow-lg mb-4 mx-4 relative overflow-hidden">
+              {/* 로고 오버레이 (미리보기용) */}
+              {logoUrl && logoSettings?.enabled && (
+                <div style={getLogoStyle()} />
+              )}
+
+              <div className="relative z-10">
+                <div className="text-4xl font-bold text-white mb-2">
+                  🎉
                 </div>
-                <div className="text-3xl font-bold text-white">
-                  {winner.name}
+                {/* PC뷰: 가로 배치 */}
+                <div className="hidden md:flex items-center justify-center gap-3">
+                  <div className="text-xl text-white/90">
+                    {winner.club}
+                  </div>
+                  <div className="text-3xl font-bold text-white">
+                    {winner.name}
+                  </div>
                 </div>
-              </div>
-              {/* 모바일뷰: 세로 배치 */}
-              <div className="md:hidden flex flex-col items-center justify-center gap-1">
-                <div className="text-lg text-white/90">
-                  {winner.club}
-                </div>
-                <div className="text-2xl font-bold text-white">
-                  {winner.name}
+                {/* 모바일뷰: 세로 배치 */}
+                <div className="md:hidden flex flex-col items-center justify-center gap-1">
+                  <div className="text-lg text-white/90">
+                    {winner.club}
+                  </div>
+                  <div className="text-2xl font-bold text-white">
+                    {winner.name}
+                  </div>
                 </div>
               </div>
             </div>

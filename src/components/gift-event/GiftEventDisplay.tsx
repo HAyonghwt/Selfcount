@@ -20,6 +20,16 @@ export default function GiftEventDisplay() {
   const [showWinners, setShowWinners] = useState(false);
   const [showWinner, setShowWinner] = useState(false);
   const [drawStartTime, setDrawStartTime] = useState<number | null>(null);
+  const [logoUrl, setLogoUrl] = useState<string>('');
+  const [logoSettings, setLogoSettings] = useState({
+    enabled: false,
+    size: 1,
+    opacity: 1.0,
+    offsetX: 0,
+    offsetY: 0,
+    saturation: 400,
+    intensity: 200
+  });
 
   useEffect(() => {
     if (!db) return;
@@ -32,12 +42,47 @@ export default function GiftEventDisplay() {
     const unsubWinners = onValue(winnersRef, snap => setWinners(snap.val() || []));
     const unsubCurrentWinner = onValue(currentWinnerRef, snap => setCurrentWinner(snap.val() || null));
     const unsubDrawStartTime = onValue(drawStartTimeRef, snap => setDrawStartTime(snap.val() || null));
+    const unsubSettings = onValue(ref(db, "giftEvent/settings"), snap => {
+      if (snap.exists()) {
+        const settings = snap.val();
+        // Merge with defaults to ensure all properties exist
+        setLogoSettings({
+          enabled: settings.enabled ?? false,
+          size: settings.size ?? 1,
+          opacity: settings.opacity ?? 0.3,
+          offsetX: settings.offsetX ?? 0,
+          offsetY: settings.offsetY ?? 0,
+          saturation: settings.saturation ?? 400,
+          intensity: settings.intensity ?? 200
+        });
+        console.log('[GiftEventDisplay] Logo settings loaded:', settings);
+      } else {
+        console.log('[GiftEventDisplay] No logo settings found in Firebase');
+      }
+    });
+
+    // Fetch logo URL
+    get(ref(db, 'logos')).then((snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.val();
+        const firstLogo = Object.values(data)[0] as any;
+        if (firstLogo?.url) {
+          setLogoUrl(firstLogo.url);
+          console.log('[GiftEventDisplay] Logo URL loaded:', firstLogo.url);
+        }
+      } else {
+        console.log('[GiftEventDisplay] No logos found in Firebase');
+      }
+    }).catch(error => {
+      console.error('[GiftEventDisplay] Error fetching logo:', error);
+    });
 
     return () => {
       unsubStatus();
       unsubWinners();
       unsubCurrentWinner();
       unsubDrawStartTime();
+      unsubSettings();
     };
   }, []);
 
@@ -160,6 +205,8 @@ export default function GiftEventDisplay() {
           winner={currentWinner || lastWinner}
           onAnimationEnd={handleWinnerAnnounce}
           drawStartTime={drawStartTime}
+          logoUrl={logoUrl}
+          logoSettings={logoSettings}
         />
       </div>
     );

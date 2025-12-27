@@ -23,6 +23,25 @@ export default function GiftEventAdminPage() {
   const [currentWinner, setCurrentWinner] = useState<Participant | null>(null);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [drawStartTime, setDrawStartTime] = useState<number | null>(null);
+  const [logoUrl, setLogoUrl] = useState<string>('');
+  const [logoSettings, setLogoSettings] = useState({
+    enabled: false,
+    size: 1,
+    opacity: 1.0,
+    offsetX: 0,
+    offsetY: 0,
+    saturation: 400,
+    intensity: 200
+  });
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  // Check if logged in as admin (not moderator/host)
+  useEffect(() => {
+    // Check if there's host data (사회자) in sessionStorage
+    const hostData = sessionStorage.getItem('hostData');
+    // Admin is logged in if NO host data exists (meaning they logged in via email)
+    setIsAdmin(!hostData);
+  }, []);
 
   // Load initial data from Firebase
   useEffect(() => {
@@ -47,6 +66,24 @@ export default function GiftEventAdminPage() {
       }
     });
 
+    // Subscribe to logo settings
+    const unsubSettings = onValue(ref(db, 'giftEvent/settings'), (snapshot) => {
+      if (snapshot.exists()) {
+        setLogoSettings(snapshot.val());
+      }
+    });
+
+    // Fetch logo URL
+    get(ref(db, 'logos')).then((snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.val();
+        const firstLogo = Object.values(data)[0] as any;
+        if (firstLogo?.url) {
+          setLogoUrl(firstLogo.url);
+        }
+      }
+    });
+
     // Fetch all players once to use as the base participants list
     get(playersRef).then((snapshot) => {
       if (snapshot.exists()) {
@@ -68,8 +105,15 @@ export default function GiftEventAdminPage() {
 
     return () => {
       unsubGiftEvent();
+      unsubSettings();
     };
   }, []);
+
+  const updateLogoSettings = (newSettings: any) => {
+    if (!db) return;
+    setLogoSettings(newSettings);
+    update(ref(db, 'giftEvent/settings'), newSettings);
+  };
 
   const handleStartEvent = () => {
     if (!db) return;
@@ -168,6 +212,8 @@ export default function GiftEventAdminPage() {
                 winner={currentWinner}
                 onAnimationEnd={handleWinnerAnnounce}
                 drawStartTime={drawStartTime}
+                logoUrl={logoUrl}
+                logoSettings={logoSettings}
               />
             </div>
           ) : status === 'winner' && winners.length > 0 ? (
@@ -176,6 +222,8 @@ export default function GiftEventAdminPage() {
                 winner={winners[winners.length - 1]}
                 onAnimationEnd={() => { }}
                 drawStartTime={null}
+                logoUrl={logoUrl}
+                logoSettings={logoSettings}
               />
             </div>
           ) : (
@@ -241,6 +289,120 @@ export default function GiftEventAdminPage() {
                 </Button>
               </CardContent>
             </Card>
+
+            {/* 로고 설정 카드 - 관리자 전용 */}
+            {isAdmin && (
+              <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-lg">
+                <CardHeader className="pb-2 md:pb-4">
+                  <CardTitle className="text-base md:text-xl font-semibold text-gray-800 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 md:w-5 md:h-5 text-yellow-600" />
+                      로고 설정
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-gray-500 font-normal">ON/OFF</span>
+                      <input
+                        type="checkbox"
+                        checked={logoSettings.enabled}
+                        onChange={(e) => updateLogoSettings({ ...logoSettings, enabled: e.target.checked })}
+                        className="w-4 h-4"
+                      />
+                    </div>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {logoSettings.enabled && (
+                    <>
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-xs text-gray-500">
+                          <span>크기 ({Math.round(logoSettings.size * 100)}%)</span>
+                          <input
+                            type="range"
+                            min="0.1"
+                            max="2"
+                            step="0.1"
+                            value={logoSettings.size}
+                            onChange={(e) => updateLogoSettings({ ...logoSettings, size: parseFloat(e.target.value) })}
+                            className="w-32"
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-xs text-gray-500">
+                          <span>투명도 ({Math.round(logoSettings.opacity * 100)}%)</span>
+                          <input
+                            type="range"
+                            min="0"
+                            max="2"
+                            step="0.1"
+                            value={logoSettings.opacity}
+                            onChange={(e) => updateLogoSettings({ ...logoSettings, opacity: parseFloat(e.target.value) })}
+                            className="w-32"
+                          />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="space-y-1">
+                          <span className="text-xs text-gray-500 block">가로 위치 ({logoSettings.offsetX})</span>
+                          <input
+                            type="range"
+                            min="-400"
+                            max="400"
+                            value={logoSettings.offsetX}
+                            onChange={(e) => updateLogoSettings({ ...logoSettings, offsetX: parseInt(e.target.value) })}
+                            className="w-full"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <span className="text-xs text-gray-500 block">세로 위치 ({logoSettings.offsetY})</span>
+                          <input
+                            type="range"
+                            min="-800"
+                            max="800"
+                            value={logoSettings.offsetY}
+                            onChange={(e) => updateLogoSettings({ ...logoSettings, offsetY: parseInt(e.target.value) })}
+                            className="w-full"
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-xs text-gray-500">
+                          <span>색상 강도 ({logoSettings.saturation}%)</span>
+                          <input
+                            type="range"
+                            min="0"
+                            max="800"
+                            step="10"
+                            value={logoSettings.saturation ?? 200}
+                            onChange={(e) => updateLogoSettings({ ...logoSettings, saturation: parseInt(e.target.value) })}
+                            className="w-32"
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-xs text-gray-500">
+                          <span>진하기 ({logoSettings.intensity ?? 150}%)</span>
+                          <input
+                            type="range"
+                            min="0"
+                            max="300"
+                            step="10"
+                            value={logoSettings.intensity ?? 150}
+                            onChange={(e) => updateLogoSettings({ ...logoSettings, intensity: parseInt(e.target.value) })}
+                            className="w-32"
+                          />
+                        </div>
+                      </div>
+                    </>
+                  )}
+                  {!logoSettings.enabled && (
+                    <div className="text-center text-xs text-gray-400 py-2">
+                      로고 설정이 꺼져 있습니다
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
 
             {/* 통계 카드 */}
             <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-lg">

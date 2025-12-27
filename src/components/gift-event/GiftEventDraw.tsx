@@ -15,9 +15,19 @@ interface GiftEventDrawProps {
   winner: Participant | null;
   onAnimationEnd: () => void;
   drawStartTime?: number | null;
+  logoUrl?: string;
+  logoSettings?: {
+    enabled: boolean;
+    size: number;
+    opacity: number;
+    offsetX: number;
+    offsetY: number;
+    saturation?: number;
+    intensity?: number;
+  };
 }
 
-export default function GiftEventDraw({ winner, onAnimationEnd, drawStartTime }: GiftEventDrawProps) {
+export default function GiftEventDraw({ winner, onAnimationEnd, drawStartTime, logoUrl, logoSettings }: GiftEventDrawProps) {
   const [rolling, setRolling] = useState(false);
   const [final, setFinal] = useState(false);
   const [winners, setWinners] = useState<Participant[]>([]);
@@ -198,6 +208,35 @@ export default function GiftEventDraw({ winner, onAnimationEnd, drawStartTime }:
 
   if (!winner || participants.length === 0) return null;
 
+  // 로고 스타일 생성
+  const getLogoStyle = () => {
+    if (!logoUrl || !logoSettings?.enabled) return {};
+
+    return {
+      position: 'absolute' as const,
+      top: '50%',
+      left: '50%',
+      transform: `translate(-50%, -50%) translate(${logoSettings.offsetX / 20}vw, ${logoSettings.offsetY / 20}vh) scale(${logoSettings.size})`,
+      width: '60%',
+      height: '60%',
+      backgroundImage: `url('${logoUrl.replace(/'/g, "\\'")}')`,
+      backgroundPosition: 'center',
+      backgroundRepeat: 'no-repeat',
+      backgroundSize: 'contain',
+      opacity: logoSettings.opacity,
+      filter: `grayscale(100%) sepia(100%) saturate(${logoSettings.saturation ?? 400}%) hue-rotate(-10deg) brightness(${(logoSettings.intensity ?? 200) / 100}) contrast(${(logoSettings.intensity ?? 200) / 100})`,
+      pointerEvents: 'none' as const,
+      zIndex: 5
+    };
+  };
+
+  // Debug logging
+  console.log('[GiftEventDraw] Props:', {
+    logoUrl,
+    logoSettings,
+    winnerName: winner?.name
+  });
+
   return (
     <div className="fixed inset-0 z-[60] overflow-hidden bg-[#1a1a2e] flex flex-col items-center select-none"
       style={{ height: '100dvh', maxHeight: '100dvh' }}>
@@ -240,6 +279,11 @@ export default function GiftEventDraw({ winner, onAnimationEnd, drawStartTime }:
         {final ? (
           <div className="text-center w-full max-w-[62vw] mx-auto relative z-20 flex-1 flex flex-col justify-center my-[0.5vh]">
             <div className="bg-gradient-to-r from-yellow-400 via-orange-500 to-yellow-600 p-[3vh] md:p-[5vh] rounded-[6vh] shadow-[0_5vh_12vh_rgba(0,0,0,0.8)] transform scale-95 md:scale-100 border-[0.6vh] border-yellow-200/50 relative overflow-hidden group min-h-[48vh] max-h-[52vh] flex flex-col justify-center">
+              {/* 로고 오버레이 */}
+              {logoUrl && logoSettings?.enabled && (
+                <div style={getLogoStyle()} />
+              )}
+
               {/* 꽃 장식 테두리 요소들 - VH 비례 크기 */}
               <div className="absolute top-[3vh] left-[3vh] text-yellow-200/60 animate-spin-slow">
                 <Flower className="w-[8vh] h-[8vh] md:w-[12vh] md:h-[12vh]" />
