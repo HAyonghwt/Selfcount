@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { db } from '@/lib/firebase';
 import { ref, get, onValue } from 'firebase/database';
@@ -24,8 +26,35 @@ export default function ScorePrintTool() {
         selectedGroups: [] as string[],
         showAllGroups: true,
         selectedCourses: [] as string[],
-        showAllCourses: true
+        showAllCourses: true,
+        logoEnabled: false, // 로고 온/오프
+        logoSize: 0.6, // 로고 크기 (0.1 ~ 1.0)
+        logoOpacity: 0.10, // 로고 진하기 (0.0 ~ 1.0)
+        logoOffsetX: 0, // 로고 가로 위치 (-50 ~ 50)
+        logoOffsetY: 0, // 로고 세로 위치 (-50 ~ 50)
     });
+
+    // 로고 불러오기
+    const [backgroundLogoUrl, setBackgroundLogoUrl] = useState<string>('');
+    useEffect(() => {
+        const loadLogo = async () => {
+            if (!db) return;
+            try {
+                const logosRef = ref(db, 'logos');
+                const snapshot = await get(logosRef);
+                if (snapshot.exists()) {
+                    const logosData = snapshot.val();
+                    const firstLogo = Object.values(logosData)[0] as any;
+                    if (firstLogo?.url) {
+                        setBackgroundLogoUrl(firstLogo.url);
+                    }
+                }
+            } catch (error) {
+                console.error('로고 불러오기 실패:', error);
+            }
+        };
+        loadLogo();
+    }, []);
     const [isLoading, setIsLoading] = useState(false);
     const [isSavingImage, setIsSavingImage] = useState(false);
     const [players, setPlayers] = useState<any>({});
@@ -363,6 +392,30 @@ export default function ScorePrintTool() {
         const tournamentName = tournament.name || '골프 대회';
         let printContent = '';
 
+        // 로고 HTML (배경 이미지 대신 img 태그 사용 - 인쇄 시 강제 출력을 위해)
+        const logoHtml = (printModal.logoEnabled && backgroundLogoUrl) ? `
+            <div style="
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                z-index: -1;
+                pointer-events: none;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                overflow: hidden;
+            ">
+                <img src="${backgroundLogoUrl}" style="
+                    width: ${printModal.logoSize * 100}%;
+                    height: auto;
+                    opacity: ${printModal.logoOpacity};
+                    transform: translate(${printModal.logoOffsetX}px, ${printModal.logoOffsetY}px);
+                " />
+            </div>
+        ` : '';
+
         // CSS 스타일
         const styles = `
             <style>
@@ -376,6 +429,9 @@ export default function ScorePrintTool() {
                     font-family: 'Arial', sans-serif;
                     margin: 0;
                     padding: 20px;
+                    -webkit-print-color-adjust: exact !important;
+                    print-color-adjust: exact !important;
+                    position: relative;
                 }
                 .print-header {
                     background: linear-gradient(135deg, #1e3a8a, #3b82f6);
@@ -746,6 +802,7 @@ export default function ScorePrintTool() {
                 ${styles}
             </head>
             <body>
+                ${logoHtml}
                 ${header}
                 ${printContent}
                 ${footer}
@@ -813,7 +870,12 @@ export default function ScorePrintTool() {
             selectedGroups: allGroupsList,
             showAllGroups: true,
             selectedCourses: Array.from(availableCourses).sort(),
-            showAllCourses: true
+            showAllCourses: true,
+            logoEnabled: false,
+            logoSize: 0.6,
+            logoOpacity: 0.10,
+            logoOffsetX: 0,
+            logoOffsetY: 0
         });
     };
 
@@ -834,10 +896,37 @@ export default function ScorePrintTool() {
 
             toast({ title: "이미지 저장 시작", description: "그룹별로 분리하여 저장 중..." });
 
+            // 로고 스타일
+            const logoStyle = (printModal.logoEnabled && backgroundLogoUrl) ? `
+                .print-wrapper {
+                    position: relative;
+                }
+                .print-wrapper::before {
+                    content: '';
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                    right: 0;
+                    bottom: 0;
+                    background-image: url('${backgroundLogoUrl.replace(/'/g, "\\'")}');
+                    background-repeat: no-repeat;
+                    background-position: calc(50% + ${printModal.logoOffsetX}px) calc(50% + ${printModal.logoOffsetY}px);
+                    background-size: ${printModal.logoSize * 100}% auto;
+                    opacity: ${printModal.logoOpacity};
+                    pointer-events: none;
+                    z-index: 0;
+                }
+                .print-wrapper > * {
+                    position: relative;
+                    z-index: 1;
+                }
+            ` : '';
+
             // 공통 스타일 (홈 전광판과 동일)
             const styleContent = `
                 <style>
-                    .print-wrapper { font-family: 'Pretendard', sans-serif; text-align: center; color: #1e293b; width: 100%; box-sizing: border-box; }
+                    .print-wrapper { font-family: 'Pretendard', sans-serif; text-align: center; color: #1e293b; width: 100%; box-sizing: border-box; ${printModal.logoEnabled && backgroundLogoUrl ? 'position: relative;' : ''} }
+                    ${logoStyle}
                     .print-header { 
                         background-color: #3b82f6; 
                         color: white; 
@@ -1219,202 +1308,423 @@ export default function ScorePrintTool() {
 
             {/* 인쇄 모달 */}
             <Dialog open={printModal.open} onOpenChange={open => setPrintModal({ ...printModal, open })}>
-                <DialogContent className="max-w-2xl">
-                    <DialogHeader>
-                        <DialogTitle>📄 점수표 인쇄 설정</DialogTitle>
-                        <DialogDescription>
-                            인쇄할 점수표의 설정을 선택해주세요.
-                        </DialogDescription>
+                <DialogContent className="max-w-[95vw] w-full lg:max-w-7xl">
+                    <DialogHeader className="flex flex-row items-center justify-between pb-4 border-b mb-4 space-y-0">
+                        <div className="space-y-1 text-left">
+                            <DialogTitle>📄 점수표 인쇄 설정</DialogTitle>
+                            <DialogDescription>
+                                인쇄할 점수표의 설정을 선택해주세요.
+                            </DialogDescription>
+                        </div>
+                        {backgroundLogoUrl && (
+                            <div className="flex items-center gap-2">
+                                <span className="text-sm font-medium text-slate-600">배경 로고 설정</span>
+                                <Button
+                                    size="sm"
+                                    variant={printModal.logoEnabled ? 'default' : 'outline'}
+                                    onClick={() => setPrintModal({ ...printModal, logoEnabled: !printModal.logoEnabled })}
+                                    className={`h-8 w-16 ${printModal.logoEnabled ? 'bg-blue-600 hover:bg-blue-700' : ''}`}
+                                >
+                                    {printModal.logoEnabled ? 'ON' : 'OFF'}
+                                </Button>
+                            </div>
+                        )}
                     </DialogHeader>
 
-                    <div className="space-y-4">
-                        {/* 인쇄 방향 선택 */}
-                        <div>
-                            <label className="text-sm font-medium mb-2 block">인쇄 방향</label>
-                            <div className="flex gap-2">
-                                <Button
-                                    variant={printModal.orientation === 'portrait' ? 'default' : 'outline'}
-                                    onClick={() => setPrintModal({ ...printModal, orientation: 'portrait' })}
-                                    className="flex-1"
-                                >
-                                    세로 인쇄
-                                </Button>
-                                <Button
-                                    variant={printModal.orientation === 'landscape' ? 'default' : 'outline'}
-                                    onClick={() => setPrintModal({ ...printModal, orientation: 'landscape' })}
-                                    className="flex-1"
-                                >
-                                    가로 인쇄
-                                </Button>
-                            </div>
-                        </div>
-
-                        {/* 용지 크기 선택 */}
-                        <div>
-                            <label className="text-sm font-medium mb-2 block">용지 크기</label>
-                            <div className="flex gap-2">
-                                <Button
-                                    variant={printModal.paperSize === 'A4' ? 'default' : 'outline'}
-                                    onClick={() => setPrintModal({ ...printModal, paperSize: 'A4' })}
-                                    className="flex-1"
-                                >
-                                    A4
-                                </Button>
-                                <Button
-                                    variant={printModal.paperSize === 'A3' ? 'default' : 'outline'}
-                                    onClick={() => setPrintModal({ ...printModal, paperSize: 'A3' })}
-                                    className="flex-1"
-                                >
-                                    A3
-                                </Button>
-                            </div>
-                        </div>
-
-                        {/* 인쇄할 그룹 선택 */}
-                        <div>
-                            <label className="text-sm font-medium mb-2 block">인쇄할 그룹</label>
-                            <div className="space-y-2 max-h-40 overflow-y-auto border rounded p-2">
-                                <div className="flex items-center">
-                                    <input
-                                        type="checkbox"
-                                        checked={printModal.showAllGroups}
-                                        onChange={(e) => {
-                                            if (e.target.checked) {
-                                                setPrintModal({
-                                                    ...printModal,
-                                                    showAllGroups: true,
-                                                    selectedGroups: allGroupsList
-                                                });
-                                            } else {
-                                                setPrintModal({
-                                                    ...printModal,
-                                                    showAllGroups: false,
-                                                    selectedGroups: []
-                                                });
-                                            }
-                                        }}
-                                        className="mr-2"
-                                    />
-                                    <span className="text-sm font-bold">모든 그룹</span>
-                                    <span className="text-xs text-muted-foreground ml-2">({allGroupsList.length}개 그룹)</span>
+                    <div className="flex flex-col lg:flex-row gap-6 h-[calc(100vh-250px)] lg:h-auto min-h-0">
+                        {/* 좌측: 설정 (고정 너비) */}
+                        <div className="w-full lg:w-80 space-y-4 shrink-0 overflow-y-auto pr-2">
+                            {/* 인쇄 방향 선택 */}
+                            <div>
+                                <label className="text-sm font-medium mb-2 block">인쇄 방향</label>
+                                <div className="flex gap-2">
+                                    <Button
+                                        variant={printModal.orientation === 'portrait' ? 'default' : 'outline'}
+                                        onClick={() => setPrintModal({ ...printModal, orientation: 'portrait' })}
+                                        className="flex-1"
+                                    >
+                                        세로 인쇄
+                                    </Button>
+                                    <Button
+                                        variant={printModal.orientation === 'landscape' ? 'default' : 'outline'}
+                                        onClick={() => setPrintModal({ ...printModal, orientation: 'landscape' })}
+                                        className="flex-1"
+                                    >
+                                        가로 인쇄
+                                    </Button>
                                 </div>
-                                {!printModal.showAllGroups && (
-                                    <div className="ml-4 space-y-1">
-                                        {allGroupsList.map((groupName) => (
-                                            <div key={groupName} className="flex items-center">
-                                                <input
-                                                    type="checkbox"
-                                                    checked={printModal.selectedGroups.includes(groupName)}
-                                                    onChange={(e) => {
-                                                        if (e.target.checked) {
-                                                            setPrintModal({
-                                                                ...printModal,
-                                                                selectedGroups: [...printModal.selectedGroups, groupName]
-                                                            });
-                                                        } else {
-                                                            setPrintModal({
-                                                                ...printModal,
-                                                                selectedGroups: printModal.selectedGroups.filter(g => g !== groupName)
-                                                            });
-                                                        }
-                                                    }}
-                                                    className="mr-2"
-                                                />
-                                                <span className="text-sm">{groupName}</span>
-                                            </div>
-                                        ))}
+                            </div>
+
+                            {/* 용지 크기 선택 */}
+                            <div>
+                                <label className="text-sm font-medium mb-2 block">용지 크기</label>
+                                <div className="flex gap-2">
+                                    <Button
+                                        variant={printModal.paperSize === 'A4' ? 'default' : 'outline'}
+                                        onClick={() => setPrintModal({ ...printModal, paperSize: 'A4' })}
+                                        className="flex-1"
+                                    >
+                                        A4
+                                    </Button>
+                                    <Button
+                                        variant={printModal.paperSize === 'A3' ? 'default' : 'outline'}
+                                        onClick={() => setPrintModal({ ...printModal, paperSize: 'A3' })}
+                                        className="flex-1"
+                                    >
+                                        A3
+                                    </Button>
+                                </div>
+                            </div>
+
+                            {/* 인쇄할 그룹 선택 */}
+                            <div>
+                                <label className="text-sm font-medium mb-2 block">인쇄할 그룹</label>
+                                <div className="space-y-2 max-h-[25vh] overflow-y-auto border rounded p-2">
+                                    <div className="flex items-center">
+                                        <input
+                                            type="checkbox"
+                                            checked={printModal.showAllGroups}
+                                            onChange={(e) => {
+                                                if (e.target.checked) {
+                                                    setPrintModal({
+                                                        ...printModal,
+                                                        showAllGroups: true,
+                                                        selectedGroups: allGroupsList
+                                                    });
+                                                } else {
+                                                    setPrintModal({
+                                                        ...printModal,
+                                                        showAllGroups: false,
+                                                        selectedGroups: []
+                                                    });
+                                                }
+                                            }}
+                                            className="mr-2"
+                                        />
+                                        <span className="text-sm font-bold">모든 그룹</span>
+                                        <span className="text-xs text-muted-foreground ml-2">({allGroupsList.length}개 그룹)</span>
                                     </div>
-                                )}
-                            </div>
-                            <p className="text-xs text-muted-foreground mt-1">
-                                {printModal.showAllGroups
-                                    ? `모든 그룹(${allGroupsList.length}개)이 선택되었습니다. 각 그룹은 별도 페이지로 인쇄됩니다.`
-                                    : printModal.selectedGroups.length > 0
-                                        ? `${printModal.selectedGroups.length}개 그룹이 선택되었습니다. 각 그룹은 별도 페이지로 인쇄됩니다.`
-                                        : '인쇄할 그룹을 선택해주세요.'
-                                }
-                            </p>
-                        </div>
-
-                        {/* 출력할 코스 선택 */}
-                        <div>
-                            <label className="text-sm font-medium mb-2 block">출력할 코스 선택</label>
-                            <div className="space-y-2 border rounded p-2">
-                                <div className="flex items-center">
-                                    <input
-                                        type="checkbox"
-                                        checked={printModal.showAllCourses}
-                                        onChange={(e) => {
-                                            const availableCourses = new Set<string>();
-                                            Object.values(processedData).forEach(groupPlayers => {
-                                                groupPlayers.forEach(player => {
-                                                    player.assignedCourses?.forEach((c: any) => {
-                                                        const cName = player.coursesData[c.id]?.courseName || c.name;
-                                                        if (cName) availableCourses.add(cName);
-                                                    });
-                                                });
-                                            });
-
-                                            if (e.target.checked) {
-                                                setPrintModal({
-                                                    ...printModal,
-                                                    showAllCourses: true,
-                                                    selectedCourses: Array.from(availableCourses).sort()
-                                                });
-                                            } else {
-                                                setPrintModal({
-                                                    ...printModal,
-                                                    showAllCourses: false,
-                                                    selectedCourses: []
-                                                });
-                                            }
-                                        }}
-                                        className="mr-2"
-                                    />
-                                    <span className="text-sm font-bold">모든 코스</span>
-                                </div>
-                                {!printModal.showAllCourses && (
-                                    <div className="ml-4 flex flex-wrap gap-x-4 gap-y-1">
-                                        {(() => {
-                                            const availableCourses = new Set<string>();
-                                            Object.values(processedData).forEach(groupPlayers => {
-                                                groupPlayers.forEach(player => {
-                                                    player.assignedCourses?.forEach((c: any) => {
-                                                        const cName = player.coursesData[c.id]?.courseName || c.name;
-                                                        if (cName) availableCourses.add(cName);
-                                                    });
-                                                });
-                                            });
-                                            return Array.from(availableCourses).sort().map((courseName) => (
-                                                <div key={courseName} className="flex items-center">
+                                    {!printModal.showAllGroups && (
+                                        <div className="ml-4 space-y-1">
+                                            {allGroupsList.map((groupName) => (
+                                                <div key={groupName} className="flex items-center">
                                                     <input
                                                         type="checkbox"
-                                                        checked={printModal.selectedCourses.includes(courseName)}
+                                                        checked={printModal.selectedGroups.includes(groupName)}
                                                         onChange={(e) => {
                                                             if (e.target.checked) {
                                                                 setPrintModal({
                                                                     ...printModal,
-                                                                    selectedCourses: [...printModal.selectedCourses, courseName]
+                                                                    selectedGroups: [...printModal.selectedGroups, groupName]
                                                                 });
                                                             } else {
                                                                 setPrintModal({
                                                                     ...printModal,
-                                                                    selectedCourses: printModal.selectedCourses.filter(c => c !== courseName)
+                                                                    selectedGroups: printModal.selectedGroups.filter(g => g !== groupName)
                                                                 });
                                                             }
                                                         }}
                                                         className="mr-2"
                                                     />
-                                                    <span className="text-sm">{courseName}</span>
+                                                    <span className="text-sm">{groupName}</span>
                                                 </div>
-                                            ));
-                                        })()}
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                    {printModal.showAllGroups
+                                        ? `모든 그룹(${allGroupsList.length}개)이 선택되었습니다. 각 그룹은 별도 페이지로 인쇄됩니다.`
+                                        : printModal.selectedGroups.length > 0
+                                            ? `${printModal.selectedGroups.length}개 그룹이 선택되었습니다. 각 그룹은 별도 페이지로 인쇄됩니다.`
+                                            : '인쇄할 그룹을 선택해주세요.'
+                                    }
+                                </p>
+                            </div>
+
+                            {/* 출력할 코스 선택 */}
+                            <div>
+                                <label className="text-sm font-medium mb-2 block">출력할 코스 선택</label>
+                                <div className="space-y-2 border rounded p-2 max-h-[25vh] overflow-y-auto">
+                                    <div className="flex items-center">
+                                        <input
+                                            type="checkbox"
+                                            checked={printModal.showAllCourses}
+                                            onChange={(e) => {
+                                                const availableCourses = new Set<string>();
+                                                Object.values(processedData).forEach(groupPlayers => {
+                                                    groupPlayers.forEach(player => {
+                                                        player.assignedCourses?.forEach((c: any) => {
+                                                            const cName = player.coursesData[c.id]?.courseName || c.name;
+                                                            if (cName) availableCourses.add(cName);
+                                                        });
+                                                    });
+                                                });
+
+                                                if (e.target.checked) {
+                                                    setPrintModal({
+                                                        ...printModal,
+                                                        showAllCourses: true,
+                                                        selectedCourses: Array.from(availableCourses).sort()
+                                                    });
+                                                } else {
+                                                    setPrintModal({
+                                                        ...printModal,
+                                                        showAllCourses: false,
+                                                        selectedCourses: []
+                                                    });
+                                                }
+                                            }}
+                                            className="mr-2"
+                                        />
+                                        <span className="text-sm font-bold">모든 코스</span>
+                                    </div>
+                                    {!printModal.showAllCourses && (
+                                        <div className="ml-4 flex flex-wrap gap-x-4 gap-y-1">
+                                            {(() => {
+                                                const availableCourses = new Set<string>();
+                                                Object.values(processedData).forEach(groupPlayers => {
+                                                    groupPlayers.forEach(player => {
+                                                        player.assignedCourses?.forEach((c: any) => {
+                                                            const cName = player.coursesData[c.id]?.courseName || c.name;
+                                                            if (cName) availableCourses.add(cName);
+                                                        });
+                                                    });
+                                                });
+                                                return Array.from(availableCourses).sort().map((courseName) => (
+                                                    <div key={courseName} className="flex items-center">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={printModal.selectedCourses.includes(courseName)}
+                                                            onChange={(e) => {
+                                                                if (e.target.checked) {
+                                                                    setPrintModal({
+                                                                        ...printModal,
+                                                                        selectedCourses: [...printModal.selectedCourses, courseName]
+                                                                    });
+                                                                } else {
+                                                                    setPrintModal({
+                                                                        ...printModal,
+                                                                        selectedCourses: printModal.selectedCourses.filter(c => c !== courseName)
+                                                                    });
+                                                                }
+                                                            }}
+                                                            className="mr-2"
+                                                        />
+                                                        <span className="text-sm">{courseName}</span>
+                                                    </div>
+                                                ));
+                                            })()}
+                                        </div>
+                                    )}
+                                </div>
+                                <p className="text-xs text-muted-foreground mt-1 text-blue-600 font-medium italic">
+                                    * 선택한 코스만 인쇄되지만, 순위와 총타수는 전체 코스 성적으로 계산됩니다.
+                                </p>
+                            </div>
+                        </div>
+
+                        {/* 중앙: 미리보기 + 우측 패널 */}
+                        <div className="flex-1 min-w-0 border rounded-lg p-4 bg-gray-50 flex flex-col">
+                            <div className="flex items-center justify-between mb-2 shrink-0">
+                                <label className="text-sm font-medium">미리보기</label>
+                            </div>
+
+                            <div className="flex gap-4 h-full min-h-0">
+                                {/* Preview Box */}
+                                <div className="flex-1 border rounded bg-gray-100 p-4 flex items-center justify-center overflow-hidden relative">
+                                    <div
+                                        className="bg-white shadow-lg relative transition-all duration-300 origin-center"
+                                        style={{
+                                            aspectRatio: printModal.orientation === 'portrait' ? '210/297' : '297/210',
+                                            height: '100%',
+                                            maxHeight: '450px',
+                                            width: 'auto',
+                                            position: 'relative',
+                                            backgroundImage: (printModal.logoEnabled && backgroundLogoUrl) ? `url('${backgroundLogoUrl}')` : 'none',
+                                            backgroundRepeat: 'no-repeat',
+                                            backgroundPosition: `calc(50% + ${printModal.logoOffsetX}px) calc(50% + ${printModal.logoOffsetY}px)`,
+                                            backgroundSize: `${printModal.logoSize * 100}% auto`,
+                                            opacity: 1
+                                        }}
+                                    >
+                                        {/* Logo Overlay Div for Opacity Control */}
+                                        {printModal.logoEnabled && backgroundLogoUrl && (
+                                            <div style={{
+                                                position: 'absolute',
+                                                top: 0,
+                                                left: 0,
+                                                right: 0,
+                                                bottom: 0,
+                                                backgroundImage: `url('${backgroundLogoUrl}')`,
+                                                backgroundRepeat: 'no-repeat',
+                                                backgroundPosition: `calc(50% + ${printModal.logoOffsetX}px) calc(50% + ${printModal.logoOffsetY}px)`,
+                                                backgroundSize: `${printModal.logoSize * 100}% auto`,
+                                                opacity: printModal.logoOpacity,
+                                                pointerEvents: 'none',
+                                                zIndex: 0
+                                            }} />
+                                        )}
+
+                                        {/* Scaled Content - zoom 속성 활용 */}
+                                        <div style={{
+                                            zoom: 0.35,
+                                            width: '100%',
+                                            height: '100%',
+                                            position: 'relative',
+                                            zIndex: 1,
+                                            padding: '20px',
+                                            overflow: 'hidden'
+                                        }}>
+                                            <div className="text-center mb-10">
+                                                <div className="bg-blue-600 text-white p-6 rounded-lg mb-6 shadow-sm">
+                                                    <div className="text-3xl font-bold mb-2">⛳ {tournament.name || 'Park Golf Championship'}</div>
+                                                    <div className="text-xl opacity-90">인쇄일시: {new Date().toLocaleString('ko-KR')}</div>
+                                                </div>
+                                                <div className="text-left mb-4 px-2">
+                                                    <span className="text-2xl font-bold text-slate-700">📊 {allGroupsList[0] || '그룹명'}</span>
+                                                </div>
+
+                                                {/* Dummy Table Visualization */}
+                                                <div className="border border-slate-200 mt-4 rounded-sm overflow-hidden">
+                                                    <div className="bg-slate-100 p-3 border-b border-slate-200 grid grid-cols-12 gap-2">
+                                                        <div className="col-span-1 font-bold text-slate-500">순위</div>
+                                                        <div className="col-span-2 font-bold text-slate-500">이름</div>
+                                                        <div className="col-span-9 font-bold text-slate-500">점수...</div>
+                                                    </div>
+                                                    {Array.from({ length: 8 }).map((_, i) => (
+                                                        <div key={i} className="p-3 border-b border-slate-100 grid grid-cols-12 gap-2 text-sm text-slate-600">
+                                                            <div className="col-span-1">{i + 1}</div>
+                                                            <div className="col-span-2">홍길동</div>
+                                                            <div className="col-span-9">...</div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                            <div className="text-lg text-gray-400 text-center mt-10">
+                                                (미리보기 - 실제 인쇄 결과와 유사한 비율입니다)
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* 우측: 로고 설정 패널 (ON일 때만 표시, 세로 배치) */}
+                                {printModal.logoEnabled && backgroundLogoUrl && (
+                                    <div className="w-64 shrink-0 space-y-4 border-l pl-4 overflow-y-auto">
+                                        <div className="flex items-center justify-between">
+                                            <h4 className="font-semibold text-sm">로고 상세 설정</h4>
+                                        </div>
+
+                                        <div className="space-y-6">
+                                            <div className="space-y-2">
+                                                <Label className="text-xs font-medium">로고 크기 ({Math.round(printModal.logoSize * 100)}%)</Label>
+                                                <div className="flex items-center gap-2">
+                                                    <Input
+                                                        type="range"
+                                                        min="0.1"
+                                                        max="1.0"
+                                                        step="0.05"
+                                                        value={printModal.logoSize}
+                                                        onChange={(e) => setPrintModal({ ...printModal, logoSize: Number(e.target.value) })}
+                                                        className="flex-1 h-8"
+                                                    />
+                                                </div>
+                                                <Input
+                                                    type="number"
+                                                    min="0.1"
+                                                    max="1.0"
+                                                    step="0.05"
+                                                    value={printModal.logoSize}
+                                                    onChange={(e) => {
+                                                        const val = Number(e.target.value);
+                                                        if (val >= 0.1 && val <= 1.0) {
+                                                            setPrintModal({ ...printModal, logoSize: val });
+                                                        }
+                                                    }}
+                                                    className="w-full text-xs h-8"
+                                                />
+                                            </div>
+
+                                            <div className="space-y-2">
+                                                <Label className="text-xs font-medium">로고 진하기 ({Math.round(printModal.logoOpacity * 100)}%)</Label>
+                                                <div className="flex items-center gap-2">
+                                                    <Input
+                                                        type="range"
+                                                        min="0.0"
+                                                        max="1.0"
+                                                        step="0.01"
+                                                        value={printModal.logoOpacity}
+                                                        onChange={(e) => setPrintModal({ ...printModal, logoOpacity: Number(e.target.value) })}
+                                                        className="flex-1 h-8"
+                                                    />
+                                                </div>
+                                                <Input
+                                                    type="number"
+                                                    min="0.0"
+                                                    max="1.0"
+                                                    step="0.01"
+                                                    value={printModal.logoOpacity}
+                                                    onChange={(e) => {
+                                                        const val = Number(e.target.value);
+                                                        if (val >= 0.0 && val <= 1.0) {
+                                                            setPrintModal({ ...printModal, logoOpacity: val });
+                                                        }
+                                                    }}
+                                                    className="w-full text-xs h-8"
+                                                />
+                                            </div>
+
+                                            <div className="space-y-2">
+                                                <Label className="text-xs font-medium">가로 위치 (X: {printModal.logoOffsetX}px)</Label>
+                                                <div className="flex items-center gap-2">
+                                                    <Input
+                                                        type="range"
+                                                        min="-100" // 범위 확장
+                                                        max="100"
+                                                        step="1"
+                                                        value={printModal.logoOffsetX}
+                                                        onChange={(e) => setPrintModal({ ...printModal, logoOffsetX: Number(e.target.value) })}
+                                                        className="flex-1 h-8"
+                                                    />
+                                                </div>
+                                                <Input
+                                                    type="number"
+                                                    min="-100"
+                                                    max="100"
+                                                    step="1"
+                                                    value={printModal.logoOffsetX}
+                                                    onChange={(e) => setPrintModal({ ...printModal, logoOffsetX: Number(e.target.value) })}
+                                                    className="w-full text-xs h-8"
+                                                />
+                                            </div>
+
+                                            <div className="space-y-2">
+                                                <Label className="text-xs font-medium">세로 위치 (Y: {printModal.logoOffsetY}px)</Label>
+                                                <div className="flex items-center gap-2">
+                                                    <Input
+                                                        type="range"
+                                                        min="-100" // 범위 확장
+                                                        max="100"
+                                                        step="1"
+                                                        value={printModal.logoOffsetY}
+                                                        onChange={(e) => setPrintModal({ ...printModal, logoOffsetY: Number(e.target.value) })}
+                                                        className="flex-1 h-8"
+                                                    />
+                                                </div>
+                                                <Input
+                                                    type="number"
+                                                    min="-100"
+                                                    max="100"
+                                                    step="1"
+                                                    value={printModal.logoOffsetY}
+                                                    onChange={(e) => setPrintModal({ ...printModal, logoOffsetY: Number(e.target.value) })}
+                                                    className="w-full text-xs h-8"
+                                                />
+                                            </div>
+                                        </div>
                                     </div>
                                 )}
                             </div>
-                            <p className="text-xs text-muted-foreground mt-1 text-blue-600 font-medium italic">
-                                * 선택한 코스만 인쇄되지만, 순위와 총타수는 전체 코스 성적으로 계산됩니다.
-                            </p>
                         </div>
                     </div>
 
