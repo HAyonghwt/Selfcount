@@ -42,39 +42,61 @@ export default function GiftEventDisplay() {
     const unsubWinners = onValue(winnersRef, snap => setWinners(snap.val() || []));
     const unsubCurrentWinner = onValue(currentWinnerRef, snap => setCurrentWinner(snap.val() || null));
     const unsubDrawStartTime = onValue(drawStartTimeRef, snap => setDrawStartTime(snap.val() || null));
+    
+    // 초기 로드 시 설정과 로고 URL을 함께 불러오기
+    const loadInitialData = async () => {
+      try {
+        // 로고 설정 불러오기
+        const settingsSnapshot = await get(ref(db, "giftEvent/settings"));
+        if (settingsSnapshot.exists()) {
+          const settings = settingsSnapshot.val();
+          setLogoSettings({
+            enabled: settings.enabled ?? false,
+            size: settings.size ?? 1,
+            opacity: settings.opacity ?? 0.3,
+            offsetX: settings.offsetX ?? 0,
+            offsetY: settings.offsetY ?? 0,
+            saturation: settings.saturation ?? 600,
+            intensity: settings.intensity ?? 200,
+            isBlackAndWhite: settings.isBlackAndWhite ?? false
+          });
+        }
+        
+        // 로고 URL 불러오기
+        const logosSnapshot = await get(ref(db, 'logos'));
+        if (logosSnapshot.exists()) {
+          const data = logosSnapshot.val();
+          const firstLogo = Object.values(data)[0] as any;
+          if (firstLogo?.url) {
+            setLogoUrl(firstLogo.url);
+          }
+        } else {
+          console.log('[GiftEventDisplay] No logos found in Firebase (initial load)');
+        }
+      } catch (error) {
+        console.error('[GiftEventDisplay] Error loading initial data:', error);
+      }
+    };
+    
+    loadInitialData();
+    
+    // 실시간 구독으로 설정 변경 감지 (초기 로드 후에도 작동)
     const unsubSettings = onValue(ref(db, "giftEvent/settings"), snap => {
       if (snap.exists()) {
         const settings = snap.val();
         // Merge with defaults to ensure all properties exist
-        setLogoSettings({
+        const updatedSettings = {
           enabled: settings.enabled ?? false,
           size: settings.size ?? 1,
           opacity: settings.opacity ?? 0.3,
           offsetX: settings.offsetX ?? 0,
           offsetY: settings.offsetY ?? 0,
-          saturation: settings.saturation ?? 400,
-          intensity: settings.intensity ?? 200
-        });
-        console.log('[GiftEventDisplay] Logo settings loaded:', settings);
-      } else {
-        console.log('[GiftEventDisplay] No logo settings found in Firebase');
+          saturation: settings.saturation ?? 600,
+          intensity: settings.intensity ?? 200,
+          isBlackAndWhite: settings.isBlackAndWhite ?? false
+        };
+        setLogoSettings(updatedSettings);
       }
-    });
-
-    // Fetch logo URL
-    get(ref(db, 'logos')).then((snapshot) => {
-      if (snapshot.exists()) {
-        const data = snapshot.val();
-        const firstLogo = Object.values(data)[0] as any;
-        if (firstLogo?.url) {
-          setLogoUrl(firstLogo.url);
-          console.log('[GiftEventDisplay] Logo URL loaded:', firstLogo.url);
-        }
-      } else {
-        console.log('[GiftEventDisplay] No logos found in Firebase');
-      }
-    }).catch(error => {
-      console.error('[GiftEventDisplay] Error fetching logo:', error);
     });
 
     return () => {

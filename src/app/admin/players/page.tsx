@@ -19,7 +19,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Checkbox } from "@/components/ui/checkbox";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { db } from "@/lib/firebase";
-import { ref, onValue, push, remove, update, set } from "firebase/database";
+import { ref, onValue, push, remove, update, set, get } from "firebase/database";
 import { useToast } from "@/hooks/use-toast";
 import * as XLSX from 'xlsx';
 
@@ -58,8 +58,135 @@ export default function PlayerManagementPage() {
         open: false,
         type: 'individual' as 'individual' | 'team',
         paperSize: 'A4' as 'A4' | 'A3', // 용지 크기 추가
-        groupSettings: {} as { [groupName: string]: { date: string; courses: string[] } } // courses는 선택 순서대로 저장
+        groupSettings: {} as { [groupName: string]: { date: string; courses: string[] } }, // courses는 선택 순서대로 저장
+        logoEnabled: false, // 로고 온/오프
+        logoSize: 0.6, // 로고 크기 (0.1 ~ 1.0)
+        logoOpacity: 0.10, // 로고 진하기 (0.0 ~ 1.0)
+        logoOffsetX: 0, // 로고 가로 위치 (-100 ~ 100)
+        logoOffsetY: 0, // 로고 세로 위치 (-100 ~ 100)
     });
+
+    // 로고 불러오기
+    const [backgroundLogoUrl, setBackgroundLogoUrl] = useState<string>('');
+    useEffect(() => {
+        const loadLogo = async () => {
+            if (!db) return;
+            try {
+                const logosRef = ref(db, 'logos');
+                const snapshot = await get(logosRef);
+                if (snapshot.exists()) {
+                    const logosData = snapshot.val();
+                    const firstLogo = Object.values(logosData)[0] as any;
+                    if (firstLogo?.url) {
+                        setBackgroundLogoUrl(firstLogo.url);
+                    }
+                }
+            } catch (error) {
+                console.error('로고 불러오기 실패:', error);
+            }
+        };
+        loadLogo();
+    }, []);
+
+    // 로고 설정 불러오기 및 저장
+    useEffect(() => {
+        if (!db) return;
+
+        const loadInitialData = async () => {
+            try {
+                // 먼저 get으로 즉시 불러오기
+                const settingsSnapshot = await get(ref(db, 'rosterDownload/settings'));
+                if (settingsSnapshot.exists()) {
+                    const settings = settingsSnapshot.val();
+                    setRosterDownloadModal(prev => ({
+                        ...prev,
+                        logoEnabled: settings.logoEnabled ?? false,
+                        logoSize: settings.logoSize ?? 0.6,
+                        logoOpacity: settings.logoOpacity ?? 0.10,
+                        logoOffsetX: settings.logoOffsetX ?? 0,
+                        logoOffsetY: settings.logoOffsetY ?? 0
+                    }));
+                }
+            } catch (error) {
+                console.error('로고 설정 불러오기 실패:', error);
+            }
+        };
+
+        loadInitialData();
+
+        // 실시간 구독으로 설정 변경 감지
+        const unsubSettings = onValue(ref(db, 'rosterDownload/settings'), (snapshot) => {
+            if (snapshot.exists()) {
+                const settings = snapshot.val();
+                setRosterDownloadModal(prev => ({
+                    ...prev,
+                    logoEnabled: settings.logoEnabled ?? false,
+                    logoSize: settings.logoSize ?? 0.6,
+                    logoOpacity: settings.logoOpacity ?? 0.10,
+                    logoOffsetX: settings.logoOffsetX ?? 0,
+                    logoOffsetY: settings.logoOffsetY ?? 0
+                }));
+            }
+        });
+
+        return () => {
+            unsubSettings();
+        };
+    }, []);
+
+    // 로고 설정 업데이트 함수
+    const updateRosterLogoSettings = async (newSettings: Partial<Pick<typeof rosterDownloadModal, 'logoEnabled' | 'logoSize' | 'logoOpacity' | 'logoOffsetX' | 'logoOffsetY'>>) => {
+        if (!db) return;
+
+        try {
+            // Firebase에서 현재 설정을 불러와서 병합 (최신 상태 보장)
+            const currentSettingsSnapshot = await get(ref(db, 'rosterDownload/settings'));
+            let finalSettings;
+            
+            if (currentSettingsSnapshot.exists()) {
+                // Firebase에 설정이 있으면 Firebase의 설정과 병합
+                const currentSettings = currentSettingsSnapshot.val();
+                finalSettings = {
+                    logoEnabled: currentSettings.logoEnabled ?? false,
+                    logoSize: currentSettings.logoSize ?? 0.6,
+                    logoOpacity: currentSettings.logoOpacity ?? 0.10,
+                    logoOffsetX: currentSettings.logoOffsetX ?? 0,
+                    logoOffsetY: currentSettings.logoOffsetY ?? 0,
+                    ...newSettings
+                };
+            } else {
+                // Firebase에 설정이 없으면 현재 state와 병합
+                finalSettings = {
+                    logoEnabled: rosterDownloadModal.logoEnabled,
+                    logoSize: rosterDownloadModal.logoSize,
+                    logoOpacity: rosterDownloadModal.logoOpacity,
+                    logoOffsetX: rosterDownloadModal.logoOffsetX,
+                    logoOffsetY: rosterDownloadModal.logoOffsetY,
+                    ...newSettings
+                };
+            }
+
+            // 기본값 보장
+            const settingsToSave = {
+                logoEnabled: finalSettings.logoEnabled ?? false,
+                logoSize: finalSettings.logoSize ?? 0.6,
+                logoOpacity: finalSettings.logoOpacity ?? 0.10,
+                logoOffsetX: finalSettings.logoOffsetX ?? 0,
+                logoOffsetY: finalSettings.logoOffsetY ?? 0
+            };
+
+            // Firebase에 먼저 저장
+            await set(ref(db, 'rosterDownload/settings'), settingsToSave);
+
+            // 그 다음 state 업데이트 (Firebase 저장 후)
+            setRosterDownloadModal(prev => ({
+                ...prev,
+                ...settingsToSave
+            }));
+        } catch (error) {
+            console.error('로고 설정 저장 실패:', error);
+        }
+    };
     
     // Course assignment modal states
     const [isGroupCourseModalOpen, setGroupCourseModalOpen] = useState(false);
@@ -1798,6 +1925,31 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                     `;
                     document.body.appendChild(container);
 
+                    const logoStyle = (rosterDownloadModal.logoEnabled && backgroundLogoUrl) ? `
+                        position: relative;
+                        background-image: url('${backgroundLogoUrl.replace(/'/g, "\\'")}');
+                        background-repeat: no-repeat;
+                        background-position: calc(50% + ${rosterDownloadModal.logoOffsetX}px) calc(50% + ${rosterDownloadModal.logoOffsetY}px);
+                        background-size: ${rosterDownloadModal.logoSize * 100}% auto;
+                    ` : '';
+
+                    const logoOverlay = (rosterDownloadModal.logoEnabled && backgroundLogoUrl) ? `
+                        <div style="
+                            position: absolute;
+                            top: 0;
+                            left: 0;
+                            right: 0;
+                            bottom: 0;
+                            background-image: url('${backgroundLogoUrl.replace(/'/g, "\\'")}');
+                            background-repeat: no-repeat;
+                            background-position: calc(50% + ${rosterDownloadModal.logoOffsetX}px) calc(50% + ${rosterDownloadModal.logoOffsetY}px);
+                            background-size: ${rosterDownloadModal.logoSize * 100}% auto;
+                            opacity: ${rosterDownloadModal.logoOpacity};
+                            pointer-events: none;
+                            z-index: 0;
+                        "></div>
+                    ` : '';
+
                     const styleContent = `
                         <style>
                             .print-wrapper { 
@@ -1805,7 +1957,8 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                                 text-align: center; 
                                 color: #1e293b; 
                                 width: 100%; 
-                                box-sizing: border-box; 
+                                box-sizing: border-box;
+                                ${logoStyle}
                             }
                             .print-header { 
                                 background-color: #3b82f6; 
@@ -1905,13 +2058,14 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                     // 첫 페이지에만 대회 제목 표시
                     if (pageNum === 1) {
                         htmlContent += `
-                            <div class="print-wrapper">
-                                <div class="print-header">
+                            <div class="print-wrapper" style="position: relative;">
+                                ${logoOverlay}
+                                <div class="print-header" style="position: relative; z-index: 1;">
                                     <div class="print-title">⛳ ${tournamentName}</div>
                                 </div>
                         `;
                     } else {
-                        htmlContent += `<div class="print-wrapper">`;
+                        htmlContent += `<div class="print-wrapper" style="position: relative;">${logoOverlay}`;
                     }
                     
                     // 그룹별 설정 가져오기 (코스는 선택 순서대로)
@@ -2061,9 +2215,10 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                     htmlContent += `
                                 </tbody>
                             </table>
-                            <div class="page-footer" style="margin-top: 40px; padding-bottom: 20px;">
+                            <div class="page-footer" style="margin-top: 40px; padding-bottom: 20px; position: relative; z-index: 1;">
                                 ${isLastPage ? `총 ${totalPlayers}${type === 'individual' ? '명' : '팀'}` : ''} - ${pageNum}/${totalPages}페이지
                             </div>
+                        </div>
                         </div>
                     `;
 
@@ -2335,13 +2490,32 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                 }
                 
                 const groupNameEnglish = getGroupNameEnglish(groupName);
+                const logoOverlayForGroup = (rosterDownloadModal.logoEnabled && backgroundLogoUrl) ? `
+                    <div style="
+                        position: absolute;
+                        top: 0;
+                        left: 0;
+                        right: 0;
+                        bottom: 0;
+                        background-image: url('${backgroundLogoUrl.replace(/'/g, "\\'")}');
+                        background-repeat: no-repeat;
+                        background-position: calc(50% + ${rosterDownloadModal.logoOffsetX}px) calc(50% + ${rosterDownloadModal.logoOffsetY}px);
+                        background-size: ${rosterDownloadModal.logoSize * 100}% auto;
+                        opacity: ${rosterDownloadModal.logoOpacity};
+                        pointer-events: none;
+                        z-index: 0;
+                    "></div>
+                ` : '';
+
                 printContent += `
-                    <div style="margin-bottom: 30px;">
-                        <h1 style="font-size: 32px; font-weight: 800; margin-bottom: 20px; text-align: center;">⛳ ${tournamentName}</h1>
-                        <div style="margin-bottom: 20px;">
-                            <h2 style="font-size: 24px; font-weight: 700; color: #334155; margin-bottom: 12px;">
-                                📋 ${groupName} 조편성표 ${groupNameEnglish ? `<span style="font-size: 18px; font-weight: 500; color: #64748b; margin-left: 8px;">${groupNameEnglish}</span>` : ''}
-                            </h2>
+                    <div style="margin-bottom: 30px; position: relative;">
+                        ${logoOverlayForGroup}
+                        <div style="position: relative; z-index: 1;">
+                            <h1 style="font-size: 32px; font-weight: 800; margin-bottom: 20px; text-align: center;">⛳ ${tournamentName}</h1>
+                            <div style="margin-bottom: 20px;">
+                                <h2 style="font-size: 24px; font-weight: 700; color: #334155; margin-bottom: 12px;">
+                                    📋 ${groupName} 조편성표 ${groupNameEnglish ? `<span style="font-size: 18px; font-weight: 500; color: #64748b; margin-left: 8px;">${groupNameEnglish}</span>` : ''}
+                                </h2>
                             <div style="padding: 12px; background-color: #f8fafc; border-radius: 8px; border-left: 4px solid #3b82f6; margin-bottom: 20px;">
                                 <div style="font-size: 14px; font-weight: 600; color: #334155; margin-bottom: 6px;">📅 일정: ${scheduleText} <span style="font-size: 12px; font-weight: 500; color: #64748b; margin-left: 8px;">(${scheduleTextEnglish})</span></div>
                                 <div style="font-size: 14px; font-weight: 600; color: #334155;">⛳ 코스: ${coursesText} <span style="font-size: 12px; font-weight: 500; color: #64748b; margin-left: 8px;">(${coursesTextEnglish})</span></div>
@@ -2394,6 +2568,7 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                 
                 printContent += `
                         </table>
+                        </div>
                     </div>
                 `;
             });
@@ -2407,6 +2582,31 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
             }
             
             const paperSize = rosterDownloadModal.paperSize || 'A4';
+            const logoStyleForPrint = (rosterDownloadModal.logoEnabled && backgroundLogoUrl) ? `
+                position: relative;
+                background-image: url('${backgroundLogoUrl.replace(/'/g, "\\'")}');
+                background-repeat: no-repeat;
+                background-position: calc(50% + ${rosterDownloadModal.logoOffsetX}px) calc(50% + ${rosterDownloadModal.logoOffsetY}px);
+                background-size: ${rosterDownloadModal.logoSize * 100}% auto;
+            ` : '';
+
+            const logoOverlayForPrint = (rosterDownloadModal.logoEnabled && backgroundLogoUrl) ? `
+                <div style="
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    right: 0;
+                    bottom: 0;
+                    background-image: url('${backgroundLogoUrl.replace(/'/g, "\\'")}');
+                    background-repeat: no-repeat;
+                    background-position: calc(50% + ${rosterDownloadModal.logoOffsetX}px) calc(50% + ${rosterDownloadModal.logoOffsetY}px);
+                    background-size: ${rosterDownloadModal.logoSize * 100}% auto;
+                    opacity: ${rosterDownloadModal.logoOpacity};
+                    pointer-events: none;
+                    z-index: 0;
+                "></div>
+            ` : '';
+
             const fullHtml = `
                 <!DOCTYPE html>
                 <html>
@@ -2426,11 +2626,15 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
                         body {
                             font-family: 'Pretendard', 'Malgun Gothic', sans-serif;
                             padding: 20px;
+                            ${logoStyleForPrint}
                         }
                     </style>
                 </head>
                 <body>
-                    ${printContent}
+                    ${logoOverlayForPrint}
+                    <div style="position: relative; z-index: 1;">
+                        ${printContent}
+                    </div>
                 </body>
                 </html>
             `;
@@ -3205,155 +3409,365 @@ if (allPlayers.length + newPlayers.length > maxPlayers) {
 
         {/* 조 편성표 다운로드 모달 (기존 코드와 완전히 분리) */}
         <Dialog open={rosterDownloadModal.open} onOpenChange={(open) => setRosterDownloadModal({ ...rosterDownloadModal, open })}>
-            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-                <DialogHeader>
-                    <DialogTitle>📋 조 편성표 다운로드 설정</DialogTitle>
-                    <DialogDescription>
-                        각 그룹별로 일정과 코스를 지정한 후 이미지 다운로드 또는 인쇄를 진행하세요.
-                    </DialogDescription>
+            <DialogContent className="max-w-[95vw] w-full lg:max-w-7xl max-h-[90vh] overflow-hidden flex flex-col">
+                <DialogHeader className="flex flex-row items-center justify-between pb-4 border-b mb-4 space-y-0 shrink-0">
+                    <div className="space-y-1 text-left">
+                        <DialogTitle>📋 조 편성표 다운로드 설정</DialogTitle>
+                        <DialogDescription>
+                            각 그룹별로 일정과 코스를 지정한 후 이미지 다운로드 또는 인쇄를 진행하세요.
+                        </DialogDescription>
+                    </div>
+                    {backgroundLogoUrl && (
+                        <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium text-slate-600">배경 로고 설정</span>
+                            <Button
+                                size="sm"
+                                variant={rosterDownloadModal.logoEnabled ? 'default' : 'outline'}
+                                onClick={() => {
+                                    const newEnabled = !rosterDownloadModal.logoEnabled;
+                                    updateRosterLogoSettings({ logoEnabled: newEnabled });
+                                }}
+                                className={`h-8 w-16 ${rosterDownloadModal.logoEnabled ? 'bg-blue-600 hover:bg-blue-700' : ''}`}
+                            >
+                                {rosterDownloadModal.logoEnabled ? 'ON' : 'OFF'}
+                            </Button>
+                        </div>
+                    )}
                 </DialogHeader>
                 
-                <div className="space-y-4">
-                    <Tabs defaultValue={groupList.filter((g: any) => g.type === rosterDownloadModal.type)[0]?.name || ''}>
-                        <TabsList className="grid w-full grid-cols-auto gap-2 overflow-x-auto">
+                <div className="flex gap-4 flex-1 min-h-0 overflow-hidden">
+                    {/* 좌측: 그룹별 설정 */}
+                    <div className="w-[400px] shrink-0 border rounded-lg p-4 bg-gray-50 overflow-y-auto">
+                        <div className="mb-4">
+                            <Label className="text-base font-semibold mb-2 block">
+                                📄 용지 크기 <span className="text-sm font-normal text-muted-foreground">(Paper Size)</span>
+                            </Label>
+                            <div className="flex gap-4">
+                                <div className="flex items-center space-x-2">
+                                    <input
+                                        type="radio"
+                                        id="paper-a4"
+                                        name="paperSize"
+                                        value="A4"
+                                        checked={rosterDownloadModal.paperSize === 'A4'}
+                                        onChange={(e) => setRosterDownloadModal({ ...rosterDownloadModal, paperSize: e.target.value as 'A4' | 'A3' })}
+                                        className="w-4 h-4"
+                                    />
+                                    <Label htmlFor="paper-a4" className="text-sm font-normal cursor-pointer">A4</Label>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                    <input
+                                        type="radio"
+                                        id="paper-a3"
+                                        name="paperSize"
+                                        value="A3"
+                                        checked={rosterDownloadModal.paperSize === 'A3'}
+                                        onChange={(e) => setRosterDownloadModal({ ...rosterDownloadModal, paperSize: e.target.value as 'A4' | 'A3' })}
+                                        className="w-4 h-4"
+                                    />
+                                    <Label htmlFor="paper-a3" className="text-sm font-normal cursor-pointer">A3</Label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <Tabs defaultValue={groupList.filter((g: any) => g.type === rosterDownloadModal.type)[0]?.name || ''}>
+                            <TabsList className="grid w-full grid-cols-auto gap-2 overflow-x-auto mb-4">
+                                {groupList
+                                    .filter((g: any) => g.type === rosterDownloadModal.type)
+                                    .map((group: any) => (
+                                        <TabsTrigger key={group.name} value={group.name} className="whitespace-nowrap">
+                                            {group.name}
+                                        </TabsTrigger>
+                                    ))}
+                            </TabsList>
+                            
                             {groupList
                                 .filter((g: any) => g.type === rosterDownloadModal.type)
-                                .map((group: any) => (
-                                    <TabsTrigger key={group.name} value={group.name} className="whitespace-nowrap">
-                                        {group.name}
-                                    </TabsTrigger>
-                                ))}
-                        </TabsList>
-                        
-                        {groupList
-                            .filter((g: any) => g.type === rosterDownloadModal.type)
-                            .map((group: any) => {
-                                const groupName = group.name;
-                                const currentSettings = rosterDownloadModal.groupSettings[groupName] || { date: '', courses: [] };
-                                
-                                return (
-                                    <TabsContent key={groupName} value={groupName} className="space-y-4">
-                                        <div className="space-y-4 p-4 border rounded-lg bg-blue-50/50">
-                                            <div className="mb-4 pb-3 border-b">
-                                                <h3 className="text-lg font-bold text-primary">{groupName} 그룹 설정</h3>
-                                                <p className="text-sm text-muted-foreground mt-1">이 그룹만의 일정과 코스를 설정합니다.</p>
-                                            </div>
-                                            <div>
-                                                <Label htmlFor={`date-${groupName}`} className="text-base font-semibold">
-                                                    📅 일정 <span className="text-sm font-normal text-muted-foreground">(Schedule)</span>
-                                                </Label>
-                                                <Input
-                                                    id={`date-${groupName}`}
-                                                    type="date"
-                                                    value={currentSettings.date}
-                                                    onChange={(e) => {
-                                                        setRosterDownloadModal({
-                                                            ...rosterDownloadModal,
-                                                            groupSettings: {
-                                                                ...rosterDownloadModal.groupSettings,
-                                                                [groupName]: {
-                                                                    ...currentSettings,
-                                                                    date: e.target.value
+                                .map((group: any) => {
+                                    const groupName = group.name;
+                                    const currentSettings = rosterDownloadModal.groupSettings[groupName] || { date: '', courses: [] };
+                                    
+                                    return (
+                                        <TabsContent key={groupName} value={groupName} className="space-y-4">
+                                            <div className="space-y-4">
+                                                <div>
+                                                    <Label htmlFor={`date-${groupName}`} className="text-sm font-semibold">
+                                                        📅 일정
+                                                    </Label>
+                                                    <Input
+                                                        id={`date-${groupName}`}
+                                                        type="date"
+                                                        value={currentSettings.date}
+                                                        onChange={(e) => {
+                                                            setRosterDownloadModal({
+                                                                ...rosterDownloadModal,
+                                                                groupSettings: {
+                                                                    ...rosterDownloadModal.groupSettings,
+                                                                    [groupName]: {
+                                                                        ...currentSettings,
+                                                                        date: e.target.value
+                                                                    }
                                                                 }
-                                                            }
-                                                        });
-                                                    }}
-                                                    className="mt-2"
-                                                />
-                                            </div>
-                                            
-                                            <div>
-                                                <Label className="text-base font-semibold mb-2 block">
-                                                    ⛳ 코스 선택 (복수 선택 가능) <span className="text-sm font-normal text-muted-foreground">(Course Selection - Multiple Selection Available)</span>
-                                                </Label>
-                                                {currentSettings.courses.length > 0 && (
-                                                    <div className="text-sm text-muted-foreground mb-2">
-                                                        선택 순서: {currentSettings.courses.map((cid: string) => {
-                                                            const course = courses.find((c: any) => c.id === cid);
-                                                            return course?.name || cid;
-                                                        }).join(' → ')}
-                                                    </div>
-                                                )}
-                                                <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mt-2">
-                                                    {courses.map((course: any) => {
-                                                        const isSelected = currentSettings.courses.includes(course.id);
-                                                        return (
-                                                            <div key={course.id} className="flex items-center space-x-2">
-                                                                <Checkbox
-                                                                    id={`course-${groupName}-${course.id}`}
-                                                                    checked={isSelected}
-                                                                    onCheckedChange={(checked) => {
-                                                                        const newCourses = checked
-                                                                            ? [...currentSettings.courses, course.id]
-                                                                            : currentSettings.courses.filter((cid: string) => cid !== course.id);
-                                                                        setRosterDownloadModal({
-                                                                            ...rosterDownloadModal,
-                                                                            groupSettings: {
-                                                                                ...rosterDownloadModal.groupSettings,
-                                                                                [groupName]: {
-                                                                                    ...currentSettings,
-                                                                                    courses: newCourses
-                                                                                }
-                                                                            }
-                                                                        });
-                                                                    }}
-                                                                />
-                                                                <Label
-                                                                    htmlFor={`course-${groupName}-${course.id}`}
-                                                                    className="text-sm font-normal cursor-pointer"
-                                                                >
-                                                                    {course.name}
-                                                                </Label>
-                                                            </div>
-                                                        );
-                                                    })}
+                                                            });
+                                                        }}
+                                                        className="mt-2"
+                                                    />
                                                 </div>
-                                                {courses.length === 0 && (
-                                                    <p className="text-sm text-muted-foreground mt-2">
-                                                        코스가 없습니다. 코스 관리 페이지에서 코스를 먼저 추가해주세요.
-                                                    </p>
-                                                )}
+                                                
+                                                <div>
+                                                    <Label className="text-sm font-semibold mb-2 block">
+                                                        ⛳ 코스 선택
+                                                    </Label>
+                                                    {currentSettings.courses.length > 0 && (
+                                                        <div className="text-xs text-muted-foreground mb-2">
+                                                            선택 순서: {currentSettings.courses.map((cid: string) => {
+                                                                const course = courses.find((c: any) => c.id === cid);
+                                                                return course?.name || cid;
+                                                            }).join(' → ')}
+                                                        </div>
+                                                    )}
+                                                    <div className="grid grid-cols-1 gap-2 mt-2">
+                                                        {courses.map((course: any) => {
+                                                            const isSelected = currentSettings.courses.includes(course.id);
+                                                            return (
+                                                                <div key={course.id} className="flex items-center space-x-2">
+                                                                    <Checkbox
+                                                                        id={`course-${groupName}-${course.id}`}
+                                                                        checked={isSelected}
+                                                                        onCheckedChange={(checked) => {
+                                                                            const newCourses = checked
+                                                                                ? [...currentSettings.courses, course.id]
+                                                                                : currentSettings.courses.filter((cid: string) => cid !== course.id);
+                                                                            setRosterDownloadModal({
+                                                                                ...rosterDownloadModal,
+                                                                                groupSettings: {
+                                                                                    ...rosterDownloadModal.groupSettings,
+                                                                                    [groupName]: {
+                                                                                        ...currentSettings,
+                                                                                        courses: newCourses
+                                                                                    }
+                                                                                }
+                                                                            });
+                                                                        }}
+                                                                    />
+                                                                    <Label
+                                                                        htmlFor={`course-${groupName}-${course.id}`}
+                                                                        className="text-sm font-normal cursor-pointer"
+                                                                    >
+                                                                        {course.name}
+                                                                    </Label>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                    {courses.length === 0 && (
+                                                        <p className="text-xs text-muted-foreground mt-2">
+                                                            코스가 없습니다.
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </TabsContent>
+                                    );
+                                })}
+                        </Tabs>
+                    </div>
+
+                    {/* 중앙: 미리보기 + 우측 패널 */}
+                    <div className="flex-1 min-w-0 border rounded-lg p-4 bg-gray-50 flex flex-col">
+                        <div className="flex items-center justify-between mb-2 shrink-0">
+                            <label className="text-sm font-medium">미리보기</label>
+                        </div>
+
+                        <div className="flex gap-4 h-full min-h-0">
+                            {/* Preview Box */}
+                            <div className="flex-1 border rounded bg-gray-100 p-4 flex items-center justify-center overflow-hidden relative">
+                                <div
+                                    className="bg-white shadow-lg relative transition-all duration-300 origin-center"
+                                    style={{
+                                        aspectRatio: rosterDownloadModal.paperSize === 'A4' ? '210/297' : '297/420',
+                                        height: '100%',
+                                        maxHeight: '450px',
+                                        width: 'auto',
+                                        position: 'relative',
+                                    }}
+                                >
+                                    {/* Logo Overlay Div for Opacity Control */}
+                                    {rosterDownloadModal.logoEnabled && backgroundLogoUrl && (
+                                        <div style={{
+                                            position: 'absolute',
+                                            top: 0,
+                                            left: 0,
+                                            right: 0,
+                                            bottom: 0,
+                                            backgroundImage: `url('${backgroundLogoUrl}')`,
+                                            backgroundRepeat: 'no-repeat',
+                                            backgroundPosition: `calc(50% + ${rosterDownloadModal.logoOffsetX}px) calc(50% + ${rosterDownloadModal.logoOffsetY}px)`,
+                                            backgroundSize: `${rosterDownloadModal.logoSize * 100}% auto`,
+                                            opacity: rosterDownloadModal.logoOpacity,
+                                            pointerEvents: 'none',
+                                            zIndex: 0
+                                        }} />
+                                    )}
+
+                                    {/* Scaled Content */}
+                                    <div style={{
+                                        zoom: 0.3,
+                                        width: '100%',
+                                        height: '100%',
+                                        position: 'relative',
+                                        zIndex: 1,
+                                        padding: '20px',
+                                        overflow: 'hidden'
+                                    }}>
+                                        <div className="text-center mb-6">
+                                            <div className="bg-blue-600 text-white p-4 rounded-lg mb-4 shadow-sm">
+                                                <div className="text-2xl font-bold mb-1">⛳ {tournament?.name || '파크골프 토너먼트'}</div>
+                                                <div className="text-sm opacity-90">{new Date().toLocaleString('ko-KR')}</div>
+                                            </div>
+                                            <div className="text-left mb-3 px-2">
+                                                <span className="text-xl font-bold text-slate-700">
+                                                    📋 {groupList.filter((g: any) => g.type === rosterDownloadModal.type)[0]?.name || '그룹명'} 조편성표
+                                                </span>
+                                            </div>
+                                            <div className="border border-slate-200 mt-3 rounded-sm overflow-hidden">
+                                                <div className="bg-slate-100 p-2 border-b border-slate-200 grid grid-cols-2 gap-2">
+                                                    <div className="font-bold text-slate-500 text-sm">조</div>
+                                                    <div className="font-bold text-slate-500 text-sm">조 구성원</div>
+                                                </div>
+                                                <div className="bg-white">
+                                                    <div className="p-2 border-b border-slate-200 grid grid-cols-2 gap-2">
+                                                        <div className="bg-blue-100 text-blue-700 font-bold text-sm text-center py-1">1조</div>
+                                                        <div className="text-slate-600 text-xs text-center py-1">홍길동(소속1) 김철수(소속2)</div>
+                                                    </div>
+                                                    <div className="p-2 border-b border-slate-200 grid grid-cols-2 gap-2">
+                                                        <div className="bg-blue-100 text-blue-700 font-bold text-sm text-center py-1">2조</div>
+                                                        <div className="text-slate-600 text-xs text-center py-1">이영희(소속3) 박민수(소속4)</div>
+                                                    </div>
+                                                    <div className="p-2 grid grid-cols-2 gap-2">
+                                                        <div className="bg-blue-100 text-blue-700 font-bold text-sm text-center py-1">3조</div>
+                                                        <div className="text-slate-600 text-xs text-center py-1">최지영(소속5) 정대현(소속6)</div>
+                                                    </div>
+                                                </div>
                                             </div>
                                         </div>
-                                    </TabsContent>
-                                );
-                            })}
-                    </Tabs>
-                </div>
-                
-                <div className="mb-4 p-4 border rounded-lg bg-gray-50">
-                    <Label className="text-base font-semibold mb-2 block">
-                        📄 용지 크기 <span className="text-sm font-normal text-muted-foreground">(Paper Size)</span>
-                    </Label>
-                    <div className="flex gap-4">
-                        <div className="flex items-center space-x-2">
-                            <input
-                                type="radio"
-                                id="paper-a4"
-                                name="paperSize"
-                                value="A4"
-                                checked={rosterDownloadModal.paperSize === 'A4'}
-                                onChange={(e) => setRosterDownloadModal({ ...rosterDownloadModal, paperSize: e.target.value as 'A4' | 'A3' })}
-                                className="w-4 h-4"
-                            />
-                            <Label htmlFor="paper-a4" className="text-sm font-normal cursor-pointer">A4 (210mm × 297mm)</Label>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                            <input
-                                type="radio"
-                                id="paper-a3"
-                                name="paperSize"
-                                value="A3"
-                                checked={rosterDownloadModal.paperSize === 'A3'}
-                                onChange={(e) => setRosterDownloadModal({ ...rosterDownloadModal, paperSize: e.target.value as 'A4' | 'A3' })}
-                                className="w-4 h-4"
-                            />
-                            <Label htmlFor="paper-a3" className="text-sm font-normal cursor-pointer">A3 (297mm × 420mm)</Label>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* 우측: 로고 설정 패널 (ON일 때만 표시) */}
+                            {rosterDownloadModal.logoEnabled && backgroundLogoUrl && (
+                                <div className="w-[280px] shrink-0 border rounded-lg p-4 bg-blue-50 overflow-y-auto">
+                                    <div className="flex items-center justify-between mb-4">
+                                        <h4 className="font-semibold text-sm">로고 상세 설정</h4>
+                                    </div>
+
+                                    <div className="space-y-4">
+                                        <div className="space-y-2">
+                                            <Label className="text-xs font-medium">로고 크기 ({Math.round(rosterDownloadModal.logoSize * 100)}%)</Label>
+                                            <Input
+                                                type="range"
+                                                min="0.1"
+                                                max="1.0"
+                                                step="0.05"
+                                                value={rosterDownloadModal.logoSize}
+                                                onChange={(e) => updateRosterLogoSettings({ logoSize: Number(e.target.value) })}
+                                                className="w-full h-8"
+                                            />
+                                            <Input
+                                                type="number"
+                                                min="0.1"
+                                                max="1.0"
+                                                step="0.05"
+                                                value={rosterDownloadModal.logoSize}
+                                                onChange={(e) => {
+                                                    const val = Number(e.target.value);
+                                                    if (val >= 0.1 && val <= 1.0) {
+                                                        updateRosterLogoSettings({ logoSize: val });
+                                                    }
+                                                }}
+                                                className="w-full text-xs h-8"
+                                            />
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <Label className="text-xs font-medium">로고 진하기 ({Math.round(rosterDownloadModal.logoOpacity * 100)}%)</Label>
+                                            <Input
+                                                type="range"
+                                                min="0.0"
+                                                max="1.0"
+                                                step="0.01"
+                                                value={rosterDownloadModal.logoOpacity}
+                                                onChange={(e) => updateRosterLogoSettings({ logoOpacity: Number(e.target.value) })}
+                                                className="w-full h-8"
+                                            />
+                                            <Input
+                                                type="number"
+                                                min="0.0"
+                                                max="1.0"
+                                                step="0.01"
+                                                value={rosterDownloadModal.logoOpacity}
+                                                onChange={(e) => {
+                                                    const val = Number(e.target.value);
+                                                    if (val >= 0.0 && val <= 1.0) {
+                                                        updateRosterLogoSettings({ logoOpacity: val });
+                                                    }
+                                                }}
+                                                className="w-full text-xs h-8"
+                                            />
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <Label className="text-xs font-medium">가로 위치 (X: {rosterDownloadModal.logoOffsetX}px)</Label>
+                                            <Input
+                                                type="range"
+                                                min="-100"
+                                                max="100"
+                                                step="1"
+                                                value={rosterDownloadModal.logoOffsetX}
+                                                onChange={(e) => updateRosterLogoSettings({ logoOffsetX: Number(e.target.value) })}
+                                                className="w-full h-8"
+                                            />
+                                            <Input
+                                                type="number"
+                                                min="-100"
+                                                max="100"
+                                                step="1"
+                                                value={rosterDownloadModal.logoOffsetX}
+                                                onChange={(e) => updateRosterLogoSettings({ logoOffsetX: Number(e.target.value) })}
+                                                className="w-full text-xs h-8"
+                                            />
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <Label className="text-xs font-medium">세로 위치 (Y: {rosterDownloadModal.logoOffsetY}px)</Label>
+                                            <Input
+                                                type="range"
+                                                min="-100"
+                                                max="100"
+                                                step="1"
+                                                value={rosterDownloadModal.logoOffsetY}
+                                                onChange={(e) => updateRosterLogoSettings({ logoOffsetY: Number(e.target.value) })}
+                                                className="w-full h-8"
+                                            />
+                                            <Input
+                                                type="number"
+                                                min="-100"
+                                                max="100"
+                                                step="1"
+                                                value={rosterDownloadModal.logoOffsetY}
+                                                onChange={(e) => updateRosterLogoSettings({ logoOffsetY: Number(e.target.value) })}
+                                                className="w-full text-xs h-8"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>
                 
-                <DialogFooter className="flex gap-2">
+                <DialogFooter className="flex gap-2 shrink-0 mt-4">
                     <Button
                         variant="outline"
                         onClick={() => setRosterDownloadModal({ ...rosterDownloadModal, open: false })}

@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/select"
 import { useToast } from "@/hooks/use-toast";
 import { db } from "@/lib/firebase";
-import { ref, onValue, get, set, remove } from "firebase/database";
+import { ref, onValue, get, set, remove, update } from "firebase/database";
 import { Download, Settings, Upload, Trash2, X } from "lucide-react";
 import jsPDF from "jspdf";
 
@@ -43,6 +43,7 @@ const BACKGROUND_IMAGES = [
   '/badges/008.jpg',
   '/badges/009.jpg',
   '/badges/010.jpg',
+  '/badges/011.jpg',
 ];
 
 // 배경 이미지별 기본 이름 색상
@@ -57,6 +58,7 @@ const BACKGROUND_COLORS: { [key: string]: string } = {
   '/badges/008.jpg': '#1009C0',
   '/badges/009.jpg': '#6301A4',
   '/badges/010.jpg': '#005D40',
+  '/badges/011.jpg': '#EDB901',
 };
 
 export default function BadgePage() {
@@ -94,9 +96,26 @@ export default function BadgePage() {
   const [logoSettings, setLogoSettings] = useState({
     size: 0.8, // 명찰 크기 대비 비율 (0.1 ~ 1.0)
     offsetX: 0, // 가로 오프셋 (픽셀, -50 ~ 50)
-    offsetY: 0, // 세로 오프셋 (픽셀, -50 ~ 50)
+    offsetY: 0, // 세로 오프셋 (픽셀, -200 ~ 200)
     opacity: 0.10, // 투명도 (0.0 ~ 1.0)
   });
+  
+  // 로고 설정 업데이트 함수
+  const updateLogoSettings = async (newSettings: Partial<typeof logoSettings>) => {
+    if (!db) return;
+    
+    try {
+      const updatedSettings = {
+        ...logoSettings,
+        ...newSettings
+      };
+      
+      setLogoSettings(updatedSettings);
+      await set(ref(db, 'badges/settings'), updatedSettings);
+    } catch (error) {
+      console.error('로고 설정 저장 실패:', error);
+    }
+  };
 
   // 미리보기용 캔버스 ref
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -130,7 +149,7 @@ export default function BadgePage() {
     };
   }, []);
 
-  // 로고 목록 불러오기
+  // 로고 목록 및 설정 불러오기
   useEffect(() => {
     const loadLogos = async () => {
       if (!db) return;
@@ -153,7 +172,44 @@ export default function BadgePage() {
       }
     };
 
+    const loadSettings = async () => {
+      if (!db) return;
+      
+      try {
+        const settingsSnapshot = await get(ref(db, 'badges/settings'));
+        if (settingsSnapshot.exists()) {
+          const settings = settingsSnapshot.val();
+          setLogoSettings({
+            size: settings.size ?? 0.8,
+            offsetX: settings.offsetX ?? 0,
+            offsetY: settings.offsetY ?? 0,
+            opacity: settings.opacity ?? 0.10
+          });
+        }
+      } catch (error) {
+        console.error('로고 설정 불러오기 실패:', error);
+      }
+    };
+
     loadLogos();
+    loadSettings();
+    
+    // 실시간 구독으로 설정 변경 감지
+    const unsubSettings = onValue(ref(db, 'badges/settings'), (snapshot) => {
+      if (snapshot.exists()) {
+        const settings = snapshot.val();
+        setLogoSettings({
+          size: settings.size ?? 0.8,
+          offsetX: settings.offsetX ?? 0,
+          offsetY: settings.offsetY ?? 0,
+          opacity: settings.opacity ?? 0.10
+        });
+      }
+    });
+    
+    return () => {
+      unsubSettings();
+    };
   }, []);
 
   // 로고 업로드 함수
@@ -628,18 +684,33 @@ export default function BadgePage() {
           {/* 배경 이미지 선택 */}
           <div className="space-y-2">
             <Label>배경 이미지 선택</Label>
-            <Select value={selectedBackground} onValueChange={setSelectedBackground}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {BACKGROUND_IMAGES.map((img, index) => (
-                  <SelectItem key={img} value={img}>
-                    배경 {index + 1} ({img.split('/').pop()})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {/* 색상 샘플 표 */}
+            <div className="border rounded-lg p-4 bg-gray-50">
+              <div className="text-xs text-muted-foreground mb-2">배경별 기본 색상 (클릭하여 선택)</div>
+              <div className="grid grid-cols-11 gap-2">
+                {BACKGROUND_IMAGES.map((img, index) => {
+                  const color = BACKGROUND_COLORS[img] || '#000000';
+                  const isSelected = selectedBackground === img;
+                  return (
+                    <div
+                      key={img}
+                      className={`flex flex-col items-center gap-1 p-2 rounded border-2 transition-all cursor-pointer ${
+                        isSelected ? 'border-blue-500 bg-blue-50 shadow-md' : 'border-gray-200 hover:border-gray-300 hover:shadow-sm'
+                      }`}
+                      onClick={() => setSelectedBackground(img)}
+                      title={`배경 ${index + 1} - ${color}`}
+                    >
+                      <div
+                        className="w-full h-12 rounded"
+                        style={{ backgroundColor: color }}
+                      />
+                      <span className="text-xs font-medium">배경 {index + 1}</span>
+                      <span className="text-xs text-muted-foreground">{color}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </div>
 
           {/* 명찰 크기 설정 */}
@@ -838,7 +909,7 @@ export default function BadgePage() {
                   max="1.0"
                   step="0.05"
                   value={logoSettings.size}
-                  onChange={(e) => setLogoSettings({ ...logoSettings, size: Number(e.target.value) })}
+                  onChange={(e) => updateLogoSettings({ size: Number(e.target.value) })}
                   className="w-full"
                 />
                 <Input
@@ -850,7 +921,7 @@ export default function BadgePage() {
                   onChange={(e) => {
                     const val = Number(e.target.value);
                     if (val >= 0.1 && val <= 1.0) {
-                      setLogoSettings({ ...logoSettings, size: val });
+                      updateLogoSettings({ size: val });
                     }
                   }}
                   className="w-full"
@@ -864,7 +935,7 @@ export default function BadgePage() {
                   max="1.0"
                   step="0.01"
                   value={logoSettings.opacity}
-                  onChange={(e) => setLogoSettings({ ...logoSettings, opacity: Number(e.target.value) })}
+                  onChange={(e) => updateLogoSettings({ opacity: Number(e.target.value) })}
                   className="w-full"
                 />
                 <Input
@@ -876,7 +947,7 @@ export default function BadgePage() {
                   onChange={(e) => {
                     const val = Number(e.target.value);
                     if (val >= 0.0 && val <= 1.0) {
-                      setLogoSettings({ ...logoSettings, opacity: val });
+                      updateLogoSettings({ opacity: val });
                     }
                   }}
                   className="w-full"
@@ -890,7 +961,7 @@ export default function BadgePage() {
                   max="50"
                   step="1"
                   value={logoSettings.offsetX}
-                  onChange={(e) => setLogoSettings({ ...logoSettings, offsetX: Number(e.target.value) })}
+                  onChange={(e) => updateLogoSettings({ offsetX: Number(e.target.value) })}
                   className="w-full"
                 />
                 <Input
@@ -902,7 +973,7 @@ export default function BadgePage() {
                   onChange={(e) => {
                     const val = Number(e.target.value);
                     if (val >= -50 && val <= 50) {
-                      setLogoSettings({ ...logoSettings, offsetX: val });
+                      updateLogoSettings({ offsetX: val });
                     }
                   }}
                   className="w-full"
@@ -912,23 +983,23 @@ export default function BadgePage() {
                 <Label>세로 위치 (Y: {logoSettings.offsetY}px)</Label>
                 <Input
                   type="range"
-                  min="-50"
-                  max="50"
+                  min="-200"
+                  max="200"
                   step="1"
                   value={logoSettings.offsetY}
-                  onChange={(e) => setLogoSettings({ ...logoSettings, offsetY: Number(e.target.value) })}
+                  onChange={(e) => updateLogoSettings({ offsetY: Number(e.target.value) })}
                   className="w-full"
                 />
                 <Input
                   type="number"
-                  min="-50"
-                  max="50"
+                  min="-200"
+                  max="200"
                   step="1"
                   value={logoSettings.offsetY}
                   onChange={(e) => {
                     const val = Number(e.target.value);
-                    if (val >= -50 && val <= 50) {
-                      setLogoSettings({ ...logoSettings, offsetY: val });
+                    if (val >= -200 && val <= 200) {
+                      updateLogoSettings({ offsetY: val });
                     }
                   }}
                   className="w-full"

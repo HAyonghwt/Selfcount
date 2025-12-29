@@ -23,6 +23,7 @@ interface GiftEventDrawSmallProps {
     offsetX: number;
     offsetY: number;
     saturation?: number;
+    isBlackAndWhite?: boolean;
     intensity?: number;
   };
 }
@@ -63,14 +64,22 @@ export default function GiftEventDrawSmall({ winner, onAnimationEnd, drawStartTi
   useEffect(() => {
     if (!winner || participants.length === 0) return;
 
+    // drawStartTime이 null이면 이미 당첨자가 발표된 상태이므로 바로 결과 표시
+    if (!drawStartTime) {
+      setRolling(false);
+      setFinal(true);
+      setShowWinnerList(true);
+      return;
+    }
+
     // 타임스탬프 기반 동기화 로직
     const now = Date.now();
-    const startTime = drawStartTime || now; // 없으면 현재 시간(기존 로직 호환)
+    const startTime = drawStartTime;
     const elapsedAtStart = now - startTime;
     const ANIMATION_DURATION = 3500; // 전체 애니메이션 시간 (2.5초 + 1초 대기)
 
     // 이미 애니메이션이 끝난 시간이면 바로 결과 표시
-    if (drawStartTime && elapsedAtStart >= 2500) {
+    if (elapsedAtStart >= 2500) {
       setRolling(false);
       setFinal(true);
       setShowWinnerList(true);
@@ -140,24 +149,43 @@ export default function GiftEventDrawSmall({ winner, onAnimationEnd, drawStartTi
 
   // 로고 스타일 생성
   const getLogoStyle = () => {
-    if (!logoUrl || !logoSettings?.enabled) return {};
+    if (!logoUrl || !logoSettings?.enabled) {
+      return {};
+    }
 
-    return {
+    const intensity = logoSettings.intensity ?? 200;
+    const isBW = logoSettings.isBlackAndWhite;
+
+    const style = {
       position: 'absolute' as const,
       top: '50%',
       left: '50%',
       transform: `translate(-50%, -50%) translate(${logoSettings.offsetX / 20}vw, ${logoSettings.offsetY / 20}vh) scale(${logoSettings.size})`,
       width: '60%',
       height: '60%',
-      backgroundImage: `url('${logoUrl.replace(/'/g, "\\'")}')`,
-      backgroundPosition: 'center',
-      backgroundRepeat: 'no-repeat',
-      backgroundSize: 'contain',
+      // 흑백 모드일 때는 검정색 배경, 아닐 때는 골드 그라데이션
+      background: isBW 
+        ? '#000000' 
+        : 'linear-gradient(135deg, #CFB53B 0%, #F9F295 45%, #E6B800 70%, #996515 100%)',
+      // 로고를 마스크로 사용
+      WebkitMaskImage: `url('${logoUrl.replace(/'/g, "\\'")}')`,
+      WebkitMaskRepeat: 'no-repeat',
+      WebkitMaskPosition: 'center',
+      WebkitMaskSize: 'contain',
+      maskImage: `url('${logoUrl.replace(/'/g, "\\'")}')`,
+      maskRepeat: 'no-repeat',
+      maskPosition: 'center',
+      maskSize: 'contain',
       opacity: logoSettings.opacity,
-      filter: `grayscale(100%) sepia(100%) saturate(${logoSettings.saturation ?? 400}%) hue-rotate(-10deg) brightness(${(logoSettings.intensity ?? 200) / 100}) contrast(${(logoSettings.intensity ?? 200) / 100})`,
+      // 흑백 모드일 때는 강한 대비와 밝기 조절로 흑백 느낌 강조
+      filter: isBW
+        ? `drop-shadow(0 0 8px rgba(0,0,0,0.4)) grayscale(100%) brightness(1.2) contrast(1.5)`
+        : `drop-shadow(0 0 10px rgba(0,0,0,0.8)) brightness(${(intensity + 50) / 100}) contrast(1.2)`,
       pointerEvents: 'none' as const,
-      zIndex: 0
+      zIndex: 10
     };
+    
+    return style;
   };
 
   return (
@@ -199,10 +227,14 @@ export default function GiftEventDrawSmall({ winner, onAnimationEnd, drawStartTi
         {final ? (
           <div className="text-center flex-1 flex flex-col justify-center">
             <div className="bg-gradient-to-r from-yellow-400 to-orange-400 p-4 rounded-xl shadow-lg mb-4 mx-4 relative overflow-hidden">
-              {/* 로고 오버레이 (미리보기용) */}
-              {logoUrl && logoSettings?.enabled && (
-                <div style={getLogoStyle()} />
-              )}
+              {/* 로고 오버레이 */}
+              {(() => {
+                const logoStyle = getLogoStyle();
+                if (Object.keys(logoStyle).length > 0) {
+                  return <div style={logoStyle} />;
+                }
+                return null;
+              })()}
 
               <div className="relative z-10">
                 <div className="text-4xl font-bold text-white mb-2">

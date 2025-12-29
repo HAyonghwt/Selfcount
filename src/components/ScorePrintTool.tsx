@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { db } from '@/lib/firebase';
-import { ref, get, onValue } from 'firebase/database';
+import { ref, get, onValue, set } from 'firebase/database';
 import { Printer, Download } from 'lucide-react';
 
 /**
@@ -55,6 +55,105 @@ export default function ScorePrintTool() {
         };
         loadLogo();
     }, []);
+
+    // 로고 설정 불러오기 및 저장
+    useEffect(() => {
+        if (!db) return;
+
+        const loadSettings = async () => {
+            try {
+                const settingsSnapshot = await get(ref(db, 'scorePrint/settings'));
+                if (settingsSnapshot.exists()) {
+                    const settings = settingsSnapshot.val();
+                    setPrintModal(prev => ({
+                        ...prev,
+                        logoEnabled: settings.logoEnabled ?? false,
+                        logoSize: settings.logoSize ?? 0.6,
+                        logoOpacity: settings.logoOpacity ?? 0.10,
+                        logoOffsetX: settings.logoOffsetX ?? 0,
+                        logoOffsetY: settings.logoOffsetY ?? 0
+                    }));
+                }
+            } catch (error) {
+                console.error('로고 설정 불러오기 실패:', error);
+            }
+        };
+
+        loadSettings();
+
+        // 실시간 구독으로 설정 변경 감지
+        const unsubSettings = onValue(ref(db, 'scorePrint/settings'), (snapshot) => {
+            if (snapshot.exists()) {
+                const settings = snapshot.val();
+                setPrintModal(prev => ({
+                    ...prev,
+                    logoEnabled: settings.logoEnabled ?? false,
+                    logoSize: settings.logoSize ?? 0.6,
+                    logoOpacity: settings.logoOpacity ?? 0.10,
+                    logoOffsetX: settings.logoOffsetX ?? 0,
+                    logoOffsetY: settings.logoOffsetY ?? 0
+                }));
+            }
+        });
+
+        return () => {
+            unsubSettings();
+        };
+    }, []);
+
+    // 로고 설정 업데이트 함수
+    const updateLogoSettings = async (newSettings: Partial<Pick<typeof printModal, 'logoEnabled' | 'logoSize' | 'logoOpacity' | 'logoOffsetX' | 'logoOffsetY'>>) => {
+        if (!db) return;
+
+        try {
+            // Firebase에서 현재 설정을 불러와서 병합 (최신 상태 보장)
+            const currentSettingsSnapshot = await get(ref(db, 'scorePrint/settings'));
+            let finalSettings;
+            
+            if (currentSettingsSnapshot.exists()) {
+                // Firebase에 설정이 있으면 Firebase의 설정과 병합
+                const currentSettings = currentSettingsSnapshot.val();
+                finalSettings = {
+                    logoEnabled: currentSettings.logoEnabled ?? false,
+                    logoSize: currentSettings.logoSize ?? 0.6,
+                    logoOpacity: currentSettings.logoOpacity ?? 0.10,
+                    logoOffsetX: currentSettings.logoOffsetX ?? 0,
+                    logoOffsetY: currentSettings.logoOffsetY ?? 0,
+                    ...newSettings
+                };
+            } else {
+                // Firebase에 설정이 없으면 현재 state와 병합
+                finalSettings = {
+                    logoEnabled: printModal.logoEnabled,
+                    logoSize: printModal.logoSize,
+                    logoOpacity: printModal.logoOpacity,
+                    logoOffsetX: printModal.logoOffsetX,
+                    logoOffsetY: printModal.logoOffsetY,
+                    ...newSettings
+                };
+            }
+
+            // 기본값 보장
+            const settingsToSave = {
+                logoEnabled: finalSettings.logoEnabled ?? false,
+                logoSize: finalSettings.logoSize ?? 0.6,
+                logoOpacity: finalSettings.logoOpacity ?? 0.10,
+                logoOffsetX: finalSettings.logoOffsetX ?? 0,
+                logoOffsetY: finalSettings.logoOffsetY ?? 0
+            };
+
+            // state 업데이트
+            setPrintModal(prev => ({
+                ...prev,
+                ...settingsToSave
+            }));
+
+            // Firebase에 저장
+            await set(ref(db, 'scorePrint/settings'), settingsToSave);
+        } catch (error) {
+            console.error('로고 설정 저장 실패:', error);
+        }
+    };
     const [isLoading, setIsLoading] = useState(false);
     const [isSavingImage, setIsSavingImage] = useState(false);
     const [players, setPlayers] = useState<any>({});
@@ -1322,7 +1421,10 @@ export default function ScorePrintTool() {
                                 <Button
                                     size="sm"
                                     variant={printModal.logoEnabled ? 'default' : 'outline'}
-                                    onClick={() => setPrintModal({ ...printModal, logoEnabled: !printModal.logoEnabled })}
+                                    onClick={() => {
+                                        const newEnabled = !printModal.logoEnabled;
+                                        updateLogoSettings({ logoEnabled: newEnabled });
+                                    }}
                                     className={`h-8 w-16 ${printModal.logoEnabled ? 'bg-blue-600 hover:bg-blue-700' : ''}`}
                                 >
                                     {printModal.logoEnabled ? 'ON' : 'OFF'}
@@ -1625,7 +1727,10 @@ export default function ScorePrintTool() {
                                                         max="1.0"
                                                         step="0.05"
                                                         value={printModal.logoSize}
-                                                        onChange={(e) => setPrintModal({ ...printModal, logoSize: Number(e.target.value) })}
+                                                        onChange={(e) => {
+                                                            const val = Number(e.target.value);
+                                                            updateLogoSettings({ logoSize: val });
+                                                        }}
                                                         className="flex-1 h-8"
                                                     />
                                                 </div>
@@ -1638,7 +1743,7 @@ export default function ScorePrintTool() {
                                                     onChange={(e) => {
                                                         const val = Number(e.target.value);
                                                         if (val >= 0.1 && val <= 1.0) {
-                                                            setPrintModal({ ...printModal, logoSize: val });
+                                                            updateLogoSettings({ logoSize: val });
                                                         }
                                                     }}
                                                     className="w-full text-xs h-8"
@@ -1654,7 +1759,10 @@ export default function ScorePrintTool() {
                                                         max="1.0"
                                                         step="0.01"
                                                         value={printModal.logoOpacity}
-                                                        onChange={(e) => setPrintModal({ ...printModal, logoOpacity: Number(e.target.value) })}
+                                                        onChange={(e) => {
+                                                            const val = Number(e.target.value);
+                                                            updateLogoSettings({ logoOpacity: val });
+                                                        }}
                                                         className="flex-1 h-8"
                                                     />
                                                 </div>
@@ -1667,7 +1775,7 @@ export default function ScorePrintTool() {
                                                     onChange={(e) => {
                                                         const val = Number(e.target.value);
                                                         if (val >= 0.0 && val <= 1.0) {
-                                                            setPrintModal({ ...printModal, logoOpacity: val });
+                                                            updateLogoSettings({ logoOpacity: val });
                                                         }
                                                     }}
                                                     className="w-full text-xs h-8"
@@ -1683,7 +1791,10 @@ export default function ScorePrintTool() {
                                                         max="100"
                                                         step="1"
                                                         value={printModal.logoOffsetX}
-                                                        onChange={(e) => setPrintModal({ ...printModal, logoOffsetX: Number(e.target.value) })}
+                                                        onChange={(e) => {
+                                                            const val = Number(e.target.value);
+                                                            updateLogoSettings({ logoOffsetX: val });
+                                                        }}
                                                         className="flex-1 h-8"
                                                     />
                                                 </div>
@@ -1693,7 +1804,10 @@ export default function ScorePrintTool() {
                                                     max="100"
                                                     step="1"
                                                     value={printModal.logoOffsetX}
-                                                    onChange={(e) => setPrintModal({ ...printModal, logoOffsetX: Number(e.target.value) })}
+                                                    onChange={(e) => {
+                                                        const val = Number(e.target.value);
+                                                        updateLogoSettings({ logoOffsetX: val });
+                                                    }}
                                                     className="w-full text-xs h-8"
                                                 />
                                             </div>
@@ -1707,7 +1821,10 @@ export default function ScorePrintTool() {
                                                         max="100"
                                                         step="1"
                                                         value={printModal.logoOffsetY}
-                                                        onChange={(e) => setPrintModal({ ...printModal, logoOffsetY: Number(e.target.value) })}
+                                                        onChange={(e) => {
+                                                            const val = Number(e.target.value);
+                                                            updateLogoSettings({ logoOffsetY: val });
+                                                        }}
                                                         className="flex-1 h-8"
                                                     />
                                                 </div>
@@ -1717,7 +1834,10 @@ export default function ScorePrintTool() {
                                                     max="100"
                                                     step="1"
                                                     value={printModal.logoOffsetY}
-                                                    onChange={(e) => setPrintModal({ ...printModal, logoOffsetY: Number(e.target.value) })}
+                                                    onChange={(e) => {
+                                                        const val = Number(e.target.value);
+                                                        updateLogoSettings({ logoOffsetY: val });
+                                                    }}
                                                     className="w-full text-xs h-8"
                                                 />
                                             </div>
@@ -1762,4 +1882,3 @@ export default function ScorePrintTool() {
         </>
     );
 }
-

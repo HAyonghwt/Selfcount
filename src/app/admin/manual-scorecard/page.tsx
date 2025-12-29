@@ -9,7 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { useToast } from "@/hooks/use-toast"
 import { db } from "@/lib/firebase"
-import { ref, get, onValue } from "firebase/database"
+import { ref, get, onValue, set } from "firebase/database"
 import { Printer } from "lucide-react"
 import ManualScorecardPrint from "@/components/ManualScorecardPrint"
 
@@ -26,6 +26,14 @@ export default function ManualScorecardPage() {
     const [selectedGroup, setSelectedGroup] = useState("")
     const [selectedCourses, setSelectedCourses] = useState<{ [key: string]: boolean }>({})
     const [showPrintView, setShowPrintView] = useState(false)
+
+    // 로고 설정 state
+    const [logoEnabled, setLogoEnabled] = useState(false)
+    const [logoSize, setLogoSize] = useState(0.6)
+    const [logoOpacity, setLogoOpacity] = useState(0.10)
+    const [logoOffsetX, setLogoOffsetX] = useState(0)
+    const [logoOffsetY, setLogoOffsetY] = useState(0)
+    const [backgroundLogoUrl, setBackgroundLogoUrl] = useState<string>('')
 
     // 날짜 기본값 설정 (오늘 날짜)
     useEffect(() => {
@@ -108,6 +116,118 @@ export default function ManualScorecardPage() {
         loadData()
     }, [toast])
 
+    // 로고 불러오기
+    useEffect(() => {
+        const loadLogo = async () => {
+            if (!db) return;
+            try {
+                const logosRef = ref(db, 'logos');
+                const snapshot = await get(logosRef);
+                if (snapshot.exists()) {
+                    const logosData = snapshot.val();
+                    const firstLogo = Object.values(logosData)[0] as any;
+                    if (firstLogo?.url) {
+                        setBackgroundLogoUrl(firstLogo.url);
+                    }
+                }
+            } catch (error) {
+                console.error('로고 불러오기 실패:', error);
+            }
+        };
+        loadLogo();
+    }, []);
+
+    // 로고 설정 불러오기 및 저장
+    useEffect(() => {
+        if (!db) return;
+
+        const loadInitialData = async () => {
+            try {
+                const settingsSnapshot = await get(ref(db, 'manualScorecard/settings'));
+                if (settingsSnapshot.exists()) {
+                    const settings = settingsSnapshot.val();
+                    setLogoEnabled(settings.logoEnabled ?? false);
+                    setLogoSize(settings.logoSize ?? 0.6);
+                    setLogoOpacity(settings.logoOpacity ?? 0.10);
+                    setLogoOffsetX(settings.logoOffsetX ?? 0);
+                    setLogoOffsetY(settings.logoOffsetY ?? 0);
+                }
+            } catch (error) {
+                console.error('로고 설정 불러오기 실패:', error);
+            }
+        };
+
+        loadInitialData();
+
+        // 실시간 구독으로 설정 변경 감지
+        const unsubSettings = onValue(ref(db, 'manualScorecard/settings'), (snapshot) => {
+            if (snapshot.exists()) {
+                const settings = snapshot.val();
+                setLogoEnabled(settings.logoEnabled ?? false);
+                setLogoSize(settings.logoSize ?? 0.6);
+                setLogoOpacity(settings.logoOpacity ?? 0.10);
+                setLogoOffsetX(settings.logoOffsetX ?? 0);
+                setLogoOffsetY(settings.logoOffsetY ?? 0);
+            }
+        });
+
+        return () => {
+            unsubSettings();
+        };
+    }, []);
+
+    // 로고 설정 업데이트 함수
+    const updateLogoSettings = async (newSettings: { logoEnabled?: boolean; logoSize?: number; logoOpacity?: number; logoOffsetX?: number; logoOffsetY?: number }) => {
+        if (!db) return;
+
+        try {
+            // Firebase에서 현재 설정을 불러와서 병합
+            const currentSettingsSnapshot = await get(ref(db, 'manualScorecard/settings'));
+            let finalSettings;
+            
+            if (currentSettingsSnapshot.exists()) {
+                const currentSettings = currentSettingsSnapshot.val();
+                finalSettings = {
+                    logoEnabled: currentSettings.logoEnabled ?? false,
+                    logoSize: currentSettings.logoSize ?? 0.6,
+                    logoOpacity: currentSettings.logoOpacity ?? 0.10,
+                    logoOffsetX: currentSettings.logoOffsetX ?? 0,
+                    logoOffsetY: currentSettings.logoOffsetY ?? 0,
+                    ...newSettings
+                };
+            } else {
+                finalSettings = {
+                    logoEnabled: logoEnabled,
+                    logoSize: logoSize,
+                    logoOpacity: logoOpacity,
+                    logoOffsetX: logoOffsetX,
+                    logoOffsetY: logoOffsetY,
+                    ...newSettings
+                };
+            }
+
+            const settingsToSave = {
+                logoEnabled: finalSettings.logoEnabled ?? false,
+                logoSize: finalSettings.logoSize ?? 0.6,
+                logoOpacity: finalSettings.logoOpacity ?? 0.10,
+                logoOffsetX: finalSettings.logoOffsetX ?? 0,
+                logoOffsetY: finalSettings.logoOffsetY ?? 0
+            };
+
+            // Firebase에 먼저 저장
+            await set(ref(db, 'manualScorecard/settings'), settingsToSave);
+
+            // 그 다음 state 업데이트
+            setLogoEnabled(settingsToSave.logoEnabled);
+            setLogoSize(settingsToSave.logoSize);
+            setLogoOpacity(settingsToSave.logoOpacity);
+            setLogoOffsetX(settingsToSave.logoOffsetX);
+            setLogoOffsetY(settingsToSave.logoOffsetY);
+        } catch (error) {
+            console.error('로고 설정 저장 실패:', error);
+        }
+    };
+
     const handleCourseToggle = (courseId: string) => {
         setSelectedCourses(prev => ({
             ...prev,
@@ -157,6 +277,46 @@ export default function ManualScorecardPage() {
         setShowPrintView(false)
     }
 
+    // 미리보기용: 빈 슬롯 찾기 (로고가 들어갈 위치)
+    const getEmptySlotForPreview = () => {
+        if (!selectedGroup) return null;
+        
+        const selectedCourseIds = Object.keys(selectedCourses).filter(id => selectedCourses[id]);
+        if (selectedCourseIds.length === 0) return null;
+
+        // 선택된 코스를 정렬
+        const selectedCoursesSorted = courses
+            .filter(c => selectedCourseIds.includes(c.id))
+            .sort((a, b) => {
+                if (!selectedGroup || !groups[selectedGroup]) {
+                    return (a.order || 0) - (b.order || 0);
+                }
+                const groupCourses = groups[selectedGroup]?.courses || {};
+                const orderA = (typeof groupCourses[a.id] === 'number' && groupCourses[a.id] > 0)
+                    ? groupCourses[a.id]
+                    : (a.order || 999);
+                const orderB = (typeof groupCourses[b.id] === 'number' && groupCourses[b.id] > 0)
+                    ? groupCourses[b.id]
+                    : (b.order || 999);
+                return orderA - orderB;
+            });
+
+        // 첫 페이지의 코스들 (최대 3개)
+        const firstPageCourses = selectedCoursesSorted.slice(0, 3);
+        
+        // 빈 슬롯 찾기 (0, 1, 2 중에서)
+        for (let i = 0; i < 3; i++) {
+            if (!firstPageCourses[i]) {
+                return i; // 빈 슬롯 인덱스 반환
+            }
+        }
+        
+        // 첫 페이지가 모두 채워져 있으면 첫 번째 슬롯(인덱스 0) 반환
+        return 0;
+    }
+
+    const emptySlotIndex = getEmptySlotForPreview();
+
     if (loading) {
         return (
             <div className="container mx-auto p-6">
@@ -181,6 +341,12 @@ export default function ManualScorecardPage() {
                 courses={courses}
                 players={players}
                 onClose={handleClosePrintView}
+                logoEnabled={logoEnabled}
+                logoSize={logoSize}
+                logoOpacity={logoOpacity}
+                logoOffsetX={logoOffsetX}
+                logoOffsetY={logoOffsetY}
+                backgroundLogoUrl={backgroundLogoUrl}
             />
         )
     }
@@ -205,14 +371,36 @@ export default function ManualScorecardPage() {
             </Card>
 
             <Dialog open={isPrintModalOpen} onOpenChange={setIsPrintModalOpen}>
-                <DialogContent className="max-w-2xl">
-                    <DialogHeader>
+                <DialogContent className="max-w-[95vw] w-full lg:max-w-7xl max-h-[90vh] overflow-hidden flex flex-col">
+                    <DialogHeader className="flex flex-row items-center justify-between pb-4 border-b mb-4 space-y-0 shrink-0">
+                        <div className="space-y-1 text-left">
                         <DialogTitle>채점표 인쇄 설정</DialogTitle>
                         <DialogDescription>
                             날짜, 그룹, 코스를 선택하고 인쇄 버튼을 클릭하세요.
                         </DialogDescription>
+                        </div>
+                        {backgroundLogoUrl && (
+                            <div className="flex items-center gap-2">
+                                <span className="text-sm font-medium text-slate-600">배경 로고 설정</span>
+                                <Button
+                                    size="sm"
+                                    variant={logoEnabled ? 'default' : 'outline'}
+                                    onClick={() => {
+                                        const newEnabled = !logoEnabled;
+                                        updateLogoSettings({ logoEnabled: newEnabled });
+                                    }}
+                                    className={`h-8 w-16 ${logoEnabled ? 'bg-blue-600 hover:bg-blue-700' : ''}`}
+                                >
+                                    {logoEnabled ? 'ON' : 'OFF'}
+                                </Button>
+                            </div>
+                        )}
                     </DialogHeader>
-                    <div className="space-y-4 py-4">
+                    
+                    <div className="flex gap-4 flex-1 min-h-0 overflow-hidden flex-row">
+                        {/* 좌측: 설정 */}
+                        <div className="w-[350px] shrink-0 border rounded-lg p-4 bg-gray-50 overflow-y-auto">
+                            <div className="space-y-4">
                         <div className="space-y-2">
                             <Label htmlFor="date">날짜 (Date)</Label>
                             <Input
@@ -279,7 +467,306 @@ export default function ManualScorecardPage() {
                             </div>
                         </div>
                     </div>
-                    <DialogFooter>
+                        </div>
+
+                        {/* 중앙: 미리보기 + 우측 패널 */}
+                        <div className="flex-1 min-w-0 border rounded-lg p-4 bg-gray-50 flex flex-col">
+                            <div className="flex items-center justify-between mb-2 shrink-0">
+                                <label className="text-sm font-medium">미리보기</label>
+                            </div>
+
+                            <div className="flex gap-4 h-full min-h-0">
+                                {/* Preview Box */}
+                                <div className="flex-1 border rounded bg-gray-100 p-4 flex items-center justify-center overflow-hidden relative">
+                                    <div
+                                        className="bg-white shadow-lg relative transition-all duration-300 origin-center"
+                                        style={{
+                                            aspectRatio: '297/210', // A4 landscape
+                                            height: '100%',
+                                            maxHeight: '450px',
+                                            width: 'auto',
+                                            position: 'relative',
+                                        }}
+                                    >
+                                        {/* Logo Overlay는 빈 슬롯 내부에 표시되므로 여기서는 제거 */}
+
+                                        {/* Scaled Content */}
+                                        <div style={{
+                                            zoom: 0.25,
+                                            width: '100%',
+                                            height: '100%',
+                                            position: 'relative',
+                                            zIndex: 1,
+                                            padding: '4mm',
+                                            overflow: 'hidden',
+                                            display: 'flex',
+                                            flexDirection: 'column'
+                                        }}>
+                                            {/* 헤더 */}
+                                            <div className="mb-1" style={{ flexShrink: 0 }}>
+                                                <div className="text-lg font-bold text-center mb-1">
+                                                    {tournament?.name || '파크골프 토너먼트'}
+                                                </div>
+                                                <div className="flex justify-between items-start mb-1">
+                                                    <div>
+                                                        <div className="text-sm font-bold">
+                                                            그룹: {selectedGroup || '그룹명'}
+                                                        </div>
+                                                        <div className="text-xs font-bold">
+                                                            1조
+                                                        </div>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <div className="text-xs text-gray-600">
+                                                            날짜: {selectedDate || new Date().toISOString().slice(0, 10)}
+                                                        </div>
+                                                        <div className="text-xs font-semibold">
+                                                            심판 확인
+                                                        </div>
+                                                        <div className="border border-black" style={{ width: '50px', height: '20px' }}></div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* 코스별 채점표 - 가로로 3개 배치 (빈 슬롯 포함) */}
+                                            <div className="flex-1 grid grid-cols-3 gap-1" style={{ minHeight: 0 }}>
+                                                {[0, 1, 2].map((slotIndex) => {
+                                                    const selectedCourseIds = Object.keys(selectedCourses).filter(id => selectedCourses[id]);
+                                                    const selectedCoursesSorted = courses
+                                                        .filter(c => selectedCourseIds.includes(c.id))
+                                                        .sort((a, b) => {
+                                                            if (!selectedGroup || !groups[selectedGroup]) {
+                                                                return (a.order || 0) - (b.order || 0);
+                                                            }
+                                                            const groupCourses = groups[selectedGroup]?.courses || {};
+                                                            const orderA = (typeof groupCourses[a.id] === 'number' && groupCourses[a.id] > 0)
+                                                                ? groupCourses[a.id]
+                                                                : (a.order || 999);
+                                                            const orderB = (typeof groupCourses[b.id] === 'number' && groupCourses[b.id] > 0)
+                                                                ? groupCourses[b.id]
+                                                                : (b.order || 999);
+                                                            return orderA - orderB;
+                                                        });
+                                                    const firstPageCourses = selectedCoursesSorted.slice(0, 3);
+                                                    const course = firstPageCourses[slotIndex];
+                                                    
+                                                    // 빈 슬롯인 경우 (로고가 들어갈 위치)
+                                                    if (!course || (emptySlotIndex !== null && emptySlotIndex === slotIndex)) {
+                                                        return (
+                                                            <div
+                                                                key={`preview-empty-${slotIndex}`}
+                                                                className="course-container"
+                                                                style={{
+                                                                    border: '3px solid #f9fafb',
+                                                                    backgroundColor: '#ffffff',
+                                                                    padding: '6px',
+                                                                    borderRadius: '4px',
+                                                                    display: 'flex',
+                                                                    flexDirection: 'column',
+                                                                    minHeight: 0,
+                                                                    position: 'relative'
+                                                                }}
+                                                            >
+                                                                {/* 배경 로고 (빈 슬롯에만 표시) */}
+                                                                {logoEnabled && backgroundLogoUrl && (
+                                                                    <img
+                                                                        src={backgroundLogoUrl}
+                                                                        alt=""
+                                                                        className="logo-background"
+                                                                        style={{
+                                                                            position: 'absolute',
+                                                                            top: `calc(50% + ${logoOffsetY}px)`,
+                                                                            left: `calc(50% + ${logoOffsetX}px)`,
+                                                                            transform: 'translate(-50%, -50%)',
+                                                                            width: `${logoSize * 100}%`,
+                                                                            height: 'auto',
+                                                                            maxWidth: `${logoSize * 100}%`,
+                                                                            maxHeight: `${logoSize * 100}%`,
+                                                                            objectFit: 'contain',
+                                                                            opacity: logoOpacity,
+                                                                            zIndex: 1,
+                                                                            pointerEvents: 'none',
+                                                                            userSelect: 'none'
+                                                                        }}
+                                                                    />
+                                                                )}
+
+                                                                {/* 빈 슬롯 표시 - 조명 */}
+                                                                <div style={{
+                                                                    position: 'absolute',
+                                                                    top: '50%',
+                                                                    left: '50%',
+                                                                    transform: 'translate(-50%, -50%)',
+                                                                    zIndex: 20,
+                                                                    pointerEvents: 'none',
+                                                                    textAlign: 'center',
+                                                                    fontSize: '24px',
+                                                                    fontWeight: 'bold',
+                                                                    color: '#a8a7a7'
+                                                                }}>
+                                                                    1조
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    }
+                                                    
+                                                    // 채워진 슬롯
+                                                    return (
+                                                        <div
+                                                            key={`preview-course-${slotIndex}`}
+                                                            className="course-container"
+                                                            style={{
+                                                                border: '2px solid #e2e8f0',
+                                                                backgroundColor: '#f8fafc',
+                                                                padding: '6px',
+                                                                borderRadius: '4px',
+                                                                display: 'flex',
+                                                                flexDirection: 'column',
+                                                                minHeight: 0
+                                                            }}
+                                                        >
+                                                            <div className="text-xs font-bold mb-1" style={{ color: '#334155' }}>
+                                                                {course.name || `코스 ${course.id}`}
+                                                            </div>
+                                                            <div className="border border-slate-200 rounded-sm overflow-hidden flex-1">
+                                                                <div className="bg-slate-100 p-1 border-b border-slate-200 grid grid-cols-3 gap-1 text-xs">
+                                                                    <div className="font-bold text-slate-500">이름</div>
+                                                                    <div className="font-bold text-slate-500">소속</div>
+                                                                    <div className="font-bold text-slate-500">점수</div>
+                                                                </div>
+                                                                <div className="bg-white">
+                                                                    <div className="p-1 border-b border-slate-200 grid grid-cols-3 gap-1 text-xs">
+                                                                        <div className="text-slate-600">홍길동</div>
+                                                                        <div className="text-slate-600">소속1</div>
+                                                                        <div className="text-slate-600">-</div>
+                                                                    </div>
+                                                                    <div className="p-1 grid grid-cols-3 gap-1 text-xs">
+                                                                        <div className="text-slate-600">김철수</div>
+                                                                        <div className="text-slate-600">소속2</div>
+                                                                        <div className="text-slate-600">-</div>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* 우측: 로고 설정 패널 (ON일 때만 표시) */}
+                                {logoEnabled && backgroundLogoUrl && (
+                                    <div className="w-[280px] shrink-0 border rounded-lg p-4 bg-blue-50 overflow-y-auto">
+                                        <div className="flex items-center justify-between mb-4">
+                                            <h4 className="font-semibold text-sm">로고 상세 설정</h4>
+                                        </div>
+
+                                        <div className="space-y-4">
+                                            <div className="space-y-2">
+                                                <Label className="text-xs font-medium">로고 크기 ({Math.round(logoSize * 100)}%)</Label>
+                                                <Input
+                                                    type="range"
+                                                    min="0.1"
+                                                    max="1.0"
+                                                    step="0.05"
+                                                    value={logoSize}
+                                                    onChange={(e) => updateLogoSettings({ logoSize: Number(e.target.value) })}
+                                                    className="w-full h-8"
+                                                />
+                                                <Input
+                                                    type="number"
+                                                    min="0.1"
+                                                    max="1.0"
+                                                    step="0.05"
+                                                    value={logoSize}
+                                                    onChange={(e) => {
+                                                        const val = Number(e.target.value);
+                                                        if (val >= 0.1 && val <= 1.0) {
+                                                            updateLogoSettings({ logoSize: val });
+                                                        }
+                                                    }}
+                                                    className="w-full text-xs h-8"
+                                                />
+                                            </div>
+
+                                            <div className="space-y-2">
+                                                <Label className="text-xs font-medium">로고 진하기 ({Math.round(logoOpacity * 100)}%)</Label>
+                                                <Input
+                                                    type="range"
+                                                    min="0.0"
+                                                    max="1.0"
+                                                    step="0.01"
+                                                    value={logoOpacity}
+                                                    onChange={(e) => updateLogoSettings({ logoOpacity: Number(e.target.value) })}
+                                                    className="w-full h-8"
+                                                />
+                                                <Input
+                                                    type="number"
+                                                    min="0.0"
+                                                    max="1.0"
+                                                    step="0.01"
+                                                    value={logoOpacity}
+                                                    onChange={(e) => {
+                                                        const val = Number(e.target.value);
+                                                        if (val >= 0.0 && val <= 1.0) {
+                                                            updateLogoSettings({ logoOpacity: val });
+                                                        }
+                                                    }}
+                                                    className="w-full text-xs h-8"
+                                                />
+                                            </div>
+
+                                            <div className="space-y-2">
+                                                <Label className="text-xs font-medium">가로 위치 (X: {logoOffsetX}px)</Label>
+                                                <Input
+                                                    type="range"
+                                                    min="-100"
+                                                    max="100"
+                                                    step="1"
+                                                    value={logoOffsetX}
+                                                    onChange={(e) => updateLogoSettings({ logoOffsetX: Number(e.target.value) })}
+                                                    className="w-full h-8"
+                                                />
+                                                <Input
+                                                    type="number"
+                                                    min="-100"
+                                                    max="100"
+                                                    step="1"
+                                                    value={logoOffsetX}
+                                                    onChange={(e) => updateLogoSettings({ logoOffsetX: Number(e.target.value) })}
+                                                    className="w-full text-xs h-8"
+                                                />
+                                            </div>
+
+                                            <div className="space-y-2">
+                                                <Label className="text-xs font-medium">세로 위치 (Y: {logoOffsetY}px)</Label>
+                                                <Input
+                                                    type="range"
+                                                    min="-100"
+                                                    max="100"
+                                                    step="1"
+                                                    value={logoOffsetY}
+                                                    onChange={(e) => updateLogoSettings({ logoOffsetY: Number(e.target.value) })}
+                                                    className="w-full h-8"
+                                                />
+                                                <Input
+                                                    type="number"
+                                                    min="-100"
+                                                    max="100"
+                                                    step="1"
+                                                    value={logoOffsetY}
+                                                    onChange={(e) => updateLogoSettings({ logoOffsetY: Number(e.target.value) })}
+                                                    className="w-full text-xs h-8"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                    <DialogFooter className="flex gap-2 shrink-0 mt-4">
                         <Button variant="outline" onClick={() => setIsPrintModalOpen(false)}>
                             취소
                         </Button>

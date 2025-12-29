@@ -15,6 +15,12 @@ interface ManualScorecardPrintProps {
     courses: any[]
     players: any[]
     onClose: () => void
+    logoEnabled?: boolean
+    logoSize?: number
+    logoOpacity?: number
+    logoOffsetX?: number
+    logoOffsetY?: number
+    backgroundLogoUrl?: string
 }
 
 // 코스별 테마색
@@ -41,56 +47,64 @@ export default function ManualScorecardPrint({
     groups,
     courses,
     players,
-    onClose
+    onClose,
+    logoEnabled = false,
+    logoSize = 0.6,
+    logoOpacity = 0.10,
+    logoOffsetX = 0,
+    logoOffsetY = 0,
+    backgroundLogoUrl: propBackgroundLogoUrl
 }: ManualScorecardPrintProps) {
-    const [backgroundLogoUrl, setBackgroundLogoUrl] = useState<string>('')
+    const [backgroundLogoUrl, setBackgroundLogoUrl] = useState<string>(propBackgroundLogoUrl || '')
     const [logoImageLoaded, setLogoImageLoaded] = useState(false)
 
-    // 배경 로고 불러오기 (Firebase Realtime Database에서)
+    // props로 전달된 로고 URL이 있으면 사용, 없으면 Firebase에서 불러오기
     useEffect(() => {
-        const loadLogo = async () => {
-            if (!db) {
-                console.log('수기 채점표 - Database not initialized');
-                return;
-            }
-            
-            try {
-                const logosRef = ref(db, 'logos');
-                const snapshot = await get(logosRef);
-                if (snapshot.exists()) {
-                    const logosData = snapshot.val();
-                    console.log('수기 채점표 - 로고 데이터 키:', Object.keys(logosData));
-                    const firstLogo = Object.values(logosData)[0] as any;
-                    console.log('수기 채점표 - 첫 번째 로고:', firstLogo);
-                    // url 또는 base64 필드 확인
-                    const logoUrl = firstLogo?.url || firstLogo?.base64;
-                    if (logoUrl) {
-                        console.log('수기 채점표 - 로고 URL 발견, 이미지 로드 시작:', logoUrl.substring(0, 50) + '...');
-                        // 이미지가 완전히 로드되었는지 확인
-                        const img = new Image();
-                        img.onload = () => {
-                            console.log('수기 채점표 - 로고 이미지 로드 성공');
-                            setBackgroundLogoUrl(logoUrl);
-                            setLogoImageLoaded(true);
-                            console.log('수기 채점표 - backgroundLogoUrl 및 logoImageLoaded 설정 완료');
-                        };
-                        img.onerror = (error) => {
-                            console.error('수기 채점표 - 로고 이미지 로드 실패:', error);
-                        };
-                        img.src = logoUrl;
-                    } else {
-                        console.log('수기 채점표 - 로고 URL이 없습니다. firstLogo:', firstLogo);
-                    }
-                } else {
-                    console.log('수기 채점표 - 로고 데이터가 없습니다');
+        if (propBackgroundLogoUrl) {
+            setBackgroundLogoUrl(propBackgroundLogoUrl);
+            const img = new Image();
+            img.onload = () => {
+                setLogoImageLoaded(true);
+            };
+            img.onerror = () => {
+                setLogoImageLoaded(false);
+            };
+            img.src = propBackgroundLogoUrl;
+        } else {
+            // 배경 로고 불러오기 (Firebase Realtime Database에서)
+            const loadLogo = async () => {
+                if (!db) {
+                    console.log('수기 채점표 - Database not initialized');
+                    return;
                 }
-            } catch (error) {
-                console.error('수기 채점표 - 로고 불러오기 실패:', error);
-            }
-        };
+                
+                try {
+                    const logosRef = ref(db, 'logos');
+                    const snapshot = await get(logosRef);
+                    if (snapshot.exists()) {
+                        const logosData = snapshot.val();
+                        const firstLogo = Object.values(logosData)[0] as any;
+                        const logoUrl = firstLogo?.url || firstLogo?.base64;
+                        if (logoUrl) {
+                            const img = new Image();
+                            img.onload = () => {
+                                setBackgroundLogoUrl(logoUrl);
+                                setLogoImageLoaded(true);
+                            };
+                            img.onerror = (error) => {
+                                console.error('수기 채점표 - 로고 이미지 로드 실패:', error);
+                            };
+                            img.src = logoUrl;
+                        }
+                    }
+                } catch (error) {
+                    console.error('수기 채점표 - 로고 불러오기 실패:', error);
+                }
+            };
 
-        loadLogo();
-    }, []);
+            loadLogo();
+        }
+    }, [propBackgroundLogoUrl]);
 
     // PDF 파일명을 그룹명으로 설정
     useEffect(() => {
@@ -247,6 +261,9 @@ export default function ManualScorecardPrint({
     return (
         <>
             <style jsx global>{`
+                :root {
+                    --logo-opacity: ${logoOpacity};
+                }
                 @page {
                     size: A4 landscape;
                     margin: 0;
@@ -282,13 +299,23 @@ export default function ManualScorecardPrint({
                         print-color-adjust: exact !important;
                         color-adjust: exact !important;
                     }
-                    /* 배경 이미지 인쇄 강제 */
+                    /* 배경 이미지 인쇄 강제 - opacity는 CSS 변수로 동적으로 설정 */
                     .logo-background {
                         -webkit-print-color-adjust: exact !important;
                         print-color-adjust: exact !important;
                         color-adjust: exact !important;
-                        opacity: 0.10 !important;
                         display: block !important;
+                        visibility: visible !important;
+                        opacity: var(--logo-opacity) !important;
+                    }
+                    /* 인쇄 시 이미지가 반드시 표시되도록 */
+                    img.logo-background {
+                        display: block !important;
+                        visibility: visible !important;
+                        opacity: var(--logo-opacity) !important;
+                        -webkit-print-color-adjust: exact !important;
+                        print-color-adjust: exact !important;
+                        color-adjust: exact !important;
                     }
                     /* 사이드바 및 불필요한 레이아웃 인쇄 시 숨기기 */
                     [data-sidebar="trigger"], 
@@ -403,26 +430,32 @@ export default function ManualScorecardPrint({
                                             }}
                                         >
                                             {/* 배경 로고 (조 이름 뒤에) */}
-                                            {backgroundLogoUrl && logoImageLoaded && (
+                                            {logoEnabled && backgroundLogoUrl && (
                                                 <img
                                                     src={backgroundLogoUrl}
                                                     alt=""
                                                     className="logo-background"
                                                     style={{
                                                         position: 'absolute',
-                                                        top: '50%',
-                                                        left: '50%',
+                                                        top: `calc(50% + ${logoOffsetY}px)`,
+                                                        left: `calc(50% + ${logoOffsetX}px)`,
                                                         transform: 'translate(-50%, -50%)',
-                                                        width: '80%',
+                                                        width: `${logoSize * 100}%`,
                                                         height: 'auto',
-                                                        maxWidth: '80%',
-                                                        maxHeight: '80%',
+                                                        maxWidth: `${logoSize * 100}%`,
+                                                        maxHeight: `${logoSize * 100}%`,
                                                         objectFit: 'contain',
-                                                        opacity: 0.10,
+                                                        opacity: logoOpacity,
                                                         zIndex: 1,
                                                         pointerEvents: 'none',
-                                                        userSelect: 'none'
+                                                        userSelect: 'none',
+                                                        WebkitPrintColorAdjust: 'exact',
+                                                        printColorAdjust: 'exact',
+                                                        colorAdjust: 'exact',
+                                                        visibility: 'visible'
                                                     }}
+                                                    onLoad={() => setLogoImageLoaded(true)}
+                                                    onError={() => console.error('로고 이미지 로드 실패')}
                                                 />
                                             )}
 

@@ -30,8 +30,9 @@ export default function GiftEventAdminPage() {
     opacity: 1.0,
     offsetX: 0,
     offsetY: 0,
-    saturation: 400,
-    intensity: 200
+    saturation: 600,
+    intensity: 200,
+    isBlackAndWhite: false
   });
   const [isAdmin, setIsAdmin] = useState(false);
 
@@ -66,21 +67,57 @@ export default function GiftEventAdminPage() {
       }
     });
 
-    // Subscribe to logo settings
+    // 초기 로드 시 설정과 로고 URL을 먼저 불러오기
+    const loadInitialData = async () => {
+      try {
+        // 로고 설정 불러오기
+        const settingsSnapshot = await get(ref(db, 'giftEvent/settings'));
+        if (settingsSnapshot.exists()) {
+          const settings = settingsSnapshot.val();
+          const loadedSettings = {
+            enabled: settings.enabled ?? false,
+            size: settings.size ?? 1,
+            opacity: settings.opacity ?? 1.0,
+            offsetX: settings.offsetX ?? 0,
+            offsetY: settings.offsetY ?? 0,
+            saturation: settings.saturation ?? 600,
+            intensity: settings.intensity ?? 200,
+            isBlackAndWhite: settings.isBlackAndWhite ?? false
+          };
+          setLogoSettings(loadedSettings);
+        }
+        
+        // 로고 URL 불러오기
+        const logosSnapshot = await get(ref(db, 'logos'));
+        if (logosSnapshot.exists()) {
+          const data = logosSnapshot.val();
+          const firstLogo = Object.values(data)[0] as any;
+          if (firstLogo?.url) {
+            setLogoUrl(firstLogo.url);
+          }
+        }
+      } catch (error) {
+        console.error('[GiftEventAdminPage] Error loading initial data:', error);
+      }
+    };
+    
+    loadInitialData();
+    
+    // 실시간 구독으로 설정 변경 감지 (초기 로드 후에도 작동)
     const unsubSettings = onValue(ref(db, 'giftEvent/settings'), (snapshot) => {
       if (snapshot.exists()) {
-        setLogoSettings(snapshot.val());
-      }
-    });
-
-    // Fetch logo URL
-    get(ref(db, 'logos')).then((snapshot) => {
-      if (snapshot.exists()) {
-        const data = snapshot.val();
-        const firstLogo = Object.values(data)[0] as any;
-        if (firstLogo?.url) {
-          setLogoUrl(firstLogo.url);
-        }
+        const settings = snapshot.val();
+        const updatedSettings = {
+          enabled: settings.enabled ?? false,
+          size: settings.size ?? 1,
+          opacity: settings.opacity ?? 1.0,
+          offsetX: settings.offsetX ?? 0,
+          offsetY: settings.offsetY ?? 0,
+          saturation: settings.saturation ?? 600,
+          intensity: settings.intensity ?? 200,
+          isBlackAndWhite: settings.isBlackAndWhite ?? false
+        };
+        setLogoSettings(updatedSettings);
       }
     });
 
@@ -109,21 +146,61 @@ export default function GiftEventAdminPage() {
     };
   }, []);
 
-  const updateLogoSettings = (newSettings: any) => {
-    if (!db) return;
-    setLogoSettings(newSettings);
-    update(ref(db, 'giftEvent/settings'), newSettings);
+  const updateLogoSettings = async (newSettings: any) => {
+    if (!db) {
+      console.error('[GiftEventAdminPage] Database not initialized');
+      return;
+    }
+    
+    // 항상 Firebase에서 현재 설정을 불러와서 병합 (최신 상태 보장)
+    try {
+      const currentSettingsSnapshot = await get(ref(db, 'giftEvent/settings'));
+      let finalSettings;
+      
+      if (currentSettingsSnapshot.exists()) {
+        // Firebase에 설정이 있으면 Firebase의 설정과 병합
+        const currentSettings = currentSettingsSnapshot.val();
+        finalSettings = {
+          ...currentSettings,
+          ...newSettings
+        };
+      } else {
+        // Firebase에 설정이 없으면 현재 state와 병합
+        finalSettings = {
+          ...logoSettings,
+          ...newSettings
+        };
+      }
+      
+      // 기본값 보장
+      finalSettings = {
+        enabled: finalSettings.enabled ?? false,
+        size: finalSettings.size ?? 1,
+        opacity: finalSettings.opacity ?? 1.0,
+        offsetX: finalSettings.offsetX ?? 0,
+        offsetY: finalSettings.offsetY ?? 0,
+        saturation: finalSettings.saturation ?? 600,
+        intensity: finalSettings.intensity ?? 200,
+        isBlackAndWhite: finalSettings.isBlackAndWhite ?? false
+      };
+      
+      setLogoSettings(finalSettings);
+      // set을 사용하여 전체 설정을 저장
+      await set(ref(db, 'giftEvent/settings'), finalSettings);
+    } catch (error) {
+      console.error('[GiftEventAdminPage] Error saving logo settings:', error);
+    }
   };
 
-  const handleStartEvent = () => {
+  const handleStartEvent = async () => {
     if (!db) return;
     if (participants.length === 0) {
       alert("추첨할 참가자가 없습니다.");
       return;
     }
     const allParticipantIds = participants.map(p => p.id);
-    const giftEventRef = ref(db, 'giftEvent');
-    set(giftEventRef, {
+    // update를 사용하여 settings를 보존
+    await update(ref(db, 'giftEvent'), {
       status: 'waiting',
       remaining: allParticipantIds,
       winners: [],
@@ -180,9 +257,30 @@ export default function GiftEventAdminPage() {
     });
   };
 
-  const handleResetEvent = () => {
+  const handleResetEvent = async () => {
     if (!db) return;
-    remove(ref(db, 'giftEvent'));
+    
+    // 로고 설정을 백업
+    const settingsSnapshot = await get(ref(db, 'giftEvent/settings'));
+    const savedSettings = settingsSnapshot.exists() ? settingsSnapshot.val() : null;
+    
+    // giftEvent의 추첨 관련 데이터만 삭제 (settings는 보존)
+    const updates: any = {
+      status: null,
+      winners: null,
+      remaining: null,
+      currentWinner: null,
+      drawStartTime: null
+    };
+    
+    // null 값으로 업데이트하여 해당 필드만 삭제
+    await update(ref(db, 'giftEvent'), updates);
+    
+    // 로고 설정이 있었다면 복원 (안전장치)
+    if (savedSettings) {
+      await set(ref(db, 'giftEvent/settings'), savedSettings);
+    }
+    
     setCurrentWinner(null);
     setWinners([]);
     setShowResetConfirm(false);
@@ -304,7 +402,7 @@ export default function GiftEventAdminPage() {
                       <input
                         type="checkbox"
                         checked={logoSettings.enabled}
-                        onChange={(e) => updateLogoSettings({ ...logoSettings, enabled: e.target.checked })}
+                        onChange={(e) => updateLogoSettings({ enabled: e.target.checked })}
                         className="w-4 h-4"
                       />
                     </div>
@@ -322,7 +420,7 @@ export default function GiftEventAdminPage() {
                             max="2"
                             step="0.1"
                             value={logoSettings.size}
-                            onChange={(e) => updateLogoSettings({ ...logoSettings, size: parseFloat(e.target.value) })}
+                            onChange={(e) => updateLogoSettings({ size: parseFloat(e.target.value) })}
                             className="w-32 md:w-40 h-6 md:h-auto"
                           />
                         </div>
@@ -336,7 +434,7 @@ export default function GiftEventAdminPage() {
                             max="2"
                             step="0.1"
                             value={logoSettings.opacity}
-                            onChange={(e) => updateLogoSettings({ ...logoSettings, opacity: parseFloat(e.target.value) })}
+                            onChange={(e) => updateLogoSettings({ opacity: parseFloat(e.target.value) })}
                             className="w-32 md:w-40 h-6 md:h-auto"
                           />
                         </div>
@@ -349,7 +447,7 @@ export default function GiftEventAdminPage() {
                             min="-400"
                             max="400"
                             value={logoSettings.offsetX}
-                            onChange={(e) => updateLogoSettings({ ...logoSettings, offsetX: parseInt(e.target.value) })}
+                            onChange={(e) => updateLogoSettings({ offsetX: parseInt(e.target.value) })}
                             className="w-full h-6 md:h-auto"
                           />
                         </div>
@@ -360,7 +458,7 @@ export default function GiftEventAdminPage() {
                             min="-800"
                             max="800"
                             value={logoSettings.offsetY}
-                            onChange={(e) => updateLogoSettings({ ...logoSettings, offsetY: parseInt(e.target.value) })}
+                            onChange={(e) => updateLogoSettings({ offsetY: parseInt(e.target.value) })}
                             className="w-full h-6 md:h-auto"
                           />
                         </div>
@@ -374,7 +472,7 @@ export default function GiftEventAdminPage() {
                             max="800"
                             step="10"
                             value={logoSettings.saturation ?? 200}
-                            onChange={(e) => updateLogoSettings({ ...logoSettings, saturation: parseInt(e.target.value) })}
+                            onChange={(e) => updateLogoSettings({ saturation: parseInt(e.target.value) })}
                             className="w-32 md:w-40 h-6 md:h-auto"
                           />
                         </div>
@@ -388,10 +486,22 @@ export default function GiftEventAdminPage() {
                             max="300"
                             step="10"
                             value={logoSettings.intensity ?? 150}
-                            onChange={(e) => updateLogoSettings({ ...logoSettings, intensity: parseInt(e.target.value) })}
+                            onChange={(e) => updateLogoSettings({ intensity: parseInt(e.target.value) })}
                             className="w-32 md:w-40 h-6 md:h-auto"
                           />
                         </div>
+                      </div>
+
+                      <div className="pt-2 border-t border-gray-100">
+                        <label className="flex items-center space-x-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={logoSettings.isBlackAndWhite || false}
+                            onChange={(e) => updateLogoSettings({ isBlackAndWhite: e.target.checked })}
+                            className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          />
+                          <span className="text-xs md:text-sm font-medium text-gray-700">흑백 모드 (Black & White)</span>
+                        </label>
                       </div>
                     </>
                   )}
