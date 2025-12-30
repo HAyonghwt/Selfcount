@@ -73,6 +73,7 @@ export default function ScorePrintTool() {
                 if (!db) return;
                 const loadSettings = async () => {
                     try {
+                        if (!db) return;
                         const settingsSnapshot = await get(ref(db, 'scorePrint/settings'));
                         if (settingsSnapshot.exists()) {
                             const settings = settingsSnapshot.val();
@@ -357,7 +358,7 @@ export default function ScorePrintTool() {
                 });
 
                 // 코스 총점 계산
-                const courseTotal = holeScores.reduce((sum, score) => {
+                const courseTotal = holeScores.reduce((sum: number, score) => {
                     return sum + (typeof score === 'number' && score > 0 ? score : 0);
                 }, 0);
 
@@ -1008,37 +1009,33 @@ export default function ScorePrintTool() {
 
             toast({ title: "이미지 저장 시작", description: "그룹별로 분리하여 저장 중..." });
 
-            // 로고 스타일
-            const logoStyle = (printModal.logoEnabled && backgroundLogoUrl) ? `
-                .print-wrapper {
-                    position: relative;
-                }
-                .print-wrapper::before {
-                    content: '';
+            // 로고 스타일 (calc 제거 및 구조 최적화)
+            const logoOverlayStyle = (printModal.logoEnabled && backgroundLogoUrl) ? `
+                .logo-overlay {
                     position: absolute;
                     top: 0;
                     left: 0;
                     right: 0;
                     bottom: 0;
-                    background-image: url('${backgroundLogoUrl.replace(/'/g, "\\'")}');
-                    background-repeat: no-repeat;
-                    background-position: calc(50% + ${printModal.logoOffsetX}px) calc(50% + ${printModal.logoOffsetY}px);
-                    background-size: ${printModal.logoSize * 100}% auto;
-                    opacity: ${printModal.logoOpacity};
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
                     pointer-events: none;
                     z-index: 0;
+                    overflow: hidden;
                 }
-                .print-wrapper > * {
-                    position: relative;
-                    z-index: 1;
+                .logo-overlay img {
+                    width: ${printModal.logoSize * 100}%;
+                    opacity: ${printModal.logoOpacity};
+                    transform: translate(${printModal.logoOffsetX}px, ${printModal.logoOffsetY}px);
                 }
             ` : '';
 
             // 공통 스타일 (홈 전광판과 동일)
             const styleContent = `
                 <style>
-                    .print-wrapper { font-family: 'Pretendard', sans-serif; text-align: center; color: #1e293b; width: 100%; box-sizing: border-box; ${printModal.logoEnabled && backgroundLogoUrl ? 'position: relative;' : ''} }
-                    ${logoStyle}
+                    .print-wrapper { font-family: 'Pretendard', sans-serif; text-align: center; color: #1e293b; width: 100%; box-sizing: border-box; position: relative; }
+                    ${logoOverlayStyle}
                     .print-header { 
                         background-color: #3b82f6; 
                         color: white; 
@@ -1210,13 +1207,25 @@ export default function ScorePrintTool() {
                     if (isFirstPage) {
                         htmlContent += `
                             <div class="print-wrapper">
+                                ${printModal.logoEnabled && backgroundLogoUrl ? `
+                                    <div class="logo-overlay">
+                                        <img src="${backgroundLogoUrl}" />
+                                    </div>
+                                ` : ''}
                                 <div class="print-header">
                                     <div class="print-title">⛳ ${tournamentName}</div>
                                     <div class="print-date">인쇄일시: ${printDate}</div>
                                 </div>
                         `;
                     } else {
-                        htmlContent += `<div class="print-wrapper">`;
+                        htmlContent += `
+                            <div class="print-wrapper">
+                                ${printModal.logoEnabled && backgroundLogoUrl ? `
+                                    <div class="logo-overlay">
+                                        <img src="${backgroundLogoUrl}" />
+                                    </div>
+                                ` : ''}
+                        `;
                     }
 
                     htmlContent += `
