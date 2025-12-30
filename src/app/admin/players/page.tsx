@@ -1773,7 +1773,13 @@ export default function PlayerManagementPage() {
         setRosterDownloadModal({
             open: true,
             type,
-            groupSettings: initialSettings
+            paperSize: 'A4',
+            groupSettings: initialSettings,
+            logoEnabled: false,
+            logoSize: 0.6,
+            logoOpacity: 0.1,
+            logoOffsetX: 0,
+            logoOffsetY: 0
         });
     };
 
@@ -1934,20 +1940,20 @@ export default function PlayerManagementPage() {
                     ` : '';
 
                     const logoOverlay = (rosterDownloadModal.logoEnabled && backgroundLogoUrl) ? `
-                        <div style="
+                        <img src="${backgroundLogoUrl}" style="
                             position: absolute;
-                            top: 0;
-                            left: 0;
-                            right: 0;
-                            bottom: 0;
-                            background-image: url('${backgroundLogoUrl.replace(/'/g, "\\'")}');
-                            background-repeat: no-repeat;
-                            background-position: calc(50% + ${rosterDownloadModal.logoOffsetX}px) calc(50% + ${rosterDownloadModal.logoOffsetY}px);
-                            background-size: ${rosterDownloadModal.logoSize * 100}% auto;
+                            top: calc(50% + ${rosterDownloadModal.logoOffsetY}px);
+                            left: calc(50% + ${rosterDownloadModal.logoOffsetX}px);
+                            transform: translate(-50%, -50%);
+                            width: ${rosterDownloadModal.logoSize * 100}%;
+                            height: auto;
+                            max-width: none;
                             opacity: ${rosterDownloadModal.logoOpacity};
                             pointer-events: none;
-                            z-index: 0;
-                        "></div>
+                            z-index: 50;
+                            -webkit-print-color-adjust: exact !important;
+                            print-color-adjust: exact !important;
+                        " />
                     ` : '';
 
                     const styleContent = `
@@ -2495,20 +2501,20 @@ export default function PlayerManagementPage() {
 
                 const groupNameEnglish = getGroupNameEnglish(groupName);
                 const logoOverlayForGroup = (rosterDownloadModal.logoEnabled && backgroundLogoUrl) ? `
-                    <div style="
+                    <img src="${backgroundLogoUrl}" style="
                         position: absolute;
-                        top: 0;
-                        left: 0;
-                        right: 0;
-                        bottom: 0;
-                        background-image: url('${backgroundLogoUrl.replace(/'/g, "\\'")}');
-                        background-repeat: no-repeat;
-                        background-position: calc(50% + ${rosterDownloadModal.logoOffsetX}px) calc(50% + ${rosterDownloadModal.logoOffsetY}px);
-                        background-size: ${rosterDownloadModal.logoSize * 100}% auto;
+                        top: calc(50% + ${rosterDownloadModal.logoOffsetY}px);
+                        left: calc(50% + ${rosterDownloadModal.logoOffsetX}px);
+                        transform: translate(-50%, -50%);
+                        width: ${rosterDownloadModal.logoSize * 100}%;
+                        height: auto;
+                        max-width: none;
                         opacity: ${rosterDownloadModal.logoOpacity};
                         pointer-events: none;
-                        z-index: 0;
-                    "></div>
+                        z-index: 50;
+                        -webkit-print-color-adjust: exact !important;
+                        print-color-adjust: exact !important;
+                    " />
                 ` : '';
 
                 printContent += `
@@ -2586,29 +2592,23 @@ export default function PlayerManagementPage() {
             }
 
             const paperSize = rosterDownloadModal.paperSize || 'A4';
-            const logoStyleForPrint = (rosterDownloadModal.logoEnabled && backgroundLogoUrl) ? `
-                position: relative;
-                background-image: url('${backgroundLogoUrl.replace(/'/g, "\\'")}');
-                background-repeat: no-repeat;
-                background-position: calc(50% + ${rosterDownloadModal.logoOffsetX}px) calc(50% + ${rosterDownloadModal.logoOffsetY}px);
-                background-size: ${rosterDownloadModal.logoSize * 100}% auto;
-            ` : '';
+
 
             const logoOverlayForPrint = (rosterDownloadModal.logoEnabled && backgroundLogoUrl) ? `
-                <div style="
+                <img src="${backgroundLogoUrl}" style="
                     position: fixed;
-                    top: 0;
-                    left: 0;
-                    right: 0;
-                    bottom: 0;
-                    background-image: url('${backgroundLogoUrl.replace(/'/g, "\\'")}');
-                    background-repeat: no-repeat;
-                    background-position: calc(50% + ${rosterDownloadModal.logoOffsetX}px) calc(50% + ${rosterDownloadModal.logoOffsetY}px);
-                    background-size: ${rosterDownloadModal.logoSize * 100}% auto;
+                    top: calc(50% + ${rosterDownloadModal.logoOffsetY}px);
+                    left: calc(50% + ${rosterDownloadModal.logoOffsetX}px);
+                    transform: translate(-50%, -50%);
+                    width: ${rosterDownloadModal.logoSize * 100}%;
+                    height: auto;
+                    max-width: none;
                     opacity: ${rosterDownloadModal.logoOpacity};
                     pointer-events: none;
-                    z-index: 0;
-                "></div>
+                    z-index: 50;
+                    -webkit-print-color-adjust: exact !important;
+                    print-color-adjust: exact !important;
+                " />
             ` : '';
 
             const fullHtml = `
@@ -2630,7 +2630,6 @@ export default function PlayerManagementPage() {
                         body {
                             font-family: 'Pretendard', 'Malgun Gothic', sans-serif;
                             padding: 20px;
-                            ${logoStyleForPrint}
                         }
                     </style>
                 </head>
