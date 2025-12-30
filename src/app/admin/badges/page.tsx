@@ -95,21 +95,21 @@ export default function BadgePage() {
   // 로고 설정
   const [logoSettings, setLogoSettings] = useState({
     size: 0.8, // 명찰 크기 대비 비율 (0.1 ~ 1.0)
-    offsetX: 0, // 가로 오프셋 (픽셀, -50 ~ 50)
+    offsetX: 0, // 가로 오프셋 (픽셀, -200 ~ 200)
     offsetY: 0, // 세로 오프셋 (픽셀, -200 ~ 200)
     opacity: 0.10, // 투명도 (0.0 ~ 1.0)
   });
-  
+
   // 로고 설정 업데이트 함수
   const updateLogoSettings = async (newSettings: Partial<typeof logoSettings>) => {
     if (!db) return;
-    
+
     try {
       const updatedSettings = {
         ...logoSettings,
         ...newSettings
       };
-      
+
       setLogoSettings(updatedSettings);
       await set(ref(db, 'badges/settings'), updatedSettings);
     } catch (error) {
@@ -153,11 +153,11 @@ export default function BadgePage() {
   useEffect(() => {
     const loadLogos = async () => {
       if (!db) return;
-      
+
       try {
         const logosRef = ref(db, 'logos');
         const snapshot = await get(logosRef);
-        
+
         if (snapshot.exists()) {
           const logosData = snapshot.val();
           const logos = Object.entries(logosData).map(([name, data]: [string, any]) => ({
@@ -174,7 +174,7 @@ export default function BadgePage() {
 
     const loadSettings = async () => {
       if (!db) return;
-      
+
       try {
         const settingsSnapshot = await get(ref(db, 'badges/settings'));
         if (settingsSnapshot.exists()) {
@@ -193,7 +193,7 @@ export default function BadgePage() {
 
     loadLogos();
     loadSettings();
-    
+
     // 실시간 구독으로 설정 변경 감지
     const unsubSettings = onValue(ref(db, 'badges/settings'), (snapshot) => {
       if (snapshot.exists()) {
@@ -206,7 +206,7 @@ export default function BadgePage() {
         });
       }
     });
-    
+
     return () => {
       unsubSettings();
     };
@@ -263,10 +263,10 @@ export default function BadgePage() {
         .replace(/[^a-zA-Z0-9_-]/g, '_') // 특수문자 제거 (. # $ [ ] 포함)
         .replace(/_{2,}/g, '_')
         .replace(/^_+|_+$/g, '') || 'logo';
-      
+
       // 경로 키는 확장자 없이 생성 (특수문자 제거)
       const logoKey = `logo_${timestamp}_${baseFileName}`;
-      
+
       // Firebase Realtime Database에 저장
       const logoRef = ref(db, `logos/${logoKey}`);
       await set(logoRef, {
@@ -276,23 +276,23 @@ export default function BadgePage() {
         fileSize: file.size,
         fileType: file.type
       });
-      
+
       console.log('로고 업로드 완료:', logoKey);
-      
+
       setUploadedLogos(prev => [...prev, { name: logoKey, url: base64, thumbnail: base64 }]);
-      
+
       toast({
         title: "성공",
         description: "로고가 업로드되었습니다.",
       });
     } catch (error: any) {
       console.error('로고 업로드 실패:', error);
-      
+
       let errorMessage = "로고 업로드에 실패했습니다.";
       if (error?.message) {
         errorMessage = error.message;
       }
-      
+
       toast({
         title: "오류",
         description: errorMessage,
@@ -318,9 +318,9 @@ export default function BadgePage() {
 
       const logoRef = ref(db, `logos/${logoName}`);
       await remove(logoRef);
-      
+
       setUploadedLogos(prev => prev.filter(logo => logo.name !== logoName));
-      
+
       toast({
         title: "성공",
         description: "로고가 삭제되었습니다.",
@@ -425,18 +425,18 @@ export default function BadgePage() {
         ctx.save();
         const opacity = logoOpacity !== undefined ? logoOpacity : 0.10;
         ctx.globalAlpha = opacity;
-        
+
         // 로고 원본 비율 계산
         const logoAspectRatio = logoImg.width / logoImg.height;
         const badgeAspectRatio = pxWidth / pxHeight;
-        
+
         // 로고 크기 설정 (기본값 0.8, 파라미터로 받은 값 사용)
         const sizeRatio = logoSize !== undefined ? logoSize : 0.8;
-        
+
         // 명찰 크기의 설정된 비율을 기준으로 하되, 원본 비율 유지
         let logoWidth: number;
         let logoHeight: number;
-        
+
         if (logoAspectRatio > badgeAspectRatio) {
           // 로고가 명찰보다 가로로 더 긴 경우: 가로를 기준으로 크기 결정
           logoWidth = pxWidth * sizeRatio;
@@ -446,7 +446,7 @@ export default function BadgePage() {
           logoHeight = pxHeight * sizeRatio;
           logoWidth = logoHeight * logoAspectRatio;
         }
-        
+
         // 명찰 크기를 넘지 않도록 한 번 더 체크
         if (logoWidth > pxWidth) {
           logoWidth = pxWidth * sizeRatio;
@@ -456,14 +456,14 @@ export default function BadgePage() {
           logoHeight = pxHeight * sizeRatio;
           logoWidth = logoHeight * logoAspectRatio;
         }
-        
+
         // 위치 오프셋 적용 (기본값 0, 파라미터로 받은 값 사용)
         const offsetX = logoOffsetX !== undefined ? logoOffsetX : 0;
         const offsetY = logoOffsetY !== undefined ? logoOffsetY : 0;
-        
+
         const logoX = (pxWidth - logoWidth) / 2 + offsetX; // 가로 중앙 + 오프셋
         const logoY = (pxHeight - logoHeight) / 2 + offsetY; // 세로 중앙 + 오프셋
-        
+
         ctx.drawImage(logoImg, logoX, logoY, logoWidth, logoHeight);
         ctx.restore();
       } catch (error) {
@@ -694,9 +694,8 @@ export default function BadgePage() {
                   return (
                     <div
                       key={img}
-                      className={`flex flex-col items-center gap-1 p-2 rounded border-2 transition-all cursor-pointer ${
-                        isSelected ? 'border-blue-500 bg-blue-50 shadow-md' : 'border-gray-200 hover:border-gray-300 hover:shadow-sm'
-                      }`}
+                      className={`flex flex-col items-center gap-1 p-2 rounded border-2 transition-all cursor-pointer ${isSelected ? 'border-blue-500 bg-blue-50 shadow-md' : 'border-gray-200 hover:border-gray-300 hover:shadow-sm'
+                        }`}
                       onClick={() => setSelectedBackground(img)}
                       title={`배경 ${index + 1} - ${color}`}
                     >
@@ -957,8 +956,8 @@ export default function BadgePage() {
                 <Label>가로 위치 (X: {logoSettings.offsetX}px)</Label>
                 <Input
                   type="range"
-                  min="-50"
-                  max="50"
+                  min="-200"
+                  max="200"
                   step="1"
                   value={logoSettings.offsetX}
                   onChange={(e) => updateLogoSettings({ offsetX: Number(e.target.value) })}
@@ -966,13 +965,13 @@ export default function BadgePage() {
                 />
                 <Input
                   type="number"
-                  min="-50"
-                  max="50"
+                  min="-200"
+                  max="200"
                   step="1"
                   value={logoSettings.offsetX}
                   onChange={(e) => {
                     const val = Number(e.target.value);
-                    if (val >= -50 && val <= 50) {
+                    if (val >= -200 && val <= 200) {
                       updateLogoSettings({ offsetX: val });
                     }
                   }}
