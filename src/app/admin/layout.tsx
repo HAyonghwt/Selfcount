@@ -16,6 +16,7 @@ import {
   FileText,
   Database,
   CreditCard,
+  LayoutGrid,
 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -43,6 +44,7 @@ const mainNavItems = [
   { href: "/admin/dashboard", icon: BarChart2, label: "홈 전광판" },
   { href: "/admin/tournaments", icon: Trophy, label: "대회 및 코스 관리" },
   { href: "/admin/players", icon: Users, label: "그룹 및 선수관리" },
+  { href: "/admin/group-generator", icon: LayoutGrid, label: "조 번호 생성" },
 ];
 
 const secondaryNavItems = [
@@ -179,7 +181,7 @@ function SidebarContentWithSidebarHooks({ isMobile, pathname, appName, selfScori
 
   // 사회자인 경우 경품 행사만 필터링
   const filteredMainNavItems = isHost ? [] : mainNavItems;
-  const filteredSecondaryNavItems = isHost 
+  const filteredSecondaryNavItems = isHost
     ? secondaryNavItems.filter(item => item.href === '/admin/gift-event')
     : secondaryNavItems;
 

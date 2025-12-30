@@ -83,6 +83,28 @@ const translations = {
     }
 };
 
+// 그룹명 번역 맵 (한글 -> 영어)
+const groupTranslations: { [key: string]: string } = {
+    '남자부': 'Men\'s Division',
+    '여자부': 'Women\'s Division',
+    '남자 시니어부': 'Men\'s Senior',
+    '여자 시니어부': 'Women\'s Senior',
+    '일반부': 'General Division',
+    '부부대항': 'Couples',
+    '혼성2인': 'Mixed Doubles',
+    '개인전': 'Individual',
+    '단체전': 'Team',
+    '남자': 'Men',
+    '여자': 'Women',
+    '시니어': 'Senior',
+};
+
+// 그룹명 번역 헬퍼 함수
+const translateGroupName = (name: string, lang: 'ko' | 'en'): string => {
+    if (lang === 'ko') return name;
+    return groupTranslations[name] || name;
+};
+
 // 순위 표시 함수 (영어: 1st, 2nd, 3rd... / 한글: 1위, 2위, 3위...)
 const formatRank = (rank: number, lang: 'ko' | 'en'): string => {
     if (lang === 'ko') {
@@ -2019,7 +2041,7 @@ function ExternalScoreboard() {
                         <div key={groupName} className="mb-8">
                             <header className="flex justify-between items-baseline sb-group-header">
                                 <h1 className="text-xl md:text-2xl font-bold sb-title">
-                                    {tournament.name || '파크골프 토너먼트'} ({groupName})
+                                    {tournament.name || '파크골프 토너먼트'} ({translateGroupName(groupName, currentLang)})
                                 </h1>
                                 <div className="text-xl md:text-2xl font-bold sb-progress-text">
                                     {(() => {
@@ -2345,7 +2367,7 @@ function ExternalScoreboard() {
                                 </SelectTrigger>
                                 <SelectContent className="bg-gray-900 text-white border-gray-700">
                                     <SelectItem value="all">{t('viewAllGroups')}</SelectItem>
-                                    {allGroupsList.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}
+                                    {allGroupsList.map(g => <SelectItem key={g} value={g}>{translateGroupName(g, currentLang)}</SelectItem>)}
                                 </SelectContent>
                             </Select>
                             {/* 순환 중 표시 */}
@@ -2459,7 +2481,7 @@ function ExternalScoreboard() {
                                                     className="border-gray-600"
                                                 />
                                                 <Label htmlFor={`rotation-group-${group}`} className="text-xs text-gray-300 cursor-pointer">
-                                                    {group}
+                                                    {translateGroupName(group, currentLang)}
                                                 </Label>
                                             </div>
                                         ))}
@@ -2503,7 +2525,7 @@ function ExternalScoreboard() {
                         )}
                     </div>
                 </div>
-            </div>
+            </div >
         </>
     );
 }
