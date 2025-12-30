@@ -390,7 +390,75 @@ export default function PlayerManagementPage() {
     // 조 재편성용 엑셀 다운로드 함수
     const handleDownloadReorganizeTemplate = async (type: 'individual' | 'team') => {
         try {
-            // Firebase에 저장된 순위 사용 (전광판과 동일한 순위)
+            // --- 전광판과 동일한 실시간 순위 산출 로직 통합 ---
+            // 외부 전광판이나 홈 전광판을 방문하지 않아도 실시간으로 정합성 있는 순위 계산
+
+            // 1. 필요한 헬퍼 함수 정의 (전광판 logic 복제)
+            const getPlayerTotalAndPlusMinusAllCourses = (tournament: any, player: any, allAssignedCourses: any[]) => {
+                let total = 0;
+                let parTotal = 0;
+                let playedHoles = 0;
+                allAssignedCourses.forEach((course: any) => {
+                    const courseData = tournament?.courses?.[course.id];
+                    const scoresForCourse = (allScores[player.id]?.[course.id]) || {};
+                    if (courseData && Array.isArray(courseData.pars)) {
+                        for (let i = 0; i < 9; i++) {
+                            const score = scoresForCourse[(i + 1).toString()];
+                            const par = courseData.pars[i] ?? null;
+                            if (score !== null && score !== undefined && par !== null && par !== undefined) {
+                                total += score;
+                                parTotal += par;
+                                playedHoles++;
+                            }
+                        }
+                    }
+                });
+                return playedHoles > 0 ? { total, pm: total - parTotal } : { total: 0, pm: null };
+            };
+
+            const tieBreak = (a: any, b: any, sortedCourses: any[]) => {
+                if (a.hasForfeited && !b.hasForfeited) return 1;
+                if (!a.hasForfeited && b.hasForfeited) return -1;
+                if (!a.hasAnyScore && !b.hasAnyScore) return 0;
+                if (!a.hasAnyScore) return 1;
+                if (!b.hasAnyScore) return -1;
+
+                // 총점 비교
+                if (a.totalScore !== b.totalScore) {
+                    return a.totalScore - b.totalScore;
+                }
+
+                // 코스별 점수 비교
+                for (const course of sortedCourses) {
+                    const courseId = course.id;
+                    const aCourseScore = a.courseScores[courseId] || 0;
+                    const bCourseScore = b.courseScores[courseId] || 0;
+                    if (aCourseScore !== bCourseScore) {
+                        return aCourseScore - bCourseScore;
+                    }
+                }
+
+                // 홀별 백카운트 (마지막 코스부터 역순)
+                if (sortedCourses.length > 0) {
+                    for (const course of sortedCourses) {
+                        const courseId = course.id;
+                        const aHoleScores = allScores[a.id]?.[courseId] || {};
+                        const bHoleScores = allScores[b.id]?.[courseId] || {};
+                        let hasNonZeroScore = false;
+
+                        for (let i = 9; i >= 1; i--) {
+                            const hole = i.toString();
+                            const aHole = Number(aHoleScores[hole] || 0);
+                            const bHole = Number(bHoleScores[hole] || 0);
+
+                            if (aHole > 0 || bHole > 0) hasNonZeroScore = true;
+                            if (aHole !== bHole) return aHole - bHole;
+                        }
+                        if (hasNonZeroScore) break;
+                    }
+                }
+                return 0;
+            };
 
             const wb = XLSX.utils.book_new();
             const groupList = Object.values(groupsData)
@@ -406,18 +474,8 @@ export default function PlayerManagementPage() {
                 return;
             }
 
-            // 순위 데이터 확인
-            const hasRanks = Object.keys(playerRanks).length > 0;
-            if (!hasRanks) {
-                const confirmDownload = window.confirm(
-                    '순위 데이터가 아직 없습니다.\n\n' +
-                    '순위를 포함하려면 먼저 "외부 전광판" 또는 "홈 전광판" 페이지를 방문하여 순위가 계산되도록 해주세요.\n\n' +
-                    '순위 없이 다운로드하시겠습니까?'
-                );
-                if (!confirmDownload) {
-                    return;
-                }
-            }
+            // 모든 코스 정보
+            const allCourses = Object.values(tournament.courses || {}).filter(Boolean);
 
             groupList.forEach((groupName: string) => {
                 const groupPlayers = allPlayers.filter((p: any) =>
@@ -427,26 +485,112 @@ export default function PlayerManagementPage() {
 
                 if (groupPlayers.length === 0) return;
 
-                // Firebase에 저장된 순위 사용
-                const playersWithRank = groupPlayers.map((player: any) => {
-                    const rank = playerRanks[player.id] ?? null;
-                    // 디버깅: 순위가 없는 경우 로그 출력
-                    if (rank === null && hasRanks) {
-                        console.log(`순위 없음: ${player.name || player.p1_name} (ID: ${player.id})`);
+                const playerGroupData = groupsData[groupName];
+                const coursesOrder = playerGroupData?.courses || {};
+
+                // 해당 그룹에 배정된 코스들 찾기 및 정렬 (백카운트 정렬 기준 확보용)
+                const assignedCourseIds = Object.keys(coursesOrder).filter((id: string) => {
+                    const order = coursesOrder[id];
+                    return typeof order === 'boolean' ? order : (typeof order === 'number' && order > 0);
+                });
+
+                const allAssignedCoursesForGroup = allCourses.filter((c: any) => assignedCourseIds.includes(c.id.toString()));
+                allAssignedCoursesForGroup.sort((a: any, b: any) => {
+                    const orderA = coursesOrder[String(a.id)];
+                    const orderB = coursesOrder[String(b.id)];
+
+                    let numA: number;
+                    if (typeof orderA === 'boolean') {
+                        numA = orderA ? (a.order || 0) : 0;
+                    } else if (typeof orderA === 'number' && orderA > 0) {
+                        numA = orderA;
+                    } else {
+                        numA = a.order || 0;
                     }
+
+                    let numB: number;
+                    if (typeof orderB === 'boolean') {
+                        numB = orderB ? (b.order || 0) : 0;
+                    } else if (typeof orderB === 'number' && orderB > 0) {
+                        numB = orderB;
+                    } else {
+                        numB = b.order || 0;
+                    }
+                    return numA - numB;
+                });
+
+                // 실시간 순위 계산을 위해 선수 데이터 가공
+                const processedPlayers = groupPlayers.map((player: any) => {
+                    let hasAnyScore = false;
+                    let hasForfeited = false;
+                    const courseScores: { [courseId: string]: number } = {};
+
+                    allAssignedCoursesForGroup.forEach((course: any) => {
+                        const scoresForCourse = allScores[player.id]?.[course.id] || {};
+                        let courseTotal = 0;
+                        for (let i = 1; i <= 9; i++) {
+                            const score = scoresForCourse[i.toString()];
+                            if (score !== undefined && score !== null) {
+                                const scoreNum = Number(score);
+                                if (scoreNum === 0) hasForfeited = true;
+                                courseTotal += scoreNum;
+                                hasAnyScore = true;
+                            }
+                        }
+                        courseScores[course.id] = courseTotal;
+                    });
+
+                    const pmResult = getPlayerTotalAndPlusMinusAllCourses(tournament, player, allAssignedCoursesForGroup);
+
                     return {
                         ...player,
-                        rank: rank
+                        totalScore: pmResult.total,
+                        plusMinus: pmResult.pm,
+                        hasAnyScore,
+                        hasForfeited,
+                        courseScores
                     };
                 });
 
-                // 순위순으로 정렬 (순위가 없는 선수는 맨 뒤로)
-                playersWithRank.sort((a: any, b: any) => {
-                    if (a.rank === null && b.rank === null) return 0;
-                    if (a.rank === null) return 1;
-                    if (b.rank === null) return -1;
-                    return a.rank - b.rank;
-                });
+                // 점수가 있는 그룹과 없는 그룹 분리하여 정렬
+                const playersToSort = processedPlayers.filter(p => p.hasAnyScore && !p.hasForfeited);
+                const otherPlayers = processedPlayers.filter(p => !p.hasAnyScore || p.hasForfeited);
+                const coursesForBackcount = [...allAssignedCoursesForGroup].reverse();
+
+                if (playersToSort.length > 0) {
+                    // ±타수 정렬 및 백카운트 적용
+                    playersToSort.sort((a: any, b: any) => {
+                        if (a.plusMinus !== b.plusMinus) {
+                            return (a.plusMinus ?? 0) - (b.plusMinus ?? 0);
+                        }
+                        return tieBreak(a, b, coursesForBackcount);
+                    });
+
+                    // 순위 부여
+                    const minPM = playersToSort[0].plusMinus;
+                    let rank = 1;
+                    let oneRankCount = 0;
+                    for (let i = 0; i < playersToSort.length; i++) {
+                        if (playersToSort[i].plusMinus === minPM) {
+                            playersToSort[i].rank = 1;
+                            oneRankCount++;
+                        } else break;
+                    }
+
+                    rank = oneRankCount + 1;
+                    for (let i = oneRankCount; i < playersToSort.length; i++) {
+                        const prev = playersToSort[i - 1];
+                        const curr = playersToSort[i];
+                        if (curr.plusMinus === prev.plusMinus && tieBreak(curr, prev, coursesForBackcount) === 0) {
+                            curr.rank = prev.rank;
+                        } else {
+                            curr.rank = rank;
+                        }
+                        rank++;
+                    }
+                }
+
+                const playersWithRank = [...playersToSort, ...otherPlayers.map(p => ({ ...p, rank: null }))];
 
                 let sheetData: any[][] = [];
 
@@ -457,7 +601,7 @@ export default function PlayerManagementPage() {
                             player.jo || '',
                             player.name || '',
                             player.affiliation || '무소속',
-                            player.rank !== null && player.rank !== undefined ? player.rank : ''
+                            player.rank || ''
                         ]);
                     });
                 } else { // team
@@ -469,7 +613,7 @@ export default function PlayerManagementPage() {
                             player.p1_affiliation || '무소속',
                             player.p2_name || '',
                             player.p2_affiliation || '무소속',
-                            player.rank !== null && player.rank !== undefined ? player.rank : ''
+                            player.rank || ''
                         ]);
                     });
                 }
@@ -493,7 +637,7 @@ export default function PlayerManagementPage() {
 
             toast({
                 title: '다운로드 완료',
-                description: `${filename} 파일이 다운로드되었습니다.`,
+                description: `${filename} 파일이 다운로드되었습니다 (실시간 순위 반영).`,
             });
         } catch (error) {
             console.error('다운로드 오류:', error);
