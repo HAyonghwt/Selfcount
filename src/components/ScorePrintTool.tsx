@@ -7,8 +7,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { db } from '@/lib/firebase';
+import { db, auth } from '@/lib/firebase';
 import { ref, get, onValue, set } from 'firebase/database';
+import { onAuthStateChanged } from 'firebase/auth';
 import { Printer, Download } from 'lucide-react';
 
 /**
@@ -35,70 +36,80 @@ export default function ScorePrintTool() {
     });
 
     // 로고 불러오기
+    // 로고 불러오기
     const [backgroundLogoUrl, setBackgroundLogoUrl] = useState<string>('');
     useEffect(() => {
-        const loadLogo = async () => {
-            if (!db) return;
-            try {
-                const logosRef = ref(db, 'logos');
-                const snapshot = await get(logosRef);
-                if (snapshot.exists()) {
-                    const logosData = snapshot.val();
-                    const firstLogo = Object.values(logosData)[0] as any;
-                    if (firstLogo?.url) {
-                        setBackgroundLogoUrl(firstLogo.url);
+        if (!db || !auth) return;
+
+        const unsubscribe = onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                if (!db) return;
+                try {
+                    const logosRef = ref(db, 'logos');
+                    const snapshot = await get(logosRef);
+                    if (snapshot.exists()) {
+                        const logosData = snapshot.val();
+                        const firstLogo = Object.values(logosData)[0] as any;
+                        if (firstLogo?.url) {
+                            setBackgroundLogoUrl(firstLogo.url);
+                        }
                     }
+                } catch (error) {
+                    console.error('로고 불러오기 실패:', error);
                 }
-            } catch (error) {
-                console.error('로고 불러오기 실패:', error);
-            }
-        };
-        loadLogo();
-    }, []);
-
-    // 로고 설정 불러오기 및 저장
-    useEffect(() => {
-        if (!db) return;
-
-        const loadSettings = async () => {
-            try {
-                const settingsSnapshot = await get(ref(db, 'scorePrint/settings'));
-                if (settingsSnapshot.exists()) {
-                    const settings = settingsSnapshot.val();
-                    setPrintModal(prev => ({
-                        ...prev,
-                        logoEnabled: settings.logoEnabled ?? false,
-                        logoSize: settings.logoSize ?? 0.6,
-                        logoOpacity: settings.logoOpacity ?? 0.10,
-                        logoOffsetX: settings.logoOffsetX ?? 0,
-                        logoOffsetY: settings.logoOffsetY ?? 0
-                    }));
-                }
-            } catch (error) {
-                console.error('로고 설정 불러오기 실패:', error);
-            }
-        };
-
-        loadSettings();
-
-        // 실시간 구독으로 설정 변경 감지
-        const unsubSettings = onValue(ref(db, 'scorePrint/settings'), (snapshot) => {
-            if (snapshot.exists()) {
-                const settings = snapshot.val();
-                setPrintModal(prev => ({
-                    ...prev,
-                    logoEnabled: settings.logoEnabled ?? false,
-                    logoSize: settings.logoSize ?? 0.6,
-                    logoOpacity: settings.logoOpacity ?? 0.10,
-                    logoOffsetX: settings.logoOffsetX ?? 0,
-                    logoOffsetY: settings.logoOffsetY ?? 0
-                }));
             }
         });
 
-        return () => {
-            unsubSettings();
-        };
+        return () => unsubscribe();
+    }, []);
+
+    // 로고 설정 불러오기 및 저장
+    // 로고 설정 불러오기 및 저장
+    useEffect(() => {
+        if (!db || !auth) return;
+
+        const unsubscribe = onAuthStateChanged(auth, (user) => {
+            if (user) {
+                if (!db) return;
+                const loadSettings = async () => {
+                    try {
+                        const settingsSnapshot = await get(ref(db, 'scorePrint/settings'));
+                        if (settingsSnapshot.exists()) {
+                            const settings = settingsSnapshot.val();
+                            setPrintModal(prev => ({
+                                ...prev,
+                                logoEnabled: settings.logoEnabled ?? false,
+                                logoSize: settings.logoSize ?? 0.6,
+                                logoOpacity: settings.logoOpacity ?? 0.10,
+                                logoOffsetX: settings.logoOffsetX ?? 0,
+                                logoOffsetY: settings.logoOffsetY ?? 0
+                            }));
+                        }
+                    } catch (error) {
+                        console.error('로고 설정 불러오기 실패:', error);
+                    }
+                };
+
+                loadSettings();
+
+                // 실시간 구독으로 설정 변경 감지
+                return onValue(ref(db, 'scorePrint/settings'), (snapshot) => {
+                    if (snapshot.exists()) {
+                        const settings = snapshot.val();
+                        setPrintModal(prev => ({
+                            ...prev,
+                            logoEnabled: settings.logoEnabled ?? false,
+                            logoSize: settings.logoSize ?? 0.6,
+                            logoOpacity: settings.logoOpacity ?? 0.10,
+                            logoOffsetX: settings.logoOffsetX ?? 0,
+                            logoOffsetY: settings.logoOffsetY ?? 0
+                        }));
+                    }
+                });
+            }
+        });
+
+        return () => unsubscribe();
     }, []);
 
     // 로고 설정 업데이트 함수
@@ -109,7 +120,7 @@ export default function ScorePrintTool() {
             // Firebase에서 현재 설정을 불러와서 병합 (최신 상태 보장)
             const currentSettingsSnapshot = await get(ref(db, 'scorePrint/settings'));
             let finalSettings;
-            
+
             if (currentSettingsSnapshot.exists()) {
                 // Firebase에 설정이 있으면 Firebase의 설정과 병합
                 const currentSettings = currentSettingsSnapshot.val();
@@ -165,42 +176,48 @@ export default function ScorePrintTool() {
     const [allGroupsList, setAllGroupsList] = useState<string[]>([]);
 
     // Firebase에서 데이터 로드
+    // Firebase에서 데이터 로드
     useEffect(() => {
-        if (!db) return;
+        if (!db || !auth) return;
 
-        const loadData = async () => {
-            setIsLoading(true);
-            try {
-                // 선수 데이터
-                const playersSnapshot = await get(ref(db, 'players'));
-                setPlayers(playersSnapshot.val() || {});
+        setIsLoading(true);
+        const unsubscribe = onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                if (!db) return;
+                try {
+                    // 선수 데이터
+                    const playersSnapshot = await get(ref(db, 'players'));
+                    setPlayers(playersSnapshot.val() || {});
 
-                // 점수 데이터
-                const scoresSnapshot = await get(ref(db, 'scores'));
-                setScores(scoresSnapshot.val() || {});
+                    // 점수 데이터
+                    const scoresSnapshot = await get(ref(db, 'scores'));
+                    setScores(scoresSnapshot.val() || {});
 
-                // 코스 데이터
-                const coursesSnapshot = await get(ref(db, 'tournaments/current/courses'));
-                setCourses(coursesSnapshot.val() || {});
+                    // 코스 데이터
+                    const coursesSnapshot = await get(ref(db, 'tournaments/current/courses'));
+                    setCourses(coursesSnapshot.val() || {});
 
-                // 그룹 데이터
-                const groupsSnapshot = await get(ref(db, 'tournaments/current/groups'));
-                setGroupsData(groupsSnapshot.val() || {});
+                    // 그룹 데이터
+                    const groupsSnapshot = await get(ref(db, 'tournaments/current/groups'));
+                    setGroupsData(groupsSnapshot.val() || {});
 
-                // 대회 정보
-                const tournamentRef = ref(db, 'tournaments/current');
-                onValue(tournamentRef, (snap) => {
-                    setTournament(snap.val() || {});
-                }, { onlyOnce: true });
-            } catch (error: any) {
-                console.error('데이터 로드 실패:', error);
-                toast({ title: '오류', description: '데이터를 불러오는데 실패했습니다.', variant: 'destructive' });
-            } finally {
+                    // 대회 정보
+                    const tournamentRef = ref(db, 'tournaments/current');
+                    onValue(tournamentRef, (snap) => {
+                        setTournament(snap.val() || {});
+                    }, { onlyOnce: true });
+                } catch (error: any) {
+                    console.error('데이터 로드 실패:', error);
+                    toast({ title: '오류', description: '데이터를 불러오는데 실패했습니다.', variant: 'destructive' });
+                } finally {
+                    setIsLoading(false);
+                }
+            } else {
                 setIsLoading(false);
             }
-        };
+        });
 
-        loadData();
+        return () => unsubscribe();
     }, [toast]);
 
     // 홈 전광판과 동일한 tieBreak 함수 (백카운트 방식)
@@ -962,20 +979,16 @@ export default function ScorePrintTool() {
             });
         });
 
-        setPrintModal({
+        setPrintModal(prev => ({
+            ...prev,
             open: true,
             orientation: 'portrait',
             paperSize: 'A4',
             selectedGroups: allGroupsList,
             showAllGroups: true,
             selectedCourses: Array.from(availableCourses).sort(),
-            showAllCourses: true,
-            logoEnabled: false,
-            logoSize: 0.6,
-            logoOpacity: 0.10,
-            logoOffsetX: 0,
-            logoOffsetY: 0
-        });
+            showAllCourses: true
+        }));
     };
 
     // 점수표 이미지 저장
