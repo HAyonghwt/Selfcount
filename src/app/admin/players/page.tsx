@@ -1770,17 +1770,12 @@ export default function PlayerManagementPage() {
             };
         });
 
-        setRosterDownloadModal({
+        setRosterDownloadModal(prev => ({
+            ...prev,
             open: true,
             type,
-            paperSize: 'A4',
-            groupSettings: initialSettings,
-            logoEnabled: false,
-            logoSize: 0.6,
-            logoOpacity: 0.1,
-            logoOffsetX: 0,
-            logoOffsetY: 0
-        });
+            groupSettings: initialSettings
+        }));
     };
 
     // 조편성표 이미지 다운로드 함수 (모달에서 호출)
