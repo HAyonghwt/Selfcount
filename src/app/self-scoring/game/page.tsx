@@ -37,7 +37,7 @@ export default function SelfScoringGameSetupPage() {
             router.push('/self-scoring');
             return;
         }
-        
+
         try {
             const captain = JSON.parse(loggedInCaptain);
             setCaptainData(captain);
@@ -81,7 +81,7 @@ export default function SelfScoringGameSetupPage() {
         }
         const dbInstance = db as import('firebase/database').Database;
         const configRef = ref(dbInstance, 'config');
-        
+
         const unsubConfig = onValue(configRef, (snapshot) => {
             if (snapshot.exists()) {
                 const data = snapshot.val();
@@ -120,18 +120,18 @@ export default function SelfScoringGameSetupPage() {
     // 사용 가능한 경기방식 계산 (2인1팀 그룹과 선수가 있을 때만 표시)
     const availableGameModes = useMemo(() => {
         const modes: Array<{ value: string; label: string }> = [];
-        
+
         // 개인전은 항상 표시
         modes.push({ value: 'individual', label: '개인전' });
-        
+
         // 2인1팀: 그룹과 선수가 모두 있을 때만 표시
         const hasTeamGroups = Object.values(groupsData || {}).some((g: any) => g?.type === 'team');
         const hasTeamPlayers = allPlayers.some((p: any) => p?.type === 'team');
-        
+
         if (hasTeamGroups && hasTeamPlayers) {
             modes.push({ value: 'team', label: '2인1팀' });
         }
-        
+
         return modes;
     }, [groupsData, allPlayers]);
 
@@ -183,11 +183,11 @@ export default function SelfScoringGameSetupPage() {
                 orderedJos.push(joStr);
             }
         });
-        
+
         // 그룹 데이터에서 조 순서 정보 가져오기
         const groupData = groupsData[selectedGroup];
         const joOrder = groupData?.joOrder || {};
-        
+
         // 조 순서 정보가 있으면 그 순서대로 정렬, 없으면 기존 정렬 유지
         if (Object.keys(joOrder).length > 0) {
             orderedJos.sort((a, b) => {
@@ -219,7 +219,7 @@ export default function SelfScoringGameSetupPage() {
                 return a.localeCompare(b);
             });
         }
-        
+
         return orderedJos;
     }, [allPlayers, selectedGroup, groupsData]);
 
@@ -240,6 +240,9 @@ export default function SelfScoringGameSetupPage() {
         if (!selectedGroup || !selectedJo) return [] as string[];
         if (gameMode === 'team') {
             const teams = allPlayers.filter((p: any) => p.type === 'team' && p.group === selectedGroup && String(p.jo) === String(selectedJo));
+            // 엑셀 등록 순서(uploadOrder)로 정렬
+            teams.sort((a, b) => (a.uploadOrder || 999) - (b.uploadOrder || 999));
+
             const names: string[] = [];
             teams.forEach((t: any) => {
                 if (t.p1_name) names.push(t.p1_name);
@@ -250,6 +253,7 @@ export default function SelfScoringGameSetupPage() {
         // default: individual
         return allPlayers
             .filter((p: any) => p.type === 'individual' && p.group === selectedGroup && String(p.jo) === String(selectedJo))
+            .sort((a: any, b: any) => (a.uploadOrder || 999) - (b.uploadOrder || 999))
             .map((p: any) => p.name)
             .filter(Boolean);
     }, [allPlayers, gameMode, selectedGroup, selectedJo]);
@@ -298,7 +302,7 @@ export default function SelfScoringGameSetupPage() {
             const courseTabs = assignedCourseList.map((c: any) => ({ id: String(c.id), name: c.name, pars: c.pars }));
             sessionStorage.setItem('selfScoringCourses', JSON.stringify(courseTabs));
             if (courseTabs.length > 0) sessionStorage.setItem('selfScoringActiveCourseId', String(courseTabs[0].id));
-        } catch {}
+        } catch { }
 
         // 점수 입력 페이지를 새창으로 열기
         if (typeof window !== 'undefined') {
@@ -330,7 +334,7 @@ export default function SelfScoringGameSetupPage() {
             const courseTabs = assignedCourseList.map((c: any) => ({ id: String(c.id), name: c.name, pars: c.pars }));
             sessionStorage.setItem('selfScoringCourses', JSON.stringify(courseTabs));
             if (courseTabs.length > 0) sessionStorage.setItem('selfScoringActiveCourseId', String(courseTabs[0].id));
-        } catch {}
+        } catch { }
 
         // 일괄 입력 모드 페이지를 새창으로 열기
         if (typeof window !== 'undefined') {
@@ -456,7 +460,7 @@ export default function SelfScoringGameSetupPage() {
                         <div className="flex flex-col gap-3 sm:gap-4 pt-3 sm:pt-4 sticky bottom-2 z-10 bg-slate-100/80 backdrop-blur rounded-xl p-2">
                             <div className="flex gap-3 sm:gap-4">
                                 {captainScoringEnabled && (
-                                    <Button 
+                                    <Button
                                         onClick={handleStartScoring}
                                         disabled={!gameMode || !selectedGroup || !selectedJo}
                                         className="flex-1"
@@ -465,7 +469,7 @@ export default function SelfScoringGameSetupPage() {
                                     </Button>
                                 )}
                                 {batchInputModeEnabled && (
-                                    <Button 
+                                    <Button
                                         onClick={handleBatchScoring}
                                         disabled={!gameMode || !selectedGroup || !selectedJo}
                                         className="flex-1"
@@ -475,7 +479,7 @@ export default function SelfScoringGameSetupPage() {
                                     </Button>
                                 )}
                             </div>
-                            <Button 
+                            <Button
                                 onClick={handleLogout}
                                 variant="outline"
                                 className="w-full"
