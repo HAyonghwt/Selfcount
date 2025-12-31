@@ -2687,6 +2687,18 @@ export default function PlayerManagementPage() {
 
                 sortedJos.forEach((jo) => {
                     const playersInJo = playersByJo[jo];
+
+                    // 엑셀 업로드 순서(uploadOrder) 또는 등록 순서(id)로 정렬
+                    playersInJo.sort((a: any, b: any) => {
+                        const orderA = a.uploadOrder ?? Number.MAX_SAFE_INTEGER;
+                        const orderB = b.uploadOrder ?? Number.MAX_SAFE_INTEGER;
+                        if (orderA !== orderB) {
+                            return orderA - orderB;
+                        }
+                        // uploadOrder가 없거나 같으면 등록 순서(id)로 정렬 (가나다순 방지)
+                        return a.id < b.id ? -1 : 1;
+                    });
+
                     const membersList: string[] = [];
 
                     playersInJo.forEach((player: any) => {
