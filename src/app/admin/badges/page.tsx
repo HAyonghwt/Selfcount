@@ -405,11 +405,16 @@ export default function BadgePage() {
 
     // 모든 좌표와 글자 크기를 96 DPI 기준으로 작성하면 
     // 내부적으로 300 DPI 해상도에 맞춰 자동으로 확대되도록 설정
+    // 모든 좌표와 글자 크기를 96 DPI 기준으로 작성하면 
+    // 내부적으로 300 DPI 해상도에 맞춰 자동으로 확대되도록 설정
     ctx.scale(ratioX, ratioY);
 
     // 배경 이미지 그리기
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0); // 픽셀 단위 직접 제어를 위해 변환 초기화
+    // targetWidth, targetHeight는 이미 정수(Integer)로 계산되어 있음
     if (preloadedBgImage) {
-      ctx.drawImage(preloadedBgImage, 0, 0, pxWidth, pxHeight);
+      ctx.drawImage(preloadedBgImage, 0, 0, ctx.canvas.width, ctx.canvas.height);
     } else {
       // 배경 이미지 로드 (fallback)
       const img = new Image();
@@ -419,11 +424,12 @@ export default function BadgePage() {
           img.onerror = reject;
           img.src = selectedBackground;
         });
-        ctx.drawImage(img, 0, 0, pxWidth, pxHeight);
+        ctx.drawImage(img, 0, 0, ctx.canvas.width, ctx.canvas.height);
       } catch (e) {
         console.error("배경 로드 실패", e);
       }
     }
+    ctx.restore();
 
     // 로고 그리기
     if (logoUrl) {
@@ -442,11 +448,6 @@ export default function BadgePage() {
         }
 
         if (logoImg) {
-          // 로고를 희미하게 그리기 (설정된 opacity 사용)
-          ctx.save();
-          const opacity = logoOpacity !== undefined ? logoOpacity : 0.10;
-          ctx.globalAlpha = opacity;
-
           // 로고 원본 비율 계산
           const logoAspectRatio = logoImg.width / logoImg.height;
           const badgeAspectRatio = pxWidth / pxHeight;
@@ -454,7 +455,7 @@ export default function BadgePage() {
           // 로고 크기 설정 (기본값 0.8, 파라미터로 받은 값 사용)
           const sizeRatio = logoSize !== undefined ? logoSize : 0.8;
 
-          // 명찰 크기의 설정된 비율을 기준으로 하되, 원본 비율 유지
+          // 명찰 크기의 설정된 비율을 기준으로 하되, 원본 비율 유지 (논리적 크기 - Float)
           let logoWidth: number;
           let logoHeight: number;
 
@@ -484,6 +485,11 @@ export default function BadgePage() {
 
           const logoX = (pxWidth - logoWidth) / 2 + offsetX; // 가로 중앙 + 오프셋
           const logoY = (pxHeight - logoHeight) / 2 + offsetY; // 세로 중앙 + 오프셋
+
+          ctx.save();
+          // 로고 투명도 설정
+          const opacity = logoOpacity !== undefined ? logoOpacity : 0.10;
+          ctx.globalAlpha = opacity;
 
           ctx.drawImage(logoImg, logoX, logoY, logoWidth, logoHeight);
           ctx.restore();
