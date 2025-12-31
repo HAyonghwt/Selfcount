@@ -2639,26 +2639,9 @@ export default function PlayerManagementPage() {
                 }
 
                 const groupNameEnglish = getGroupNameEnglish(groupName);
-                const logoOverlayForGroup = (rosterDownloadModal.logoEnabled && backgroundLogoUrl) ? `
-                    <img src="${backgroundLogoUrl}" style="
-                        position: absolute;
-                        top: calc(50% + ${rosterDownloadModal.logoOffsetY}px);
-                        left: calc(50% + ${rosterDownloadModal.logoOffsetX}px);
-                        transform: translate(-50%, -50%);
-                        width: ${rosterDownloadModal.logoSize * 100}%;
-                        height: auto;
-                        max-width: none;
-                        opacity: ${rosterDownloadModal.logoOpacity};
-                        pointer-events: none;
-                        z-index: 50;
-                        -webkit-print-color-adjust: exact !important;
-                        print-color-adjust: exact !important;
-                    " />
-                ` : '';
 
                 printContent += `
                     <div style="margin-bottom: 30px; position: relative;">
-                        ${logoOverlayForGroup}
                         <div style="position: relative; z-index: 1;">
                             <h1 style="font-size: 32px; font-weight: 800; margin-bottom: 20px; text-align: center;">⛳ ${tournamentName}</h1>
                             <div style="margin-bottom: 20px;">
