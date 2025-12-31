@@ -346,12 +346,39 @@ export default function BadgePage() {
     }
   }, [selectedBackground]);
 
-  // 선택된 그룹의 선수 목록 필터링
+  // 선택된 그룹의 선수 목록 필터링 및 정렬 (엑셀 순서 반영)
   const filteredPlayers = allPlayers.filter(player => {
     if (!selectedGroup) return false;
     if (player.type !== selectedType) return false;
     if (player.group !== selectedGroup) return false;
     return true;
+  }).sort((a, b) => {
+    // 1. 조 번호로 먼저 정렬
+    const joA = String(a.jo || '');
+    const joB = String(b.jo || '');
+    const numA = parseInt(joA);
+    const numB = parseInt(joB);
+
+    if (joA !== joB) {
+      if (!isNaN(numA) && !isNaN(numB)) {
+        return numA - numB;
+      }
+      return joA.localeCompare(joB);
+    }
+
+    // 2. 같은 조 내에서는 엑셀 업로드 순서(uploadOrder)로 정렬
+    // uploadOrder가 없는 경우(기존 데이터)는 맨 뒤로 가거나 이름순 정렬
+    const orderA = a.uploadOrder ?? Number.MAX_SAFE_INTEGER;
+    const orderB = b.uploadOrder ?? Number.MAX_SAFE_INTEGER;
+
+    if (orderA !== orderB) {
+      return orderA - orderB;
+    }
+
+    // 3. 순서 정보가 모두 없으면 이름으로 정렬 (Fallback)
+    const nameA = a.name || a.p1_name || '';
+    const nameB = b.name || b.p1_name || '';
+    return nameA.localeCompare(nameB);
   });
 
   // 조별로 그룹화
