@@ -315,8 +315,7 @@ export default function GroupGeneratorPage() {
                                                 <Checkbox
                                                     id={`course-${id}`}
                                                     checked={selectedCourseIds.includes(id)}
-                                                    onCheckedChange={() => toggleCourse(id)}
-                                                    className="h-4 w-4"
+                                                    className="h-4 w-4 pointer-events-none"
                                                 />
                                                 <span className="font-black text-sm">{id}</span>
                                             </div>
