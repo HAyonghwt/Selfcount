@@ -319,8 +319,9 @@ export default function ScorePrintTool() {
 
             const coursesForPlayer = assignedCourseIds
                 .map(cid => {
-                    const key = Object.keys(courses).find(k => String(k) === String(cid));
-                    return key ? { id: key, ...courses[key] } : undefined;
+                    // 메인 전광판과 동일하게 id 속성을 기준으로 검색
+                    const course = Object.values(courses).find((c: any) => String(c.id) === String(cid));
+                    return course ? course : undefined;
                 })
                 .filter(Boolean) as any[];
 
