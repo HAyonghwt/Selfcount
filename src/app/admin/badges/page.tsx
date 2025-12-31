@@ -380,92 +380,114 @@ export default function BadgePage() {
     logoSize?: number,
     logoOffsetX?: number,
     logoOffsetY?: number,
-    logoOpacity?: number
+    logoOpacity?: number,
+    preloadedBgImage?: HTMLImageElement,
+    preloadedLogoImage?: HTMLImageElement
   ) => {
     const TARGET_DPI = 300;
     const BASE_DPI = 96;
-    const ratio = TARGET_DPI / BASE_DPI;
 
-    // 픽셀 단위로 변환 (96 DPI 기준 - 기존 디자인 및 위치 계산용)
+    // 픽셀 단위로 변환 (96 DPI 기준 - 기존 디자인 및 위치 계산용) - 소수점 정밀도 유지 (반올림 제거)
     const mmToPx = (mm: number) => (mm * BASE_DPI) / 25.4;
     const pxWidth = mmToPx(width);
     const pxHeight = mmToPx(height);
 
-    // Canvas 실제 해상도는 300 DPI로 고해상도 설정
-    ctx.canvas.width = (width * TARGET_DPI) / 25.4;
-    ctx.canvas.height = (height * TARGET_DPI) / 25.4;
+    // Canvas 실제 해상도는 300 DPI로 고해상도 설정 - 캔버스 버퍼 크기는 정수여야 함
+    const targetWidth = Math.round((width * TARGET_DPI) / 25.4);
+    const targetHeight = Math.round((height * TARGET_DPI) / 25.4);
+
+    ctx.canvas.width = targetWidth;
+    ctx.canvas.height = targetHeight;
+
+    // 실제 캔버스 크기(정수)와 로직상 픽셀 크기(실수)의 비율을 정확하게 계산하여 스케일링
+    const ratioX = targetWidth / pxWidth;
+    const ratioY = targetHeight / pxHeight;
 
     // 모든 좌표와 글자 크기를 96 DPI 기준으로 작성하면 
     // 내부적으로 300 DPI 해상도에 맞춰 자동으로 확대되도록 설정
-    ctx.scale(ratio, ratio);
-
-    // 배경 이미지 로드
-    const img = new Image();
-    await new Promise((resolve, reject) => {
-      img.onload = resolve;
-      img.onerror = reject;
-      img.src = selectedBackground;
-    });
+    ctx.scale(ratioX, ratioY);
 
     // 배경 이미지 그리기
-    ctx.drawImage(img, 0, 0, pxWidth, pxHeight);
+    if (preloadedBgImage) {
+      ctx.drawImage(preloadedBgImage, 0, 0, pxWidth, pxHeight);
+    } else {
+      // 배경 이미지 로드 (fallback)
+      const img = new Image();
+      try {
+        await new Promise((resolve, reject) => {
+          img.onload = resolve;
+          img.onerror = reject;
+          img.src = selectedBackground;
+        });
+        ctx.drawImage(img, 0, 0, pxWidth, pxHeight);
+      } catch (e) {
+        console.error("배경 로드 실패", e);
+      }
+    }
 
-    // 로고가 있으면 배경으로 추가 (opacity 0.10)
+    // 로고 그리기
     if (logoUrl) {
       try {
-        const logoImg = new Image();
-        logoImg.crossOrigin = 'anonymous';
-        await new Promise((resolve, reject) => {
-          logoImg.onload = resolve;
-          logoImg.onerror = reject;
-          logoImg.src = logoUrl;
-        });
+        let logoImg = preloadedLogoImage;
 
-        // 로고를 희미하게 그리기 (설정된 opacity 사용)
-        ctx.save();
-        const opacity = logoOpacity !== undefined ? logoOpacity : 0.10;
-        ctx.globalAlpha = opacity;
-
-        // 로고 원본 비율 계산
-        const logoAspectRatio = logoImg.width / logoImg.height;
-        const badgeAspectRatio = pxWidth / pxHeight;
-
-        // 로고 크기 설정 (기본값 0.8, 파라미터로 받은 값 사용)
-        const sizeRatio = logoSize !== undefined ? logoSize : 0.8;
-
-        // 명찰 크기의 설정된 비율을 기준으로 하되, 원본 비율 유지
-        let logoWidth: number;
-        let logoHeight: number;
-
-        if (logoAspectRatio > badgeAspectRatio) {
-          // 로고가 명찰보다 가로로 더 긴 경우: 가로를 기준으로 크기 결정
-          logoWidth = pxWidth * sizeRatio;
-          logoHeight = logoWidth / logoAspectRatio;
-        } else {
-          // 로고가 명찰보다 세로로 더 긴 경우: 세로를 기준으로 크기 결정
-          logoHeight = pxHeight * sizeRatio;
-          logoWidth = logoHeight * logoAspectRatio;
+        if (!logoImg) {
+          logoImg = new Image();
+          logoImg.crossOrigin = 'anonymous';
+          await new Promise((resolve, reject) => {
+            if (!logoImg) return reject("Image creation failed");
+            logoImg.onload = resolve;
+            logoImg.onerror = reject;
+            logoImg.src = logoUrl!;
+          });
         }
 
-        // 명찰 크기를 넘지 않도록 한 번 더 체크
-        if (logoWidth > pxWidth) {
-          logoWidth = pxWidth * sizeRatio;
-          logoHeight = logoWidth / logoAspectRatio;
+        if (logoImg) {
+          // 로고를 희미하게 그리기 (설정된 opacity 사용)
+          ctx.save();
+          const opacity = logoOpacity !== undefined ? logoOpacity : 0.10;
+          ctx.globalAlpha = opacity;
+
+          // 로고 원본 비율 계산
+          const logoAspectRatio = logoImg.width / logoImg.height;
+          const badgeAspectRatio = pxWidth / pxHeight;
+
+          // 로고 크기 설정 (기본값 0.8, 파라미터로 받은 값 사용)
+          const sizeRatio = logoSize !== undefined ? logoSize : 0.8;
+
+          // 명찰 크기의 설정된 비율을 기준으로 하되, 원본 비율 유지
+          let logoWidth: number;
+          let logoHeight: number;
+
+          if (logoAspectRatio > badgeAspectRatio) {
+            // 로고가 명찰보다 가로로 더 긴 경우: 가로를 기준으로 크기 결정
+            logoWidth = pxWidth * sizeRatio;
+            logoHeight = logoWidth / logoAspectRatio;
+          } else {
+            // 로고가 명찰보다 세로로 더 긴 경우: 세로를 기준으로 크기 결정
+            logoHeight = pxHeight * sizeRatio;
+            logoWidth = logoHeight * logoAspectRatio;
+          }
+
+          // 명찰 크기를 넘지 않도록 한 번 더 체크
+          if (logoWidth > pxWidth) {
+            logoWidth = pxWidth * sizeRatio;
+            logoHeight = logoWidth / logoAspectRatio;
+          }
+          if (logoHeight > pxHeight) {
+            logoHeight = pxHeight * sizeRatio;
+            logoWidth = logoHeight * logoAspectRatio;
+          }
+
+          // 위치 오프셋 적용 (기본값 0, 파라미터로 받은 값 사용)
+          const offsetX = logoOffsetX !== undefined ? logoOffsetX : 0;
+          const offsetY = logoOffsetY !== undefined ? logoOffsetY : 0;
+
+          const logoX = (pxWidth - logoWidth) / 2 + offsetX; // 가로 중앙 + 오프셋
+          const logoY = (pxHeight - logoHeight) / 2 + offsetY; // 세로 중앙 + 오프셋
+
+          ctx.drawImage(logoImg, logoX, logoY, logoWidth, logoHeight);
+          ctx.restore();
         }
-        if (logoHeight > pxHeight) {
-          logoHeight = pxHeight * sizeRatio;
-          logoWidth = logoHeight * logoAspectRatio;
-        }
-
-        // 위치 오프셋 적용 (기본값 0, 파라미터로 받은 값 사용)
-        const offsetX = logoOffsetX !== undefined ? logoOffsetX : 0;
-        const offsetY = logoOffsetY !== undefined ? logoOffsetY : 0;
-
-        const logoX = (pxWidth - logoWidth) / 2 + offsetX; // 가로 중앙 + 오프셋
-        const logoY = (pxHeight - logoHeight) / 2 + offsetY; // 세로 중앙 + 오프셋
-
-        ctx.drawImage(logoImg, logoX, logoY, logoWidth, logoHeight);
-        ctx.restore();
       } catch (error) {
         console.error('로고 로드 실패:', error);
       }
@@ -569,7 +591,33 @@ export default function BadgePage() {
     try {
       toast({
         title: "PDF 생성 중",
-        description: "명찰 PDF를 생성하고 있습니다...",
+        description: "명찰 PDF를 위해 이미지를 준비하고 있습니다...",
+      });
+
+      // 1. 이미지 미리 로딩 (일관성 및 속도 향상)
+      const bgImage = new Image();
+      await new Promise((resolve, reject) => {
+        bgImage.onload = resolve;
+        bgImage.onerror = reject;
+        bgImage.src = selectedBackground;
+      });
+
+      let logoImage: HTMLImageElement | undefined = undefined;
+      const logoUrl = uploadedLogos.length > 0 ? uploadedLogos[0].url : undefined;
+      if (logoUrl) {
+        logoImage = new Image();
+        logoImage.crossOrigin = 'anonymous';
+        await new Promise((resolve, reject) => {
+          if (!logoImage) return reject();
+          logoImage.onload = resolve;
+          logoImage.onerror = reject;
+          logoImage.src = logoUrl;
+        });
+      }
+
+      toast({
+        title: "PDF 생성 중",
+        description: "명찰 페이지를 구성하고 있습니다...",
       });
 
       const pdf = new jsPDF({
@@ -622,9 +670,22 @@ export default function BadgePage() {
           const ctx = canvas.getContext('2d');
           if (!ctx) continue;
 
-          // 첫 번째 로고 사용
-          const logoUrl = uploadedLogos.length > 0 ? uploadedLogos[0].url : undefined;
-          await drawBadge(ctx, player, selectedGroup, tournament.name || '대회명', badgeWidth, badgeHeight, logoUrl, logoSettings.size, logoSettings.offsetX, logoSettings.offsetY, logoSettings.opacity);
+          // 미리 로딩된 이미지 전달
+          await drawBadge(
+            ctx,
+            player,
+            selectedGroup,
+            tournament.name || '대회명',
+            badgeWidth,
+            badgeHeight,
+            logoUrl,
+            logoSettings.size,
+            logoSettings.offsetX,
+            logoSettings.offsetY,
+            logoSettings.opacity,
+            bgImage,      // Preloaded Background
+            logoImage     // Preloaded Logo
+          );
 
           // Canvas를 이미지로 변환하여 PDF에 추가
           const imgData = canvas.toDataURL('image/png');
@@ -653,22 +714,74 @@ export default function BadgePage() {
 
   // 미리보기 업데이트
   useEffect(() => {
-    if (!previewCanvasRef.current) return;
+    let isMounted = true;
 
-    const canvas = previewCanvasRef.current;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    const renderPreview = async () => {
+      if (!previewCanvasRef.current) return;
 
-    // 그룹과 선수가 없으면 캔버스 초기화만
-    if (!selectedGroup || filteredPlayers.length === 0) {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      return;
-    }
+      const canvas = previewCanvasRef.current;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
 
-    const firstPlayer = filteredPlayers[0];
-    // 첫 번째 로고 사용
-    const logoUrl = uploadedLogos.length > 0 ? uploadedLogos[0].url : undefined;
-    drawBadge(ctx, firstPlayer, selectedGroup, tournament.name || '대회명', badgeWidth, badgeHeight, logoUrl, logoSettings.size, logoSettings.offsetX, logoSettings.offsetY, logoSettings.opacity).catch(console.error);
+      // 그룹과 선수가 없으면 캔버스 초기화만
+      if (!selectedGroup || filteredPlayers.length === 0) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        return;
+      }
+
+      const firstPlayer = filteredPlayers[0];
+      const logoUrl = uploadedLogos.length > 0 ? uploadedLogos[0].url : undefined;
+
+      try {
+        // 1. 배경 이미지 미리 로딩
+        const bgImage = new Image();
+        await new Promise((resolve, reject) => {
+          bgImage.onload = resolve;
+          bgImage.onerror = reject;
+          bgImage.src = selectedBackground;
+        });
+
+        // 2. 로고 이미지 미리 로딩
+        let logoImage: HTMLImageElement | undefined = undefined;
+        if (logoUrl) {
+          logoImage = new Image();
+          logoImage.crossOrigin = 'anonymous';
+          await new Promise((resolve, reject) => {
+            if (!logoImage) return reject();
+            logoImage.onload = resolve;
+            logoImage.onerror = reject;
+            logoImage.src = logoUrl;
+          });
+        }
+
+        if (!isMounted) return;
+
+        // 3. 미리 로딩된 이미지로 그리기
+        await drawBadge(
+          ctx,
+          firstPlayer,
+          selectedGroup,
+          tournament.name || '대회명',
+          badgeWidth,
+          badgeHeight,
+          logoUrl,
+          logoSettings.size,
+          logoSettings.offsetX,
+          logoSettings.offsetY,
+          logoSettings.opacity,
+          bgImage,
+          logoImage
+        );
+      } catch (error) {
+        console.error("미리보기 렌더링 실패:", error);
+      }
+    };
+
+    renderPreview();
+
+    return () => {
+      isMounted = false;
+    };
   }, [selectedBackground, badgeWidth, badgeHeight, selectedGroup, filteredPlayers, fontSizes, textColors, tournament.name, uploadedLogos, logoSettings]);
 
   return (

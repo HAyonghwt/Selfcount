@@ -1043,7 +1043,24 @@ export default function ScorePrintTool() {
             // 공통 스타일 (홈 전광판과 동일)
             const styleContent = `
                 <style>
-                    .print-wrapper { font-family: 'Pretendard', sans-serif; text-align: center; color: #1e293b; width: 100%; box-sizing: border-box; position: relative; }
+                    @media print {
+                        .no-print { display: none !important; }
+                        @page { margin: 5mm; }
+                    }
+                    body { margin: 0; padding: 0; background-color: #f8fafc; }
+                    .print-controls {
+                        position: fixed; top: 0; left: 0; right: 0;
+                        background: white; padding: 15px;
+                        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+                        display: flex; gap: 10px; justify-content: center;
+                        z-index: 9999;
+                    }
+                    .btn {
+                        padding: 10px 20px; border-radius: 8px; font-weight: bold; border: none; cursor: pointer; font-size: 16px;
+                    }
+                    .btn-print { background: #2563eb; color: white; }
+                    .btn-close { background: #e2e8f0; color: #1e293b; }
+                    .print-wrapper { font-family: 'Pretendard', sans-serif; text-align: center; color: #1e293b; width: 100%; box-sizing: border-box; position: relative; background: white; margin-top: 70px; }
                     ${logoOverlayStyle}
                     .print-header { 
                         background-color: #3b82f6; 
@@ -1415,6 +1432,15 @@ export default function ScorePrintTool() {
         }
     };
 
+    const [isMobile, setIsMobile] = useState(false);
+
+    useEffect(() => {
+        const checkMobile = () => setIsMobile(window.innerWidth < 1024);
+        checkMobile();
+        window.addEventListener('resize', checkMobile);
+        return () => window.removeEventListener('resize', checkMobile);
+    }, []);
+
     return (
         <>
             <Card>
@@ -1438,17 +1464,17 @@ export default function ScorePrintTool() {
 
             {/* 인쇄 모달 */}
             <Dialog open={printModal.open} onOpenChange={open => setPrintModal({ ...printModal, open })}>
-                <DialogContent className="max-w-[95vw] w-full lg:max-w-7xl">
-                    <DialogHeader className="flex flex-row items-center justify-between pb-4 border-b mb-4 space-y-0">
+                <DialogContent className="max-w-[100vw] w-full lg:max-w-7xl h-[100vh] lg:h-auto flex flex-col p-4 lg:p-6 mb-0 rounded-none lg:rounded-lg mt-0">
+                    <DialogHeader className="flex flex-row items-center justify-between pb-4 border-b mb-0 space-y-0 shrink-0">
                         <div className="space-y-1 text-left">
                             <DialogTitle>📄 점수표 인쇄 설정</DialogTitle>
-                            <DialogDescription>
+                            <DialogDescription className="hidden sm:block">
                                 인쇄할 점수표의 설정을 선택해주세요.
                             </DialogDescription>
                         </div>
                         {backgroundLogoUrl && (
                             <div className="flex items-center gap-2">
-                                <span className="text-sm font-medium text-slate-600">배경 로고 설정</span>
+                                <span className="text-sm font-medium text-slate-600 hidden sm:inline">배경 로고</span>
                                 <Button
                                     size="sm"
                                     variant={printModal.logoEnabled ? 'default' : 'outline'}
@@ -1464,9 +1490,9 @@ export default function ScorePrintTool() {
                         )}
                     </DialogHeader>
 
-                    <div className="flex flex-col lg:flex-row gap-6 h-[calc(100vh-250px)] lg:h-auto min-h-0">
-                        {/* 좌측: 설정 (고정 너비) */}
-                        <div className="w-full lg:w-80 space-y-4 shrink-0 overflow-y-auto pr-2">
+                    <div className="flex flex-col lg:flex-row gap-6 flex-1 min-h-0 overflow-hidden">
+                        {/* 좌측: 설정 (고정 너비) - 모바일에서는 상단에 배치하되 크기 줄임 */}
+                        <div className="w-full lg:w-80 space-y-4 shrink-0 overflow-y-auto pr-2 pb-4 lg:pb-0 h-auto max-h-[40vh] lg:max-h-none border-b lg:border-b-0 lg:border-r">
                             {/* 인쇄 방향 선택 */}
                             <div>
                                 <label className="text-sm font-medium mb-2 block">인쇄 방향</label>
@@ -1474,16 +1500,16 @@ export default function ScorePrintTool() {
                                     <Button
                                         variant={printModal.orientation === 'portrait' ? 'default' : 'outline'}
                                         onClick={() => setPrintModal({ ...printModal, orientation: 'portrait' })}
-                                        className="flex-1"
+                                        className="flex-1 h-9 text-sm"
                                     >
-                                        세로 인쇄
+                                        세로
                                     </Button>
                                     <Button
                                         variant={printModal.orientation === 'landscape' ? 'default' : 'outline'}
                                         onClick={() => setPrintModal({ ...printModal, orientation: 'landscape' })}
-                                        className="flex-1"
+                                        className="flex-1 h-9 text-sm"
                                     >
-                                        가로 인쇄
+                                        가로
                                     </Button>
                                 </div>
                             </div>
@@ -1495,14 +1521,14 @@ export default function ScorePrintTool() {
                                     <Button
                                         variant={printModal.paperSize === 'A4' ? 'default' : 'outline'}
                                         onClick={() => setPrintModal({ ...printModal, paperSize: 'A4' })}
-                                        className="flex-1"
+                                        className="flex-1 h-9 text-sm"
                                     >
                                         A4
                                     </Button>
                                     <Button
                                         variant={printModal.paperSize === 'A3' ? 'default' : 'outline'}
                                         onClick={() => setPrintModal({ ...printModal, paperSize: 'A3' })}
-                                        className="flex-1"
+                                        className="flex-1 h-9 text-sm"
                                     >
                                         A3
                                     </Button>
@@ -1512,7 +1538,7 @@ export default function ScorePrintTool() {
                             {/* 인쇄할 그룹 선택 */}
                             <div>
                                 <label className="text-sm font-medium mb-2 block">인쇄할 그룹</label>
-                                <div className="space-y-2 max-h-[25vh] overflow-y-auto border rounded p-2">
+                                <div className="space-y-2 max-h-[120px] lg:max-h-[25vh] overflow-y-auto border rounded p-2">
                                     <div className="flex items-center">
                                         <input
                                             type="checkbox"
@@ -1535,7 +1561,7 @@ export default function ScorePrintTool() {
                                             className="mr-2"
                                         />
                                         <span className="text-sm font-bold">모든 그룹</span>
-                                        <span className="text-xs text-muted-foreground ml-2">({allGroupsList.length}개 그룹)</span>
+                                        <span className="text-xs text-muted-foreground ml-2">({allGroupsList.length}개)</span>
                                     </div>
                                     {!printModal.showAllGroups && (
                                         <div className="ml-4 space-y-1">
@@ -1578,7 +1604,7 @@ export default function ScorePrintTool() {
                             {/* 출력할 코스 선택 */}
                             <div>
                                 <label className="text-sm font-medium mb-2 block">출력할 코스 선택</label>
-                                <div className="space-y-2 border rounded p-2 max-h-[25vh] overflow-y-auto">
+                                <div className="space-y-2 border rounded p-2 max-h-[120px] lg:max-h-[25vh] overflow-y-auto">
                                     <div className="flex items-center">
                                         <input
                                             type="checkbox"
@@ -1658,7 +1684,7 @@ export default function ScorePrintTool() {
                         </div>
 
                         {/* 중앙: 미리보기 + 우측 패널 */}
-                        <div className="flex-1 min-w-0 border rounded-lg p-4 bg-gray-50 flex flex-col">
+                        <div className="hidden lg:flex flex-1 min-w-0 border rounded-lg p-4 bg-gray-50 flex-col">
                             <div className="flex items-center justify-between mb-2 shrink-0">
                                 <label className="text-sm font-medium">미리보기</label>
                             </div>
@@ -1678,25 +1704,23 @@ export default function ScorePrintTool() {
                                             backgroundRepeat: 'no-repeat',
                                             backgroundPosition: `calc(50% + ${printModal.logoOffsetX}px) calc(50% + ${printModal.logoOffsetY}px)`,
                                             backgroundSize: `${printModal.logoSize * 100}% auto`,
-                                            opacity: 1
+                                            opacity: 1 // 미리보기는 투명도 적용 안 함 (배경만)
                                         }}
                                     >
-                                        {/* Logo Overlay Div for Opacity Control */}
+                                        {/* 로고 오버레이 (실제 인쇄와 동일하게) */}
                                         {printModal.logoEnabled && backgroundLogoUrl && (
                                             <div style={{
                                                 position: 'absolute',
-                                                top: 0,
-                                                left: 0,
-                                                right: 0,
-                                                bottom: 0,
-                                                backgroundImage: `url('${backgroundLogoUrl}')`,
-                                                backgroundRepeat: 'no-repeat',
-                                                backgroundPosition: `calc(50% + ${printModal.logoOffsetX}px) calc(50% + ${printModal.logoOffsetY}px)`,
-                                                backgroundSize: `${printModal.logoSize * 100}% auto`,
-                                                opacity: printModal.logoOpacity,
-                                                pointerEvents: 'none',
-                                                zIndex: 0
-                                            }} />
+                                                top: 0, left: 0, right: 0, bottom: 0,
+                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                zIndex: 0, pointerEvents: 'none', overflow: 'hidden'
+                                            }}>
+                                                <img src={backgroundLogoUrl} style={{
+                                                    width: `${printModal.logoSize * 100}%`,
+                                                    opacity: printModal.logoOpacity,
+                                                    transform: `translate(${printModal.logoOffsetX}px, ${printModal.logoOffsetY}px)`
+                                                }} />
+                                            </div>
                                         )}
 
                                         {/* Scaled Content - zoom 속성 활용 */}
@@ -1743,7 +1767,7 @@ export default function ScorePrintTool() {
 
                                 {/* 우측: 로고 설정 패널 (ON일 때만 표시, 세로 배치) */}
                                 {printModal.logoEnabled && backgroundLogoUrl && (
-                                    <div className="w-64 shrink-0 space-y-4 border-l pl-4 overflow-y-auto">
+                                    <div className="w-64 shrink-0 space-y-4 border-l pl-4 overflow-y-auto hidden lg:block">
                                         <div className="flex items-center justify-between">
                                             <h4 className="font-semibold text-sm">로고 상세 설정</h4>
                                         </div>
@@ -1814,7 +1838,7 @@ export default function ScorePrintTool() {
                                             </div>
 
                                             <div className="space-y-2">
-                                                <Label className="text-xs font-medium">가로 위치 (X: {printModal.logoOffsetX}px)</Label>
+                                                <Label className="text-xs font-medium">가로 위치 ({printModal.logoOffsetX}px)</Label>
                                                 <div className="flex items-center gap-2">
                                                     <Input
                                                         type="range"
@@ -1844,7 +1868,7 @@ export default function ScorePrintTool() {
                                             </div>
 
                                             <div className="space-y-2">
-                                                <Label className="text-xs font-medium">세로 위치 (Y: {printModal.logoOffsetY}px)</Label>
+                                                <Label className="text-xs font-medium">세로 위치 ({printModal.logoOffsetY}px)</Label>
                                                 <div className="flex items-center gap-2">
                                                     <Input
                                                         type="range"
@@ -1879,29 +1903,29 @@ export default function ScorePrintTool() {
                         </div>
                     </div>
 
-                    <DialogFooter className="flex flex-col-reverse sm:flex-row gap-2">
-                        <Button variant="outline" onClick={() => setPrintModal({ ...printModal, open: false })} className="mt-2 sm:mt-0">
+                    <DialogFooter className="flex flex-col-reverse sm:flex-row gap-2 shrink-0 mt-4 border-t pt-4">
+                        <Button variant="outline" onClick={() => setPrintModal({ ...printModal, open: false })} className="mt-2 sm:mt-0 h-11 sm:h-10">
                             취소
                         </Button>
                         <Button
                             variant="outline"
                             onClick={showPreview}
-                            className="bg-green-600 hover:bg-green-700 text-white w-full sm:w-auto"
+                            className="bg-green-600 hover:bg-green-700 text-white w-full sm:w-auto hidden sm:inline-flex"
                             disabled={!printModal.showAllGroups && printModal.selectedGroups.length === 0}
                         >
                             👁️ 미리보기
                         </Button>
                         <Button
-                            onClick={handleSaveImage}
-                            className="bg-purple-600 hover:bg-purple-700 text-white w-full sm:w-auto"
+                            onClick={isMobile ? executePrint : handleSaveImage}
+                            className="bg-purple-600 hover:bg-purple-700 text-white w-full sm:w-auto h-11 sm:h-10"
                             disabled={(!printModal.showAllGroups && printModal.selectedGroups.length === 0) || isSavingImage}
                         >
                             <Download className="mr-2 h-4 w-4" />
-                            {isSavingImage ? '변환 중...' : '📸 점수표 이미지 저장'}
+                            {isMobile ? 'PDF 다운로드 (권장)' : (isSavingImage ? '변환 중...' : '📸 점수표 이미지 저장')}
                         </Button>
                         <Button
                             onClick={executePrint}
-                            className="bg-blue-600 hover:bg-blue-700 text-white w-full sm:w-auto"
+                            className="bg-blue-600 hover:bg-blue-700 text-white w-full sm:w-auto h-11 sm:h-10"
                             disabled={!printModal.showAllGroups && printModal.selectedGroups.length === 0}
                         >
                             <Printer className="mr-2 h-4 w-4" />
