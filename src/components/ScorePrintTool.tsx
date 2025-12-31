@@ -178,47 +178,55 @@ export default function ScorePrintTool() {
 
     // Firebase에서 데이터 로드
     // Firebase에서 데이터 로드
+    // Firebase에서 데이터 로드 (실시간 업데이트 반영)
     useEffect(() => {
         if (!db || !auth) return;
 
         setIsLoading(true);
-        const unsubscribe = onAuthStateChanged(auth, async (user) => {
+        const unsubs: (() => void)[] = [];
+
+        const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
+            // 이전 리스너 정리
+            unsubs.forEach(u => u());
+            unsubs.length = 0;
+
             if (user) {
                 if (!db) return;
-                try {
-                    // 선수 데이터
-                    const playersSnapshot = await get(ref(db, 'players'));
-                    setPlayers(playersSnapshot.val() || {});
+                // Players Listeners
+                const playersRef = ref(db, 'players');
+                unsubs.push(onValue(playersRef, (snap) => {
+                    setPlayers(snap.val() || {});
+                }));
 
-                    // 점수 데이터
-                    const scoresSnapshot = await get(ref(db, 'scores'));
-                    setScores(scoresSnapshot.val() || {});
+                // Scores Listener - 실시간 점수 반영
+                const scoresRef = ref(db, 'scores');
+                unsubs.push(onValue(scoresRef, (snap) => {
+                    setScores(snap.val() || {});
+                }));
 
-                    // 코스 데이터
-                    const coursesSnapshot = await get(ref(db, 'tournaments/current/courses'));
-                    setCourses(coursesSnapshot.val() || {});
-
-                    // 그룹 데이터
-                    const groupsSnapshot = await get(ref(db, 'tournaments/current/groups'));
-                    setGroupsData(groupsSnapshot.val() || {});
-
-                    // 대회 정보
-                    const tournamentRef = ref(db, 'tournaments/current');
-                    onValue(tournamentRef, (snap) => {
-                        setTournament(snap.val() || {});
-                    }, { onlyOnce: true });
-                } catch (error: any) {
-                    console.error('데이터 로드 실패:', error);
-                    toast({ title: '오류', description: '데이터를 불러오는데 실패했습니다.', variant: 'destructive' });
-                } finally {
-                    setIsLoading(false);
-                }
+                // Tournament Listener (includes groups & courses) - 실시간 설정 반영
+                const tournamentRef = ref(db, 'tournaments/current');
+                unsubs.push(onValue(tournamentRef, (snap) => {
+                    const data = snap.val() || {};
+                    setTournament(data);
+                    setCourses(data.courses || {});
+                    setGroupsData(data.groups || {});
+                    setIsLoading(false); // 데이터 로드 완료
+                }));
             } else {
+                setPlayers({});
+                setScores({});
+                setTournament({});
+                setCourses({});
+                setGroupsData({});
                 setIsLoading(false);
             }
         });
 
-        return () => unsubscribe();
+        return () => {
+            unsubscribeAuth();
+            unsubs.forEach(u => u());
+        };
     }, [toast]);
 
     // 홈 전광판과 동일한 tieBreak 함수 (백카운트 방식)
