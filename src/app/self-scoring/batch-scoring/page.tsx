@@ -20,6 +20,20 @@ type PlayerDb = {
   jo: number;
 };
 
+// 일괄 입력 이력 타입
+type BatchHistoryEntry = {
+  modifiedBy: string;  // 조장 아이디
+  modifiedAt: number;  // 타임스탬프
+  action: 'reset' | 'save' | 'update';  // 액션 타입
+  details?: string;    // 추가 설명
+};
+
+type LastInputInfo = {
+  lastModifiedBy: string;
+  lastModifiedAt: number;
+  action: string;
+};
+
 export default function BatchScoringPage() {
   const { toast } = useToast();
 
@@ -192,6 +206,11 @@ export default function BatchScoringPage() {
   const prevDbHasAnyScoreRef = useRef<boolean | null>(null);
   // 저장 직후 하이라이트 표시용 맵 (코스별 [4][9])
   const [savedFlashMap, setSavedFlashMap] = useState<Record<string, boolean[][]>>({});
+
+  // 일괄 입력 이력 추적
+  const [lastInputInfo, setLastInputInfo] = useState<LastInputInfo | null>(null);
+  const [historyModalOpen, setHistoryModalOpen] = useState(false);
+  const [actionHistory, setActionHistory] = useState<BatchHistoryEntry[]>([]);
 
   // 그룹 선수 로그 미리 불러오기 (대시보드/전광판과 동일한 기준 적용을 위해)
   useEffect(() => {
@@ -386,7 +405,7 @@ export default function BatchScoringPage() {
       const list: PlayerDb[] = Object.entries<any>(data)
         .map(([id, v]) => ({ id, ...v }))
         .filter((p) => String(p.jo) === String(selectedJo)); // 그룹은 이미 쿼리로 필터링됨
-      
+
       // 수기 채점표와 동일한 순서로 정렬 (uploadOrder 우선 → 이름 순)
       list.sort((a, b) => {
         // uploadOrder가 있으면 그것으로 정렬
@@ -398,7 +417,7 @@ export default function BatchScoringPage() {
         const nameB = b.type === 'team' ? `${b.p1_name}/${b.p2_name}` : (b.name || '');
         return nameA.localeCompare(nameB);
       });
-      
+
       setPlayersInGroupJo(list as any);
 
       // 관전 모드에서는 플레이어 이름을 실시간으로 설정
@@ -451,7 +470,7 @@ export default function BatchScoringPage() {
 
           const newPlayerNames = filledNames.slice(0, 4);
           setPlayerNames(newPlayerNames);
-          
+
           // sessionStorage 업데이트
           try {
             if (typeof window !== 'undefined') {
@@ -460,12 +479,12 @@ export default function BatchScoringPage() {
           } catch (error) {
             console.error('sessionStorage 업데이트 실패:', error);
           }
-          
+
           // signatures 배열도 동일한 순서로 재정렬
           // 기존 signatures를 playerId 기반으로 매핑한 후 재정렬
           const currentSignatures = [...signatures];
           const reorderedSignatures: string[] = [];
-          
+
           list.forEach((p, idx) => {
             if (p.type === 'team') {
               // 팀전: 각 선수별로 서명 처리
@@ -484,12 +503,12 @@ export default function BatchScoringPage() {
               }
             }
           });
-          
+
           // 항상 4개로 채우기
           while (reorderedSignatures.length < 4) {
             reorderedSignatures.push('');
           }
-          
+
           setSignatures(reorderedSignatures.slice(0, 4));
         }
       }
@@ -603,7 +622,7 @@ export default function BatchScoringPage() {
       // 그룹에 배정된 코스 id 목록 및 순서 정보 가져오기
       const group = groupsObj[selectedGroup] || {};
       const coursesOrder = group.courses || {};
-      
+
       // 그룹에 배정된 코스 목록 (number 타입이고 0보다 큰 값만, 또는 boolean true)
       const assignedCourses: Array<{ cid: string; order: number }> = Object.entries(coursesOrder)
         .map(([cid, order]: [string, any]) => {
@@ -630,7 +649,7 @@ export default function BatchScoringPage() {
           const key = courseKeys.find((k) => String(k) === String(cid));
           const course = key ? coursesObj[key] : null;
           if (!course) return null;
-          
+
           // 코스의 원본 순서 정보 저장 (색상 테마용)
           // 1. course.order 필드가 있으면 그것을 사용
           // 2. 없으면 courses 객체의 키 순서를 사용 (대회 및 코스 관리에서 설정된 순서)
@@ -642,7 +661,7 @@ export default function BatchScoringPage() {
             const courseIndex = courseKeys.findIndex(k => String(k) === String(cid));
             originalOrder = courseIndex >= 0 ? courseIndex + 1 : 999;
           }
-          
+
           return {
             id: String(course.id ?? cid),
             name: String(course.name ?? cid),
@@ -655,12 +674,12 @@ export default function BatchScoringPage() {
       if (nextTabs.length > 0) {
         const prevTabsLength = courseTabs.length;
         setCourseTabs(nextTabs);
-        
+
         // 코스 탭이 처음 로드되거나 완전히 바뀐 경우 (그룹 변경 등)
         // 또는 현재 활성 코스가 목록에 없는 경우 첫 번째 탭 선택
         const isInitialLoad = prevTabsLength === 0;
         const exists = nextTabs.some((t) => String(t.id) === String(activeCourseId));
-        
+
         if (isInitialLoad || !exists || !activeCourseId) {
           // 처음 로드이거나 현재 활성 코스가 목록에 없으면 첫 번째 탭 선택
           setActiveCourseId(String(nextTabs[0].id));
@@ -686,6 +705,47 @@ export default function BatchScoringPage() {
 
     return () => unsubTournament();
   }, [db, selectedGroup, activeCourseId, isPageVisible]);
+
+  // 일괄 입력 이력 로드 (현재 코스)
+  useEffect(() => {
+    if (!db || !selectedGroup || !selectedJo || !activeCourseId) {
+      setLastInputInfo(null);
+      setActionHistory([]);
+      return;
+    }
+
+    const dbInstance = db as any;
+    const historyPath = `batchScoringHistory/${selectedGroup}/${selectedJo}/${activeCourseId}`;
+    const historyRef = ref(dbInstance, historyPath);
+
+    const unsubHistory = onValue(historyRef, (snap) => {
+      const data = snap.val();
+      if (data) {
+        // 최종 입력자 정보
+        if (data.lastModifiedBy && data.lastModifiedAt) {
+          setLastInputInfo({
+            lastModifiedBy: data.lastModifiedBy,
+            lastModifiedAt: data.lastModifiedAt,
+            action: data.action || 'save'
+          });
+        } else {
+          setLastInputInfo(null);
+        }
+
+        // 전체 이력 (배열 형태로 저장)
+        if (Array.isArray(data.history)) {
+          setActionHistory(data.history);
+        } else {
+          setActionHistory([]);
+        }
+      } else {
+        setLastInputInfo(null);
+        setActionHistory([]);
+      }
+    });
+
+    return () => unsubHistory();
+  }, [db, selectedGroup, selectedJo, activeCourseId]);
 
   // 디바운싱된 점수 업데이트 (과도한 리렌더링 방지)
   useEffect(() => {
@@ -1043,7 +1103,7 @@ export default function BatchScoringPage() {
         isAuthenticated = await ensureAuthenticated();
         if (isAuthenticated) break;
       }
-      
+
       if (!isAuthenticated) {
         toast({
           title: "인증 실패",
@@ -1130,18 +1190,18 @@ export default function BatchScoringPage() {
           // 인증 재시도
           console.log(`인증 오류 감지, 재인증 시도 중... (${attempt}/${maxRetries})`);
           const reAuthSuccess = await ensureAuthenticated(2, 500); // 최대 2회, 0.5초 간격
-          
+
           if (reAuthSuccess) {
             // 재인증 성공 시 다시 저장 시도
             continue;
           }
         }
-        
+
         // 네트워크 오류도 재시도
         const isNetworkError = e?.code === 'network-request-failed' ||
           e?.message?.includes('network') ||
           e?.message?.includes('timeout');
-        
+
         if (isNetworkError && attempt < maxRetries) {
           continue;
         }
@@ -1177,7 +1237,7 @@ export default function BatchScoringPage() {
       toast({ title: '저장 중', description: '이미 저장 중입니다. 잠시만 기다려주세요.', variant: 'default' });
       return;
     }
-    
+
     // 저장 시 수정 모드 셀 모두 제거
     editingCellsRef.current.clear();
 
@@ -1196,7 +1256,7 @@ export default function BatchScoringPage() {
         isAuthenticated = await ensureAuthenticated();
         if (isAuthenticated) break;
       }
-      
+
       if (!isAuthenticated) {
         toast({
           title: "인증 실패",
@@ -1215,21 +1275,28 @@ export default function BatchScoringPage() {
     let savedCount = 0;
     let errorCount = 0;
     const savedCells: Array<{ pi: number; hi: number }> = [];
+    // 변경된 점수 상세 정보 추적
+    const changedScores: Array<{ playerName: string; hole: number; oldScore: number | null; newScore: number }> = [];
+
 
     try {
       // 모든 셀의 점수를 병렬로 저장 (빈 이름인 선수는 건너뛰기)
       const savePromises: Promise<void>[] = [];
-      
+
       for (let pi = 0; pi < maxPlayers; pi++) {
         const playerName = renderNames[pi];
         // 빈 이름이면 건너뛰기
         if (!playerName || playerName.trim() === '' || playerName.startsWith('이름')) {
           continue;
         }
-        
+
         for (let hi = 0; hi < 9; hi++) {
           const val = batchInputScores[pi]?.[hi] ?? draftScores[pi]?.[hi] ?? null;
           if (typeof val === 'number' && val > 0) {
+            // 기존 점수 확인 (변경 여부 판단용)
+            const oldScore = tableScores[pi]?.[hi] ?? null;
+            const isChanged = oldScore !== val;
+
             savePromises.push(
               saveToFirebase(pi, hi, val)
                 .then(() => {
@@ -1237,6 +1304,16 @@ export default function BatchScoringPage() {
                   savedCells.push({ pi, hi });
                   // 저장 완료 시각적 피드백
                   flashSavedCell(pi, hi);
+
+                  // 변경된 점수만 상세 정보에 추가
+                  if (isChanged) {
+                    changedScores.push({
+                      playerName,
+                      hole: hi + 1,
+                      oldScore: typeof oldScore === 'number' ? oldScore : null,
+                      newScore: val
+                    });
+                  }
                 })
                 .catch((error) => {
                   errorCount++;
@@ -1246,7 +1323,7 @@ export default function BatchScoringPage() {
           }
         }
       }
-      
+
       // 모든 저장 작업을 병렬로 실행
       await Promise.all(savePromises);
 
@@ -1267,23 +1344,23 @@ export default function BatchScoringPage() {
       // 저장된 점수가 있는 홀은 자동으로 잠금
       const newLocks = [...holeLocks];
       const savedHoles = new Set(savedCells.map(({ hi }) => hi));
-      
+
       // 저장된 셀이 있는 홀은 잠금 상태로 설정
       savedHoles.forEach(hi => {
         newLocks[hi] = true;
         // 수동 해제 목록에서도 제거하여 다시 자동 잠금이 유지되도록
         manuallyUnlockedHolesRef.current.delete(hi);
       });
-      
+
       // 나머지 홀은 기존 로직대로 전체가 채워졌을 때만 잠금
       for (let hi = 0; hi < 9; hi++) {
         if (savedHoles.has(hi)) {
           continue; // 이미 처리된 홀은 건너뛰기
         }
-        
+
         let allFilled = true;
         let hasAnyPlayer = false;
-        
+
         for (let pi = 0; pi < maxPlayers; pi++) {
           const playerName = renderNames[pi];
           if (!playerName || playerName.trim() === '' || playerName.startsWith('이름')) {
@@ -1297,7 +1374,7 @@ export default function BatchScoringPage() {
             break;
           }
         }
-        
+
         if (hasAnyPlayer && allFilled) {
           newLocks[hi] = true;
         }
@@ -1305,14 +1382,70 @@ export default function BatchScoringPage() {
       setHoleLocks(newLocks);
 
       if (savedCount > 0) {
-        toast({ 
-          title: '저장 완료', 
+        toast({
+          title: '저장 완료',
           description: `${savedCount}개의 점수가 저장되었습니다.${errorCount > 0 ? ` (${errorCount}개 실패)` : ''}`,
           duration: 1000
         });
+
+        // 일괄 입력 이력 기록 (Firebase)
+        try {
+          const dbInstance = db as any;
+          const historyPath = `batchScoringHistory/${selectedGroup}/${selectedJo}/${activeCourseId}`;
+          const historyRef = ref(dbInstance, historyPath);
+
+          const currentTimestamp = Date.now();
+          const captainId = captainData?.id || `조장${selectedJo}`;
+
+          // 기존 이력을 가져와서 새 이력 추가
+          const snapshot = await get(historyRef);
+          const existingData = snapshot.val() || {};
+          const existingHistory: BatchHistoryEntry[] = Array.isArray(existingData.history) ? existingData.history : [];
+
+          // 새 이력 항목 결정 (기존 데이터가 있으면 'update', 없으면 'save')
+          const actionType: 'save' | 'update' = existingData.lastModifiedBy ? 'update' : 'save';
+
+          // 상세 정보 생성
+          let detailsText = '';
+          if (changedScores.length > 0) {
+            // 변경된 점수가 있으면 상세히 표시
+            const changeDetails = changedScores.map(c => {
+              if (c.oldScore === null) {
+                return `${c.playerName} ${c.hole}H: ${c.newScore}점 입력`;
+              } else {
+                return `${c.playerName} ${c.hole}H: ${c.oldScore}→${c.newScore}`;
+              }
+            }).join(', ');
+            detailsText = changeDetails.length > 100 ? changeDetails.substring(0, 100) + '...' : changeDetails;
+          } else {
+            // 변경 없이 저장만 한 경우
+            detailsText = `${savedCount}개 점수 저장`;
+          }
+
+          const newEntry: BatchHistoryEntry = {
+            modifiedBy: captainId,
+            modifiedAt: currentTimestamp,
+            action: actionType,
+            details: detailsText
+          };
+
+          // 이력 배열에 추가 (최신 순으로 정렬하기 위해 앞에 추가)
+          const updatedHistory = [newEntry, ...existingHistory];
+
+          // Firebase에 저장
+          await set(historyRef, {
+            lastModifiedBy: captainId,
+            lastModifiedAt: currentTimestamp,
+            action: actionType,
+            history: updatedHistory
+          });
+        } catch (error) {
+          console.error('이력 기록 실패:', error);
+          // 이력 기록 실패는 치명적이지 않으므로 무시
+        }
       } else {
-        toast({ 
-          title: '저장할 점수 없음', 
+        toast({
+          title: '저장할 점수 없음',
           description: '입력된 점수가 없습니다.',
           variant: 'destructive'
         });
@@ -1431,10 +1564,10 @@ export default function BatchScoringPage() {
   // 일괄 입력 모드: batchInputScores를 기준으로 합계 계산 (수기채점표와 동일하게 검산 가능)
   const playerTotals = useMemo(() => {
     // batchInputScores를 우선 사용, 없으면 tableScores 사용
-    const scoresToUse = batchInputScores.some(row => row.some(v => v !== null)) 
-      ? batchInputScores 
+    const scoresToUse = batchInputScores.some(row => row.some(v => v !== null))
+      ? batchInputScores
       : tableScores;
-    
+
     return scoresToUse.map((row, playerIdx) => {
       let sum = 0;
       let parSum = 0;
@@ -1455,18 +1588,18 @@ export default function BatchScoringPage() {
   useEffect(() => {
     const newLocks = Array(9).fill(false);
     const maxPlayers = gameMode === 'team' ? 2 : 4;
-    
+
     for (let hi = 0; hi < 9; hi++) {
       // 수동으로 해제된 홀은 다시 잠그지 않음
       if (manuallyUnlockedHolesRef.current.has(hi)) {
         newLocks[hi] = false;
         continue;
       }
-      
+
       // 해당 홀의 모든 선수 점수가 입력되었는지 확인
       let allFilled = true;
       let hasAnyPlayer = false;
-      
+
       for (let pi = 0; pi < maxPlayers; pi++) {
         const playerName = playerNames[pi];
         // 빈 이름이면 건너뛰기
@@ -1483,7 +1616,7 @@ export default function BatchScoringPage() {
       // 선수가 하나도 없으면 잠금하지 않음
       newLocks[hi] = hasAnyPlayer && allFilled;
     }
-    
+
     // 이전 값과 비교하여 변경된 경우에만 업데이트
     setHoleLocks(prev => {
       const hasChanged = prev.some((lock, idx) => lock !== newLocks[idx]);
@@ -1513,12 +1646,12 @@ export default function BatchScoringPage() {
   const themeClass = useMemo(() => {
     const activeCourse = courseTabs.find((c) => String(c.id) === String(activeCourseId));
     if (!activeCourse) return 'theme-red';
-    
+
     // 코스 이름에서 A, B, C, D 등을 추출
     const courseName = activeCourse.name || '';
     // 알파벳 대문자 찾기 (A-Z)
     const alphabetMatch = courseName.match(/[A-Z]/);
-    
+
     if (alphabetMatch) {
       // 알파벳을 숫자로 변환 (A=0, B=1, C=2, D=3, E=4, F=5...)
       const alphabetIndex = alphabetMatch[0].charCodeAt(0) - 'A'.charCodeAt(0);
@@ -2301,18 +2434,18 @@ export default function BatchScoringPage() {
                     const isEditing = editingCellsRef.current.has(`${pi}-${hi}`);
                     // 일괄 입력 모드: batchInputScores 우선, 없으면 draftScores
                     // 수정 중인 셀이면 committedVal을 무시하고 빈 값으로 표시
-                    const val = isEditing && batchVal === null && draftVal === null 
-                      ? null 
+                    const val = isEditing && batchVal === null && draftVal === null
+                      ? null
                       : (batchVal ?? (typeof draftVal === 'number' ? draftVal : (typeof committedVal === 'number' ? committedVal : null)));
                     const cellState = getCellState(pi, hi);
                     const isLocked = cellState === 'locked';
                     const isDisabled = cellState === 'disabled';
                     // 저장된 점수인지 확인 (committedVal이 있고 batchVal이 없을 때, 또는 locked 상태일 때)
-                    const isSaved = (typeof committedVal === 'number' && batchVal === null && draftVal === null) || 
-                                   (typeof committedVal === 'number' && isLocked);
+                    const isSaved = (typeof committedVal === 'number' && batchVal === null && draftVal === null) ||
+                      (typeof committedVal === 'number' && isLocked);
                     const playerName = renderNames[pi];
                     const isEmptyName = !playerName || playerName.trim() === '' || playerName.startsWith('이름');
-                    
+
                     const handleDoubleClickUnlock = (e: React.MouseEvent | React.TouchEvent) => {
                       e.preventDefault();
                       e.stopPropagation();
@@ -2320,7 +2453,7 @@ export default function BatchScoringPage() {
                       // 더블클릭 시 해당 셀만 잠금 해제하여 수정 가능하게 함
                       if (isReadOnlyMode) return; // 관전 모드에서는 수정 불가
                       if (isDisabled) return; // 비활성화된 셀은 수정 불가
-                      
+
                       if (isLocked && isSaved) {
                         console.log('잠금 해제 시작', { pi, hi });
                         // 해당 셀의 batchInputScores를 완전히 초기화하여 점수가 없는 상태로 만듦
@@ -2346,7 +2479,7 @@ export default function BatchScoringPage() {
                         manuallyUnlockedHolesRef.current.add(hi);
                         // 수정 중인 셀로 표시하여 자동 커서 이동 방지
                         editingCellsRef.current.add(`${pi}-${hi}`);
-                        
+
                         // input 요소에 포커스를 주고 값을 선택하여 바로 입력 가능하게 함
                         setTimeout(() => {
                           const input = document.querySelector(
@@ -2362,14 +2495,14 @@ export default function BatchScoringPage() {
                             input.dispatchEvent(event);
                           }
                         }, 50);
-                        
+
                         console.log('잠금 해제 완료', { pi, hi });
                       }
                     };
-                    
+
                     return (
-                      <td 
-                        key={pi} 
+                      <td
+                        key={pi}
                         style={{ position: 'relative', padding: '4px 8px', verticalAlign: 'middle', pointerEvents: 'auto', cursor: (isLocked && isSaved) ? 'pointer' : 'default' }}
                         onDoubleClick={(e) => {
                           console.log('td 더블클릭', { pi, hi, isLocked, isSaved });
@@ -2389,8 +2522,8 @@ export default function BatchScoringPage() {
                           }
                         }}
                       >
-                        <div 
-                          className="score-input-container" 
+                        <div
+                          className="score-input-container"
                           style={{ position: 'relative', pointerEvents: 'auto' }}
                           onDoubleClick={(e) => {
                             console.log('div 더블클릭', { pi, hi, isLocked, isSaved });
@@ -2398,19 +2531,19 @@ export default function BatchScoringPage() {
                           }}
                         >
                           {isSaved && (
-                            <svg 
-                              width="12" 
-                              height="12" 
-                              viewBox="0 0 24 24" 
-                              fill="none" 
-                              stroke="currentColor" 
-                              strokeWidth="2.5" 
-                              strokeLinecap="round" 
+                            <svg
+                              width="12"
+                              height="12"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2.5"
+                              strokeLinecap="round"
                               strokeLinejoin="round"
-                              style={{ 
-                                position: 'absolute', 
-                                right: '2px', 
-                                top: '50%', 
+                              style={{
+                                position: 'absolute',
+                                right: '2px',
+                                top: '50%',
                                 transform: 'translateY(-50%)',
                                 color: '#9ca3af',
                                 zIndex: 2,
@@ -2464,7 +2597,7 @@ export default function BatchScoringPage() {
                               const newVal = e.target.value === '' ? null : Number(e.target.value);
                               const cellKey = `${pi}-${hi}`;
                               const isEditing = editingCellsRef.current.has(cellKey);
-                              
+
                               setBatchInputScores(prev => {
                                 const next = prev.map(row => [...row]);
                                 next[pi][hi] = newVal;
@@ -2476,19 +2609,19 @@ export default function BatchScoringPage() {
                                 next[pi][hi] = newVal;
                                 return next;
                               });
-                              
+
                               // 수정 중인 셀이면 자동 커서 이동하지 않음
                               if (isEditing) {
                                 return;
                               }
-                              
+
                               // 유효한 점수 입력 시 자동으로 다음 칸으로 이동 (옆으로: 같은 홀의 다음 선수)
                               if (newVal !== null && newVal >= 1 && newVal <= 20) {
                                 setTimeout(() => {
                                   // 다음 칸 찾기: 같은 홀의 다음 선수, 없으면 다음 홀의 첫 선수
                                   let nextPi = pi + 1;
                                   let nextHi = hi;
-                                  
+
                                   // 빈 이름인 선수는 건너뛰기
                                   while (nextPi < renderColumns.length) {
                                     const nextPlayerName = renderNames[nextPi];
@@ -2497,12 +2630,12 @@ export default function BatchScoringPage() {
                                     }
                                     nextPi++;
                                   }
-                                  
+
                                   if (nextPi >= renderColumns.length) {
                                     // 현재 홀의 모든 선수 점수를 입력했으면 다음 홀의 첫 선수로
                                     nextHi = hi + 1;
                                     nextPi = 0;
-                                    
+
                                     // 빈 이름인 선수는 건너뛰기
                                     while (nextPi < renderColumns.length) {
                                       const nextPlayerName = renderNames[nextPi];
@@ -2511,13 +2644,13 @@ export default function BatchScoringPage() {
                                       }
                                       nextPi++;
                                     }
-                                    
+
                                     if (nextHi >= 9) {
                                       // 모든 홀을 입력했으면 더 이상 이동하지 않음
                                       return;
                                     }
                                   }
-                                  
+
                                   // 다음 input 필드로 포커스 이동
                                   if (nextPi < renderColumns.length && nextHi < 9) {
                                     const nextInput = document.querySelector(
@@ -2675,12 +2808,120 @@ export default function BatchScoringPage() {
             } catch { }
 
             toast({ title: '초기화 완료', description: `${activeCourse?.name || '현재 코스'}가 초기화되었습니다.` });
+
+            // 초기화 이력 기록 (Firebase)
+            try {
+              if (!db) return;
+              const dbInstance = db as any;
+              const historyPath = `batchScoringHistory/${selectedGroup}/${selectedJo}/${activeCourseId}`;
+              const historyRef = ref(dbInstance, historyPath);
+
+              const currentTimestamp = Date.now();
+              const captainId = captainData?.id || `조장${selectedJo}`;
+
+              // 기존 이력을 가져와서 새 이력 추가
+              const snapshot = await get(historyRef);
+              const existingData = snapshot.val() || {};
+              const existingHistory: BatchHistoryEntry[] = Array.isArray(existingData.history) ? existingData.history : [];
+
+              const newEntry: BatchHistoryEntry = {
+                modifiedBy: captainId,
+                modifiedAt: currentTimestamp,
+                action: 'reset',
+                details: '점수 초기화'
+              };
+
+              // 이력 배열에 추가 (최신 순)
+              const updatedHistory = [newEntry, ...existingHistory];
+
+              // Firebase에 저장
+              await set(historyRef, {
+                lastModifiedBy: captainId,
+                lastModifiedAt: currentTimestamp,
+                action: 'reset',
+                history: updatedHistory
+              });
+            } catch (error) {
+              console.error('초기화 이력 기록 실패:', error);
+            }
           }} disabled={isReadOnlyMode}>초기화</button>
           <button className="action-button qr-button" onClick={handleBatchSave} disabled={isReadOnlyMode || isSaving}>
             {isSaving ? '저장 중...' : '일괄 저장'}
           </button>
         </div>
+
+        {/* 최종 입력자 정보 표시 */}
+        {lastInputInfo && (
+          <div className="last-input-info">
+            <div className="last-input-main">
+              <span className="input-label">최종 {lastInputInfo.action === 'reset' ? '초기화' : '입력'}:</span>
+              <span className="input-captain">{lastInputInfo.lastModifiedBy}</span>
+              <span className="input-time">
+                {new Date(lastInputInfo.lastModifiedAt).toLocaleString('ko-KR', {
+                  year: 'numeric',
+                  month: '2-digit',
+                  day: '2-digit',
+                  hour: '2-digit',
+                  minute: '2-digit'
+                })}
+              </span>
+            </div>
+            {actionHistory.length > 1 && (
+              <button
+                className="history-button"
+                onClick={() => setHistoryModalOpen(true)}
+              >
+                이력 보기 ({actionHistory.length})
+              </button>
+            )}
+          </div>
+        )}
       </div>
+
+      {/* 이력 모달 */}
+      <AlertDialog open={historyModalOpen} onOpenChange={setHistoryModalOpen}>
+        <AlertDialogContent className="history-modal">
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {activeCourse?.name || '코스'} 입력 이력
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="history-list">
+                {actionHistory.length === 0 ? (
+                  <div className="history-empty">이력이 없습니다.</div>
+                ) : (
+                  actionHistory.map((entry, index) => (
+                    <div key={index} className="history-item">
+                      <div className="history-header">
+                        <span className="history-action">
+                          {entry.action === 'reset' ? '🔄 초기화' : entry.action === 'update' ? '✏️ 수정' : '💾 저장'}
+                        </span>
+                        <span className="history-time">
+                          {new Date(entry.modifiedAt).toLocaleString('ko-KR', {
+                            month: '2-digit',
+                            day: '2-digit',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })}
+                        </span>
+                      </div>
+                      <div className="history-details">
+                        <span className="history-captain">{entry.modifiedBy}</span>
+                        {entry.details && <span className="history-desc"> · {entry.details}</span>}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={() => setHistoryModalOpen(false)}>
+              닫기
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* 일괄 입력 모드에서는 숫자패드 및 서명 모달 제거 */}
       {/* 뒤로가기 확인 다이얼로그 */}
@@ -2703,7 +2944,7 @@ export default function BatchScoringPage() {
                   // window.close()는 JavaScript에서 직접 열린 창만 닫을 수 있음
                   // 모바일 브라우저에서도 새 창으로 열린 경우 일반적으로 작동함
                   window.close();
-                  
+
                   // 창이 닫히지 않을 수 있는 경우를 대비해 fallback 로직
                   // (예: 직접 URL로 접근한 경우, 브라우저 보안 정책으로 인해 닫히지 않는 경우)
                   setTimeout(() => {
