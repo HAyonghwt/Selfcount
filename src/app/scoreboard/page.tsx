@@ -361,9 +361,9 @@ function ExternalScoreboard() {
     // 그룹 순환 로직은 finalDataByGroup 선언 이후로 이동 (아래 참조)
 
     // 캐싱을 위한 상태 추가
-    const [lastScoresHash, setLastScoresHash] = useState('');
-    const [lastPlayersHash, setLastPlayersHash] = useState('');
-    const [lastTournamentHash, setLastTournamentHash] = useState('');
+    const lastScoresHash = useRef('');
+    const lastPlayersHash = useRef('');
+    const lastTournamentHash = useRef('');
 
     // 최적화된 데이터 구독을 위한 상태
     const [initialDataLoaded, setInitialDataLoaded] = useState(false);
@@ -415,14 +415,14 @@ function ExternalScoreboard() {
                 const unsubInitialPlayers = onValue(playersRef, snap => {
                     const data = snap.val() || {};
                     setPlayers(data);
-                    setLastPlayersHash(JSON.stringify(data));
+                    lastPlayersHash.current = JSON.stringify(data);
                     checkAllLoaded();
                 });
 
                 const unsubInitialScores = onValue(scoresRef, snap => {
                     const data = snap.val() || {};
                     setScores(data);
-                    setLastScoresHash(JSON.stringify(data));
+                    lastScoresHash.current = JSON.stringify(data);
                     checkAllLoaded();
                 });
 
@@ -430,7 +430,7 @@ function ExternalScoreboard() {
                     const data = snap.val() || {};
                     setTournament(data);
                     setGroupsData(data.groups || {});
-                    setLastTournamentHash(JSON.stringify(data));
+                    lastTournamentHash.current = JSON.stringify(data);
                     checkAllLoaded();
                 });
 
@@ -461,8 +461,8 @@ function ExternalScoreboard() {
                         setPlayers((prev: any) => {
                             const newPlayers = { ...prev, [playerId]: playerData };
                             const newHash = JSON.stringify(newPlayers);
-                            if (newHash !== lastPlayersHash) {
-                                setLastPlayersHash(newHash);
+                            if (newHash !== lastPlayersHash.current) {
+                                lastPlayersHash.current = newHash;
                                 return newPlayers;
                             }
                             return prev;
@@ -595,8 +595,8 @@ function ExternalScoreboard() {
                                 setGroupsData(value);
                             }
                             const newHash = JSON.stringify(newTournament);
-                            if (newHash !== lastTournamentHash) {
-                                setLastTournamentHash(newHash);
+                            if (newHash !== lastTournamentHash.current) {
+                                lastTournamentHash.current = newHash;
                                 return newTournament;
                             }
                             return prev;
@@ -611,8 +611,8 @@ function ExternalScoreboard() {
                     setTournament((prev: any) => {
                         const newTournament = { ...prev, courses: coursesData };
                         const newHash = JSON.stringify(newTournament);
-                        if (newHash !== lastTournamentHash) {
-                            setLastTournamentHash(newHash);
+                        if (newHash !== lastTournamentHash.current) {
+                            lastTournamentHash.current = newHash;
                             return newTournament;
                         }
                         return prev;
@@ -628,7 +628,7 @@ function ExternalScoreboard() {
         });
         // 클린업: 이 이펙트가 재실행/언마운트 시 구독 해제
         return () => stopSubscriptions();
-    }, [initialDataLoaded, lastScoresHash, lastPlayersHash, lastTournamentHash, resumeSeq]);
+    }, [initialDataLoaded, resumeSeq]);
 
     // 탭 비활성화 시 구독 일시 중단, 다시 보이면 재개
     useEffect(() => {
