@@ -20,7 +20,8 @@ import {
     LayoutGrid,
     CheckCircle2,
     AlertCircle,
-    RotateCcw
+    RotateCcw,
+    Star
 } from "lucide-react"
 import { Checkbox } from "@/components/ui/checkbox"
 import { useToast } from "@/hooks/use-toast"
@@ -30,6 +31,8 @@ interface GroupItem {
     id: string;
     suffix: string; // empty string for base, "-1", "-2" etc.
     players: number;
+    isChampion?: boolean;
+    championSelectedAt?: number; // timestamp for sorting
 }
 
 interface HoleItem {
@@ -142,7 +145,8 @@ export default function GroupGeneratorPage() {
                 groups: Array.from({ length: defaultGroupsPerHole }, (_, j) => ({
                     id: `${course.id}-${hole.number}-${j}`,
                     suffix: j === 0 ? '' : `-${j}`,
-                    players: defaultPlayers
+                    players: defaultPlayers,
+                    isChampion: false
                 }))
             }))
         }))
@@ -167,7 +171,8 @@ export default function GroupGeneratorPage() {
                         groups: [...h.groups, {
                             id: `${courseId}-${holeNumber}-${Date.now()}`,
                             suffix: `-${nextIndex}`,
-                            players: defaultPlayers
+                            players: defaultPlayers,
+                            isChampion: false
                         }]
                     }
                 })
@@ -220,9 +225,35 @@ export default function GroupGeneratorPage() {
         }))
     }
 
+    // 챔피언조 토글
+    const toggleChampion = (courseId: string, holeNumber: number, groupId: string) => {
+        setCourses(prev => prev.map(c => {
+            if (c.id !== courseId) return c;
+            return {
+                ...c,
+                holes: c.holes.map(h => {
+                    if (h.number !== holeNumber) return h;
+                    return {
+                        ...h,
+                        groups: h.groups.map(g => {
+                            if (g.id !== groupId) return g;
+                            const newIsChampion = !g.isChampion;
+                            return {
+                                ...g,
+                                isChampion: newIsChampion,
+                                championSelectedAt: newIsChampion ? Date.now() : undefined
+                            };
+                        })
+                    }
+                })
+            }
+        }))
+    }
+
     // 최종 생성 데이터 (복사용 리스트)
     const generatedList = useMemo(() => {
-        const list: string[] = [];
+        const allGroups: { name: string; isChampion: boolean; championSelectedAt?: number }[] = [];
+
         courses
             .filter(c => selectedCourseIds.includes(c.id))
             .forEach(course => {
@@ -230,13 +261,27 @@ export default function GroupGeneratorPage() {
                     hole.groups.forEach(group => {
                         const groupName = `${course.id}${hole.number}${group.suffix}`;
                         for (let i = 0; i < group.players; i++) {
-                            list.push(groupName);
+                            allGroups.push({
+                                name: groupName,
+                                isChampion: !!group.isChampion,
+                                championSelectedAt: group.championSelectedAt
+                            });
                         }
                     });
                 });
             });
-        return list;
+
+        // 챔피언조를 먼저 배치하고, 나머지를 뒤에 배치
+        // 챔피언조 내부 정렬: 선택된 순서(오래된 순)대로
+        const champions = allGroups
+            .filter(g => g.isChampion)
+            .sort((a, b) => (a.championSelectedAt || 0) - (b.championSelectedAt || 0));
+
+        const normals = allGroups.filter(g => !g.isChampion);
+
+        return [...champions, ...normals].map(g => g.name);
     }, [courses, selectedCourseIds]);
+
 
     const copyToClipboard = () => {
         const text = generatedList.join('\n');
@@ -412,12 +457,28 @@ export default function GroupGeneratorPage() {
 
                                             <div className="flex-1 flex flex-wrap gap-3 items-center">
                                                 {hole.groups.map((group, gIdx) => (
-                                                    <div key={group.id} className="flex flex-col bg-white border rounded-lg overflow-hidden shadow-sm group">
-                                                        <div className="bg-secondary p-1 text-[10px] font-bold text-center uppercase tracking-wider">
-                                                            {course.id}{hole.number}{group.suffix || '(Base)'}
+                                                    <div key={group.id} className={cn(
+                                                        "flex flex-col border rounded-lg overflow-hidden shadow-sm group transition-all",
+                                                        group.isChampion ? "border-yellow-400 ring-2 ring-yellow-200" : "bg-white"
+                                                    )}>
+                                                        <div className={cn(
+                                                            "p-1 text-[10px] font-bold text-center uppercase tracking-wider flex items-center justify-between px-2",
+                                                            group.isChampion ? "bg-yellow-400 text-yellow-900" : "bg-secondary text-muted-foreground"
+                                                        )}>
+                                                            <span className={cn(group.isChampion && "text-black")}>{course.id}{hole.number}{group.suffix || '(Base)'}</span>
+                                                            <button
+                                                                onClick={() => toggleChampion(course.id, hole.number, group.id)}
+                                                                className={cn(
+                                                                    "hover:scale-110 transition-transform",
+                                                                    group.isChampion ? "text-yellow-700" : "text-gray-300 hover:text-yellow-400"
+                                                                )}
+                                                                title="챔피언조(최우선 배정) 설정"
+                                                            >
+                                                                <Star className={cn("h-3 w-3", group.isChampion && "fill-current")} />
+                                                            </button>
                                                         </div>
-                                                        <div className="flex items-center p-2 gap-2">
-                                                            <div className="flex items-center border rounded">
+                                                        <div className={cn("flex items-center p-2 gap-2", group.isChampion && "bg-yellow-50")}>
+                                                            <div className="flex items-center border rounded bg-white">
                                                                 <button
                                                                     onClick={() => updatePlayers(course.id, hole.number, group.id, -1)}
                                                                     className="p-1 hover:bg-secondary transition-colors"
@@ -440,8 +501,11 @@ export default function GroupGeneratorPage() {
                                                                 <Trash2 className="h-4 w-4" />
                                                             </button>
                                                         </div>
-                                                        <div className="text-[10px] text-center pb-1 text-muted-foreground">
-                                                            {group.players}명 반복
+                                                        <div className={cn(
+                                                            "text-[10px] text-center pb-1",
+                                                            group.isChampion ? "text-yellow-700 bg-yellow-50" : "text-muted-foreground"
+                                                        )}>
+                                                            {group.isChampion ? "★ 챔피언조" : `${group.players}명 반복`}
                                                         </div>
                                                     </div>
                                                 ))}
