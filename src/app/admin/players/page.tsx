@@ -2782,7 +2782,8 @@ export default function PlayerManagementPage() {
 
             setTimeout(() => {
                 printWindow.print();
-                printWindow.close();
+                // 모바일에서 인쇄 대화상자가 뜨기 전에 창이 닫히는 문제 해결을 위해 close() 제거
+                // 사용자가 직접 닫도록 유도
             }, 500);
 
             setRosterDownloadModal({ ...rosterDownloadModal, open: false });
@@ -3546,7 +3547,7 @@ export default function PlayerManagementPage() {
 
             {/* 조 편성표 다운로드 모달 (기존 코드와 완전히 분리) */}
             <Dialog open={rosterDownloadModal.open} onOpenChange={(open) => setRosterDownloadModal({ ...rosterDownloadModal, open })}>
-                <DialogContent className="max-w-[95vw] w-full lg:max-w-7xl max-h-[90vh] overflow-hidden flex flex-col">
+                <DialogContent className="max-w-[95vw] w-full lg:max-w-7xl h-[90vh] flex flex-col p-4 sm:p-6 overflow-hidden">
                     <DialogHeader className="flex flex-row items-center justify-between pb-4 border-b mb-4 space-y-0 shrink-0">
                         <div className="space-y-1 text-left">
                             <DialogTitle>📋 조 편성표 다운로드 설정</DialogTitle>
@@ -3572,9 +3573,9 @@ export default function PlayerManagementPage() {
                         )}
                     </DialogHeader>
 
-                    <div className="flex gap-4 flex-1 min-h-0 overflow-hidden">
+                    <div className="flex flex-col lg:flex-row gap-4 flex-1 min-h-0 overflow-hidden">
                         {/* 좌측: 그룹별 설정 */}
-                        <div className="w-[400px] shrink-0 border rounded-lg p-4 bg-gray-50 overflow-y-auto">
+                        <div className="w-full lg:w-[400px] shrink-0 border rounded-lg p-4 bg-gray-50 overflow-y-auto max-h-[30vh] lg:max-h-none">
                             <div className="mb-4">
                                 <Label className="text-base font-semibold mb-2 block">
                                     📄 용지 크기 <span className="text-sm font-normal text-muted-foreground">(Paper Size)</span>
@@ -3711,12 +3712,12 @@ export default function PlayerManagementPage() {
                         </div>
 
                         {/* 중앙: 미리보기 + 우측 패널 */}
-                        <div className="flex-1 min-w-0 border rounded-lg p-4 bg-gray-50 flex flex-col">
+                        <div className="flex-1 min-w-0 border rounded-lg p-4 bg-gray-50 flex flex-col overflow-y-auto lg:overflow-visible">
                             <div className="flex items-center justify-between mb-2 shrink-0">
                                 <label className="text-sm font-medium">미리보기</label>
                             </div>
 
-                            <div className="flex gap-4 h-full min-h-0">
+                            <div className="flex gap-4 h-full min-h-[300px] lg:min-h-0 flex-col lg:flex-row">
                                 {/* Preview Box */}
                                 <div className="flex-1 border rounded bg-gray-100 p-4 flex items-center justify-center overflow-hidden relative">
                                     <div
@@ -3794,7 +3795,7 @@ export default function PlayerManagementPage() {
 
                                 {/* 우측: 로고 설정 패널 (ON일 때만 표시) */}
                                 {rosterDownloadModal.logoEnabled && backgroundLogoUrl && (
-                                    <div className="w-[280px] shrink-0 border rounded-lg p-4 bg-blue-50 overflow-y-auto">
+                                    <div className="w-full lg:w-[280px] shrink-0 border rounded-lg p-4 bg-blue-50 overflow-y-auto max-h-[20vh] lg:max-h-none">
                                         <div className="flex items-center justify-between mb-4">
                                             <h4 className="font-semibold text-sm">로고 상세 설정</h4>
                                         </div>

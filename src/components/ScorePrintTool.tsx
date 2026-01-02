@@ -952,7 +952,8 @@ export default function ScorePrintTool() {
 
         setTimeout(() => {
             printWindow.print();
-            printWindow.close();
+            // 모바일에서 인쇄 대화상자가 뜨기 전에 창이 닫히는 문제 해결을 위해 close() 제거
+            // 사용자가 직접 닫도록 유도
         }, 500);
 
         setPrintModal({ ...printModal, open: false });
