@@ -728,8 +728,24 @@ export default function BadgePage() {
         }
       }
 
-      // PDF 다운로드
-      pdf.save(`명찰_${selectedGroup}_${new Date().getTime()}.pdf`);
+      // PDF 다운로드 (Blob 방식 사용 - 모바일 호환성 개선)
+      const blob = pdf.output('blob');
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+
+      // 파일명 안전하게 처리
+      const safeGroupName = selectedGroup.replace(/[<>:"/\\|?*]/g, '_');
+      link.download = `명찰_${safeGroupName}_${new Date().getTime()}.pdf`;
+
+      document.body.appendChild(link);
+      link.click();
+
+      // 메모리 정리
+      setTimeout(() => {
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+      }, 100);
 
       toast({
         title: "성공",
