@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { db } from "@/lib/firebase";
 import { ref, onValue, get, set, remove } from "firebase/database";
 import { Button } from "@/components/ui/button";
@@ -16,7 +16,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Database, Save, RotateCcw, Trash2, Loader2 } from "lucide-react";
+import { Database, Save, RotateCcw, Trash2, Loader2, Download, Upload } from "lucide-react";
 
 interface SystemBackup {
   backupId: string;
@@ -46,6 +46,8 @@ const BackupList: React.FC = () => {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [selectedBackup, setSelectedBackup] = useState<SystemBackup | null>(null);
   const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
     if (!db) return;
@@ -228,6 +230,81 @@ const BackupList: React.FC = () => {
     }
   };
 
+  // 백업 파일 다운로드
+  const handleDownloadBackup = (backup: SystemBackup) => {
+    const backupJson = JSON.stringify(backup, null, 2);
+    const blob = new Blob([backupJson], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `backup_${backup.backupId}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  // 백업 파일 업로드 버튼 클릭
+  const handleUploadClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  // 백업 파일 선택 및 처리
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // 초기화하여 같은 파일을 다시 선택할 수 있게 함
+    event.target.value = "";
+
+    setUploading(true);
+    const reader = new FileReader();
+
+    reader.onload = async (e) => {
+      try {
+        const content = e.target?.result as string;
+        const json = JSON.parse(content);
+
+        // 유효성 검사: 기본적인 필수 키 확인
+        if (!json.tournamentData && !json.players && !json.scores) {
+          throw new Error("유효하지 않은 백업 파일 형식입니다. (필수 데이터 누락)");
+        }
+
+        // 새로운 백업 ID 생성 (현재 시간 기준)
+        const now = new Date();
+        const pad = (n: number) => n.toString().padStart(2, "0");
+        const newBackupId = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+
+        // 업로드할 데이터 구성
+        const newBackupData: SystemBackup = {
+          ...json,
+          backupId: newBackupId, // ID는 새로 생성
+          savedAt: now.toISOString(), // 저장 시간은 현재 시간으로 갱신
+          tournamentName: `${json.tournamentName || "가져온 백업"} (가져옴)`,
+        };
+
+        // systemBackups 경로에 저장
+        await set(ref(db, `systemBackups/${newBackupId}`), newBackupData);
+
+        toast({
+          title: "백업 가져오기 성공",
+          description: `백업 파일이 목록에 추가되었습니다. (${formatBackupId(newBackupId)})`,
+        });
+      } catch (error: any) {
+        console.error("백업 가져오기 실패:", error);
+        toast({
+          title: "백업 가져오기 실패",
+          description: error.message || "파일을 처리하는 중 오류가 발생했습니다.",
+          variant: "destructive",
+        });
+      } finally {
+        setUploading(false);
+      }
+    };
+
+    reader.readAsText(file);
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -267,6 +344,31 @@ const BackupList: React.FC = () => {
                 </>
               )}
             </Button>
+            <Button
+              onClick={handleUploadClick}
+              disabled={creating || uploading}
+              variant="outline"
+              className="ml-2 text-green-600 hover:text-green-700 hover:bg-green-50 border-green-200"
+            >
+              {uploading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  업로드 중...
+                </>
+              ) : (
+                <>
+                  <Upload className="mr-2 h-4 w-4" />
+                  백업 파일 가져오기
+                </>
+              )}
+            </Button>
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileChange}
+              accept=".json"
+              className="hidden"
+            />
           </div>
 
           {backups.length === 0 ? (
@@ -299,6 +401,16 @@ const BackupList: React.FC = () => {
                         <TableCell>{playerCount}명</TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">
+                            <Button
+                              onClick={() => handleDownloadBackup(backup)}
+                              disabled={isRestoring || isDeleting}
+                              variant="outline"
+                              size="sm"
+                              className="text-gray-600 hover:text-gray-700 hover:bg-gray-50"
+                            >
+                              <Download className="mr-2 h-3 w-3" />
+                              다운로드
+                            </Button>
                             <Button
                               onClick={() => handleRestoreClick(backup)}
                               disabled={isRestoring || isDeleting}
