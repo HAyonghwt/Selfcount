@@ -1784,8 +1784,8 @@ function ExternalScoreboard() {
         }
     }, [rotationInterval, isRotationActive, startRotationInterval]); // rotationInterval 변경 시 interval 재시작
 
-    // 선수별 점수 로그 캐시 상태 (playerId별)
-    const [playerScoreLogs, setPlayerScoreLogs] = useState<ScoreLogMap>({});
+    // 선수별 점수 로그 캐시 상태 (playerId별) - 관리자 대시보드와 동일한 구조 사용
+    const [playerScoreLogs, setPlayerScoreLogs] = useState<{ [playerId: string]: ScoreLog[] }>({});
     // 로딩 상태
     const [logsLoading, setLogsLoading] = useState(false);
 
@@ -1812,24 +1812,11 @@ function ExternalScoreboard() {
                 await Promise.all(newPlayerIds.map(async (pid) => {
                     try {
                         const logs = await getPlayerScoreLogsOptimized(pid);
-                        // 로그를 맵 구조로 변환
-                        const playerMap: { [courseId: string]: { [hole: number]: ScoreLog } } = {};
-                        logs.forEach(l => {
-                            let cid = (l as any).courseId;
-                            if (!cid && l.comment) {
-                                // 코멘트에서 코스 추출 시도 (기존 로직 보존)
-                                const match = l.comment.match(/코스:\s?([A-Za-z0-9-_]+)/);
-                                if (match) cid = match[1];
-                            }
-                            if (cid && l.holeNumber) {
-                                if (!playerMap[cid]) playerMap[cid] = {};
-                                playerMap[cid][Number(l.holeNumber)] = l;
-                            }
-                        });
-                        updatedLogsLookup[pid] = playerMap;
+                        // 관리자 대시보드와 동일하게 배열 형태로 저장
+                        updatedLogsLookup[pid] = logs;
                     } catch (error) {
                         console.error(`기본 로그 로딩 실패 - 선수 ${pid}:`, error);
-                        updatedLogsLookup[pid] = {};
+                        updatedLogsLookup[pid] = [];
                     }
                 }));
 
@@ -1864,30 +1851,17 @@ function ExternalScoreboard() {
                     // 캐시가 이미 무효화되었으므로, Firebase에서 최신 로그를 가져옴
                     const logs = await getPlayerScoreLogsOptimized(playerId);
 
-                    // 로그를 맵 구조로 변환
-                    const playerMap: { [courseId: string]: { [hole: number]: ScoreLog } } = {};
-                    logs.forEach(l => {
-                        let cid = (l as any).courseId;
-                        if (!cid && l.comment) {
-                            const match = l.comment.match(/코스:\s?([A-Za-z0-9-_]+)/);
-                            if (match) cid = match[1];
-                        }
-                        if (cid && l.holeNumber) {
-                            if (!playerMap[cid]) playerMap[cid] = {};
-                            playerMap[cid][Number(l.holeNumber)] = l;
-                        }
-                    });
-
+                    // 관리자 대시보드와 동일하게 배열 형태로 저장
                     setPlayerScoreLogs((prev: any) => ({
                         ...prev,
-                        [playerId]: playerMap
+                        [playerId]: logs
                     }));
                 } catch (error) {
                     console.error(`로그 로딩 실패 - 선수 ${playerId}:`, error);
-                    // 에러 발생 시 빈 객체로 설정
+                    // 에러 발생 시 빈 배열로 설정
                     setPlayerScoreLogs((prev: any) => ({
                         ...prev,
-                        [playerId]: {}
+                        [playerId]: []
                     }));
                 }
             }
@@ -2119,7 +2093,11 @@ function ExternalScoreboard() {
                                                         <td className="py-0.5 px-1 align-middle text-center sb-td w-16 md:w-20 lg:w-24 truncate">{player.coursesData[course.id]?.courseName}</td>
                                                         {player.coursesData[course.id]?.holeScores.map((score: any, i: number) => {
                                                             const holeNumber = i + 1;
-                                                            const cellLog = playerScoreLogs[player.id]?.[course.id]?.[holeNumber];
+                                                            // 관리자 대시보드와 동일한 방식으로 로그 조회 (배열에서 find 사용)
+                                                            const logs = playerScoreLogs[player.id] || [];
+                                                            const cellLog = Array.isArray(logs)
+                                                                ? logs.find(l => String(l.courseId) === String(course.id) && Number(l.holeNumber) === holeNumber)
+                                                                : (playerScoreLogs[player.id]?.[course.id]?.[holeNumber]); // 맵 구조 폴백
                                                             const isModified = !!cellLog && cellLog.oldValue !== 0 && cellLog.oldValue !== cellLog.newValue;
 
                                                             const tooltipContent = cellLog ? (
@@ -2230,19 +2208,14 @@ function ExternalScoreboard() {
                                                                     </span>
                                                                 );
                                                             } else if (player.hasForfeited) {
-                                                                const playerLogMap = playerScoreLogs[player.id] || {};
+                                                                // 배열 구조로 변경된 로그에서 기권 타입 찾기
+                                                                const logs = playerScoreLogs[player.id] || [];
                                                                 let foundType: string = 'forfeit';
-                                                                let stopLoop = false;
-                                                                for (const cid in playerLogMap) {
-                                                                    if (stopLoop) break;
-                                                                    const courseLogs = playerLogMap[cid];
-                                                                    for (const hNum in courseLogs) {
-                                                                        const l = courseLogs[Number(hNum)];
-                                                                        if (l.newValue === 0 && (l.modifiedByType === 'judge' || l.modifiedByType === 'admin')) {
-                                                                            if (l.comment?.includes('불참')) { foundType = 'absent'; stopLoop = true; break; }
-                                                                            if (l.comment?.includes('실격')) { foundType = 'disqualified'; stopLoop = true; break; }
-                                                                            if (l.comment?.includes('기권')) { foundType = 'forfeit'; stopLoop = true; break; }
-                                                                        }
+                                                                for (const l of logs) {
+                                                                    if (l.newValue === 0 && (l.modifiedByType === 'judge' || l.modifiedByType === 'admin')) {
+                                                                        if (l.comment?.includes('불참')) { foundType = 'absent'; break; }
+                                                                        if (l.comment?.includes('실격')) { foundType = 'disqualified'; break; }
+                                                                        if (l.comment?.includes('기권')) { foundType = 'forfeit'; break; }
                                                                     }
                                                                 }
                                                                 courseSumElem = t(foundType as any);
@@ -2253,19 +2226,14 @@ function ExternalScoreboard() {
                                                             <>
                                                                 <td rowSpan={player.assignedCourses.length || 1} className="py-0.5 px-1 align-middle font-bold sb-rank text-2xl sb-td">
                                                                     {player.hasForfeited ? (() => {
-                                                                        const playerLogMap = playerScoreLogs[player.id] || {};
+                                                                        // 배열 구조로 변경된 로그에서 기권 타입 찾기
+                                                                        const logs = playerScoreLogs[player.id] || [];
                                                                         let foundType: string = 'forfeit';
-                                                                        let stopLoop = false;
-                                                                        for (const cid in playerLogMap) {
-                                                                            if (stopLoop) break;
-                                                                            const courseLogs = playerLogMap[cid];
-                                                                            for (const hNum in courseLogs) {
-                                                                                const l = courseLogs[Number(hNum)];
-                                                                                if (l.newValue === 0 && (l.modifiedByType === 'judge' || l.modifiedByType === 'admin')) {
-                                                                                    if (l.comment?.includes('불참')) { foundType = 'absent'; stopLoop = true; break; }
-                                                                                    if (l.comment?.includes('실격')) { foundType = 'disqualified'; stopLoop = true; break; }
-                                                                                    if (l.comment?.includes('기권')) { foundType = 'forfeit'; stopLoop = true; break; }
-                                                                                }
+                                                                        for (const l of logs) {
+                                                                            if (l.newValue === 0 && (l.modifiedByType === 'judge' || l.modifiedByType === 'admin')) {
+                                                                                if (l.comment?.includes('불참')) { foundType = 'absent'; break; }
+                                                                                if (l.comment?.includes('실격')) { foundType = 'disqualified'; break; }
+                                                                                if (l.comment?.includes('기권')) { foundType = 'forfeit'; break; }
                                                                             }
                                                                         }
                                                                         return t(foundType as any);
