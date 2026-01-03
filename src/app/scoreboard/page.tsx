@@ -340,6 +340,13 @@ function ExternalScoreboard() {
     // 테마 상태 (기본값: dark)
     const [theme, setTheme] = useState<'dark' | 'grey' | 'light'>('dark');
 
+    // 모바일 감지 (컴포넌트 마운트 시 한 번만 계산 - 성능 최적화)
+    const [isMobile] = useState(() =>
+        typeof window !== 'undefined' &&
+        window.matchMedia &&
+        window.matchMedia('(pointer: coarse)').matches
+    );
+
     // 번역 함수
     const t = useCallback((key: keyof typeof translations.ko) => {
         return translations[currentLang][key];
@@ -436,18 +443,13 @@ function ExternalScoreboard() {
 
                 // 순환 설정 불러오기는 별도 useEffect에서 처리 (초기 로딩과 분리)
 
-                // 3초 후에도 로딩이 안 되면 강제로 로딩 완료
-                const fallbackTimer = setTimeout(() => {
-                    if (!initialDataLoaded) {
-                        setInitialDataLoaded(true);
-                        setLoading(false);
-                    }
-                }, 3000);
+                // 3초 후에도 로딩이 안 되면 강제로 로딩 완료하는 타이머 제거
+                // 실제 데이터가 로딩되면 checkAllLoaded()에 의해 즉시 완료됨
+
                 // 언서브/타이머 해제 등록
                 activeUnsubsRef.current.push(unsubInitialPlayers);
                 activeUnsubsRef.current.push(unsubInitialScores);
                 activeUnsubsRef.current.push(unsubInitialTournament);
-                activeUnsubsRef.current.push(() => clearTimeout(fallbackTimer));
             }
 
             // 초기 데이터 로딩 후 실시간 업데이트 (점수는 항상 실시간 반영 보장)
@@ -1353,17 +1355,22 @@ function ExternalScoreboard() {
 
     // 백카운트/NTP 적용된 1위 동점자들의 순위를 다시 계산하는 함수 (기존 로직 활용)
     const applyPlayoffRanking = (data: any) => {
-        const finalData = JSON.parse(JSON.stringify(data));
+        // 깊은 복사 대신 얕은 복사 사용 (성능 최적화)
+        // 탑 레벨 객체만 복사하고, 내부 배열/객체는 필요할 때 복사
+        const finalData = { ...data };
         const allCourses = Object.values(tournament.courses || {}).filter(Boolean);
 
         for (const groupName in finalData) {
-            const groupPlayers = finalData[groupName];
-            if (!groupPlayers || groupPlayers.length === 0) continue;
+            const originalGroupPlayers = finalData[groupName];
+            if (!originalGroupPlayers || originalGroupPlayers.length === 0) continue;
 
             // 1위 동점자들 찾기
-            const firstPlacePlayers = groupPlayers.filter((p: any) => p.rank === 1);
+            const firstPlacePlayers = originalGroupPlayers.filter((p: any) => p.rank === 1);
 
             if (firstPlacePlayers.length > 1) {
+                // 수정이 필요한 그룹만 배열 복사
+                const groupPlayers = [...originalGroupPlayers];
+                finalData[groupName] = groupPlayers;
                 const playerType = firstPlacePlayers[0].type;
                 const isIndividual = playerType === 'individual';
 
@@ -1388,8 +1395,8 @@ function ExternalScoreboard() {
 
                     // 전체 그룹을 다시 정렬
                     groupPlayers.sort((a: any, b: any) => {
-                        const rankA = a.rank === null ? Infinity : a.rank;
-                        const rankB = b.rank === null ? Infinity : b.rank;
+                        const rankA = a.rank === null ? Infinity : (a.rank as number);
+                        const rankB = b.rank === null ? Infinity : (b.rank as number);
                         if (rankA !== rankB) return rankA - rankB;
 
                         const scoreA = a.hasAnyScore && !a.hasForfeited ? a.totalScore : Infinity;
@@ -1431,7 +1438,13 @@ function ExternalScoreboard() {
                     // 백카운트는 마지막 코스부터 역순이므로 reverse
                     const sortedCoursesForBackcount = [...coursesForGroup].reverse();
 
-                    firstPlacePlayers.sort((a: any, b: any) => {
+                    // firstPlacePlayers는 이미 groupPlayers의 요소들을 참조하므로
+                    // 여기서 정렬하고 속성을 변경하면 groupPlayers에도 반영됨 (얕은 복사이므로)
+                    // 하지만 안전을 위해 수정된 객체로 교체하는 것이 좋음
+
+                    const playersToUpdate = [...firstPlacePlayers];
+
+                    playersToUpdate.sort((a: any, b: any) => {
                         if (a.plusMinus !== b.plusMinus) return a.plusMinus - b.plusMinus;
                         // 백카운트: 마지막 코스부터 역순으로 비교
                         for (const course of sortedCoursesForBackcount) {
@@ -1463,18 +1476,30 @@ function ExternalScoreboard() {
                         return 0;
                     });
 
-                    // 새로운 순위 부여
+                    // 새로운 순위 부여 및 객체 업데이트
                     let rank = 1;
-                    firstPlacePlayers[0].rank = rank;
-                    for (let i = 1; i < firstPlacePlayers.length; i++) {
-                        const prev = firstPlacePlayers[i - 1];
-                        const curr = firstPlacePlayers[i];
+
+                    // 정렬된 순서대로 랭킹 부여 및 원본 배열 업데이트 준비
+                    const updatedFirstPlaceMap = new Map();
+
+                    // 첫 번째 선수 처리
+                    const firstPlayer = playersToUpdate[0];
+                    // 객체 불변성을 위해 복사
+                    const updatedFirstPlayer = { ...firstPlayer, rank: rank };
+                    updatedFirstPlaceMap.set(firstPlayer.id, updatedFirstPlayer);
+
+                    for (let i = 1; i < playersToUpdate.length; i++) {
+                        const prev = playersToUpdate[i - 1]; // 정렬된 배열의 이전 요소
+                        const curr = playersToUpdate[i];     // 정렬된 배열의 현재 요소
+
+                        // 비교를 위해 원본 데이터 사용 (rank는 아직 수정 전)
+
                         // plusMinus가 다르거나 백카운트 비교 결과가 다르면 순위 증가
+                        let isDifferent = false;
                         if (curr.plusMinus !== prev.plusMinus) {
-                            rank = i + 1;
+                            isDifferent = true;
                         } else {
                             // 백카운트 비교
-                            let isDifferent = false;
                             for (const course of sortedCoursesForBackcount) {
                                 if (!course || course.id === undefined || course.id === null) continue;
                                 const courseId = course.id;
@@ -1500,17 +1525,29 @@ function ExternalScoreboard() {
                                     }
                                 }
                             }
-                            if (isDifferent) {
-                                rank = i + 1;
-                            }
                         }
-                        curr.rank = rank;
+
+                        if (isDifferent) {
+                            rank = i + 1;
+                        }
+
+                        // 객체 업데이트
+                        const updatedPlayer = { ...curr, rank: rank };
+                        updatedFirstPlaceMap.set(curr.id, updatedPlayer);
+                    }
+
+                    // groupPlayers 배열 업데이트 (변경된 선수만 교체)
+                    for (let i = 0; i < groupPlayers.length; i++) {
+                        const p = groupPlayers[i];
+                        if (updatedFirstPlaceMap.has(p.id)) {
+                            groupPlayers[i] = updatedFirstPlaceMap.get(p.id);
+                        }
                     }
 
                     // 전체 그룹을 다시 정렬
                     groupPlayers.sort((a: any, b: any) => {
-                        const rankA = a.rank === null ? Infinity : a.rank;
-                        const rankB = b.rank === null ? Infinity : b.rank;
+                        const rankA = a.rank === null ? Infinity : (a.rank as number);
+                        const rankB = b.rank === null ? Infinity : (b.rank as number);
                         if (rankA !== rankB) return rankA - rankB;
 
                         const scoreA = a.hasAnyScore && !a.hasForfeited ? a.totalScore : Infinity;
@@ -1533,18 +1570,26 @@ function ExternalScoreboard() {
 
         // 서든데스 순위가 있는 경우 적용
         if (combinedRankMap.size > 0) {
-            finalData = JSON.parse(JSON.stringify(processedDataByGroup));
+            // 깊은 복사 대신 얕은 복사 - finalDataByGroup은 여기서 새로 생성되므로
+            // processedDataByGroup의 내용을 복사해서 사용해야 함
+            finalData = {};
+            for (const key in processedDataByGroup) {
+                finalData[key] = [...processedDataByGroup[key]]; // 배열 얕은 복사
+            }
 
             for (const groupName in finalData) {
-                finalData[groupName].forEach((player: ProcessedPlayer) => {
-                    if (combinedRankMap.has(player.id)) {
-                        player.rank = combinedRankMap.get(player.id) as number;
+                // 배열 요소(플레이어 객체)도 수정해야 하므로 필요한 경우 객체 복사
+                // (map을 사용하여 새로운 객체 배열 생성)
+                finalData[groupName] = finalData[groupName].map((originalPlayer: ProcessedPlayer) => {
+                    if (combinedRankMap.has(originalPlayer.id)) {
+                        return { ...originalPlayer, rank: combinedRankMap.get(originalPlayer.id) as number };
                     }
+                    return originalPlayer;
                 });
 
                 finalData[groupName].sort((a: any, b: any) => {
-                    const rankA = a.rank === null ? Infinity : a.rank;
-                    const rankB = b.rank === null ? Infinity : b.rank;
+                    const rankA = a.rank === null ? Infinity : (a.rank as number);
+                    const rankB = b.rank === null ? Infinity : (b.rank as number);
                     if (rankA !== rankB) return rankA - rankB;
 
                     const scoreA = a.hasAnyScore && !a.hasForfeited ? a.totalScore : Infinity;
@@ -1571,6 +1616,24 @@ function ExternalScoreboard() {
 
     // finalDataByGroup의 최신 값을 참조하기 위한 ref
     const finalDataByGroupRef = useRef(finalDataByGroup);
+
+    // 화면 분할 렌더링 (Lazy Rendering) 상태
+    const [displayedGroupCount, setDisplayedGroupCount] = useState(1); // 처음에 1개만 렌더링
+
+    useEffect(() => {
+        // 그룹이 변경되거나 필터가 변경되면 초기화
+        setDisplayedGroupCount(1);
+    }, [filterGroup, groupsToDisplay.length]);
+
+    useEffect(() => {
+        // 순차적으로 렌더링 그룹 수 증가
+        if (displayedGroupCount < groupsToDisplay.length) {
+            const timer = setTimeout(() => {
+                setDisplayedGroupCount(prev => Math.min(prev + 1, groupsToDisplay.length));
+            }, 100); // 100ms 간격으로 하나씩 추가
+            return () => clearTimeout(timer);
+        }
+    }, [displayedGroupCount, groupsToDisplay.length]);
     useEffect(() => {
         finalDataByGroupRef.current = finalDataByGroup;
     }, [finalDataByGroup]);
@@ -2040,7 +2103,7 @@ function ExternalScoreboard() {
 
                 {groupsToDisplay.length === 0 ? (
                     <NoDataContent />
-                ) : groupsToDisplay.map((groupName) => {
+                ) : groupsToDisplay.slice(0, displayedGroupCount).map((groupName) => {
                     const groupPlayers = finalDataByGroup[groupName];
                     if (!groupPlayers || groupPlayers.length === 0) return null;
 
@@ -2062,105 +2125,101 @@ function ExternalScoreboard() {
                                 </div>
                             </header>
                             <div className="overflow-x-auto">
-                                <table className="w-full text-center border-collapse sb-table">
-                                    <thead className="sb-table-head text-sm">
-                                        <tr>
-                                            <th rowSpan={2} className="py-1 px-1 text-center align-middle font-bold sb-th w-12">{t('group')}</th>
-                                            <th rowSpan={2} className="py-1 px-1 text-center align-middle font-bold sb-th w-28 md:w-32 lg:w-36">{t('playerName')}</th>
-                                            <th rowSpan={2} className="py-1 px-1 text-center align-middle font-bold sb-th w-20 md:w-24 lg:w-28">{t('club')}</th>
-                                            <th rowSpan={2} className="py-1 px-1 text-center align-middle font-bold sb-th w-16 md:w-20 lg:w-24">{t('course')}</th>
-                                            <th colSpan={9} className="py-1 px-1 text-center align-middle font-bold sb-th w-auto">HOLE</th>
-                                            <th rowSpan={2} className="py-1 px-1 min-w-[4rem] text-center align-middle font-bold sb-th">{t('sum')}</th>
-                                            <th rowSpan={2} className="py-1 px-1 min-w-[4rem] text-center align-middle font-bold sb-th sb-rank-gold">{t('totalScore')}</th>
-                                            <th rowSpan={2} className="py-1 px-1 min-w-[4rem] text-center align-middle font-bold">{t('rank')}</th>
-                                        </tr>
-                                        <tr className="border-b border-[color:var(--sb-border-color)]">
-                                            {Array.from({ length: 9 }).map((_, i) => <th key={i} className={`py-1 px-1 font-bold text-base align-middle sb-th sb-th-hole min-w-[2.5rem]`}>{i + 1}</th>)}
-                                        </tr>
-                                    </thead>
-                                    <tbody className="text-base">
-                                        {groupPlayers.map((player: ProcessedPlayer) => (
-                                            <React.Fragment key={player.id}>
-                                                {player.assignedCourses.length > 0 ? player.assignedCourses.map((course: any, courseIndex: number) => (
-                                                    <tr key={`${player.id}-${course.id}`} className="border-b border-[color:var(--sb-cell-border)] last:border-0">
-                                                        {courseIndex === 0 && (
-                                                            <>
-                                                                <td rowSpan={player.assignedCourses.length || 1} className="py-0.5 px-1 align-middle font-bold sb-td sb-td-info w-12 truncate">{player.jo}</td>
-                                                                <td rowSpan={player.assignedCourses.length || 1} className="py-0.5 px-1 text-center align-middle font-semibold sb-td sb-td-info w-28 md:w-32 lg:w-36 truncate">{player.name}</td>
-                                                                <td rowSpan={player.assignedCourses.length || 1} className="py-0.5 px-1 text-center align-middle opacity-70 sb-td sb-td-info w-20 md:w-24 lg:w-28 truncate">{player.club}</td>
-                                                            </>
-                                                        )}
-                                                        <td className="py-0.5 px-1 align-middle text-center sb-td w-16 md:w-20 lg:w-24 truncate">{player.coursesData[course.id]?.courseName}</td>
-                                                        {player.coursesData[course.id]?.holeScores.map((score: any, i: number) => {
-                                                            const holeNumber = i + 1;
-                                                            // 관리자 대시보드와 동일한 방식으로 로그 조회 (배열에서 find 사용)
-                                                            const logs = playerScoreLogs[player.id] || [];
-                                                            const cellLog = Array.isArray(logs)
-                                                                ? logs.find(l => String(l.courseId) === String(course.id) && Number(l.holeNumber) === holeNumber)
-                                                                : (playerScoreLogs[player.id]?.[course.id]?.[holeNumber]); // 맵 구조 폴백
-                                                            const isModified = !!cellLog && cellLog.oldValue !== 0 && cellLog.oldValue !== cellLog.newValue;
+                                <TooltipProvider delayDuration={0}>
+                                    <table className="w-full text-center border-collapse sb-table">
+                                        <thead className="sb-table-head text-sm">
+                                            <tr>
+                                                <th rowSpan={2} className="py-1 px-1 text-center align-middle font-bold sb-th w-12">{t('group')}</th>
+                                                <th rowSpan={2} className="py-1 px-1 text-center align-middle font-bold sb-th w-28 md:w-32 lg:w-36">{t('playerName')}</th>
+                                                <th rowSpan={2} className="py-1 px-1 text-center align-middle font-bold sb-th w-20 md:w-24 lg:w-28">{t('club')}</th>
+                                                <th rowSpan={2} className="py-1 px-1 text-center align-middle font-bold sb-th w-16 md:w-20 lg:w-24">{t('course')}</th>
+                                                <th colSpan={9} className="py-1 px-1 text-center align-middle font-bold sb-th w-auto">HOLE</th>
+                                                <th rowSpan={2} className="py-1 px-1 min-w-[4rem] text-center align-middle font-bold sb-th">{t('sum')}</th>
+                                                <th rowSpan={2} className="py-1 px-1 min-w-[4rem] text-center align-middle font-bold sb-th sb-rank-gold">{t('totalScore')}</th>
+                                                <th rowSpan={2} className="py-1 px-1 min-w-[4rem] text-center align-middle font-bold">{t('rank')}</th>
+                                            </tr>
+                                            <tr className="border-b border-[color:var(--sb-border-color)]">
+                                                {Array.from({ length: 9 }).map((_, i) => <th key={i} className={`py-1 px-1 font-bold text-base align-middle sb-th sb-th-hole min-w-[2.5rem]`}>{i + 1}</th>)}
+                                            </tr>
+                                        </thead>
+                                        <tbody className="text-base">
+                                            {groupPlayers.map((player: ProcessedPlayer) => (
+                                                <React.Fragment key={player.id}>
+                                                    {player.assignedCourses.length > 0 ? player.assignedCourses.map((course: any, courseIndex: number) => (
+                                                        <tr key={`${player.id}-${course.id}`} className="border-b border-[color:var(--sb-cell-border)] last:border-0">
+                                                            {courseIndex === 0 && (
+                                                                <>
+                                                                    <td rowSpan={player.assignedCourses.length || 1} className="py-0.5 px-1 align-middle font-bold sb-td sb-td-info w-12 truncate">{player.jo}</td>
+                                                                    <td rowSpan={player.assignedCourses.length || 1} className="py-0.5 px-1 text-center align-middle font-semibold sb-td sb-td-info w-28 md:w-32 lg:w-36 truncate">{player.name}</td>
+                                                                    <td rowSpan={player.assignedCourses.length || 1} className="py-0.5 px-1 text-center align-middle opacity-70 sb-td sb-td-info w-20 md:w-24 lg:w-28 truncate">{player.club}</td>
+                                                                </>
+                                                            )}
+                                                            <td className="py-0.5 px-1 align-middle text-center sb-td w-16 md:w-20 lg:w-24 truncate">{player.coursesData[course.id]?.courseName}</td>
+                                                            {player.coursesData[course.id]?.holeScores.map((score: any, i: number) => {
+                                                                const holeNumber = i + 1;
+                                                                // 관리자 대시보드와 동일한 방식으로 로그 조회 (배열에서 find 사용)
+                                                                const logs = playerScoreLogs[player.id] || [];
+                                                                const cellLog = Array.isArray(logs)
+                                                                    ? logs.find(l => String(l.courseId) === String(course.id) && Number(l.holeNumber) === holeNumber)
+                                                                    : (playerScoreLogs[player.id]?.[course.id]?.[holeNumber]); // 맵 구조 폴백
+                                                                const isModified = !!cellLog && cellLog.oldValue !== 0 && cellLog.oldValue !== cellLog.newValue;
 
-                                                            const tooltipContent = cellLog ? (
-                                                                <div>
-                                                                    <div><b>수정자:</b> {
-                                                                        cellLog.modifiedByType === 'admin' ? '관리자' :
-                                                                            cellLog.modifiedByType === 'captain' ? (cellLog.modifiedBy || '조장') :
-                                                                                (cellLog.modifiedBy && cellLog.modifiedBy !== 'referee' ? cellLog.modifiedBy : '심판')
-                                                                    }</div>
-                                                                    <div><b>일시:</b> {cellLog.modifiedAt ? new Date(cellLog.modifiedAt).toLocaleString('ko-KR') : ''}</div>
-                                                                    <div><b>변경:</b> {cellLog.oldValue} → {cellLog.newValue}</div>
-                                                                    {cellLog.comment && <div><b>비고:</b> {cellLog.comment}</div>}
-                                                                </div>
-                                                            ) : null;
+                                                                const tooltipContent = cellLog ? (
+                                                                    <div>
+                                                                        <div><b>수정자:</b> {
+                                                                            cellLog.modifiedByType === 'admin' ? '관리자' :
+                                                                                cellLog.modifiedByType === 'captain' ? (cellLog.modifiedBy || '조장') :
+                                                                                    (cellLog.modifiedBy && cellLog.modifiedBy !== 'referee' ? cellLog.modifiedBy : '심판')
+                                                                        }</div>
+                                                                        <div><b>일시:</b> {cellLog.modifiedAt ? new Date(cellLog.modifiedAt).toLocaleString('ko-KR') : ''}</div>
+                                                                        <div><b>변경:</b> {cellLog.oldValue} → {cellLog.newValue}</div>
+                                                                        {cellLog.comment && <div><b>비고:</b> {cellLog.comment}</div>}
+                                                                    </div>
+                                                                ) : null;
 
-                                                            const isMobile = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
-                                                            const tooltipOpen = openTooltip && openTooltip.playerId === player.id && openTooltip.courseId === course.id && openTooltip.holeIndex === i;
+                                                                const tooltipOpen = openTooltip && openTooltip.playerId === player.id && openTooltip.courseId === course.id && openTooltip.holeIndex === i;
 
-                                                            const par = getParForHole(tournament, course.id, i);
-                                                            let pm = null;
-                                                            if (par !== null && score !== null && score !== undefined) {
-                                                                pm = score - par;
-                                                            }
+                                                                const par = getParForHole(tournament, course.id, i);
+                                                                let pm = null;
+                                                                if (par !== null && score !== null && score !== undefined) {
+                                                                    pm = score - par;
+                                                                }
 
-                                                            return (
-                                                                <td
-                                                                    key={i}
-                                                                    className={cn(
-                                                                        `py-0.5 px-1 align-middle font-mono font-bold sb-td ${i % 2 !== 0 ? 'sb-td-stripe' : ''}`,
-                                                                        score === 0 ? 'text-xs' : 'text-xl',
-                                                                        isModified ? 'sb-score-plus font-bold cursor-pointer' : ''
-                                                                    )}
-                                                                    style={isModified ? { position: 'relative', zIndex: 10 } : {}}
-                                                                    onTouchStart={isModified && isMobile ? (e) => {
-                                                                        const cellKey = `${player.id}-${course.id}-${i}`;
-                                                                        touchStartTimeRef.current[cellKey] = Date.now();
-                                                                        touchTimerRef.current[cellKey] = setTimeout(() => {
+                                                                return (
+                                                                    <td
+                                                                        key={i}
+                                                                        className={cn(
+                                                                            `py-0.5 px-1 align-middle font-mono font-bold sb-td ${i % 2 !== 0 ? 'sb-td-stripe' : ''}`,
+                                                                            score === 0 ? 'text-xs' : 'text-xl',
+                                                                            isModified ? 'sb-score-plus font-bold cursor-pointer' : ''
+                                                                        )}
+                                                                        style={{
+                                                                            ...(isModified ? { position: 'relative', zIndex: 10 } : {}),
+                                                                            userSelect: 'none',
+                                                                            WebkitUserSelect: 'none',
+                                                                            WebkitTouchCallout: 'none'
+                                                                        }}
+                                                                        onClick={isModified && isMobile ? (e) => {
+                                                                            // 즉시 반응하도록 수정 (롱프레스 제거)
+                                                                            e.stopPropagation();
                                                                             if (tooltipOpen) setOpenTooltip(null);
                                                                             else setOpenTooltip({ playerId: player.id, courseId: course.id, holeIndex: i });
-                                                                        }, 500);
-                                                                    } : undefined}
-                                                                    onTouchEnd={isModified && isMobile ? (e) => {
-                                                                        const cellKey = `${player.id}-${course.id}-${i}`;
-                                                                        if (touchTimerRef.current[cellKey]) {
-                                                                            clearTimeout(touchTimerRef.current[cellKey]);
-                                                                            delete touchTimerRef.current[cellKey];
-                                                                        }
-                                                                        delete touchStartTimeRef.current[cellKey];
-                                                                    } : undefined}
-                                                                    onTouchCancel={isModified && isMobile ? (e) => {
-                                                                        const cellKey = `${player.id}-${course.id}-${i}`;
-                                                                        if (touchTimerRef.current[cellKey]) {
-                                                                            clearTimeout(touchTimerRef.current[cellKey]);
-                                                                            delete touchTimerRef.current[cellKey];
-                                                                        }
-                                                                        delete touchStartTimeRef.current[cellKey];
-                                                                    } : undefined}
-                                                                    id={isModified ? `score-tooltip-${player.id}-${course.id}-${i}` : undefined}
-                                                                >
-                                                                    <TooltipProvider delayDuration={0}>
+                                                                        } : undefined}
+                                                                        id={isModified ? `score-tooltip-${player.id}-${course.id}-${i}` : undefined}
+                                                                    >
                                                                         <Tooltip open={isMobile && isModified ? (tooltipOpen ? true : false) : undefined}>
                                                                             <TooltipTrigger asChild>
-                                                                                <span>
+                                                                                <span
+                                                                                    className="cursor-pointer"
+                                                                                    onClick={(e) => {
+                                                                                        if (isModified && isMobile) {
+                                                                                            e.stopPropagation();
+                                                                                            e.preventDefault(); // 기본 동작 방지
+                                                                                            if (tooltipOpen) setOpenTooltip(null);
+                                                                                            else setOpenTooltip({ playerId: player.id, courseId: course.id, holeIndex: i });
+                                                                                        }
+                                                                                    }}
+                                                                                >
                                                                                     {score === null ?
                                                                                         '-' :
                                                                                         score === 0 ?
@@ -2188,117 +2247,117 @@ function ExternalScoreboard() {
                                                                                 </TooltipContent>
                                                                             )}
                                                                         </Tooltip>
-                                                                    </TooltipProvider>
-                                                                </td>
-                                                            );
-                                                        })}
-                                                        {(() => {
-                                                            let courseSumElem: string | JSX.Element = '-';
-                                                            if (player.hasAnyScore && !player.hasForfeited) {
-                                                                const courseData = tournament?.courses?.[course.id];
-                                                                const { sum, pm } = getCourseSumAndPlusMinus(tournament, courseData, player.coursesData[course.id]?.holeScores || []);
-                                                                courseSumElem = (
-                                                                    <span>
-                                                                        {sum}
-                                                                        {pm !== null && (
-                                                                            <span className={cn("ml-1 align-middle text-xs", pm < 0 ? "sb-score-minus" : pm > 0 ? "sb-score-plus" : "sb-score-zero")} style={{ fontSize: '0.7em', fontWeight: 600 }}>
-                                                                                {pm === 0 ? 'E' : (pm > 0 ? `+${pm}` : pm)}
-                                                                            </span>
-                                                                        )}
-                                                                    </span>
+                                                                    </td>
                                                                 );
-                                                            } else if (player.hasForfeited) {
-                                                                // 배열 구조로 변경된 로그에서 기권 타입 찾기
-                                                                const logs = playerScoreLogs[player.id] || [];
-                                                                let foundType: string = 'forfeit';
-                                                                for (const l of logs) {
-                                                                    if (l.newValue === 0 && (l.modifiedByType === 'judge' || l.modifiedByType === 'admin')) {
-                                                                        if (l.comment?.includes('불참')) { foundType = 'absent'; break; }
-                                                                        if (l.comment?.includes('실격')) { foundType = 'disqualified'; break; }
-                                                                        if (l.comment?.includes('기권')) { foundType = 'forfeit'; break; }
+                                                            })}
+                                                            {(() => {
+                                                                let courseSumElem: string | JSX.Element = '-';
+                                                                if (player.hasAnyScore && !player.hasForfeited) {
+                                                                    const courseData = tournament?.courses?.[course.id];
+                                                                    const { sum, pm } = getCourseSumAndPlusMinus(tournament, courseData, player.coursesData[course.id]?.holeScores || []);
+                                                                    courseSumElem = (
+                                                                        <span>
+                                                                            {sum}
+                                                                            {pm !== null && (
+                                                                                <span className={cn("ml-1 align-middle text-xs", pm < 0 ? "sb-score-minus" : pm > 0 ? "sb-score-plus" : "sb-score-zero")} style={{ fontSize: '0.7em', fontWeight: 600 }}>
+                                                                                    {pm === 0 ? 'E' : (pm > 0 ? `+${pm}` : pm)}
+                                                                                </span>
+                                                                            )}
+                                                                        </span>
+                                                                    );
+                                                                } else if (player.hasForfeited) {
+                                                                    // 배열 구조로 변경된 로그에서 기권 타입 찾기
+                                                                    const logs = playerScoreLogs[player.id] || [];
+                                                                    let foundType: string = 'forfeit';
+                                                                    for (const l of logs) {
+                                                                        if (l.newValue === 0 && (l.modifiedByType === 'judge' || l.modifiedByType === 'admin')) {
+                                                                            if (l.comment?.includes('불참')) { foundType = 'absent'; break; }
+                                                                            if (l.comment?.includes('실격')) { foundType = 'disqualified'; break; }
+                                                                            if (l.comment?.includes('기권')) { foundType = 'forfeit'; break; }
+                                                                        }
                                                                     }
+                                                                    courseSumElem = t(foundType as any);
                                                                 }
-                                                                courseSumElem = t(foundType as any);
-                                                            }
-                                                            return <td className={cn("py-0.5 px-1 align-middle font-bold sb-td opacity-80", player.hasForfeited ? 'text-xs' : 'text-xl')}>{courseSumElem}</td>;
-                                                        })()}
-                                                        {courseIndex === 0 && (
-                                                            <>
-                                                                <td rowSpan={player.assignedCourses.length || 1} className="py-0.5 px-1 align-middle font-bold sb-rank text-2xl sb-td">
-                                                                    {player.hasForfeited ? (() => {
-                                                                        // 배열 구조로 변경된 로그에서 기권 타입 찾기
-                                                                        const logs = playerScoreLogs[player.id] || [];
-                                                                        let foundType: string = 'forfeit';
-                                                                        for (const l of logs) {
+                                                                return <td className={cn("py-0.5 px-1 align-middle font-bold sb-td opacity-80", player.hasForfeited ? 'text-xs' : 'text-xl')}>{courseSumElem}</td>;
+                                                            })()}
+                                                            {courseIndex === 0 && (
+                                                                <>
+                                                                    <td rowSpan={player.assignedCourses.length || 1} className="py-0.5 px-1 align-middle font-bold sb-rank text-2xl sb-td">
+                                                                        {player.hasForfeited ? (() => {
+                                                                            // 배열 구조로 변경된 로그에서 기권 타입 찾기
+                                                                            const logs = playerScoreLogs[player.id] || [];
+                                                                            let foundType: string = 'forfeit';
+                                                                            for (const l of logs) {
+                                                                                if (l.newValue === 0 && (l.modifiedByType === 'judge' || l.modifiedByType === 'admin')) {
+                                                                                    if (l.comment?.includes('불참')) { foundType = 'absent'; break; }
+                                                                                    if (l.comment?.includes('실격')) { foundType = 'disqualified'; break; }
+                                                                                    if (l.comment?.includes('기권')) { foundType = 'forfeit'; break; }
+                                                                                }
+                                                                            }
+                                                                            return t(foundType as any);
+                                                                        })() : (player.hasAnyScore ? (
+                                                                            <span>
+                                                                                {isValidNumber(player.totalScore) ? player.totalScore : '-'}
+                                                                                {(() => {
+                                                                                    const { pm } = getPlayerTotalAndPlusMinusAllCourses(tournament, player, player.allAssignedCourses);
+                                                                                    if (pm === null || pm === undefined) return null;
+                                                                                    return (
+                                                                                        <span
+                                                                                            className={cn(
+                                                                                                "ml-1 align-middle text-xs",
+                                                                                                pm < 0 ? "sb-score-minus" : pm > 0 ? "sb-score-plus" : "sb-score-zero"
+                                                                                            )}
+                                                                                            style={{ fontSize: '0.7em', fontWeight: 600 }}
+                                                                                        >
+                                                                                            {pm === 0 ? 'E' : (pm > 0 ? `+${pm}` : pm)}
+                                                                                        </span>
+                                                                                    );
+                                                                                })()}
+                                                                            </span>
+                                                                        ) : '-')}
+                                                                    </td>
+                                                                    <td rowSpan={player.assignedCourses.length || 1} className={cn("py-0.5 px-1 align-middle font-bold sb-rank text-2xl sb-td", player.hasForfeited ? "text-xs" : "text-xl")}>
+                                                                        {player.rank !== null ? formatRank(player.rank, currentLang) : ''}
+                                                                    </td>
+                                                                </>
+                                                            )}
+                                                        </tr>
+                                                    )) : (
+                                                        <tr className="border-b border-[color:var(--sb-cell-border)] last:border-0">
+                                                            <td className="py-0.5 px-1 align-middle font-bold sb-td sb-td-info w-12 truncate">{player.jo}</td>
+                                                            <td className="py-0.5 px-1 text-center align-middle font-semibold sb-td sb-td-info w-28 md:w-32 lg:w-36 truncate">{player.name}</td>
+                                                            <td className="py-0.5 px-1 text-center align-middle opacity-70 sb-td sb-td-info w-20 md:w-24 lg:w-28 truncate">{player.club}</td>
+                                                            <td colSpan={11} className="py-0.5 px-1 align-middle text-center opacity-50 sb-td">{t('noCourseDisplay')}</td>
+                                                            <td className={cn("py-0.5 px-1 align-middle font-bold sb-rank sb-td", player.hasForfeited ? "text-xs" : "text-xl")}>
+                                                                {player.hasForfeited ? (() => {
+                                                                    const playerLogMap = playerScoreLogs[player.id] || {};
+                                                                    let foundType: string = 'forfeit';
+                                                                    let stopLoop = false;
+                                                                    for (const cid in playerLogMap) {
+                                                                        if (stopLoop) break;
+                                                                        const courseLogs = playerLogMap[cid];
+                                                                        for (const hNum in courseLogs) {
+                                                                            const l = courseLogs[Number(hNum)];
                                                                             if (l.newValue === 0 && (l.modifiedByType === 'judge' || l.modifiedByType === 'admin')) {
-                                                                                if (l.comment?.includes('불참')) { foundType = 'absent'; break; }
-                                                                                if (l.comment?.includes('실격')) { foundType = 'disqualified'; break; }
-                                                                                if (l.comment?.includes('기권')) { foundType = 'forfeit'; break; }
+                                                                                if (l.comment?.includes('불참')) { foundType = 'absent'; stopLoop = true; break; }
+                                                                                if (l.comment?.includes('실격')) { foundType = 'disqualified'; stopLoop = true; break; }
+                                                                                if (l.comment?.includes('기권')) { foundType = 'forfeit'; stopLoop = true; break; }
                                                                             }
                                                                         }
-                                                                        return t(foundType as any);
-                                                                    })() : (player.hasAnyScore ? (
-                                                                        <span>
-                                                                            {isValidNumber(player.totalScore) ? player.totalScore : '-'}
-                                                                            {(() => {
-                                                                                const { pm } = getPlayerTotalAndPlusMinusAllCourses(tournament, player, player.allAssignedCourses);
-                                                                                if (pm === null || pm === undefined) return null;
-                                                                                return (
-                                                                                    <span
-                                                                                        className={cn(
-                                                                                            "ml-1 align-middle text-xs",
-                                                                                            pm < 0 ? "sb-score-minus" : pm > 0 ? "sb-score-plus" : "sb-score-zero"
-                                                                                        )}
-                                                                                        style={{ fontSize: '0.7em', fontWeight: 600 }}
-                                                                                    >
-                                                                                        {pm === 0 ? 'E' : (pm > 0 ? `+${pm}` : pm)}
-                                                                                    </span>
-                                                                                );
-                                                                            })()}
-                                                                        </span>
-                                                                    ) : '-')}
-                                                                </td>
-                                                                <td rowSpan={player.assignedCourses.length || 1} className={cn("py-0.5 px-1 align-middle font-bold sb-rank text-2xl sb-td", player.hasForfeited ? "text-xs" : "text-xl")}>
-                                                                    {player.rank !== null ? formatRank(player.rank, currentLang) : ''}
-                                                                </td>
-                                                            </>
-                                                        )}
-                                                    </tr>
-                                                )) : (
-                                                    <tr className="border-b border-[color:var(--sb-cell-border)] last:border-0">
-                                                        <td className="py-0.5 px-1 align-middle font-bold sb-td sb-td-info w-12 truncate">{player.jo}</td>
-                                                        <td className="py-0.5 px-1 text-center align-middle font-semibold sb-td sb-td-info w-28 md:w-32 lg:w-36 truncate">{player.name}</td>
-                                                        <td className="py-0.5 px-1 text-center align-middle opacity-70 sb-td sb-td-info w-20 md:w-24 lg:w-28 truncate">{player.club}</td>
-                                                        <td colSpan={11} className="py-0.5 px-1 align-middle text-center opacity-50 sb-td">{t('noCourseDisplay')}</td>
-                                                        <td className={cn("py-0.5 px-1 align-middle font-bold sb-rank sb-td", player.hasForfeited ? "text-xs" : "text-xl")}>
-                                                            {player.hasForfeited ? (() => {
-                                                                const playerLogMap = playerScoreLogs[player.id] || {};
-                                                                let foundType: string = 'forfeit';
-                                                                let stopLoop = false;
-                                                                for (const cid in playerLogMap) {
-                                                                    if (stopLoop) break;
-                                                                    const courseLogs = playerLogMap[cid];
-                                                                    for (const hNum in courseLogs) {
-                                                                        const l = courseLogs[Number(hNum)];
-                                                                        if (l.newValue === 0 && (l.modifiedByType === 'judge' || l.modifiedByType === 'admin')) {
-                                                                            if (l.comment?.includes('불참')) { foundType = 'absent'; stopLoop = true; break; }
-                                                                            if (l.comment?.includes('실격')) { foundType = 'disqualified'; stopLoop = true; break; }
-                                                                            if (l.comment?.includes('기권')) { foundType = 'forfeit'; stopLoop = true; break; }
-                                                                        }
                                                                     }
-                                                                }
-                                                                return t(foundType as any);
-                                                            })() : (player.hasAnyScore ? player.totalScore : '-')}
-                                                        </td>
-                                                        <td className={cn("py-0.5 px-1 align-middle font-bold", player.hasForfeited ? "text-xs" : "text-xl")}>
-                                                            {player.rank !== null ? formatRank(player.rank, currentLang) : ''}
-                                                        </td>
-                                                    </tr>
-                                                )}
-                                            </React.Fragment>
-                                        ))}
-                                    </tbody>
-                                </table>
+                                                                    return t(foundType as any);
+                                                                })() : (player.hasAnyScore ? player.totalScore : '-')}
+                                                            </td>
+                                                            <td className={cn("py-0.5 px-1 align-middle font-bold", player.hasForfeited ? "text-xs" : "text-xl")}>
+                                                                {player.rank !== null ? formatRank(player.rank, currentLang) : ''}
+                                                            </td>
+                                                        </tr>
+                                                    )}
+                                                </React.Fragment>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </TooltipProvider>
                             </div>
                         </div >
                     )
