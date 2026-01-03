@@ -12,6 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { db } from "@/lib/firebase";
 import { ref, onValue, get, set, remove, update } from "firebase/database";
@@ -98,6 +99,7 @@ export default function BadgePage() {
     offsetX: 0, // 가로 오프셋 (픽셀, -200 ~ 200)
     offsetY: 0, // 세로 오프셋 (픽셀, -200 ~ 200)
     opacity: 0.10, // 투명도 (0.0 ~ 1.0)
+    showLogo: true, // 로고 표시 여부
   });
 
   // 로고 설정 업데이트 함수
@@ -183,7 +185,8 @@ export default function BadgePage() {
             size: settings.size ?? 0.8,
             offsetX: settings.offsetX ?? 0,
             offsetY: settings.offsetY ?? 0,
-            opacity: settings.opacity ?? 0.10
+            opacity: settings.opacity ?? 0.10,
+            showLogo: settings.showLogo ?? true
           });
         }
       } catch (error) {
@@ -195,17 +198,21 @@ export default function BadgePage() {
     loadSettings();
 
     // 실시간 구독으로 설정 변경 감지
-    const unsubSettings = onValue(ref(db, 'badges/settings'), (snapshot) => {
-      if (snapshot.exists()) {
-        const settings = snapshot.val();
-        setLogoSettings({
-          size: settings.size ?? 0.8,
-          offsetX: settings.offsetX ?? 0,
-          offsetY: settings.offsetY ?? 0,
-          opacity: settings.opacity ?? 0.10
-        });
-      }
-    });
+    let unsubSettings = () => { };
+    if (db) {
+      unsubSettings = onValue(ref(db, 'badges/settings'), (snapshot) => {
+        if (snapshot.exists()) {
+          const settings = snapshot.val();
+          setLogoSettings({
+            size: settings.size ?? 0.8,
+            offsetX: settings.offsetX ?? 0,
+            offsetY: settings.offsetY ?? 0,
+            opacity: settings.opacity ?? 0.10,
+            showLogo: settings.showLogo ?? true
+          });
+        }
+      });
+    }
 
     return () => {
       unsubSettings();
@@ -482,38 +489,39 @@ export default function BadgePage() {
           // 로고 크기 설정 (기본값 0.8, 파라미터로 받은 값 사용)
           const sizeRatio = logoSize !== undefined ? logoSize : 0.8;
 
-          // 명찰 크기의 설정된 비율을 기준으로 하되, 원본 비율 유지 (논리적 크기 - Float)
+          // 로고를 배경과 동일하게 절대 픽셀 좌표로 그리기 위해 좌표 변환 재설정
+          ctx.save();
+          ctx.setTransform(1, 0, 0, 1, 0, 0); // 배경과 동일하게 절대 좌표 사용
+
+          // 로고가 들어갈 최대 영역 정의 (명찰 크기의 sizeRatio 비율)
+          // 절대 픽셀 크기(targetWidth, targetHeight) 기준으로 계산
+          const maxLogoWidth = targetWidth * sizeRatio;
+          const maxLogoHeight = targetHeight * sizeRatio;
+          const maxAreaAspectRatio = maxLogoWidth / maxLogoHeight;
+
+          // 명찰 크기의 설정된 비율을 기준으로 하되, 원본 비율 유지
           let logoWidth: number;
           let logoHeight: number;
 
-          if (logoAspectRatio > badgeAspectRatio) {
-            // 로고가 명찰보다 가로로 더 긴 경우: 가로를 기준으로 크기 결정
-            logoWidth = pxWidth * sizeRatio;
+          // 로고를 최대 영역 내에 맞추되 비율 유지 (contain 방식)
+          if (logoAspectRatio > maxAreaAspectRatio) {
+            // 로고가 허용 영역보다 가로로 길면 → 가로를 기준으로 축소
+            logoWidth = maxLogoWidth;
             logoHeight = logoWidth / logoAspectRatio;
           } else {
-            // 로고가 명찰보다 세로로 더 긴 경우: 세로를 기준으로 크기 결정
-            logoHeight = pxHeight * sizeRatio;
-            logoWidth = logoHeight * logoAspectRatio;
-          }
-
-          // 명찰 크기를 넘지 않도록 한 번 더 체크
-          if (logoWidth > pxWidth) {
-            logoWidth = pxWidth * sizeRatio;
-            logoHeight = logoWidth / logoAspectRatio;
-          }
-          if (logoHeight > pxHeight) {
-            logoHeight = pxHeight * sizeRatio;
+            // 로고가 허용 영역보다 세로로 길거나 비슷하면 → 세로를 기준으로 축소
+            logoHeight = maxLogoHeight;
             logoWidth = logoHeight * logoAspectRatio;
           }
 
           // 위치 오프셋 적용 (기본값 0, 파라미터로 받은 값 사용)
-          const offsetX = logoOffsetX !== undefined ? logoOffsetX : 0;
-          const offsetY = logoOffsetY !== undefined ? logoOffsetY : 0;
+          // 오프셋도 절대 픽셀 단위로 변환
+          const absoluteOffsetX = (logoOffsetX !== undefined ? logoOffsetX : 0) * ratioX;
+          const absoluteOffsetY = (logoOffsetY !== undefined ? logoOffsetY : 0) * ratioY;
 
-          const logoX = (pxWidth - logoWidth) / 2 + offsetX; // 가로 중앙 + 오프셋
-          const logoY = (pxHeight - logoHeight) / 2 + offsetY; // 세로 중앙 + 오프셋
+          const logoX = (targetWidth - logoWidth) / 2 + absoluteOffsetX; // 가로 중앙 + 오프셋
+          const logoY = (targetHeight - logoHeight) / 2 + absoluteOffsetY; // 세로 중앙 + 오프셋
 
-          ctx.save();
           // 로고 투명도 설정
           const opacity = logoOpacity !== undefined ? logoOpacity : 0.10;
           ctx.globalAlpha = opacity;
@@ -711,7 +719,7 @@ export default function BadgePage() {
             tournament.name || '대회명',
             badgeWidth,
             badgeHeight,
-            logoUrl,
+            logoSettings.showLogo ? logoUrl : undefined,
             logoSettings.size,
             logoSettings.offsetX,
             logoSettings.offsetY,
@@ -813,7 +821,7 @@ export default function BadgePage() {
           tournament.name || '대회명',
           badgeWidth,
           badgeHeight,
-          logoUrl,
+          logoSettings.showLogo ? logoUrl : undefined,
           logoSettings.size,
           logoSettings.offsetX,
           logoSettings.offsetY,
@@ -1058,8 +1066,21 @@ export default function BadgePage() {
           {/* 로고 설정 */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">로고 설정</CardTitle>
-              <CardDescription>배경 로고의 크기, 위치, 진하기를 조정할 수 있습니다</CardDescription>
+
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-lg">로고 설정</CardTitle>
+                  <CardDescription>배경 로고의 크기, 위치, 진하기를 조정할 수 있습니다</CardDescription>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Switch
+                    id="show-logo"
+                    checked={logoSettings.showLogo}
+                    onCheckedChange={(checked) => updateLogoSettings({ showLogo: checked })}
+                  />
+                  <Label htmlFor="show-logo">로고 켜기/끄기</Label>
+                </div>
+              </div>
             </CardHeader>
             <CardContent className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
