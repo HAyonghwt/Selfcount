@@ -86,7 +86,7 @@ export default function GiftEventAdminPage() {
           };
           setLogoSettings(loadedSettings);
         }
-        
+
         // 로고 URL 불러오기
         const logosSnapshot = await get(ref(db, 'logos'));
         if (logosSnapshot.exists()) {
@@ -100,9 +100,9 @@ export default function GiftEventAdminPage() {
         console.error('[GiftEventAdminPage] Error loading initial data:', error);
       }
     };
-    
+
     loadInitialData();
-    
+
     // 실시간 구독으로 설정 변경 감지 (초기 로드 후에도 작동)
     const unsubSettings = onValue(ref(db, 'giftEvent/settings'), (snapshot) => {
       if (snapshot.exists()) {
@@ -151,12 +151,12 @@ export default function GiftEventAdminPage() {
       console.error('[GiftEventAdminPage] Database not initialized');
       return;
     }
-    
+
     // 항상 Firebase에서 현재 설정을 불러와서 병합 (최신 상태 보장)
     try {
       const currentSettingsSnapshot = await get(ref(db, 'giftEvent/settings'));
       let finalSettings;
-      
+
       if (currentSettingsSnapshot.exists()) {
         // Firebase에 설정이 있으면 Firebase의 설정과 병합
         const currentSettings = currentSettingsSnapshot.val();
@@ -171,7 +171,7 @@ export default function GiftEventAdminPage() {
           ...newSettings
         };
       }
-      
+
       // 기본값 보장
       finalSettings = {
         enabled: finalSettings.enabled ?? false,
@@ -183,7 +183,7 @@ export default function GiftEventAdminPage() {
         intensity: finalSettings.intensity ?? 200,
         isBlackAndWhite: finalSettings.isBlackAndWhite ?? false
       };
-      
+
       setLogoSettings(finalSettings);
       // set을 사용하여 전체 설정을 저장
       await set(ref(db, 'giftEvent/settings'), finalSettings);
@@ -214,20 +214,10 @@ export default function GiftEventAdminPage() {
 
     setCurrentWinner(null);
 
-    // 20% 확률로 실제 멈춘 이름이 당첨자가 되도록 수정
-    const shouldUseRealWinner = Math.random() < 0.2; // 20% 확률
-
+    // 기존 방식: 완전 랜덤
     let winnerData;
-    if (shouldUseRealWinner && remaining.length > 0) {
-      // 실제 멈춘 이름 중에서 선택 (3~5명 중 하나)
-      const realWinnerIndex = Math.floor(Math.random() * Math.min(remaining.length, 5));
-      const realWinnerId = remaining[realWinnerIndex];
-      winnerData = participants.find(p => p.id === realWinnerId);
-    } else {
-      // 기존 방식: 완전 랜덤
-      const winnerId = remaining[Math.floor(Math.random() * remaining.length)];
-      winnerData = participants.find(p => p.id === winnerId);
-    }
+    const winnerId = remaining[Math.floor(Math.random() * remaining.length)];
+    winnerData = participants.find(p => p.id === winnerId);
 
     if (winnerData) {
       setCurrentWinner(winnerData);
@@ -259,11 +249,11 @@ export default function GiftEventAdminPage() {
 
   const handleResetEvent = async () => {
     if (!db) return;
-    
+
     // 로고 설정을 백업
     const settingsSnapshot = await get(ref(db, 'giftEvent/settings'));
     const savedSettings = settingsSnapshot.exists() ? settingsSnapshot.val() : null;
-    
+
     // giftEvent의 추첨 관련 데이터만 삭제 (settings는 보존)
     const updates: any = {
       status: null,
@@ -272,15 +262,15 @@ export default function GiftEventAdminPage() {
       currentWinner: null,
       drawStartTime: null
     };
-    
+
     // null 값으로 업데이트하여 해당 필드만 삭제
     await update(ref(db, 'giftEvent'), updates);
-    
+
     // 로고 설정이 있었다면 복원 (안전장치)
     if (savedSettings) {
       await set(ref(db, 'giftEvent/settings'), savedSettings);
     }
-    
+
     setCurrentWinner(null);
     setWinners([]);
     setShowResetConfirm(false);
