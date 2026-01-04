@@ -1,5 +1,5 @@
 "use client"
-import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useMemo, useRef, useCallback, useTransition } from 'react';
 import { db, ensureAuthenticated } from '@/lib/firebase';
 import { ref, onValue, onChildChanged, off, query } from 'firebase/database';
 import { Flame, ChevronUp, ChevronDown, Globe, Palette } from 'lucide-react';
@@ -322,6 +322,7 @@ function ExternalScoreboard() {
     const [teamNTPData, setTeamNTPData] = useState<any>(null);
     const [filterGroup, setFilterGroup] = useState('all');
     const scrollContainerRef = useRef<HTMLDivElement>(null);
+    const [isPending, startTransition] = useTransition();
 
     // 그룹 순환 기능 상태
     const [rotationGroups, setRotationGroups] = useState<string[]>([]);
@@ -1702,7 +1703,9 @@ function ExternalScoreboard() {
                                 if (foundValidGroup) {
                                     // console.log('Initializing Rotation Group to:', settings.selectedGroups[validGroupIndex]); // Removed
                                     currentRotationIndexRef.current = validGroupIndex;
-                                    setFilterGroup(settings.selectedGroups[validGroupIndex]);
+                                    startTransition(() => {
+                                        setFilterGroup(settings.selectedGroups[validGroupIndex]);
+                                    });
                                     // 유효한 그룹을 찾아서 설정했을 때만 '로드 완료' 처리
                                     rotationSettingsLoadedRef.current = true;
                                 } else {
@@ -1723,7 +1726,9 @@ function ExternalScoreboard() {
                     // 사용자가 아직 화면에서 직접 순환 체크박스를 건드리지 않은 경우에만
                     // Firebase 설정값으로 isRotationActive를 동기화
                     if (!hasUserToggledRotationRef.current) {
-                        setIsRotationActive(settings.isActive);
+                        startTransition(() => {
+                            setIsRotationActive(settings.isActive);
+                        });
                     }
                 }
             }
@@ -1802,7 +1807,9 @@ function ExternalScoreboard() {
                 const newIndex = currentRotationGroups.indexOf(availableGroups[0]);
                 if (newIndex !== -1) {
                     currentRotationIndexRef.current = newIndex;
-                    setFilterGroup(availableGroups[0]);
+                    startTransition(() => {
+                        setFilterGroup(availableGroups[0]);
+                    });
                 }
                 return;
             }
@@ -1820,7 +1827,9 @@ function ExternalScoreboard() {
 
             if (attempts < maxAttempts) {
                 currentRotationIndexRef.current = nextIndex;
-                setFilterGroup(currentRotationGroups[nextIndex]);
+                startTransition(() => {
+                    setFilterGroup(currentRotationGroups[nextIndex]);
+                });
             }
         }, currentInterval * 1000);
     }, [isRotationActive, rotationGroups, rotationInterval]);
@@ -2421,11 +2430,13 @@ function ExternalScoreboard() {
                         <Label htmlFor="group-filter" className="font-bold text-sm text-gray-300">{t('selectGroup')}</Label>
                         <div className="relative">
                             <Select value={filterGroup} onValueChange={(value) => {
-                                setFilterGroup(value);
-                                // 순환이 활성화되어 있으면 수동 변경 시 순환 중지
-                                if (isRotationActive) {
-                                    setIsRotationActive(false);
-                                }
+                                startTransition(() => {
+                                    setFilterGroup(value);
+                                    // 순환이 활성화되어 있으면 수동 변경 시 순환 중지
+                                    if (isRotationActive) {
+                                        setIsRotationActive(false);
+                                    }
+                                });
                             }}>
                                 <SelectTrigger id="group-filter" className="w-[200px] h-9 bg-gray-800/80 backdrop-blur-sm border-gray-600 text-white focus:ring-yellow-400">
                                     <SelectValue placeholder={t('selectGroup')} />
@@ -2474,25 +2485,27 @@ function ExternalScoreboard() {
                                         // 사용자가 화면에서 직접 순환 체크박스를 건드렸음을 기록
                                         hasUserToggledRotationRef.current = true;
 
-                                        setIsRotationActive(newValue);
+                                        startTransition(() => {
+                                            setIsRotationActive(newValue);
 
-                                        if (newValue) {
-                                            // 현재 rotationGroupsRef / rotationGroups / allGroupsList 중에서
-                                            // 실제로 화면에 표시 가능한(visibleGroups에 포함된) 첫 번째 그룹만
-                                            // 초기 순환 대상으로 사용. 유효한 그룹이 없으면 현재 화면 유지.
-                                            const baseGroups =
-                                                (rotationGroupsRef.current && rotationGroupsRef.current.length > 0)
-                                                    ? rotationGroupsRef.current
-                                                    : (rotationGroups.length > 0 ? rotationGroups : allGroupsList);
+                                            if (newValue) {
+                                                // 현재 rotationGroupsRef / rotationGroups / allGroupsList 중에서
+                                                // 실제로 화면에 표시 가능한(visibleGroups에 포함된) 첫 번째 그룹만
+                                                // 초기 순환 대상으로 사용. 유효한 그룹이 없으면 현재 화면 유지.
+                                                const baseGroups =
+                                                    (rotationGroupsRef.current && rotationGroupsRef.current.length > 0)
+                                                        ? rotationGroupsRef.current
+                                                        : (rotationGroups.length > 0 ? rotationGroups : allGroupsList);
 
-                                            const firstValidGroup = baseGroups.find(g => visibleGroups.includes(g));
+                                                const firstValidGroup = baseGroups.find(g => visibleGroups.includes(g));
 
-                                            if (firstValidGroup) {
-                                                const idxInRotation = rotationGroups.indexOf(firstValidGroup);
-                                                currentRotationIndexRef.current = idxInRotation >= 0 ? idxInRotation : 0;
-                                                setFilterGroup(firstValidGroup);
+                                                if (firstValidGroup) {
+                                                    const idxInRotation = rotationGroups.indexOf(firstValidGroup);
+                                                    currentRotationIndexRef.current = idxInRotation >= 0 ? idxInRotation : 0;
+                                                    setFilterGroup(firstValidGroup);
+                                                }
                                             }
-                                        }
+                                        });
 
                                         // localStorage에 저장 (새로고침 시 유지, 각 모니터별로 독립적)
                                         try {
@@ -2527,10 +2540,14 @@ function ExternalScoreboard() {
                                                         let newGroups: string[];
                                                         if (checked === true) {
                                                             newGroups = [...rotationGroups, group];
-                                                            setRotationGroups(newGroups);
+                                                            startTransition(() => {
+                                                                setRotationGroups(newGroups);
+                                                            });
                                                         } else {
                                                             newGroups = rotationGroups.filter(g => g !== group);
-                                                            setRotationGroups(newGroups);
+                                                            startTransition(() => {
+                                                                setRotationGroups(newGroups);
+                                                            });
                                                         }
                                                         // localStorage에 저장 (새로고침 시 유지, 각 모니터별로 독립적)
                                                         try {
@@ -2559,7 +2576,9 @@ function ExternalScoreboard() {
                                         value={rotationInterval.toString()}
                                         onValueChange={(value) => {
                                             const newInterval = parseInt(value);
-                                            setRotationInterval(newInterval);
+                                            startTransition(() => {
+                                                setRotationInterval(newInterval);
+                                            });
                                             // localStorage에 저장 (새로고침 시 유지, 각 모니터별로 독립적)
                                             try {
                                                 safeLocalStorageSetItem('scoreboardRotation', JSON.stringify({
