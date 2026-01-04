@@ -131,6 +131,7 @@ interface ProcessedPlayer {
     rank: number | null;
     hasAnyScore: boolean;
     hasForfeited: boolean;
+    forfeitType?: 'absent' | 'disqualified' | 'forfeit' | string;
     coursesData: {
         [courseId: string]: {
             courseName: string;
@@ -605,13 +606,15 @@ const ScoreboardTable = React.memo(({
                                                         </span>
                                                     );
                                                 } else if (player.hasForfeited) {
-                                                    const logs = playerScoreLogs[player.id] || [];
-                                                    let foundType: string = 'forfeit';
-                                                    for (const l of logs) {
-                                                        if (l.newValue === 0 && (l.modifiedByType === 'judge' || l.modifiedByType === 'admin')) {
-                                                            if (l.comment?.includes('불참')) { foundType = 'absent'; break; }
-                                                            if (l.comment?.includes('실격')) { foundType = 'disqualified'; break; }
-                                                            if (l.comment?.includes('기권')) { foundType = 'forfeit'; break; }
+                                                    let foundType: string = player.forfeitType || 'forfeit';
+                                                    if (!player.forfeitType) {
+                                                        const logs = playerScoreLogs[player.id] || [];
+                                                        for (const l of logs) {
+                                                            if (l.newValue === 0 && (l.modifiedByType === 'judge' || l.modifiedByType === 'admin')) {
+                                                                if (l.comment?.includes('불참')) { foundType = 'absent'; break; }
+                                                                if (l.comment?.includes('실격')) { foundType = 'disqualified'; break; }
+                                                                if (l.comment?.includes('기권')) { foundType = 'forfeit'; break; }
+                                                            }
                                                         }
                                                     }
                                                     courseSumElem = t(foundType as any);
@@ -622,13 +625,15 @@ const ScoreboardTable = React.memo(({
                                                 <>
                                                     <td rowSpan={player.assignedCourses.length || 1} className="py-0.5 px-1 align-middle font-bold sb-rank text-2xl sb-td">
                                                         {player.hasForfeited ? (() => {
-                                                            const logs = playerScoreLogs[player.id] || [];
-                                                            let foundType: string = 'forfeit';
-                                                            for (const l of logs) {
-                                                                if (l.newValue === 0 && (l.modifiedByType === 'judge' || l.modifiedByType === 'admin')) {
-                                                                    if (l.comment?.includes('불참')) { foundType = 'absent'; break; }
-                                                                    if (l.comment?.includes('실격')) { foundType = 'disqualified'; break; }
-                                                                    if (l.comment?.includes('기권')) { foundType = 'forfeit'; break; }
+                                                            let foundType: string = player.forfeitType || 'forfeit';
+                                                            if (!player.forfeitType) {
+                                                                const logs = playerScoreLogs[player.id] || [];
+                                                                for (const l of logs) {
+                                                                    if (l.newValue === 0 && (l.modifiedByType === 'judge' || l.modifiedByType === 'admin')) {
+                                                                        if (l.comment?.includes('불참')) { foundType = 'absent'; break; }
+                                                                        if (l.comment?.includes('실격')) { foundType = 'disqualified'; break; }
+                                                                        if (l.comment?.includes('기권')) { foundType = 'forfeit'; break; }
+                                                                    }
                                                                 }
                                                             }
                                                             return t(foundType as any);
@@ -667,13 +672,15 @@ const ScoreboardTable = React.memo(({
                                             <td colSpan={11} className="py-0.5 px-1 align-middle text-center opacity-50 sb-td">{t('noCourseDisplay')}</td>
                                             <td className={cn("py-0.5 px-1 align-middle font-bold sb-rank sb-td", player.hasForfeited ? "text-xs" : "text-xl")}>
                                                 {player.hasForfeited ? (() => {
-                                                    const logs = playerScoreLogs[player.id] || [];
-                                                    let foundType: string = 'forfeit';
-                                                    for (const l of logs) {
-                                                        if (l.newValue === 0 && (l.modifiedByType === 'judge' || l.modifiedByType === 'admin')) {
-                                                            if (l.comment?.includes('불참')) { foundType = 'absent'; break; }
-                                                            if (l.comment?.includes('실격')) { foundType = 'disqualified'; break; }
-                                                            if (l.comment?.includes('기권')) { foundType = 'forfeit'; break; }
+                                                    let foundType: string = player.forfeitType || 'forfeit';
+                                                    if (!player.forfeitType) {
+                                                        const logs = playerScoreLogs[player.id] || [];
+                                                        for (const l of logs) {
+                                                            if (l.newValue === 0 && (l.modifiedByType === 'judge' || l.modifiedByType === 'admin')) {
+                                                                if (l.comment?.includes('불참')) { foundType = 'absent'; break; }
+                                                                if (l.comment?.includes('실격')) { foundType = 'disqualified'; break; }
+                                                                if (l.comment?.includes('기권')) { foundType = 'forfeit'; break; }
+                                                            }
                                                         }
                                                     }
                                                     return t(foundType as any);
@@ -1700,7 +1707,8 @@ function ExternalScoreboard() {
                 totalScore,
                 coursesData,
                 hasAnyScore,
-                hasForfeited,
+                hasForfeited: hasForfeited || !!player.forfeitType,
+                forfeitType: player.forfeitType,
                 total: totalScore,
                 courseScores: courseScoresForTieBreak,
                 detailedScores: detailedScoresForTieBreak,
