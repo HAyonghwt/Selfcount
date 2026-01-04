@@ -1853,15 +1853,28 @@ function ExternalScoreboard() {
     // 로딩 상태
     const [logsLoading, setLogsLoading] = useState(false);
 
-    // 선수별 로그 최적화된 로딩 (점수 변경 시 즉시 로딩)
+    // 선수별 로그 최적화된 로딩 (점수 변경 시 즉시 로딩 + 화면 렌더링에 맞춰 지연 로딩)
     useEffect(() => {
         const fetchLogs = async () => {
             if (Object.keys(finalDataByGroup).length === 0) return;
 
             setLogsLoading(true);
 
+            // [최적화] 화면에 렌더링되는 그룹의 선수들에 대해서만 먼저 로그를 조회합니다.
+            // displayedGroupCount가 증가함에 따라 추가적인 로그 조회가 발생합니다.
+            const displayedGroups = groupsToDisplay.slice(0, displayedGroupCount);
+
+            // 아직 로딩되지 않은 그룹이 있다면 미리 로딩 (스크롤을 빨리 내리는 경우 대비 + 여유분)
+            if (displayedGroupCount < groupsToDisplay.length) {
+                // 다음 2개 그룹 정도는 미리 데이터 준비
+                const nextGroups = groupsToDisplay.slice(displayedGroupCount, displayedGroupCount + 2);
+                displayedGroups.push(...nextGroups);
+            }
+
+            const playersInScope = displayedGroups.flatMap(groupName => finalDataByGroup[groupName] || []);
+
             // 수정된 점수가 있는 선수만 로그 로딩 (최적화)
-            const playersWithScores = Object.values(finalDataByGroup).flat()
+            const playersWithScores = playersInScope
                 .filter((p: any) => p.hasAnyScore) // 점수가 있는 선수만
                 .map((p: any) => p.id);
 
@@ -1873,6 +1886,8 @@ function ExternalScoreboard() {
             const newPlayerIds = playersWithScores.filter(pid => !existingPlayerIds.includes(pid));
 
             if (newPlayerIds.length > 0) {
+                // 병렬 처리하되, 한 번에 너무 많은 요청이 가지 않도록 배치 처리 고려 가능하지만,
+                // 여기서는 displayedGroups로 이미 제한되었으므로 Promise.all 사용
                 await Promise.all(newPlayerIds.map(async (pid) => {
                     try {
                         const logs = await getPlayerScoreLogsOptimized(pid);
@@ -1893,7 +1908,7 @@ function ExternalScoreboard() {
         // 점수 변경 시 즉시 로그 로딩 (실시간성 보장)
         fetchLogs();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [finalDataByGroup, lastUpdateTime]);
+    }, [finalDataByGroup, lastUpdateTime, displayedGroupCount, groupsToDisplay]);
 
     // 실시간 업데이트를 위한 점수 변경 감지 (Firebase 호출 최소화)
     useEffect(() => {
