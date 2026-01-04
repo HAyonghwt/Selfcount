@@ -146,11 +146,11 @@ export default function RefereePage() {
             // 1. URL 파라미터에서 데이터 확인 (최우선)
             const urlParams = new URLSearchParams(window.location.search);
             const refereeDataFromUrl = urlParams.get('refereeData');
-            
+
             if (refereeDataFromUrl) {
                 try {
                     const referee = JSON.parse(decodeURIComponent(refereeDataFromUrl));
-                    
+
                     // sessionStorage에 저장 시도 (여러 번 재시도)
                     let saved = false;
                     for (let i = 0; i < maxRetries; i++) {
@@ -161,21 +161,21 @@ export default function RefereePage() {
                         } catch (e) {
                             console.warn(`sessionStorage 저장 시도 ${i + 1}/${maxRetries} 실패, 재시도...`);
                             if (i < maxRetries - 1) {
-                                setTimeout(() => {}, 100 * (i + 1));
+                                setTimeout(() => { }, 100 * (i + 1));
                             }
                         }
                     }
-                    
+
                     if (!saved) {
                         console.warn('⚠️ sessionStorage 저장 실패, URL 파라미터로만 사용');
                     }
-                    
+
                     // URL에서 파라미터 제거
                     window.history.replaceState({}, '', window.location.pathname);
-                    
+
                     if (mounted) {
                         setRefereeData(referee);
-                        
+
                         // 로그인한 심판의 홀과 현재 페이지 홀이 다르면 리다이렉트
                         if (referee.hole !== parseInt(hole)) {
                             router.push(`/referee/${referee.hole}`);
@@ -199,7 +199,7 @@ export default function RefereePage() {
             const processRefereeData = (data: string) => {
                 try {
                     const referee = JSON.parse(data);
-                    
+
                     if (mounted) {
                         setRefereeData(referee);
 
@@ -243,7 +243,7 @@ export default function RefereePage() {
                 } catch (e) {
                     console.warn(`sessionStorage 읽기 시도 ${attempt + 1}/${maxRetries} 실패`);
                 }
-                
+
                 // 다음 시도 전 대기
                 setTimeout(() => {
                     if (mounted) {
@@ -319,7 +319,7 @@ export default function RefereePage() {
                 const cached = dataCache.current.tournament;
                 const coursesArray = cached.courses ? Object.values(cached.courses) : [];
                 setCourses(coursesArray);
-                
+
                 // tournamentCourses도 함께 업데이트
                 if (cached.courses) {
                     const selectedCourses = Object.values(cached.courses)
@@ -333,7 +333,7 @@ export default function RefereePage() {
                 } else {
                     setTournamentCourses([]);
                 }
-                
+
                 setGroupsData(cached.groups || {});
                 setLoading(false);
                 return;
@@ -383,11 +383,11 @@ export default function RefereePage() {
 
                     dataCache.current.tournament = tournamentData;
                     dataCache.current.lastUpdated[cacheKey] = Date.now();
-                    
+
                     // courses 설정
                     const coursesArray = tournamentData.courses ? Object.values(tournamentData.courses) : [];
                     setCourses(coursesArray);
-                    
+
                     // tournamentCourses도 함께 업데이트 (assignedCourse 찾기용)
                     if (tournamentData.courses) {
                         const selectedCourses = Object.values(tournamentData.courses)
@@ -401,7 +401,7 @@ export default function RefereePage() {
                     } else {
                         setTournamentCourses([]);
                     }
-                    
+
                     setGroupsData(tournamentData.groups || {});
                     setUnlockPasswordFromDb(password);
                     setLoading(false);
@@ -521,7 +521,7 @@ export default function RefereePage() {
             const playerCourseRef = ref(dbInstance, `scores/${player.id}/${selectedCourse}`);
             const unsubscribe = onValue(playerCourseRef, (snapshot) => {
                 const playerCourseScores = snapshot.val();
-                
+
                 // 함수형 업데이트로 최신 상태 보장 (다른 선수의 점수가 덮어쓰이지 않도록)
                 setAllScores(prev => {
                     const updated = { ...prev };
@@ -647,7 +647,7 @@ export default function RefereePage() {
             // refereeData가 아직 로드되지 않았을 수 있으므로 오류 대신 조용히 null 반환
             return null;
         }
-        
+
         if (!refereeData.id) {
             console.warn('⚠️ assignedCourse: refereeData.id 없음', refereeData);
             return null;
@@ -655,7 +655,7 @@ export default function RefereePage() {
 
         // 2. tournamentCourses 우선 사용 (실시간 구독으로 항상 최신)
         const coursesToSearch = tournamentCourses.length > 0 ? tournamentCourses : courses;
-        
+
         // 3. 코스 데이터가 아직 로드되지 않았을 수 있으므로 로딩 중일 때는 조용히 null 반환
         if (coursesToSearch.length === 0) {
             // 로딩 중이면 조용히 null 반환 (데이터가 아직 로드 중일 수 있음)
@@ -683,7 +683,7 @@ export default function RefereePage() {
 
         const suffixNumber = match[2] ? parseInt(match[2]) : 0;
         const targetOrder = suffixNumber === 0 ? 1 : suffixNumber + 1;
-        
+
         // 4. order 기준으로 정확히 찾기 (가장 확실한 방법)
         let foundCourse = coursesToSearch.find((course: any) => {
             const courseOrder = course.order;
@@ -692,11 +692,11 @@ export default function RefereePage() {
             }
             return false;
         });
-        
+
         if (foundCourse) {
             return foundCourse;
         }
-        
+
         // 5. order가 없는 경우 인덱스 방식 (fallback, 하지만 정확도 낮음)
         if (suffixNumber < coursesToSearch.length) {
             foundCourse = coursesToSearch[suffixNumber];
@@ -724,17 +724,17 @@ export default function RefereePage() {
             const savedStateJSON = safeLocalStorageGetItem(`refereeState_${hole}`);
             if (savedStateJSON) {
                 const savedState = JSON.parse(savedStateJSON);
-                
+
                 // 저장된 코스가 assignedCourse와 일치하는지 확인
                 const savedCourseId = String(savedState.course || '');
                 const assignedCourseId = String(assignedCourse.id);
-                
+
                 if (savedCourseId !== assignedCourseId) {
                     // 할당된 코스와 다르면 로컬스토리지 상태 삭제
                     safeLocalStorageRemoveItem(`refereeState_${hole}`);
                     return;
                 }
-                
+
                 // 코스가 일치하고 모든 필수 필드가 있으면 복원
                 if (savedState.group && savedState.course && savedState.jo && savedState.view === 'scoring') {
                     setSelectedGroup(savedState.group);
@@ -765,7 +765,7 @@ export default function RefereePage() {
         // selectedCourse가 assignedCourse와 일치하는지 확인
         const selectedCourseId = String(selectedCourse || '');
         const assignedCourseId = String(assignedCourse.id);
-        
+
         if (view === 'scoring' && selectedGroup && selectedCourse && selectedJo) {
             // 코스가 일치할 때만 저장
             if (selectedCourseId === assignedCourseId) {
@@ -800,7 +800,7 @@ export default function RefereePage() {
 
         const types = new Set<'individual' | 'team'>();
         const courseIdStr = String(assignedCourse.id);
-        
+
         Object.values(groupsData).forEach((group: any) => {
             // 코스 배정 확인: boolean true 또는 number > 0
             const courseAssignment = group.courses && group.courses[courseIdStr];
@@ -823,21 +823,21 @@ export default function RefereePage() {
         if (!groupsData || Object.keys(groupsData).length === 0 || !selectedType) {
             return [];
         }
-        
+
         const courseIdStr = String(assignedCourse.id);
-        
+
         const result = Object.values(groupsData)
             .filter((g: any) => {
                 // 선택된 경기 형태와 일치하고, 해당 코스가 배정된 그룹만
                 const courseAssignment = g.courses && g.courses[courseIdStr];
                 // 코스 배정은 boolean true 또는 number > 0으로 저장됨
-                return g.type === selectedType && 
-                       (courseAssignment === true || (typeof courseAssignment === 'number' && courseAssignment > 0));
+                return g.type === selectedType &&
+                    (courseAssignment === true || (typeof courseAssignment === 'number' && courseAssignment > 0));
             })
             .map((g: any) => g.name)
             .filter(Boolean)
             .sort();
-        
+
         return result;
     }, [groupsData, selectedType, assignedCourse]);
 
@@ -859,7 +859,7 @@ export default function RefereePage() {
         }
 
         const courseIdStr = String(assignedCourse.id);
-        
+
         // 이미 선택된 코스가 있고, 그것이 assignedCourse와 일치하면 유지
         if (selectedCourse && selectedCourse === courseIdStr) {
             return;
@@ -888,11 +888,11 @@ export default function RefereePage() {
                 orderedJos.push(joStr);
             }
         });
-        
+
         // 그룹 데이터에서 조 순서 정보 가져오기
         const groupData = groupsData[selectedGroup];
         const joOrder = groupData?.joOrder || {};
-        
+
         // 조 순서 정보가 있으면 그 순서대로 정렬, 없으면 기존 정렬 유지
         if (Object.keys(joOrder).length > 0) {
             orderedJos.sort((a, b) => {
@@ -924,7 +924,7 @@ export default function RefereePage() {
                 return a.localeCompare(b);
             });
         }
-        
+
         return orderedJos;
     }, [allPlayers, selectedGroup, groupsData]);
 
@@ -941,7 +941,7 @@ export default function RefereePage() {
                 tournamentCourses: tournamentCourses.map((c: any) => ({ id: c.id, name: c.name, order: c.order })),
                 courses: courses.map((c: any) => ({ id: c.id, name: c.name }))
             });
-            
+
             toast({
                 title: '❌ 코스를 찾을 수 없습니다',
                 description: `심판 ID "${refereeData.id}"에 해당하는 코스를 찾을 수 없습니다. 관리자에게 문의하세요.`,
@@ -1075,7 +1075,7 @@ export default function RefereePage() {
             const score = currentScores[player.id];
             return score && score.status === 'editing';
         });
-        
+
         if (hasEditingScores && Object.keys(currentScores).length > 0) {
             return;
         }
@@ -1114,12 +1114,12 @@ export default function RefereePage() {
                 const existingLockedScore = scoresRef.current[player.id];
                 if (existingLockedScore && existingLockedScore.status === 'locked') {
                     const isForfeited = existingLockedScore.forfeitType && existingLockedScore.score === 0;
-                    
+
                     if (isForfeited) {
                         // 관리자 페이지에서 해제했는지 확인
                         // 관리자가 해제하면 모든 홀의 점수가 복원되거나 삭제되므로, 다른 홀의 점수를 확인
                         let wasReleasedByAdmin = false;
-                        
+
                         // 1. 현재 홀의 점수가 null이거나 0이 아니면 관리자가 해제한 것으로 판단
                         if (existingScoreFromDb !== undefined && existingScoreFromDb !== null && Number(existingScoreFromDb) !== 0) {
                             wasReleasedByAdmin = true;
@@ -1127,7 +1127,7 @@ export default function RefereePage() {
                             // 2. 현재 홀의 점수가 null이면 다른 홀의 점수를 확인
                             let hasAnyScore = false;
                             let hasZeroScore = false;
-                            
+
                             // allScores에서 다른 홀의 점수 확인
                             if (allScores[player.id] && allScores[player.id][selectedCourse as string]) {
                                 for (let h = 1; h <= 9; h++) {
@@ -1141,7 +1141,7 @@ export default function RefereePage() {
                                     }
                                 }
                             }
-                            
+
                             // 다른 홀에 점수가 있는데 0점이 없으면 관리자가 해제한 것으로 판단
                             if (hasAnyScore && !hasZeroScore) {
                                 wasReleasedByAdmin = true;
@@ -1155,9 +1155,9 @@ export default function RefereePage() {
                                         const courseScores = courseSnapshot.val();
                                         for (let h = 1; h <= 9; h++) {
                                             const holeKey = h.toString();
-                                            const holeScore = courseScores[h] !== undefined ? courseScores[h] : 
-                                                             courseScores[holeKey] !== undefined ? courseScores[holeKey] : 
-                                                             null;
+                                            const holeScore = courseScores[h] !== undefined ? courseScores[h] :
+                                                courseScores[holeKey] !== undefined ? courseScores[holeKey] :
+                                                    null;
                                             if (holeScore !== undefined && holeScore !== null) {
                                                 hasAnyScore = true;
                                                 if (holeScore === 0 || holeScore === '0' || Number(holeScore) === 0) {
@@ -1176,7 +1176,7 @@ export default function RefereePage() {
                                 }
                             }
                         }
-                        
+
                         if (!wasReleasedByAdmin) {
                             // 불참/실격/기권 처리된 선수이고 관리자 페이지에서 해제하지 않은 경우 기존 상태 유지
                             newScoresState[player.id] = existingLockedScore;
@@ -1201,6 +1201,15 @@ export default function RefereePage() {
                     };
                 } else {
                     // 저장된 점수가 없으면 편집 상태로 설정 (처음 입력 또는 관리자 해제로 null 복원)
+
+                    // [중요 수정] DB 데이터가 undefined인 경우 (네트워크 지연 등으로 데이터를 못 가져온 경우)
+                    // 기존에 로컬에 'locked' 상태로 잘 있던 점수는 절대 초기화하지 말고 유지해야 함
+                    const currentLocal = scoresRef.current[player.id];
+                    if (existingScoreFromDb === undefined && currentLocal && currentLocal.status === 'locked') {
+                        newScoresState[player.id] = currentLocal;
+                        continue;
+                    }
+
                     // 관리자 해제로 null로 복원된 경우도 편집 상태로 설정
                     const interimScore = savedInterimScores[player.id];
                     if (interimScore && interimScore.status === 'editing') {
@@ -1211,9 +1220,9 @@ export default function RefereePage() {
                             wasLocked: false // 처음 입력이므로 불참 포함
                         };
                     } else {
-                        newScoresState[player.id] = { 
-                            score: 1, 
-                            status: 'editing', 
+                        newScoresState[player.id] = {
+                            score: 1,
+                            status: 'editing',
                             forfeitType: null,
                             wasLocked: false // 처음 입력 또는 관리자 해제로 null 복원
                         };
@@ -1236,7 +1245,7 @@ export default function RefereePage() {
 
         // currentPlayers를 직접 계산 (dependency에서 제거하여 배열 크기 변경 문제 방지)
         const playersToCheck = allPlayers.filter(p => p.group === selectedGroup && p.jo.toString() === selectedJo);
-        
+
         if (playersToCheck.length === 0) {
             return;
         }
@@ -1272,9 +1281,9 @@ export default function RefereePage() {
                 // 불참/실격/기권 처리된 선수는 다른 선수의 점수 입력과 관계없이 계속 잠겨 있어야 함
                 // forfeitType이 있고 score가 0이면 불참/실격/기권 처리된 것으로 간주
                 const isForfeited = currentScoreState.forfeitType && currentScoreState.score === 0;
-                
+
                 const currentScore = currentScoreState.score;
-                
+
                 // 불참/실격/기권 처리된 선수는 Firebase에서 직접 확인하여 관리자 해제 여부 판단
                 if (isForfeited) {
                     // allScores가 업데이트될 때 불참 처리된 선수의 점수가 allScores에 없을 수 있음
@@ -1285,10 +1294,10 @@ export default function RefereePage() {
                             const playerHoleRef = ref(dbInstance, `scores/${player.id}/${selectedCourse}/${hole}`);
                             const snapshot = await get(playerHoleRef);
                             const actualFirebaseScore = snapshot.val();
-                            
+
                             // Firebase에서 실제 점수 확인
                             const actualScore = actualFirebaseScore !== undefined && actualFirebaseScore !== null ? Number(actualFirebaseScore) : null;
-                            
+
                             // 관리자 페이지에서 해제한 경우만 업데이트 (실제 Firebase 점수가 null이거나 0이 아닌 값)
                             if (actualScore === null || (actualScore !== null && actualScore !== 0)) {
                                 // 관리자 페이지에서 해제한 경우 업데이트
@@ -1326,10 +1335,10 @@ export default function RefereePage() {
                     // 불참 처리된 선수는 allScores 변경과 관계없이 상태 유지
                     return;
                 }
-                
+
                 // 불참/실격/기권 처리되지 않은 일반 선수는 allScores에서 점수 확인
                 const newScore = firebaseScore !== undefined && firebaseScore !== null ? Number(firebaseScore) : null;
-                
+
                 // 불참/실격/기권 처리되지 않은 일반 선수는 기존 로직대로 처리
                 // 점수가 변경된 경우 업데이트
                 if (newScore !== currentScore) {
@@ -1425,7 +1434,7 @@ export default function RefereePage() {
 
             // 0점이 되었을 때 기권 타입 순환 처리
             let newForfeitType = currentScoreData.forfeitType;
-            
+
             if (newScore === 0 && currentScore > 0) {
                 // 처음 0점이 되면
                 if (wasLocked) {
@@ -1567,11 +1576,11 @@ export default function RefereePage() {
                                 const existing = allScores[playerToSave.id]?.[cid]?.[h.toString()];
                                 // 실격/기권/불참 처리 시 모든 홀의 점수를 0점으로 변경 (기존 점수도 포함)
                                 const oldValue = existing === undefined || existing === null || existing === '' || isNaN(Number(existing)) ? 0 : Number(existing);
-                                
+
                                 // 모든 홀을 0점으로 설정
                                 await set(ref(dbInstance, `/scores/${playerToSave.id}/${cid}/${h}`), 0);
                                 const refereeId = (refereeData && refereeData.id) ? refereeData.id : `${hole}번홀심판`;
-                                
+
                                 // 직접 입력한 코스/홀과 다른 홀을 구분하여 로그 기록
                                 if (cid === selectedCourse && h === Number(hole)) {
                                     await logScoreChange({
@@ -1659,7 +1668,7 @@ export default function RefereePage() {
                 dataCache.current.scores[selectedCourse][playerToSave.id][selectedCourse][hole] = scoreData.score;
                 dataCache.current.lastUpdated[`scores_${selectedCourse}`] = Date.now();
             }
-            
+
             // allScores 상태도 즉시 업데이트하여 UI 반영
             // Firebase 구독이 자동으로 업데이트하지만, 즉시 반영을 위해 여기서도 업데이트
             // 단, initializeScores useEffect가 불필요하게 재실행되지 않도록 주의
@@ -1709,8 +1718,8 @@ export default function RefereePage() {
         if (unlockPasswordInput === unlockPasswordFromDb) {
             setScores(prev => ({
                 ...prev,
-                [playerToUnlock.id]: { 
-                    ...prev[playerToUnlock.id], 
+                [playerToUnlock.id]: {
+                    ...prev[playerToUnlock.id],
                     status: 'editing',
                     wasLocked: true, // 잠금 해제 시 수정 모드임을 표시
                     forfeitType: prev[playerToUnlock.id]?.forfeitType || null // forfeitType 보존
@@ -1746,7 +1755,7 @@ export default function RefereePage() {
         // 코스 order 기준으로 코스명 결정
         // suffixNumber가 0이면 첫번째 코스(order === 1), 1이면 두번째 코스(order === 2), ...
         const targetOrder = suffixNumber === 0 ? 1 : suffixNumber + 1;
-        
+
         // 먼저 order 기준으로 찾기
         let targetCourse = tournamentCourses.find((course: any) => {
             const courseOrder = course.order;
@@ -1756,12 +1765,12 @@ export default function RefereePage() {
             }
             return false;
         });
-        
+
         // order 기준으로 못 찾았으면 인덱스 방식으로 fallback
         if (!targetCourse && suffixNumber < tournamentCourses.length) {
             targetCourse = tournamentCourses[suffixNumber];
         }
-        
+
         if (targetCourse) {
             return `${targetCourse.name} ${holeNumber}번홀심판`;
         }
@@ -1879,7 +1888,7 @@ export default function RefereePage() {
                     </Select>
                     <Select
                         value={selectedCourse || ''}
-                        onValueChange={v => { 
+                        onValueChange={v => {
                             // assignedCourse와 일치하는지 확인 (비활성화되어 있지만 안전장치)
                             const newCourse = (v || '').toString();
                             if (assignedCourse && String(assignedCourse.id) !== newCourse) {
@@ -1888,7 +1897,7 @@ export default function RefereePage() {
                             } else {
                                 setSelectedCourse(newCourse);
                             }
-                            setSelectedJo(''); 
+                            setSelectedJo('');
                         }}
                         disabled={true}
                     >
@@ -1991,17 +2000,17 @@ export default function RefereePage() {
                                         )}
                                     </div>
                                     <div className="flex-shrink-0 flex items-center gap-1.5">
-                                        <Button 
-                                            variant="outline" 
-                                            size="icon" 
-                                            className="h-10 w-10 rounded-md" 
+                                        <Button
+                                            variant="outline"
+                                            size="icon"
+                                            className="h-10 w-10 rounded-md"
                                             onClick={(e) => {
                                                 e.preventDefault();
                                                 e.stopPropagation();
                                                 if (!isLocked && scoreData) {
                                                     updateScore(player.id, -1);
                                                 }
-                                            }} 
+                                            }}
                                             disabled={isLocked}
                                         >
                                             <Minus className="h-5 w-5" />
@@ -2009,11 +2018,11 @@ export default function RefereePage() {
                                         <span className={isZeroScore ? "text-xs font-bold w-12 text-center text-red-600" : "text-3xl font-bold tabular-nums w-12 text-center"}>
                                             {isZeroScore ? forfeitText : currentScore}
                                         </span>
-                                        <Button 
-                                            variant="outline" 
-                                            size="icon" 
-                                            className="h-10 w-10 rounded-md" 
-                                            onClick={() => updateScore(player.id, 1)} 
+                                        <Button
+                                            variant="outline"
+                                            size="icon"
+                                            className="h-10 w-10 rounded-md"
+                                            onClick={() => updateScore(player.id, 1)}
                                             disabled={isLocked}
                                         >
                                             <Plus className="h-5 w-5" />
