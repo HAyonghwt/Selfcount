@@ -349,9 +349,18 @@ function ExternalScoreboard() {
         window.matchMedia('(pointer: coarse)').matches
     );
 
+
     // 번역 함수
     const t = useCallback((key: keyof typeof translations.ko) => {
         return translations[currentLang][key];
+    }, [currentLang]);
+
+    // 코스 이름 번역 함수 (상단으로 이동)
+    const translateCourseName = useCallback((name: string | null | undefined) => {
+        if (!name) return '';
+        if (currentLang === 'ko') return name;
+        // "A코스" -> "Course A" 변환
+        return name.replace(/^(.*)코스$/, 'Course $1');
     }, [currentLang]);
 
     // 순환 모드일 때 5초마다 언어 전환
@@ -2126,7 +2135,7 @@ function ExternalScoreboard() {
                                     {(() => {
                                         const { courseName, progress } = getCurrentCourseAndProgress(groupName);
                                         if (courseName && progress !== null) {
-                                            return <span>{courseName}: {progress}% {t('progress')}&nbsp;|&nbsp;{t('total')}: {groupProgress[groupName]}% {t('progress')}</span>;
+                                            return <span>{translateCourseName(courseName)}: {progress}% {t('progress')}&nbsp;|&nbsp;{t('total')}: {groupProgress[groupName]}% {t('progress')}</span>;
                                         } else {
                                             return <span>{t('total')}: {groupProgress[groupName]}% {t('progress')}</span>;
                                         }
@@ -2163,7 +2172,7 @@ function ExternalScoreboard() {
                                                                     <td rowSpan={player.assignedCourses.length || 1} className="py-0.5 px-1 text-center align-middle opacity-70 sb-td sb-td-info w-20 md:w-24 lg:w-28 truncate">{player.club}</td>
                                                                 </>
                                                             )}
-                                                            <td className="py-0.5 px-1 align-middle text-center sb-td w-16 md:w-20 lg:w-24 truncate">{player.coursesData[course.id]?.courseName}</td>
+                                                            <td className="py-0.5 px-1 align-middle text-center sb-td w-16 md:w-20 lg:w-24 truncate">{translateCourseName(player.coursesData[course.id]?.courseName)}</td>
                                                             {player.coursesData[course.id]?.holeScores.map((score: any, i: number) => {
                                                                 const holeNumber = i + 1;
                                                                 // 관리자 대시보드와 동일한 방식으로 로그 조회 (배열에서 find 사용)
