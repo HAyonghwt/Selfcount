@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { db } from '@/lib/firebase';
+import { db, ensureAuthenticated } from '@/lib/firebase';
 import { ref, onValue, set, get, remove, update } from 'firebase/database';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -70,6 +70,7 @@ export default function GiftEventAdminPage() {
     // 초기 로드 시 설정과 로고 URL을 먼저 불러오기
     const loadInitialData = async () => {
       try {
+        await ensureAuthenticated();
         // 로고 설정 불러오기
         const settingsSnapshot = await get(ref(db, 'giftEvent/settings'));
         if (settingsSnapshot.exists()) {

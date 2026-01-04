@@ -1,7 +1,7 @@
 "use client";
 import React, { useEffect, useState } from "react";
 import Confetti from "react-confetti";
-import { db } from "@/lib/firebase";
+import { db, ensureAuthenticated } from "@/lib/firebase";
 import { ref, onValue, get, update } from "firebase/database";
 import GiftEventDraw from './GiftEventDraw';
 import { Trophy, Sparkles, Crown, Star } from "lucide-react";
@@ -42,10 +42,11 @@ export default function GiftEventDisplay() {
     const unsubWinners = onValue(winnersRef, snap => setWinners(snap.val() || []));
     const unsubCurrentWinner = onValue(currentWinnerRef, snap => setCurrentWinner(snap.val() || null));
     const unsubDrawStartTime = onValue(drawStartTimeRef, snap => setDrawStartTime(snap.val() || null));
-    
+
     // 초기 로드 시 설정과 로고 URL을 함께 불러오기
     const loadInitialData = async () => {
       try {
+        await ensureAuthenticated();
         // 로고 설정 불러오기
         const settingsSnapshot = await get(ref(db, "giftEvent/settings"));
         if (settingsSnapshot.exists()) {
@@ -61,7 +62,7 @@ export default function GiftEventDisplay() {
             isBlackAndWhite: settings.isBlackAndWhite ?? false
           });
         }
-        
+
         // 로고 URL 불러오기
         const logosSnapshot = await get(ref(db, 'logos'));
         if (logosSnapshot.exists()) {
@@ -77,9 +78,9 @@ export default function GiftEventDisplay() {
         console.error('[GiftEventDisplay] Error loading initial data:', error);
       }
     };
-    
+
     loadInitialData();
-    
+
     // 실시간 구독으로 설정 변경 감지 (초기 로드 후에도 작동)
     const unsubSettings = onValue(ref(db, "giftEvent/settings"), snap => {
       if (snap.exists()) {

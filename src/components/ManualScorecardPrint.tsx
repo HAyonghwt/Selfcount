@@ -3,7 +3,7 @@
 import { useMemo, useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { X } from "lucide-react"
-import { db } from "@/lib/firebase"
+import { db, ensureAuthenticated } from "@/lib/firebase"
 import { ref, get } from "firebase/database"
 
 interface ManualScorecardPrintProps {
@@ -77,8 +77,9 @@ export default function ManualScorecardPrint({
                     console.log('수기 채점표 - Database not initialized');
                     return;
                 }
-                
+
                 try {
+                    await ensureAuthenticated();
                     const logosRef = ref(db, 'logos');
                     const snapshot = await get(logosRef);
                     if (snapshot.exists()) {
@@ -408,12 +409,12 @@ export default function ManualScorecardPrint({
                                 // 빈 슬롯인 경우 placeholder 표시
                                 if (!course) {
                                     const coursePlayers = getPlayersByJo(jo)
-                                    
+
                                     // 조명 생성: 조 이름만 표시 (예: A-1-3)
                                     // 모든 빈 슬롯에 조명 표시 (Good luck이 있던 자리)
                                     // 조 이름만 표시
                                     const joNameText = jo
-                                    
+
                                     return (
                                         <div
                                             key={`placeholder-${slotIndex}`}

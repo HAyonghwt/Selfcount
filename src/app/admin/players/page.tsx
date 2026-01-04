@@ -18,7 +18,7 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { db } from "@/lib/firebase";
+import { db, ensureAuthenticated } from "@/lib/firebase";
 import { ref, onValue, push, remove, update, set, get } from "firebase/database";
 import { useToast } from "@/hooks/use-toast";
 import * as XLSX from 'xlsx';
@@ -72,6 +72,7 @@ export default function PlayerManagementPage() {
         const loadLogo = async () => {
             if (!db) return;
             try {
+                await ensureAuthenticated();
                 const logosRef = ref(db, 'logos');
                 const snapshot = await get(logosRef);
                 if (snapshot.exists()) {
@@ -95,6 +96,7 @@ export default function PlayerManagementPage() {
         const loadInitialData = async () => {
             try {
                 // 먼저 get으로 즉시 불러오기
+                await ensureAuthenticated();
                 const settingsSnapshot = await get(ref(db, 'rosterDownload/settings'));
                 if (settingsSnapshot.exists()) {
                     const settings = settingsSnapshot.val();

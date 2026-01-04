@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
-import { db } from "@/lib/firebase";
+import { db, ensureAuthenticated } from "@/lib/firebase";
 import { ref, onValue, get, set, remove, update } from "firebase/database";
 import { Download, Settings, Upload, Trash2, X } from "lucide-react";
 import jsPDF from "jspdf";
@@ -157,6 +157,7 @@ export default function BadgePage() {
       if (!db) return;
 
       try {
+        await ensureAuthenticated();
         const logosRef = ref(db, 'logos');
         const snapshot = await get(logosRef);
 
@@ -178,6 +179,7 @@ export default function BadgePage() {
       if (!db) return;
 
       try {
+        await ensureAuthenticated();
         const settingsSnapshot = await get(ref(db, 'badges/settings'));
         if (settingsSnapshot.exists()) {
           const settings = settingsSnapshot.val();

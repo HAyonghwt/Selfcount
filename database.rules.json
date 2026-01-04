@@ -9,13 +9,11 @@
     },
     "scores": {
       ".read": "auth != null",
-      "$playerId": {
-        "$courseId": {
-          "$holeNumber": {
-            ".write": "auth != null"
-          }
-        }
-      }
+      ".write": "auth != null"
+    },
+    "backups": {
+      ".read": "auth != null",
+      ".write": "auth != null"
     },
     "players": {
       ".read": "auth != null",
@@ -26,6 +24,22 @@
       ".write": "auth != null"
     },
     "config": {
+      ".read": "auth != null",
+      ".write": "auth != null"
+    },
+    "logos": {
+      ".read": "auth != null",
+      ".write": "auth != null"
+    },
+    "scorePrint": {
+      ".read": "auth != null",
+      ".write": "auth != null"
+    },
+    "badges": {
+      ".read": "auth != null",
+      ".write": "auth != null"
+    },
+    "manualScorecard": {
       ".read": "auth != null",
       ".write": "auth != null"
     },

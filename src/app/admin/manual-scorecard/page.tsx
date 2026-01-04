@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { useToast } from "@/hooks/use-toast"
-import { db } from "@/lib/firebase"
+import { db, ensureAuthenticated } from "@/lib/firebase"
 import { ref, get, onValue, set } from "firebase/database"
 import { Printer } from "lucide-react"
 import ManualScorecardPrint from "@/components/ManualScorecardPrint"
@@ -20,7 +20,7 @@ export default function ManualScorecardPage() {
     const [groups, setGroups] = useState<any>({})
     const [courses, setCourses] = useState<any[]>([])
     const [players, setPlayers] = useState<any[]>([])
-    
+
     const [isPrintModalOpen, setIsPrintModalOpen] = useState(false)
     const [selectedDate, setSelectedDate] = useState("")
     const [selectedGroup, setSelectedGroup] = useState("")
@@ -51,7 +51,7 @@ export default function ManualScorecardPage() {
         const loadData = async () => {
             try {
                 setLoading(true)
-                
+
                 // 대회 정보 로드
                 const tournamentRef = ref(db, 'tournaments/current')
                 const tournamentSnap = await get(tournamentRef)
@@ -79,7 +79,7 @@ export default function ManualScorecardPage() {
                         .filter((c: any) => c.isActive !== false)
                         .sort((a: any, b: any) => (a.order || 0) - (b.order || 0))
                     setCourses(coursesArray)
-                    
+
                     // 선택된 코스 초기화
                     const initialSelected: { [key: string]: boolean } = {}
                     coursesArray.forEach((c: any) => {
@@ -121,6 +121,7 @@ export default function ManualScorecardPage() {
         const loadLogo = async () => {
             if (!db) return;
             try {
+                await ensureAuthenticated();
                 const logosRef = ref(db, 'logos');
                 const snapshot = await get(logosRef);
                 if (snapshot.exists()) {
@@ -143,6 +144,7 @@ export default function ManualScorecardPage() {
 
         const loadInitialData = async () => {
             try {
+                await ensureAuthenticated();
                 const settingsSnapshot = await get(ref(db, 'manualScorecard/settings'));
                 if (settingsSnapshot.exists()) {
                     const settings = settingsSnapshot.val();
@@ -184,7 +186,7 @@ export default function ManualScorecardPage() {
             // Firebase에서 현재 설정을 불러와서 병합
             const currentSettingsSnapshot = await get(ref(db, 'manualScorecard/settings'));
             let finalSettings;
-            
+
             if (currentSettingsSnapshot.exists()) {
                 const currentSettings = currentSettingsSnapshot.val();
                 finalSettings = {
@@ -266,7 +268,7 @@ export default function ManualScorecardPage() {
 
         setShowPrintView(true)
         setIsPrintModalOpen(false)
-        
+
         // 인쇄 대화상자 열기
         setTimeout(() => {
             window.print()
@@ -280,7 +282,7 @@ export default function ManualScorecardPage() {
     // 미리보기용: 빈 슬롯 찾기 (로고가 들어갈 위치)
     const getEmptySlotForPreview = () => {
         if (!selectedGroup) return null;
-        
+
         const selectedCourseIds = Object.keys(selectedCourses).filter(id => selectedCourses[id]);
         if (selectedCourseIds.length === 0) return null;
 
@@ -303,14 +305,14 @@ export default function ManualScorecardPage() {
 
         // 첫 페이지의 코스들 (최대 3개)
         const firstPageCourses = selectedCoursesSorted.slice(0, 3);
-        
+
         // 빈 슬롯 찾기 (0, 1, 2 중에서)
         for (let i = 0; i < 3; i++) {
             if (!firstPageCourses[i]) {
                 return i; // 빈 슬롯 인덱스 반환
             }
         }
-        
+
         // 첫 페이지가 모두 채워져 있으면 첫 번째 슬롯(인덱스 0) 반환
         return 0;
     }
@@ -374,10 +376,10 @@ export default function ManualScorecardPage() {
                 <DialogContent className="max-w-[95vw] w-full lg:max-w-7xl max-h-[90vh] overflow-hidden flex flex-col">
                     <DialogHeader className="flex flex-row items-center justify-between pb-4 border-b mb-4 space-y-0 shrink-0">
                         <div className="space-y-1 text-left">
-                        <DialogTitle>채점표 인쇄 설정</DialogTitle>
-                        <DialogDescription>
-                            날짜, 그룹, 코스를 선택하고 인쇄 버튼을 클릭하세요.
-                        </DialogDescription>
+                            <DialogTitle>채점표 인쇄 설정</DialogTitle>
+                            <DialogDescription>
+                                날짜, 그룹, 코스를 선택하고 인쇄 버튼을 클릭하세요.
+                            </DialogDescription>
                         </div>
                         {backgroundLogoUrl && (
                             <div className="flex items-center gap-2">
@@ -396,77 +398,77 @@ export default function ManualScorecardPage() {
                             </div>
                         )}
                     </DialogHeader>
-                    
+
                     <div className="flex gap-4 flex-1 min-h-0 overflow-hidden flex-row">
                         {/* 좌측: 설정 */}
                         <div className="w-[350px] shrink-0 border rounded-lg p-4 bg-gray-50 overflow-y-auto">
                             <div className="space-y-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="date">날짜 (Date)</Label>
-                            <Input
-                                id="date"
-                                type="date"
-                                value={selectedDate}
-                                onChange={(e) => setSelectedDate(e.target.value)}
-                            />
-                        </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="date">날짜 (Date)</Label>
+                                    <Input
+                                        id="date"
+                                        type="date"
+                                        value={selectedDate}
+                                        onChange={(e) => setSelectedDate(e.target.value)}
+                                    />
+                                </div>
 
-                        <div className="space-y-2">
-                            <Label>그룹 (Group)</Label>
-                            <div className="space-y-2 max-h-48 overflow-y-auto border rounded-md p-4">
-                                {groupNames.length === 0 ? (
-                                    <p className="text-sm text-muted-foreground">그룹이 없습니다.</p>
-                                ) : (
-                                    groupNames.map((groupName) => (
-                                        <div key={groupName} className="flex items-center space-x-2">
-                                            <Checkbox
-                                                id={`group-${groupName}`}
-                                                checked={selectedGroup === groupName}
-                                                onCheckedChange={(checked) => {
-                                                    if (checked) {
-                                                        setSelectedGroup(groupName)
-                                                    } else {
-                                                        setSelectedGroup("")
-                                                    }
-                                                }}
-                                            />
-                                            <Label
-                                                htmlFor={`group-${groupName}`}
-                                                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
-                                            >
-                                                {groupName}
-                                            </Label>
-                                        </div>
-                                    ))
-                                )}
-                            </div>
-                        </div>
+                                <div className="space-y-2">
+                                    <Label>그룹 (Group)</Label>
+                                    <div className="space-y-2 max-h-48 overflow-y-auto border rounded-md p-4">
+                                        {groupNames.length === 0 ? (
+                                            <p className="text-sm text-muted-foreground">그룹이 없습니다.</p>
+                                        ) : (
+                                            groupNames.map((groupName) => (
+                                                <div key={groupName} className="flex items-center space-x-2">
+                                                    <Checkbox
+                                                        id={`group-${groupName}`}
+                                                        checked={selectedGroup === groupName}
+                                                        onCheckedChange={(checked) => {
+                                                            if (checked) {
+                                                                setSelectedGroup(groupName)
+                                                            } else {
+                                                                setSelectedGroup("")
+                                                            }
+                                                        }}
+                                                    />
+                                                    <Label
+                                                        htmlFor={`group-${groupName}`}
+                                                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                                                    >
+                                                        {groupName}
+                                                    </Label>
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
+                                </div>
 
-                        <div className="space-y-2">
-                            <Label>코스 (Course)</Label>
-                            <div className="space-y-2 max-h-48 overflow-y-auto border rounded-md p-4">
-                                {courses.length === 0 ? (
-                                    <p className="text-sm text-muted-foreground">코스가 없습니다.</p>
-                                ) : (
-                                    courses.map((course) => (
-                                        <div key={course.id} className="flex items-center space-x-2">
-                                            <Checkbox
-                                                id={`course-${course.id}`}
-                                                checked={selectedCourses[course.id] || false}
-                                                onCheckedChange={() => handleCourseToggle(course.id)}
-                                            />
-                                            <Label
-                                                htmlFor={`course-${course.id}`}
-                                                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
-                                            >
-                                                {course.name || `코스 ${course.id}`}
-                                            </Label>
-                                        </div>
-                                    ))
-                                )}
+                                <div className="space-y-2">
+                                    <Label>코스 (Course)</Label>
+                                    <div className="space-y-2 max-h-48 overflow-y-auto border rounded-md p-4">
+                                        {courses.length === 0 ? (
+                                            <p className="text-sm text-muted-foreground">코스가 없습니다.</p>
+                                        ) : (
+                                            courses.map((course) => (
+                                                <div key={course.id} className="flex items-center space-x-2">
+                                                    <Checkbox
+                                                        id={`course-${course.id}`}
+                                                        checked={selectedCourses[course.id] || false}
+                                                        onCheckedChange={() => handleCourseToggle(course.id)}
+                                                    />
+                                                    <Label
+                                                        htmlFor={`course-${course.id}`}
+                                                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                                                    >
+                                                        {course.name || `코스 ${course.id}`}
+                                                    </Label>
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
+                                </div>
                             </div>
-                        </div>
-                    </div>
                         </div>
 
                         {/* 중앙: 미리보기 + 우측 패널 */}
@@ -549,7 +551,7 @@ export default function ManualScorecardPage() {
                                                         });
                                                     const firstPageCourses = selectedCoursesSorted.slice(0, 3);
                                                     const course = firstPageCourses[slotIndex];
-                                                    
+
                                                     // 빈 슬롯인 경우 (로고가 들어갈 위치)
                                                     if (!course || (emptySlotIndex !== null && emptySlotIndex === slotIndex)) {
                                                         return (
@@ -609,7 +611,7 @@ export default function ManualScorecardPage() {
                                                             </div>
                                                         );
                                                     }
-                                                    
+
                                                     // 채워진 슬롯
                                                     return (
                                                         <div

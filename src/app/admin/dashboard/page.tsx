@@ -11,7 +11,7 @@ import { Download, Filter, Printer, ChevronDown, ChevronUp } from 'lucide-react'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import * as XLSX from 'xlsx-js-style';
 import { db } from '@/lib/firebase';
-import { ref, onValue, set, get, query, limitToLast, onChildChanged, off } from 'firebase/database';
+import { ref, onValue, set, get, query, limitToLast, onChildChanged, off, update } from 'firebase/database';
 import { useToast } from '@/hooks/use-toast';
 import { ToastAction } from '@/components/ui/toast';
 import ExternalScoreboardInfo from '@/components/ExternalScoreboardInfo';
@@ -1495,197 +1495,118 @@ export default function AdminDashboard() {
         }
         try {
             if (filterGroup === 'all') {
-                // 전체 점수 초기화
-                await set(ref(db, 'scores'), null);
-                // scoreLogs도 함께 초기화
-                await set(ref(db, 'scoreLogs'), null);
-                // sessionStorage도 함께 초기화 (self-scoring 페이지용)
+                // 1. Firebase 데이터 삭제 (전체)
+                await Promise.all([
+                    set(ref(db, 'scores'), null),
+                    set(ref(db, 'scoreLogs'), null)
+                ]);
+
+                // 2. Client-side 저장소 정리
                 sessionStorage.removeItem('selfScoringTempData');
-
-                // localStorage의 모든 홀 활성화 상태도 초기화
                 try {
                     if (typeof window !== 'undefined' && window.localStorage) {
-                        const keys = Object.keys(localStorage);
-                        keys.forEach(key => {
-                            if (key.startsWith('selfScoringDraft_')) {
-                                const savedDraft = safeLocalStorageGetItem(key);
-                                if (savedDraft) {
-                                    try {
-                                        const parsed = JSON.parse(savedDraft);
-                                        // start와 current를 null로 초기화
-                                        parsed.start = null;
-                                        parsed.current = null;
-                                        safeLocalStorageSetItem(key, JSON.stringify(parsed));
-                                    } catch (error) {
-                                        console.error('localStorage 홀 활성화 상태 초기화 실패:', error);
-                                    }
-                                }
-                            }
-                        });
-                    }
-                } catch (error) {
-                    console.error('localStorage 홀 활성화 상태 초기화 실패:', error);
-                }
-
-                // localStorage의 모든 사인 데이터도 초기화
-                try {
-                    if (typeof window !== 'undefined' && window.localStorage) {
-                        const keys = Object.keys(localStorage);
-                        keys.forEach(key => {
-                            if (key.startsWith('selfScoringSign_') ||
+                        const keysToRemove: string[] = [];
+                        for (let i = 0; i < localStorage.length; i++) {
+                            const key = localStorage.key(i);
+                            if (key && (
+                                key.startsWith('selfScoringDraft_') ||
+                                key.startsWith('selfScoringSign_') ||
                                 key.startsWith('selfScoringSignTeam_') ||
-                                key.startsWith('selfScoringPostSignLock_')) {
-                                safeLocalStorageRemoveItem(key);
+                                key.startsWith('selfScoringPostSignLock_')
+                            )) {
+                                keysToRemove.push(key);
                             }
-                        });
+                        }
+                        keysToRemove.forEach(k => safeLocalStorageRemoveItem(k));
                     }
                 } catch (error) {
-                    console.error('사인 데이터 초기화 실패:', error);
+                    console.error('localStorage 초기화 실패:', error);
                 }
             } else {
                 // 특정 그룹만 초기화
                 const groupPlayers = finalDataByGroup[filterGroup] || [];
-                const updates: any = {};
+                const playerIds = groupPlayers.map((p: any) => p.id);
+                const scoreUpdates: any = {};
+
                 groupPlayers.forEach((player: any) => {
-                    if (!player.assignedCourses) return;
-                    player.assignedCourses.forEach((course: any) => {
-                        for (let h = 1; h <= 9; h++) {
-                            updates[`${player.id}/${course.id}/${h}`] = null;
-                        }
-                    });
+                    if (player.assignedCourses) {
+                        player.assignedCourses.forEach((course: any) => {
+                            scoreUpdates[`${player.id}/${course.id}`] = null;
+                        });
+                    }
                 });
-                if (Object.keys(updates).length > 0) {
-                    const currentScores = scores || {};
-                    const updatedScores: any = { ...currentScores };
 
-                    // 기존 점수 복사
-                    Object.keys(currentScores).forEach((pid) => {
-                        updatedScores[pid] = { ...(currentScores[pid] || {}) };
-                    });
+                // 1. Firebase 데이터 삭제 (특정 그룹)
+                if (Object.keys(scoreUpdates).length > 0) {
+                    await update(ref(db, 'scores'), scoreUpdates);
 
-                    // 업데이트 적용
-                    Object.keys(updates).forEach((path) => {
-                        const [pid, cid, h] = path.split('/');
-                        if (!updatedScores[pid]) updatedScores[pid] = {};
-                        if (!updatedScores[pid][cid]) updatedScores[pid][cid] = {};
-                        updatedScores[pid][cid][h] = null;
-                    });
-
-                    await set(ref(db, 'scores'), updatedScores);
-
-                    // 해당 그룹의 scoreLogs도 함께 초기화
+                    // 로그 삭제 (해당 그룹 선수들의 로그만)
                     try {
                         const logsRef = ref(db, 'scoreLogs');
                         const snapshot = await get(logsRef);
-
                         if (snapshot.exists()) {
-                            const deleteTasks: Promise<any>[] = [];
-
+                            const logUpdates: any = {};
                             snapshot.forEach((childSnapshot) => {
                                 const logData = childSnapshot.val();
-                                // 해당 그룹의 로그만 삭제
-                                if (logData &&
-                                    logData.comment &&
-                                    logData.comment.includes(`그룹: ${filterGroup}`)) {
-                                    if (!db) return;
-                                    const logRef = ref(db, `scoreLogs/${childSnapshot.key}`);
-                                    deleteTasks.push(set(logRef, null));
+                                if (logData && playerIds.includes(logData.playerId)) {
+                                    logUpdates[childSnapshot.key] = null;
                                 }
                             });
-
-                            if (deleteTasks.length > 0) {
-                                await Promise.all(deleteTasks);
+                            if (Object.keys(logUpdates).length > 0) {
+                                await update(ref(db, 'scoreLogs'), logUpdates);
                             }
                         }
                     } catch (error) {
                         console.error('scoreLogs 초기화 실패:', error);
                     }
+                }
 
-                    // 해당 그룹의 sessionStorage 데이터도 초기화
-                    const savedData = sessionStorage.getItem('selfScoringTempData');
-                    if (savedData) {
-                        try {
-                            const data = JSON.parse(savedData);
-                            // 해당 그룹의 선수들만 점수 초기화
-                            const groupPlayerIds = groupPlayers.map((p: any) => p.id);
-                            if (data.scores) {
-                                Object.keys(data.scores).forEach(playerId => {
-                                    if (groupPlayerIds.includes(playerId)) {
-                                        delete data.scores[playerId];
-                                    }
-                                });
-                                // 업데이트된 데이터 저장
-                                if (Object.keys(data.scores).length === 0) {
-                                    sessionStorage.removeItem('selfScoringTempData');
-                                } else {
-                                    sessionStorage.setItem('selfScoringTempData', JSON.stringify(data));
-                                }
+                // 2. Client-side 저장소 정리 (특정 그룹)
+                // sessionStorage 정리
+                const savedData = sessionStorage.getItem('selfScoringTempData');
+                if (savedData) {
+                    try {
+                        const data = JSON.parse(savedData);
+                        if (data.scores) {
+                            playerIds.forEach((pid: string) => {
+                                delete data.scores[pid];
+                            });
+                            if (Object.keys(data.scores).length === 0) {
+                                sessionStorage.removeItem('selfScoringTempData');
+                            } else {
+                                sessionStorage.setItem('selfScoringTempData', JSON.stringify(data));
                             }
-                        } catch (error) {
-                            console.error('sessionStorage 초기화 실패:', error);
                         }
-                    }
-
-                    // 해당 그룹의 localStorage 홀 활성화 상태도 초기화
-                    try {
-                        const courses = Object.keys(groupsData[filterGroup]?.courses || {});
-                        courses.forEach(courseId => {
-                            const draftKey = `selfScoringDraft_${courseId}_${filterGroup}_1`;
-                            const savedDraft = safeLocalStorageGetItem(draftKey);
-                            if (savedDraft) {
-                                try {
-                                    const parsed = JSON.parse(savedDraft);
-                                    // start와 current를 null로 초기화
-                                    parsed.start = null;
-                                    parsed.current = null;
-                                    safeLocalStorageSetItem(draftKey, JSON.stringify(parsed));
-                                } catch (error) {
-                                    console.error('localStorage 홀 활성화 상태 초기화 실패:', error);
-                                }
-                            }
-                        });
                     } catch (error) {
-                        console.error('localStorage 홀 활성화 상태 초기화 실패:', error);
-                    }
-
-                    // 해당 그룹의 사인 데이터도 초기화
-                    try {
-                        const courses = Object.keys(groupsData[filterGroup]?.courses || {});
-                        courses.forEach(courseId => {
-                            // 개인 사인 삭제
-                            const signKey = `selfScoringSign_${courseId}_${filterGroup}_1`;
-                            safeLocalStorageRemoveItem(signKey);
-
-                            // 팀 사인 삭제
-                            const teamSignKey = `selfScoringSignTeam_${courseId}_${filterGroup}_1`;
-                            safeLocalStorageRemoveItem(teamSignKey);
-
-                            // 사인 후 잠금 상태 삭제
-                            const postSignLockKey = `selfScoringPostSignLock_${courseId}_${filterGroup}_1`;
-                            safeLocalStorageRemoveItem(postSignLockKey);
-                        });
-                    } catch (error) {
-                        console.error('사인 데이터 초기화 실패:', error);
+                        console.error('sessionStorage 초기화 실패:', error);
                     }
                 }
+
+                // localStorage 정리
+                try {
+                    const coursesForGroup = Object.keys(groupsData[filterGroup]?.courses || {});
+                    coursesForGroup.forEach(courseId => {
+                        const suffix = `_${courseId}_${filterGroup}_1`;
+                        safeLocalStorageRemoveItem(`selfScoringDraft${suffix}`);
+                        safeLocalStorageRemoveItem(`selfScoringSign${suffix}`);
+                        safeLocalStorageRemoveItem(`selfScoringSignTeam${suffix}`);
+                        safeLocalStorageRemoveItem(`selfScoringPostSignLock${suffix}`);
+                    });
+                } catch (e) { }
             }
 
-            // 초기화 후 수정 기록 재조회
-            try {
-                if (filterGroup === 'all') {
-                    // 전체 초기화 시 모든 선수의 수정 기록 초기화
-                    setPlayerScoreLogs({});
-                } else {
-                    // 특정 그룹 초기화 시 해당 그룹 선수들의 수정 기록만 초기화
-                    const groupPlayers = finalDataByGroup[filterGroup] || [];
-                    const updatedLogs = { ...playerScoreLogs };
+            // 3. UI 상태 업데이트
+            if (filterGroup === 'all') {
+                setPlayerScoreLogs({});
+            } else {
+                const groupPlayers = finalDataByGroup[filterGroup] || [];
+                setPlayerScoreLogs((prev: any) => {
+                    const newLogs = { ...prev };
                     groupPlayers.forEach((player: any) => {
-                        delete updatedLogs[player.id];
+                        delete newLogs[player.id];
                     });
-                    setPlayerScoreLogs(updatedLogs);
-                }
-            } catch (error) {
-                console.error('수정 기록 재조회 실패:', error);
+                    return newLogs;
+                });
             }
 
             toast({
@@ -1695,6 +1616,7 @@ export default function AdminDashboard() {
                     : `${filterGroup} 그룹의 점수가 초기화되었습니다.`
             });
         } catch (e) {
+            console.error('초기화 실패:', e);
             toast({ title: '초기화 실패', description: '점수 초기화 중 오류가 발생했습니다.', variant: 'destructive' });
         } finally {
             setShowResetConfirm(false);
@@ -1719,7 +1641,6 @@ export default function AdminDashboard() {
             // 0점(기권/불참/실격) 입력 시 또는 점수가 없고 forfeitType이 있는 경우: 소속 그룹의 모든 코스/홀에 0점 입력
             if (scoreValue === 0 || (scoreValue === null && scoreEditModal.forfeitType)) {
                 // forfeitType이 없으면 기본값으로 'forfeit' 설정
-                // [Fix] Shadowing 제거: 상위 스코프의 forfeitType 변수(인자값 포함)를 사용해야 함
                 const effectiveForfeitType = forfeitType || 'forfeit';
 
                 // 선수 정보 찾기
@@ -1881,8 +1802,9 @@ export default function AdminDashboard() {
         try {
             const { ref, set } = await import('firebase/database');
             if (!db) return;
+            const database = db;
             const promises = scoreCheckModal.missingScores.map(item =>
-                set(ref(db, `scores/${item.playerId}/${item.courseId}/${item.hole}`), 0)
+                set(ref(database, `scores/${item.playerId}/${item.courseId}/${item.hole}`), 0)
             );
             await Promise.all(promises);
             toast({ title: '누락 점수 자동 입력 완료', description: `${scoreCheckModal.missingScores.length}개 점수가 0점으로 입력되었습니다.` });
@@ -1923,7 +1845,7 @@ export default function AdminDashboard() {
             // 서든데스 상황 체크 추가
             const playersInGroup = finalDataByGroup[groupName];
             if (playersInGroup) {
-                const tiedFirstPlace = playersInGroup.filter(p => p.rank === 1);
+                const tiedFirstPlace = playersInGroup.filter((p: ProcessedPlayer) => p.rank === 1);
 
                 if (tiedFirstPlace.length > 1) {
                     // 플레이오프 필요 시 토스트 알림
@@ -2052,19 +1974,19 @@ export default function AdminDashboard() {
             /* DEPRECATED LOGIC:
             // const unsubScores = onValue(scoresRef, snap => {
             //    const data = snap.val() || {};
-
+    
             //    setScores((prev: any) => {
                     // 최적화: 전체 객체 직렬화 대신 빠른 참조 및 키 비교
-
+    
                     // 1. 참조가 같으면 변경 없음
                     if (prev === data) {
                         return prev;
                     }
-
+    
                     // 2. 키 개수 비교 (빠른 1차 필터)
                     const prevKeys = prev ? Object.keys(prev) : [];
                     const newKeys = Object.keys(data);
-
+    
                     if (prevKeys.length !== newKeys.length) {
                         // 키 개수가 다르면 변경됨 -> 모든 변경된 선수 로그 캐시 무효화
                         const changedPlayerIds = [...new Set([...prevKeys, ...newKeys])];
@@ -2075,22 +1997,22 @@ export default function AdminDashboard() {
                         });
                         return data;
                     }
-
+    
                     // 3. 변경된 선수만 감지 (깊은 비교 최소화)
                     const changedPlayerIds: string[] = [];
                     for (const playerId of newKeys) {
                         const prevScores = prev[playerId];
                         const newScores = data[playerId];
-
+    
                         // 참조가 같으면 변경 없음
                         if (prevScores === newScores) continue;
-
+    
                         // null/undefined 체크
                         if (!prevScores || !newScores) {
                             changedPlayerIds.push(playerId);
                             continue;
                         }
-
+    
                         // 키 개수 비교 (빠른 필터)
                         const prevScoreKeys = Object.keys(prevScores);
                         const newScoreKeys = Object.keys(newScores);
@@ -2098,16 +2020,16 @@ export default function AdminDashboard() {
                             changedPlayerIds.push(playerId);
                             continue;
                         }
-
+    
                         // 코스별 점수 비교 (최소한의 깊은 비교)
                         let hasChanged = false;
                         for (const courseId of newScoreKeys) {
                             const prevCourseScores = prevScores[courseId];
                             const newCourseScores = newScores[courseId];
-
+    
                             // 참조가 같으면 변경 없음
                             if (prevCourseScores === newCourseScores) continue;
-
+    
                             // 객체 비교 (홀별 점수)
                             if (typeof prevCourseScores === 'object' && typeof newCourseScores === 'object') {
                                 const prevHoles = Object.keys(prevCourseScores || {});
@@ -2129,24 +2051,24 @@ export default function AdminDashboard() {
                                 break;
                             }
                         }
-
+    
                         if (hasChanged) {
                             changedPlayerIds.push(playerId);
                         }
                     }
-
+    
                     // 변경사항이 없으면 이전 상태 유지
                     if (changedPlayerIds.length === 0) {
                         return prev;
                     }
-
+    
                     // 변경된 선수들의 로그 캐시 무효화
                     changedPlayerIds.forEach(playerId => {
                         try {
                             invalidatePlayerLogCache(playerId);
                         } catch (e) { }
                     });
-
+    
                     return data;
                 // });
             // });

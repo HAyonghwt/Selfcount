@@ -1,7 +1,7 @@
 "use client"
 import React, { useEffect, useState, useMemo, useRef, useCallback, useTransition } from 'react';
 import { db, ensureAuthenticated } from '@/lib/firebase';
-import { ref, onValue, onChildChanged, off, query } from 'firebase/database';
+import { ref, onValue, onChildChanged, onChildAdded, onChildRemoved, off, query, get } from 'firebase/database';
 import { Flame, ChevronUp, ChevronDown, Globe, Palette, Maximize, Minimize } from 'lucide-react';
 import { cn, safeLocalStorageGetItem, safeLocalStorageSetItem } from '@/lib/utils';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -610,7 +610,7 @@ function ExternalScoreboard() {
                     setScores(data);
                     lastScoresHash.current = JSON.stringify(data);
                     checkAllLoaded();
-                });
+                }, { onlyOnce: true });
 
                 const unsubInitialTournament = onValue(tournamentRef, snap => {
                     const data = snap.val() || {};
@@ -655,112 +655,67 @@ function ExternalScoreboard() {
                 // 관리자 대시보드와 동일한 방식으로 하나의 리스너만 사용하여 성능 최적화
                 // Firebase가 효율적으로 변경사항만 전송하므로 실시간성은 동일하게 유지됨
                 const scoresRef = ref(dbInstance, 'scores');
-                const unsubScores = onValue(scoresRef, snap => {
-                    const data = snap.val() || {};
+
+                // 1. 데이터 추가 감지 (새로운 선수 점수 등록)
+                const unsubScoresAdded = onChildAdded(scoresRef, snap => {
+                    const playerId = snap.key;
+                    const data = snap.val();
+                    if (!playerId || !data) return;
 
                     setScores((prev: any) => {
-                        // 최적화: 전체 객체 직렬화 대신 빠른 참조 및 키 비교
-                        // 1. 참조가 같으면 변경 없음
-                        if (prev === data) {
+                        // 이미 로드된 데이터와 동일하면 업데이트 방지 (초기 로드 중복 방지)
+                        if (prev && prev[playerId] && JSON.stringify(prev[playerId]) === JSON.stringify(data)) {
                             return prev;
                         }
 
-                        // 2. 키 개수 비교 (빠른 1차 필터)
-                        const prevKeys = prev ? Object.keys(prev) : [];
-                        const newKeys = Object.keys(data);
-                        if (prevKeys.length !== newKeys.length) {
-                            // 키 개수가 다르면 변경됨
-                            setLastUpdateTime(Date.now());
-                            const changedPlayerIds = [...new Set([...prevKeys, ...newKeys])];
-                            changedPlayerIds.forEach(playerId => {
-                                invalidatePlayerLogCache(playerId);
-                            });
-                            setChangedPlayerIds((prevIds: string[]) => {
-                                const newIds = changedPlayerIds.filter(id => !prevIds.includes(id));
-                                return newIds.length > 0 ? [...prevIds, ...newIds] : prevIds;
-                            });
-                            return data;
-                        }
-
-                        // 3. 변경된 선수만 감지 (깊은 비교 최소화)
-                        const changedPlayerIds: string[] = [];
-                        for (const playerId of newKeys) {
-                            const prevScores = prev[playerId];
-                            const newScores = data[playerId];
-
-                            // 참조가 같으면 변경 없음
-                            if (prevScores === newScores) continue;
-
-                            // null/undefined 체크
-                            if (!prevScores || !newScores) {
-                                changedPlayerIds.push(playerId);
-                                continue;
-                            }
-
-                            // 키 개수 비교 (빠른 필터)
-                            const prevScoreKeys = Object.keys(prevScores);
-                            const newScoreKeys = Object.keys(newScores);
-                            if (prevScoreKeys.length !== newScoreKeys.length) {
-                                changedPlayerIds.push(playerId);
-                                continue;
-                            }
-
-                            // 코스별 점수 비교 (최소한의 깊은 비교)
-                            let hasChanged = false;
-                            for (const courseId of newScoreKeys) {
-                                const prevCourseScores = prevScores[courseId];
-                                const newCourseScores = newScores[courseId];
-
-                                // 참조가 같으면 변경 없음
-                                if (prevCourseScores === newCourseScores) continue;
-
-                                // 객체 비교 (홀별 점수)
-                                if (typeof prevCourseScores === 'object' && typeof newCourseScores === 'object') {
-                                    const prevHoles = Object.keys(prevCourseScores || {});
-                                    const newHoles = Object.keys(newCourseScores || {});
-                                    if (prevHoles.length !== newHoles.length) {
-                                        hasChanged = true;
-                                        break;
-                                    }
-                                    // 홀별 점수 값 비교
-                                    for (const hole of newHoles) {
-                                        if (prevCourseScores[hole] !== newCourseScores[hole]) {
-                                            hasChanged = true;
-                                            break;
-                                        }
-                                    }
-                                    if (hasChanged) break;
-                                } else if (prevCourseScores !== newCourseScores) {
-                                    hasChanged = true;
-                                    break;
-                                }
-                            }
-
-                            if (hasChanged) {
-                                changedPlayerIds.push(playerId);
-                            }
-                        }
-
-                        // 변경사항이 없으면 이전 상태 유지
-                        if (changedPlayerIds.length === 0) {
-                            return prev;
-                        }
-
-                        // 변경사항이 있으면 업데이트
+                        // 변경 알림 및 캐시 무효화
                         setLastUpdateTime(Date.now());
+                        invalidatePlayerLogCache(playerId);
+                        setChangedPlayerIds((prevIds: string[]) =>
+                            prevIds.includes(playerId) ? prevIds : [...prevIds, playerId]
+                        );
 
-                        // 변경된 선수들의 로그 캐시 무효화
-                        changedPlayerIds.forEach(playerId => {
-                            invalidatePlayerLogCache(playerId);
-                        });
+                        return { ...prev, [playerId]: data };
+                    });
+                });
 
-                        // 변경된 선수 ID 저장 (로그 업데이트용)
-                        setChangedPlayerIds((prevIds: string[]) => {
-                            const newIds = changedPlayerIds.filter(id => !prevIds.includes(id));
-                            return newIds.length > 0 ? [...prevIds, ...newIds] : prevIds;
-                        });
+                // 2. 데이터 변경 감지 (기존 선수 점수 수정) - 핵심 최적화
+                const unsubScoresChanged = onChildChanged(scoresRef, snap => {
+                    const playerId = snap.key;
+                    const data = snap.val();
+                    if (!playerId || !data) return;
 
-                        return data;
+                    setScores((prev: any) => {
+                        // 참조가 같거나 내용이 같으면 스킵
+                        if (prev && prev[playerId] && JSON.stringify(prev[playerId]) === JSON.stringify(data)) {
+                            return prev;
+                        }
+
+                        setLastUpdateTime(Date.now());
+                        invalidatePlayerLogCache(playerId);
+                        setChangedPlayerIds((prevIds: string[]) =>
+                            prevIds.includes(playerId) ? prevIds : [...prevIds, playerId]
+                        );
+
+                        return { ...prev, [playerId]: data };
+                    });
+                });
+
+                // 3. 데이터 삭제 감지
+                const unsubScoresRemoved = onChildRemoved(scoresRef, snap => {
+                    const playerId = snap.key;
+                    if (!playerId) return;
+
+                    setScores((prev: any) => {
+                        if (!prev || !prev[playerId]) return prev;
+
+                        const next = { ...prev };
+                        delete next[playerId];
+
+                        setLastUpdateTime(Date.now());
+                        invalidatePlayerLogCache(playerId);
+
+                        return next;
                     });
                 });
 
@@ -802,7 +757,9 @@ function ExternalScoreboard() {
 
                 // 언서브 등록
                 activeUnsubsRef.current.push(unsubPlayers);
-                activeUnsubsRef.current.push(unsubScores);
+                activeUnsubsRef.current.push(unsubScoresAdded);
+                activeUnsubsRef.current.push(unsubScoresChanged);
+                activeUnsubsRef.current.push(unsubScoresRemoved);
                 activeUnsubsRef.current.push(unsubTournament);
                 activeUnsubsRef.current.push(unsubCourses);
             }
