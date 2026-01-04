@@ -2899,28 +2899,30 @@ function ExternalScoreboard() {
                         t={t}
                     />
 
-                    <div className="flex flex-col gap-2">
-                        <button
-                            onClick={handleScroll(-500)}
-                            aria-label="Scroll Up"
-                            className={cn(
-                                "bg-gray-800/70 text-white p-2 rounded-full hover:bg-gray-700 transition-opacity duration-300",
-                                forceGroupSelectorVisible ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-                            )}
-                        >
-                            <ChevronUp className="h-6 w-6" />
-                        </button>
-                        <button
-                            onClick={handleScroll(500)}
-                            aria-label="Scroll Down"
-                            className={cn(
-                                "bg-gray-800/70 text-white p-2 rounded-full hover:bg-gray-700 transition-opacity duration-300",
-                                forceGroupSelectorVisible ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-                            )}
-                        >
-                            <ChevronDown className="h-6 w-6" />
-                        </button>
-                    </div>
+                    {!isMobile && (
+                        <div className="flex flex-col gap-2">
+                            <button
+                                onClick={handleScroll(-500)}
+                                aria-label="Scroll Up"
+                                className={cn(
+                                    "bg-gray-800/70 text-white p-2 rounded-full hover:bg-gray-700 transition-opacity duration-300",
+                                    forceGroupSelectorVisible ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                                )}
+                            >
+                                <ChevronUp className="h-6 w-6" />
+                            </button>
+                            <button
+                                onClick={handleScroll(500)}
+                                aria-label="Scroll Down"
+                                className={cn(
+                                    "bg-gray-800/70 text-white p-2 rounded-full hover:bg-gray-700 transition-opacity duration-300",
+                                    forceGroupSelectorVisible ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                                )}
+                            >
+                                <ChevronDown className="h-6 w-6" />
+                            </button>
+                        </div>
+                    )}
                 </div>
 
                 {!isMobile && (
