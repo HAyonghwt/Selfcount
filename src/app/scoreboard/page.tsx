@@ -346,6 +346,488 @@ const getForfeitTypeFromLogs = (logs: ScoreLog[]): 'absent' | 'disqualified' | '
     return null;
 };
 
+// 서든데스 테이블 컴포넌트 (메모이제이션 적용)
+const SuddenDeathTable = React.memo(({
+    type,
+    data,
+    processedData,
+    t,
+    tournament,
+    currentLang
+}: {
+    type: 'individual' | 'team',
+    data: any,
+    processedData: any[],
+    t: any,
+    tournament: any,
+    currentLang: 'ko' | 'en'
+}) => {
+    const title = type === 'individual' ? t('suddenDeathIndividual') : t('suddenDeathTeam');
+    const courseName = data?.courseId && tournament?.courses?.[data.courseId]?.name;
+
+    return (
+        <div className="mb-6">
+            <header className="flex flex-col justify-center items-center sb-group-header pb-2 mb-2 text-center">
+                <h1 className="text-2xl md:text-4xl font-bold sb-title flex items-center gap-3">
+                    <Flame className="h-8 w-8 animate-pulse" />
+                    {title}
+                    <Flame className="h-8 w-8 animate-pulse" />
+                </h1>
+                {courseName && (
+                    <p className="text-lg md:text-xl font-semibold text-gray-400 mt-1">
+                        ({courseName})
+                    </p>
+                )}
+            </header>
+            <div className="overflow-x-auto rounded-lg border-2 border-[color:var(--sb-border-color)]">
+                <table className="w-full text-center border-collapse sb-table">
+                    <thead className="sb-table-head text-base">
+                        <tr className="sb-th">
+                            <th className="py-2 px-2 w-48 text-center align-middle font-bold sb-th">{t('playerName')}</th>
+                            <th className="py-2 px-2 w-48 text-center align-middle font-bold sb-th">{t('club')}</th>
+                            {data.holes?.sort((a: number, b: number) => a - b).map((hole: number) => <th key={hole} className="py-2 px-2 w-16 text-center align-middle font-bold sb-th">{hole}{currentLang === 'ko' ? '홀' : ''}</th>)}
+                            <th className="py-2 px-2 min-w-[5rem] text-center align-middle font-bold sb-th">{t('sum')}</th>
+                            <th className="py-2 px-2 min-w-[5rem] text-center align-middle font-bold">{t('rank')}</th>
+                        </tr>
+                    </thead>
+                    <tbody className="text-xl">
+                        {processedData.map(player => (
+                            <tr key={player.id} className="border-b border-[color:var(--sb-cell-border)] last:border-0">
+                                <td className="py-1 px-2 text-center align-middle font-semibold sb-td sb-td-info">{player.name}</td>
+                                <td className="py-1 px-2 text-center align-middle opacity-70 sb-td sb-td-info">{player.club}</td>
+                                {data.holes.map((hole: number) => <td key={hole} className="py-1 px-2 align-middle font-mono font-bold text-2xl sb-td">{player.scoresPerHole[hole] ?? '-'}</td>)}
+                                <td className="py-1 px-2 align-middle font-bold text-2xl sb-td">{player.totalScore}</td>
+                                <td className="py-1 px-2 align-middle font-bold sb-rank text-2xl">{formatRank(player.rank, currentLang)}</td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    );
+});
+SuddenDeathTable.displayName = 'SuddenDeathTable';
+
+// 메인 스코어보드 테이블 컴포넌트 (메모이제이션 적용)
+const ScoreboardTable = React.memo(({
+    groupName,
+    groupPlayers,
+    tournament,
+    scores,
+    currentLang,
+    playerScoreLogs,
+    t,
+    translateGroupName,
+    translateCourseName,
+    groupProgressValue
+}: {
+    groupName: string;
+    groupPlayers: ProcessedPlayer[];
+    tournament: any;
+    scores: any;
+    currentLang: 'ko' | 'en';
+    playerScoreLogs: { [playerId: string]: ScoreLog[] };
+    t: any;
+    translateGroupName: any;
+    translateCourseName: any;
+    groupProgressValue: number;
+}) => {
+    // 그룹별 현재 진행중인 코스와 진행률 계산 함수 (컴포넌트 내부 최적화)
+    const { courseName, progress } = useMemo(() => {
+        if (!groupPlayers || groupPlayers.length === 0) return { courseName: null, progress: null };
+        const playerGroupData = tournament?.groups?.[groupName];
+        const allCourses = Object.values(tournament?.courses || {}).filter(Boolean);
+        const assignedCourseIds = playerGroupData?.courses ? Object.keys(playerGroupData.courses).filter((id: string) => playerGroupData.courses[id]) : [];
+        const coursesForGroup = allCourses.filter((c: any) => assignedCourseIds.includes(c.id.toString()) && c.isActive !== false);
+        if (!coursesForGroup || coursesForGroup.length === 0) return { courseName: null, progress: null };
+
+        let currentCourse: any = null;
+        let currentProgress: number | null = null;
+
+        for (const course of coursesForGroup as any[]) {
+            let totalScoresEntered = 0;
+            groupPlayers.forEach((player: any) => {
+                const scoresForCourse = (scores as any)[player.id]?.[course.id];
+                if (scoresForCourse) {
+                    totalScoresEntered += Object.keys(scoresForCourse).length;
+                }
+            });
+            const totalPossible = groupPlayers.length * 9;
+            if (totalScoresEntered < totalPossible) {
+                currentCourse = course;
+                currentProgress = Math.round((totalScoresEntered / totalPossible) * 100);
+                break;
+            }
+        }
+
+        if (!currentCourse) {
+            currentCourse = coursesForGroup[coursesForGroup.length - 1];
+            let totalScoresEntered = 0;
+            groupPlayers.forEach((player: any) => {
+                const scoresForCourse = (scores as any)[player.id]?.[currentCourse.id];
+                if (scoresForCourse) {
+                    totalScoresEntered += Object.keys(scoresForCourse).length;
+                }
+            });
+            const totalPossible = groupPlayers.length * 9;
+            currentProgress = Math.round((totalScoresEntered / totalPossible) * 100);
+        }
+
+        return { courseName: currentCourse?.name || null, progress: currentProgress };
+    }, [groupName, groupPlayers, tournament, scores]);
+
+    return (
+        <div className="mb-8">
+            <header className="flex justify-between items-baseline sb-group-header">
+                <h1 className="text-xl md:text-2xl font-bold sb-title">
+                    {tournament.name || '파크골프 토너먼트'} ({translateGroupName(groupName, currentLang)})
+                </h1>
+                <div className="text-xl md:text-2xl font-bold sb-progress-text">
+                    {courseName && progress !== null ? (
+                        <span>{translateCourseName(courseName)}: {progress}% {t('progress')}&nbsp;|&nbsp;{t('total')}: {groupProgressValue}% {t('progress')}</span>
+                    ) : (
+                        <span>{t('total')}: {groupProgressValue}% {t('progress')}</span>
+                    )}
+                </div>
+            </header>
+            <div className="overflow-x-auto">
+                <TooltipProvider delayDuration={0}>
+                    <table className="w-full text-center border-collapse sb-table">
+                        <thead className="sb-table-head text-sm">
+                            <tr>
+                                <th rowSpan={2} className="py-1 px-1 text-center align-middle font-bold sb-th w-12">{t('group')}</th>
+                                <th rowSpan={2} className="py-1 px-1 text-center align-middle font-bold sb-th w-28 md:w-32 lg:w-36">{t('playerName')}</th>
+                                <th rowSpan={2} className="py-1 px-1 text-center align-middle font-bold sb-th w-20 md:w-24 lg:w-28">{t('club')}</th>
+                                <th rowSpan={2} className="py-1 px-1 text-center align-middle font-bold sb-th w-16 md:w-20 lg:w-24">{t('course')}</th>
+                                <th colSpan={9} className="py-1 px-1 text-center align-middle font-bold sb-th w-auto">HOLE</th>
+                                <th rowSpan={2} className="py-1 px-1 min-w-[4rem] text-center align-middle font-bold sb-th">{t('sum')}</th>
+                                <th rowSpan={2} className="py-1 px-1 min-w-[4rem] text-center align-middle font-bold sb-th sb-rank-gold">{t('totalScore')}</th>
+                                <th rowSpan={2} className="py-1 px-1 min-w-[4rem] text-center align-middle font-bold">{t('rank')}</th>
+                            </tr>
+                            <tr className="border-b border-[color:var(--sb-border-color)]">
+                                {Array.from({ length: 9 }).map((_, i) => <th key={i} className={`py-1 px-1 font-bold text-base align-middle sb-th sb-th-hole min-w-[2.5rem]`}>{i + 1}</th>)}
+                            </tr>
+                        </thead>
+                        <tbody className="text-base">
+                            {groupPlayers.map((player: ProcessedPlayer) => (
+                                <React.Fragment key={player.id}>
+                                    {player.assignedCourses.length > 0 ? player.assignedCourses.map((course: any, courseIndex: number) => (
+                                        <tr key={`${player.id}-${course.id}`} className="border-b border-[color:var(--sb-cell-border)] last:border-0">
+                                            {courseIndex === 0 && (
+                                                <>
+                                                    <td rowSpan={player.assignedCourses.length || 1} className="py-0.5 px-1 align-middle font-bold sb-td sb-td-info w-12 truncate">{player.jo}</td>
+                                                    <td rowSpan={player.assignedCourses.length || 1} className="py-0.5 px-1 text-center align-middle font-semibold sb-td sb-td-info w-28 md:w-32 lg:w-36 truncate">{player.name}</td>
+                                                    <td rowSpan={player.assignedCourses.length || 1} className="py-0.5 px-1 text-center align-middle opacity-70 sb-td sb-td-info w-20 md:w-24 lg:w-28 truncate">{player.club}</td>
+                                                </>
+                                            )}
+                                            <td className="py-0.5 px-1 align-middle font-bold sb-td opacity-70 w-16 md:w-20 lg:w-24 truncate">{translateCourseName(course.name)}</td>
+                                            {Array.from({ length: 9 }).map((_, i) => {
+                                                const holeNum = i + 1;
+                                                const holeScore = player.coursesData[course.id]?.holeScores[i];
+                                                const par = getParForHole(tournament, course.id, i);
+
+                                                // 수정된 점수인지 확인 (scoreLogs 활용)
+                                                // playerScoreLogs: { [playerId: string]: ScoreLog[] }
+                                                const logs = playerScoreLogs[player.id] || [];
+                                                // course.id 타입 불일치 방지 및 상세 조건 적용
+                                                const holeLog = logs.find(l => String(l.courseId) === String(course.id) && Number(l.holeNumber) === holeNum);
+                                                // 실제로 수정된 경우만 표시 (oldValue와 newValue가 다르고, 0점이 아닌 경우 - AdminDashboard 기준)
+                                                const isModified = !!holeLog && holeLog.oldValue !== holeLog.newValue && holeLog.oldValue !== 0;
+
+                                                let cellContent: string | JSX.Element = holeScore !== null ? holeScore.toString() : '-';
+
+                                                if (holeScore !== null && par !== null) {
+                                                    const diff = holeScore - par;
+                                                    let scoreClass = "";
+                                                    if (diff < 0) scoreClass = "sb-score-minus";
+                                                    else if (diff > 0) scoreClass = "sb-score-plus";
+                                                    else scoreClass = "sb-score-zero";
+
+                                                    cellContent = (
+                                                        <div className="flex flex-col items-center justify-center leading-none">
+                                                            <span className={cn("text-2xl font-mono font-bold", isModified && "sb-score-modified")}>{holeScore}</span>
+                                                            <span className={cn("text-[0.6rem] font-bold", scoreClass)} style={{ marginTop: '-2px' }}>
+                                                                {diff === 0 ? 'E' : (diff > 0 ? `+${diff}` : diff)}
+                                                            </span>
+                                                        </div>
+                                                    );
+                                                }
+
+                                                return (
+                                                    <td
+                                                        key={i}
+                                                        className={cn(
+                                                            "py-0.5 px-1 align-middle sb-td",
+                                                            isModified ? 'sb-score-plus font-bold cursor-pointer' : ''
+                                                        )}
+                                                        style={{
+                                                            userSelect: 'none',
+                                                            WebkitUserSelect: 'none',
+                                                            WebkitTouchCallout: 'none'
+                                                        }}
+                                                    >
+                                                        {isModified ? (
+                                                            <Tooltip>
+                                                                <TooltipTrigger asChild>
+                                                                    <div className="w-full h-full flex items-center justify-center">
+                                                                        {cellContent}
+                                                                    </div>
+                                                                </TooltipTrigger>
+                                                                <TooltipContent className="sb-tooltip-content">
+                                                                    <div className="text-xs">
+                                                                        <p className="font-bold border-b border-gray-600 pb-1 mb-1">
+                                                                            {holeLog.modifiedByType === 'admin' ? '관리자 수정' :
+                                                                                holeLog.modifiedByType === 'captain' ? (holeLog.modifiedBy || '조장 수정') :
+                                                                                    (holeLog.modifiedBy || '심판 수정')}
+                                                                        </p>
+                                                                        <p>{new Date(holeLog.modifiedAt).toLocaleString()}</p>
+                                                                        {holeLog.comment && <p className="mt-1 opacity-80 decoration-0">{holeLog.comment}</p>}
+                                                                    </div>
+                                                                </TooltipContent>
+                                                            </Tooltip>
+                                                        ) : cellContent}
+                                                    </td>
+                                                );
+                                            })}
+                                            {(() => {
+                                                let courseSumElem: string | JSX.Element = '-';
+                                                if (player.hasAnyScore && !player.hasForfeited) {
+                                                    const courseData = tournament?.courses?.[course.id];
+                                                    const { sum, pm } = getCourseSumAndPlusMinus(tournament, courseData, player.coursesData[course.id]?.holeScores || []);
+                                                    courseSumElem = (
+                                                        <span>
+                                                            {sum}
+                                                            {pm !== null && (
+                                                                <span className={cn("ml-1 align-middle text-xs", pm < 0 ? "sb-score-minus" : pm > 0 ? "sb-score-plus" : "sb-score-zero")} style={{ fontSize: '0.7em', fontWeight: 600 }}>
+                                                                    {pm === 0 ? 'E' : (pm > 0 ? `+${pm}` : pm)}
+                                                                </span>
+                                                            )}
+                                                        </span>
+                                                    );
+                                                } else if (player.hasForfeited) {
+                                                    const logs = playerScoreLogs[player.id] || [];
+                                                    let foundType: string = 'forfeit';
+                                                    for (const l of logs) {
+                                                        if (l.newValue === 0 && (l.modifiedByType === 'judge' || l.modifiedByType === 'admin')) {
+                                                            if (l.comment?.includes('불참')) { foundType = 'absent'; break; }
+                                                            if (l.comment?.includes('실격')) { foundType = 'disqualified'; break; }
+                                                            if (l.comment?.includes('기권')) { foundType = 'forfeit'; break; }
+                                                        }
+                                                    }
+                                                    courseSumElem = t(foundType as any);
+                                                }
+                                                return <td className={cn("py-0.5 px-1 align-middle font-bold sb-td opacity-80", player.hasForfeited ? 'text-xs' : 'text-xl')}>{courseSumElem}</td>;
+                                            })()}
+                                            {courseIndex === 0 && (
+                                                <>
+                                                    <td rowSpan={player.assignedCourses.length || 1} className="py-0.5 px-1 align-middle font-bold sb-rank text-2xl sb-td">
+                                                        {player.hasForfeited ? (() => {
+                                                            const logs = playerScoreLogs[player.id] || [];
+                                                            let foundType: string = 'forfeit';
+                                                            for (const l of logs) {
+                                                                if (l.newValue === 0 && (l.modifiedByType === 'judge' || l.modifiedByType === 'admin')) {
+                                                                    if (l.comment?.includes('불참')) { foundType = 'absent'; break; }
+                                                                    if (l.comment?.includes('실격')) { foundType = 'disqualified'; break; }
+                                                                    if (l.comment?.includes('기권')) { foundType = 'forfeit'; break; }
+                                                                }
+                                                            }
+                                                            return t(foundType as any);
+                                                        })() : (player.hasAnyScore ? (
+                                                            <span>
+                                                                {isValidNumber(player.totalScore) ? player.totalScore : '-'}
+                                                                {(() => {
+                                                                    const { pm } = getPlayerTotalAndPlusMinusAllCourses(tournament, player, player.allAssignedCourses);
+                                                                    if (pm === null || pm === undefined) return null;
+                                                                    return (
+                                                                        <span
+                                                                            className={cn(
+                                                                                "ml-1 align-middle text-xs",
+                                                                                pm < 0 ? "sb-score-minus" : pm > 0 ? "sb-score-plus" : "sb-score-zero"
+                                                                            )}
+                                                                            style={{ fontSize: '0.7em', fontWeight: 600 }}
+                                                                        >
+                                                                            {pm === 0 ? 'E' : (pm > 0 ? `+${pm}` : pm)}
+                                                                        </span>
+                                                                    );
+                                                                })()}
+                                                            </span>
+                                                        ) : '-')}
+                                                    </td>
+                                                    <td rowSpan={player.assignedCourses.length || 1} className={cn("py-0.5 px-1 align-middle font-bold sb-rank text-2xl sb-td", player.hasForfeited ? "text-xs" : "text-xl")}>
+                                                        {player.rank !== null ? formatRank(player.rank, currentLang) : ''}
+                                                    </td>
+                                                </>
+                                            )}
+                                        </tr>
+                                    )) : (
+                                        <tr className="border-b border-[color:var(--sb-cell-border)] last:border-0">
+                                            <td className="py-0.5 px-1 align-middle font-bold sb-td sb-td-info w-12 truncate">{player.jo}</td>
+                                            <td className="py-0.5 px-1 text-center align-middle font-semibold sb-td sb-td-info w-28 md:w-32 lg:w-36 truncate">{player.name}</td>
+                                            <td className="py-0.5 px-1 text-center align-middle opacity-70 sb-td sb-td-info w-20 md:w-24 lg:w-28 truncate">{player.club}</td>
+                                            <td colSpan={11} className="py-0.5 px-1 align-middle text-center opacity-50 sb-td">{t('noCourseDisplay')}</td>
+                                            <td className={cn("py-0.5 px-1 align-middle font-bold sb-rank sb-td", player.hasForfeited ? "text-xs" : "text-xl")}>
+                                                {player.hasForfeited ? (() => {
+                                                    const logs = playerScoreLogs[player.id] || [];
+                                                    let foundType: string = 'forfeit';
+                                                    for (const l of logs) {
+                                                        if (l.newValue === 0 && (l.modifiedByType === 'judge' || l.modifiedByType === 'admin')) {
+                                                            if (l.comment?.includes('불참')) { foundType = 'absent'; break; }
+                                                            if (l.comment?.includes('실격')) { foundType = 'disqualified'; break; }
+                                                            if (l.comment?.includes('기권')) { foundType = 'forfeit'; break; }
+                                                        }
+                                                    }
+                                                    return t(foundType as any);
+                                                })() : (player.hasAnyScore ? player.totalScore : '-')}
+                                            </td>
+                                            <td className={cn("py-0.5 px-1 align-middle font-bold", player.hasForfeited ? "text-xs" : "text-xl")}>
+                                                {player.rank !== null ? formatRank(player.rank, currentLang) : ''}
+                                            </td>
+                                        </tr>
+                                    )}
+                                </React.Fragment>
+                            ))}
+                        </tbody>
+                    </table>
+                </TooltipProvider>
+            </div>
+        </div>
+    );
+});
+ScoreboardTable.displayName = 'ScoreboardTable';
+
+// 그룹 선택 컴포넌트 (메모이제이션 적용)
+const GroupSelector = React.memo(({
+    filterGroup,
+    allGroupsList,
+    translateGroupName,
+    currentLang,
+    onValueChange,
+    forceGroupSelectorVisible,
+    isRotationActive,
+    rotationGroups,
+    t
+}: {
+    filterGroup: string;
+    allGroupsList: string[];
+    translateGroupName: any;
+    currentLang: string;
+    onValueChange: (value: string) => void;
+    forceGroupSelectorVisible: boolean;
+    isRotationActive: boolean;
+    rotationGroups: string[];
+    t: any;
+}) => {
+    return (
+        <div className={cn(
+            "flex items-center gap-2 transition-opacity duration-300",
+            forceGroupSelectorVisible ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+        )}>
+            <Label htmlFor="group-filter" className="font-bold text-sm text-gray-300">{t('selectGroup')}</Label>
+            <div className="relative">
+                <Select value={filterGroup} onValueChange={onValueChange}>
+                    <SelectTrigger id="group-filter" className="w-[200px] h-9 bg-gray-800/80 backdrop-blur-sm border-gray-600 text-white focus:ring-yellow-400">
+                        <SelectValue placeholder={t('selectGroup')} />
+                    </SelectTrigger>
+                    <SelectContent className="bg-gray-900 text-white border-gray-700">
+                        <SelectItem value="all">{t('viewAllGroups')}</SelectItem>
+                        {allGroupsList.map(g => <SelectItem key={g} value={g}>{translateGroupName(g, currentLang)}</SelectItem>)}
+                    </SelectContent>
+                </Select>
+                {isRotationActive && rotationGroups.length > 0 && (
+                    <div className="absolute -top-1 -right-1 w-3 h-3 bg-yellow-400 rounded-full animate-pulse" />
+                )}
+            </div>
+        </div>
+    );
+});
+GroupSelector.displayName = 'GroupSelector';
+
+// 순환 설정 컴포넌트 (메모이제이션 적용)
+const RotationSettings = React.memo(({
+    isRotationActive,
+    allGroupsList,
+    rotationGroups,
+    rotationInterval,
+    translateGroupName,
+    currentLang,
+    onRotationToggle,
+    onGroupToggle,
+    onIntervalChange,
+    t
+}: {
+    isRotationActive: boolean;
+    allGroupsList: string[];
+    rotationGroups: string[];
+    rotationInterval: number;
+    translateGroupName: any;
+    currentLang: string;
+    onRotationToggle: (checked: boolean) => void;
+    onGroupToggle: (group: string, checked: boolean) => void;
+    onIntervalChange: (value: string) => void;
+    t: any;
+}) => {
+    return (
+        <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-gray-900/95 backdrop-blur-sm border border-gray-700 rounded-lg p-4 min-w-[280px]">
+            <div className="flex flex-col gap-3">
+                <div className="flex items-center justify-between">
+                    <Label className="font-bold text-sm text-gray-300">그룹 순환</Label>
+                    <div className="flex items-center gap-2">
+                        <Checkbox
+                            id="rotation-active"
+                            checked={isRotationActive}
+                            onCheckedChange={onRotationToggle}
+                            className="border-gray-600"
+                        />
+                        <Label htmlFor="rotation-active" className="text-xs text-gray-400 cursor-pointer">
+                            활성화
+                        </Label>
+                    </div>
+                </div>
+
+                {isRotationActive && (
+                    <>
+                        <div className="flex flex-col gap-2">
+                            <Label className="text-xs text-gray-400">순환할 그룹 선택</Label>
+                            <div className="flex flex-col gap-1.5 max-h-32 overflow-y-auto">
+                                {allGroupsList.map(group => (
+                                    <div key={group} className="flex items-center gap-2">
+                                        <Checkbox
+                                            id={`rotation-group-${group}`}
+                                            checked={rotationGroups.includes(group)}
+                                            onCheckedChange={(checked) => onGroupToggle(group, checked === true)}
+                                            className="border-gray-600"
+                                        />
+                                        <Label htmlFor={`rotation-group-${group}`} className="text-xs text-gray-300 cursor-pointer">
+                                            {translateGroupName(group, currentLang)}
+                                        </Label>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="flex flex-col gap-2">
+                            <Label className="text-xs text-gray-400">순환 시간</Label>
+                            <Select value={rotationInterval.toString()} onValueChange={onIntervalChange}>
+                                <SelectTrigger className="w-full h-8 bg-gray-800/80 border-gray-600 text-white text-xs">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent className="bg-gray-900 text-white border-gray-700">
+                                    {[10, 30, 60, 120, 180, 240, 300].map(v => (
+                                        <SelectItem key={v} value={v.toString()}>
+                                            {v < 60 ? `${v}초` : `${v / 60}분`}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </>
+                )}
+            </div>
+        </div>
+    );
+});
+RotationSettings.displayName = 'RotationSettings';
+
 // 외부 전광판 컴포넌트
 function ExternalScoreboard() {
     const [loading, setLoading] = useState(true);
@@ -2101,15 +2583,133 @@ function ExternalScoreboard() {
 
 
 
-    const handleScroll = (amount: number) => {
-        if (scrollContainerRef.current) {
-            scrollContainerRef.current.scrollBy({
-                top: amount,
-                left: 0,
-                behavior: 'smooth'
+    // 그룹별 현재 진행중인 코스와 진행률 계산 함수 (useCallback으로 최적화)
+    const getCurrentCourseAndProgress = useCallback((groupName: string) => {
+        const groupPlayers = finalDataByGroup[groupName];
+        if (!groupPlayers || groupPlayers.length === 0) return { courseName: null, progress: null };
+        const playerGroupData = groupsData[groupName];
+        const allCourses = Object.values(tournament.courses || {}).filter(Boolean);
+        const assignedCourseIds = playerGroupData?.courses ? Object.keys(playerGroupData.courses).filter((id: string) => playerGroupData.courses[id]) : [];
+        const coursesForGroup = allCourses.filter((c: any) => assignedCourseIds.includes(c.id.toString()) && c.isActive !== false);
+        if (!coursesForGroup || coursesForGroup.length === 0) return { courseName: null, progress: null };
+
+        let currentCourse: any = null;
+        let currentProgress: number | null = null;
+        for (const course of coursesForGroup as any[]) {
+            let totalScoresEntered = 0;
+            groupPlayers.forEach((player: any) => {
+                const scoresForCourse = (scores as any)[player.id]?.[course.id];
+                if (scoresForCourse) {
+                    totalScoresEntered += Object.keys(scoresForCourse).length;
+                }
             });
+            const totalPossible = groupPlayers.length * 9;
+            if (totalScoresEntered < totalPossible) {
+                currentCourse = course;
+                currentProgress = Math.round((totalScoresEntered / totalPossible) * 100);
+                break;
+            }
         }
-    };
+        if (!currentCourse) {
+            currentCourse = coursesForGroup[coursesForGroup.length - 1];
+            let totalScoresEntered = 0;
+            groupPlayers.forEach((player: any) => {
+                const scoresForCourse = (scores as any)[player.id]?.[currentCourse.id];
+                if (scoresForCourse) {
+                    totalScoresEntered += Object.keys(scoresForCourse).length;
+                }
+            });
+            const totalPossible = groupPlayers.length * 9;
+            currentProgress = Math.round((totalScoresEntered / totalPossible) * 100);
+        }
+        return { courseName: currentCourse?.name || null, progress: currentProgress };
+    }, [finalDataByGroup, groupsData, tournament.courses, scores]);
+
+    // 이벤트 핸들러 고정 (useCallback)
+    const handleGroupFilterChange = useCallback((value: string) => {
+        if (isMobile) {
+            setForceGroupSelectorVisible(false);
+        }
+        setTimeout(() => {
+            startTransition(() => {
+                setFilterGroup(value);
+                if (isRotationActive) {
+                    setIsRotationActive(false);
+                }
+            });
+        }, 10);
+    }, [isMobile, isRotationActive]);
+
+    const handleRotationToggle = useCallback((checked: boolean) => {
+        const newValue = checked === true;
+        hasUserToggledRotationRef.current = true;
+        startTransition(() => {
+            setIsRotationActive(newValue);
+            if (newValue) {
+                const baseGroups = (rotationGroupsRef.current && rotationGroupsRef.current.length > 0)
+                    ? rotationGroupsRef.current
+                    : (rotationGroups.length > 0 ? rotationGroups : allGroupsList);
+                const firstValidGroup = baseGroups.find(g => visibleGroups.includes(g));
+                if (firstValidGroup) {
+                    const idxInRotation = rotationGroups.indexOf(firstValidGroup);
+                    currentRotationIndexRef.current = idxInRotation >= 0 ? idxInRotation : 0;
+                    setFilterGroup(firstValidGroup);
+                }
+            }
+        });
+        try {
+            safeLocalStorageSetItem('scoreboardRotation', JSON.stringify({
+                isActive: newValue,
+                intervalSeconds: rotationInterval,
+                selectedGroups: rotationGroups
+            }));
+        } catch (error) {
+            console.error('순환 설정 저장 실패:', error);
+        }
+    }, [allGroupsList, rotationGroups, rotationInterval, visibleGroups]);
+
+    const handleRotationGroupToggle = useCallback((group: string, checked: boolean) => {
+        let newGroups: string[];
+        if (checked) {
+            newGroups = [...rotationGroups, group];
+        } else {
+            newGroups = rotationGroups.filter(g => g !== group);
+        }
+        startTransition(() => {
+            setRotationGroups(newGroups);
+        });
+        try {
+            safeLocalStorageSetItem('scoreboardRotation', JSON.stringify({
+                isActive: isRotationActive,
+                intervalSeconds: rotationInterval,
+                selectedGroups: newGroups
+            }));
+        } catch (error) {
+            console.error('순환 설정 저장 실패:', error);
+        }
+    }, [isRotationActive, rotationGroups, rotationInterval]);
+
+    const handleRotationIntervalChange = useCallback((value: string) => {
+        const newInterval = parseInt(value);
+        startTransition(() => {
+            setRotationInterval(newInterval);
+        });
+        try {
+            safeLocalStorageSetItem('scoreboardRotation', JSON.stringify({
+                isActive: isRotationActive,
+                intervalSeconds: newInterval,
+                selectedGroups: rotationGroups
+            }));
+        } catch (error) {
+            console.error('순환 설정 저장 실패:', error);
+        }
+    }, [isRotationActive, rotationGroups]);
+
+    const handleScroll = useCallback((delta: number) => () => {
+        if (scrollContainerRef.current) {
+            scrollContainerRef.current.scrollBy({ top: delta, behavior: 'smooth' });
+        }
+    }, []);
 
     if (loading) {
         return (
@@ -2187,48 +2787,6 @@ function ExternalScoreboard() {
         )
     }
 
-    // 그룹별 현재 진행중인 코스와 진행률 계산 함수
-    const getCurrentCourseAndProgress = (groupName: string) => {
-        const groupPlayers = finalDataByGroup[groupName];
-        if (!groupPlayers || groupPlayers.length === 0) return { courseName: null, progress: null };
-        const playerGroupData = groupsData[groupName];
-        const allCourses = Object.values(tournament.courses || {}).filter(Boolean);
-        const assignedCourseIds = playerGroupData?.courses ? Object.keys(playerGroupData.courses).filter((id: string) => playerGroupData.courses[id]) : [];
-        const coursesForGroup = allCourses.filter((c: any) => assignedCourseIds.includes(c.id.toString()) && c.isActive !== false);
-        if (!coursesForGroup || coursesForGroup.length === 0) return { courseName: null, progress: null };
-        // 진행중인 코스: 9홀 모두 입력되지 않은 첫 번째 코스
-        let currentCourse: any = null;
-        let currentProgress: number | null = null;
-        for (const course of coursesForGroup as any[]) {
-            let totalScoresEntered = 0;
-            groupPlayers.forEach((player: any) => {
-                const scoresForCourse = (scores as any)[player.id]?.[course.id];
-                if (scoresForCourse) {
-                    totalScoresEntered += Object.keys(scoresForCourse).length;
-                }
-            });
-            const totalPossible = groupPlayers.length * 9;
-            if (totalScoresEntered < totalPossible) {
-                currentCourse = course;
-                currentProgress = Math.round((totalScoresEntered / totalPossible) * 100);
-                break;
-            }
-        }
-        // 모두 완료된 경우 마지막 코스 기준
-        if (!currentCourse) {
-            currentCourse = coursesForGroup[coursesForGroup.length - 1];
-            let totalScoresEntered = 0;
-            groupPlayers.forEach((player: any) => {
-                const scoresForCourse = (scores as any)[player.id]?.[currentCourse.id];
-                if (scoresForCourse) {
-                    totalScoresEntered += Object.keys(scoresForCourse).length;
-                }
-            });
-            const totalPossible = groupPlayers.length * 9;
-            currentProgress = Math.round((totalScoresEntered / totalPossible) * 100);
-        }
-        return { courseName: currentCourse && typeof currentCourse === 'object' && 'name' in currentCourse ? currentCourse.name : null, progress: currentProgress };
-    };
 
     return (
         <>
@@ -2250,369 +2808,92 @@ function ExternalScoreboard() {
 
                 {groupsToDisplay.length === 0 ? (
                     <NoDataContent />
-                ) : groupsToDisplay.slice(0, displayedGroupCount).map((groupName) => {
-                    const groupPlayers = finalDataByGroup[groupName];
-                    if (!groupPlayers || groupPlayers.length === 0) return null;
-
-                    return (
-                        <div key={groupName} className="mb-8">
-                            <header className="flex justify-between items-baseline sb-group-header">
-                                <h1 className="text-xl md:text-2xl font-bold sb-title">
-                                    {tournament.name || '파크골프 토너먼트'} ({translateGroupName(groupName, currentLang)})
-                                </h1>
-                                <div className="text-xl md:text-2xl font-bold sb-progress-text">
-                                    {(() => {
-                                        const { courseName, progress } = getCurrentCourseAndProgress(groupName);
-                                        if (courseName && progress !== null) {
-                                            return <span>{translateCourseName(courseName)}: {progress}% {t('progress')}&nbsp;|&nbsp;{t('total')}: {groupProgress[groupName]}% {t('progress')}</span>;
-                                        } else {
-                                            return <span>{t('total')}: {groupProgress[groupName]}% {t('progress')}</span>;
-                                        }
-                                    })()}
-                                </div>
-                            </header>
-                            <div className="overflow-x-auto">
-                                <TooltipProvider delayDuration={0}>
-                                    <table className="w-full text-center border-collapse sb-table">
-                                        <thead className="sb-table-head text-sm">
-                                            <tr>
-                                                <th rowSpan={2} className="py-1 px-1 text-center align-middle font-bold sb-th w-12">{t('group')}</th>
-                                                <th rowSpan={2} className="py-1 px-1 text-center align-middle font-bold sb-th w-28 md:w-32 lg:w-36">{t('playerName')}</th>
-                                                <th rowSpan={2} className="py-1 px-1 text-center align-middle font-bold sb-th w-20 md:w-24 lg:w-28">{t('club')}</th>
-                                                <th rowSpan={2} className="py-1 px-1 text-center align-middle font-bold sb-th w-16 md:w-20 lg:w-24">{t('course')}</th>
-                                                <th colSpan={9} className="py-1 px-1 text-center align-middle font-bold sb-th w-auto">HOLE</th>
-                                                <th rowSpan={2} className="py-1 px-1 min-w-[4rem] text-center align-middle font-bold sb-th">{t('sum')}</th>
-                                                <th rowSpan={2} className="py-1 px-1 min-w-[4rem] text-center align-middle font-bold sb-th sb-rank-gold">{t('totalScore')}</th>
-                                                <th rowSpan={2} className="py-1 px-1 min-w-[4rem] text-center align-middle font-bold">{t('rank')}</th>
-                                            </tr>
-                                            <tr className="border-b border-[color:var(--sb-border-color)]">
-                                                {Array.from({ length: 9 }).map((_, i) => <th key={i} className={`py-1 px-1 font-bold text-base align-middle sb-th sb-th-hole min-w-[2.5rem]`}>{i + 1}</th>)}
-                                            </tr>
-                                        </thead>
-                                        <tbody className="text-base">
-                                            {groupPlayers.map((player: ProcessedPlayer) => (
-                                                <React.Fragment key={player.id}>
-                                                    {player.assignedCourses.length > 0 ? player.assignedCourses.map((course: any, courseIndex: number) => (
-                                                        <tr key={`${player.id}-${course.id}`} className="border-b border-[color:var(--sb-cell-border)] last:border-0">
-                                                            {courseIndex === 0 && (
-                                                                <>
-                                                                    <td rowSpan={player.assignedCourses.length || 1} className="py-0.5 px-1 align-middle font-bold sb-td sb-td-info w-12 truncate">{player.jo}</td>
-                                                                    <td rowSpan={player.assignedCourses.length || 1} className="py-0.5 px-1 text-center align-middle font-semibold sb-td sb-td-info w-28 md:w-32 lg:w-36 truncate">{player.name}</td>
-                                                                    <td rowSpan={player.assignedCourses.length || 1} className="py-0.5 px-1 text-center align-middle opacity-70 sb-td sb-td-info w-20 md:w-24 lg:w-28 truncate">{player.club}</td>
-                                                                </>
-                                                            )}
-                                                            <td className="py-0.5 px-1 align-middle text-center sb-td w-16 md:w-20 lg:w-24 truncate">{translateCourseName(player.coursesData[course.id]?.courseName)}</td>
-                                                            {player.coursesData[course.id]?.holeScores.map((score: any, i: number) => {
-                                                                const holeNumber = i + 1;
-                                                                // 관리자 대시보드와 동일한 방식으로 로그 조회 (배열에서 find 사용)
-                                                                const logs = playerScoreLogs[player.id] || [];
-                                                                const cellLog = logs.find(l => String(l.courseId) === String(course.id) && Number(l.holeNumber) === holeNumber);
-                                                                const isModified = !!cellLog && cellLog.oldValue !== 0 && cellLog.oldValue !== cellLog.newValue;
-
-                                                                const tooltipContent = cellLog ? (
-                                                                    <div>
-                                                                        <div><b>수정자:</b> {
-                                                                            cellLog.modifiedByType === 'admin' ? '관리자' :
-                                                                                cellLog.modifiedByType === 'captain' ? (cellLog.modifiedBy || '조장') :
-                                                                                    (cellLog.modifiedBy && cellLog.modifiedBy !== 'referee' ? cellLog.modifiedBy : '심판')
-                                                                        }</div>
-                                                                        <div><b>일시:</b> {cellLog.modifiedAt ? new Date(cellLog.modifiedAt).toLocaleString('ko-KR') : ''}</div>
-                                                                        <div><b>변경:</b> {cellLog.oldValue} → {cellLog.newValue}</div>
-                                                                        {cellLog.comment && <div><b>비고:</b> {cellLog.comment}</div>}
-                                                                    </div>
-                                                                ) : null;
-
-                                                                const par = getParForHole(tournament, course.id, i);
-                                                                let pm = null;
-                                                                if (par !== null && score !== null && score !== undefined) {
-                                                                    pm = score - par;
-                                                                }
-
-                                                                const scoreDisplay = (
-                                                                    <span
-                                                                        className={cn("cursor-pointer", isModified ? "sb-score-plus font-bold" : "")}
-                                                                        style={{
-                                                                            ...(isModified ? { position: 'relative', zIndex: 10 } : {})
-                                                                        }}
-                                                                    >
-                                                                        {score === null ?
-                                                                            '-' :
-                                                                            score === 0 ?
-                                                                                <span className={cn("text-xs", isModified ? "sb-score-plus" : "")}>0</span> :
-                                                                                <>
-                                                                                    <span className={cn(isModified ? "sb-score-plus" : "")}>{String(score)}</span>
-                                                                                    {pm !== null && (
-                                                                                        <span
-                                                                                            className={cn(
-                                                                                                "ml-1 text-xs align-middle",
-                                                                                                pm < 0 ? "sb-score-minus" : pm > 0 ? "sb-score-plus" : "sb-score-zero"
-                                                                                            )}
-                                                                                            style={{ fontSize: '0.7em', fontWeight: 600 }}
-                                                                                        >
-                                                                                            {pm === 0 ? 'E' : (pm > 0 ? `+${pm}` : pm)}
-                                                                                        </span>
-                                                                                    )}
-                                                                                </>
-                                                                        }
-                                                                    </span>
-                                                                );
-
-                                                                const cellContent = (
-                                                                    <>
-                                                                        {/* 수정된 점수만 툴팁/팝오버 기능 제공 (성능 최적화) */}
-                                                                        {isModified ? (
-                                                                            isMobile ? (
-                                                                                <Popover>
-                                                                                    <PopoverTrigger asChild>
-                                                                                        {scoreDisplay}
-                                                                                    </PopoverTrigger>
-                                                                                    {tooltipContent && (
-                                                                                        <PopoverContent className="whitespace-pre-line text-sm bg-gray-900 border-gray-700 text-white z-[9999]" side="top">
-                                                                                            {tooltipContent}
-                                                                                        </PopoverContent>
-                                                                                    )}
-                                                                                </Popover>
-                                                                            ) : (
-                                                                                <Tooltip>
-                                                                                    <TooltipTrigger asChild>
-                                                                                        {scoreDisplay}
-                                                                                    </TooltipTrigger>
-                                                                                    {tooltipContent && (
-                                                                                        <TooltipContent side="top" className="whitespace-pre-line">
-                                                                                            {tooltipContent}
-                                                                                        </TooltipContent>
-                                                                                    )}
-                                                                                </Tooltip>
-                                                                            )
-                                                                        ) : (
-                                                                            /* 수정되지 않은 일반 점수는 툴팁 없이 렌더링 (DOM 감소) */
-                                                                            scoreDisplay
-                                                                        )}
-                                                                    </>
-                                                                );
-
-                                                                return (
-                                                                    <td
-                                                                        key={i}
-                                                                        className={cn(
-                                                                            `py-0.5 px-1 align-middle font-mono font-bold sb-td ${i % 2 !== 0 ? 'sb-td-stripe' : ''}`,
-                                                                            score === 0 ? 'text-xs' : 'text-xl',
-                                                                            isModified ? 'sb-score-plus font-bold cursor-pointer' : ''
-                                                                        )}
-                                                                        style={{
-                                                                            userSelect: 'none',
-                                                                            WebkitUserSelect: 'none',
-                                                                            WebkitTouchCallout: 'none'
-                                                                        }}
-                                                                    >
-                                                                        {cellContent}
-                                                                    </td>
-                                                                );
-                                                            })}
-                                                            {(() => {
-                                                                let courseSumElem: string | JSX.Element = '-';
-                                                                if (player.hasAnyScore && !player.hasForfeited) {
-                                                                    const courseData = tournament?.courses?.[course.id];
-                                                                    const { sum, pm } = getCourseSumAndPlusMinus(tournament, courseData, player.coursesData[course.id]?.holeScores || []);
-                                                                    courseSumElem = (
-                                                                        <span>
-                                                                            {sum}
-                                                                            {pm !== null && (
-                                                                                <span className={cn("ml-1 align-middle text-xs", pm < 0 ? "sb-score-minus" : pm > 0 ? "sb-score-plus" : "sb-score-zero")} style={{ fontSize: '0.7em', fontWeight: 600 }}>
-                                                                                    {pm === 0 ? 'E' : (pm > 0 ? `+${pm}` : pm)}
-                                                                                </span>
-                                                                            )}
-                                                                        </span>
-                                                                    );
-                                                                } else if (player.hasForfeited) {
-                                                                    // 배열 구조로 변경된 로그에서 기권 타입 찾기
-                                                                    const logs = playerScoreLogs[player.id] || [];
-                                                                    let foundType: string = 'forfeit';
-                                                                    for (const l of logs) {
-                                                                        if (l.newValue === 0 && (l.modifiedByType === 'judge' || l.modifiedByType === 'admin')) {
-                                                                            if (l.comment?.includes('불참')) { foundType = 'absent'; break; }
-                                                                            if (l.comment?.includes('실격')) { foundType = 'disqualified'; break; }
-                                                                            if (l.comment?.includes('기권')) { foundType = 'forfeit'; break; }
-                                                                        }
-                                                                    }
-                                                                    courseSumElem = t(foundType as any);
-                                                                }
-                                                                return <td className={cn("py-0.5 px-1 align-middle font-bold sb-td opacity-80", player.hasForfeited ? 'text-xs' : 'text-xl')}>{courseSumElem}</td>;
-                                                            })()}
-                                                            {courseIndex === 0 && (
-                                                                <>
-                                                                    <td rowSpan={player.assignedCourses.length || 1} className="py-0.5 px-1 align-middle font-bold sb-rank text-2xl sb-td">
-                                                                        {player.hasForfeited ? (() => {
-                                                                            // 배열 구조로 변경된 로그에서 기권 타입 찾기
-                                                                            const logs = playerScoreLogs[player.id] || [];
-                                                                            let foundType: string = 'forfeit';
-                                                                            for (const l of logs) {
-                                                                                if (l.newValue === 0 && (l.modifiedByType === 'judge' || l.modifiedByType === 'admin')) {
-                                                                                    if (l.comment?.includes('불참')) { foundType = 'absent'; break; }
-                                                                                    if (l.comment?.includes('실격')) { foundType = 'disqualified'; break; }
-                                                                                    if (l.comment?.includes('기권')) { foundType = 'forfeit'; break; }
-                                                                                }
-                                                                            }
-                                                                            return t(foundType as any);
-                                                                        })() : (player.hasAnyScore ? (
-                                                                            <span>
-                                                                                {isValidNumber(player.totalScore) ? player.totalScore : '-'}
-                                                                                {(() => {
-                                                                                    const { pm } = getPlayerTotalAndPlusMinusAllCourses(tournament, player, player.allAssignedCourses);
-                                                                                    if (pm === null || pm === undefined) return null;
-                                                                                    return (
-                                                                                        <span
-                                                                                            className={cn(
-                                                                                                "ml-1 align-middle text-xs",
-                                                                                                pm < 0 ? "sb-score-minus" : pm > 0 ? "sb-score-plus" : "sb-score-zero"
-                                                                                            )}
-                                                                                            style={{ fontSize: '0.7em', fontWeight: 600 }}
-                                                                                        >
-                                                                                            {pm === 0 ? 'E' : (pm > 0 ? `+${pm}` : pm)}
-                                                                                        </span>
-                                                                                    );
-                                                                                })()}
-                                                                            </span>
-                                                                        ) : '-')}
-                                                                    </td>
-                                                                    <td rowSpan={player.assignedCourses.length || 1} className={cn("py-0.5 px-1 align-middle font-bold sb-rank text-2xl sb-td", player.hasForfeited ? "text-xs" : "text-xl")}>
-                                                                        {player.rank !== null ? formatRank(player.rank, currentLang) : ''}
-                                                                    </td>
-                                                                </>
-                                                            )}
-                                                        </tr>
-                                                    )) : (
-                                                        <tr className="border-b border-[color:var(--sb-cell-border)] last:border-0">
-                                                            <td className="py-0.5 px-1 align-middle font-bold sb-td sb-td-info w-12 truncate">{player.jo}</td>
-                                                            <td className="py-0.5 px-1 text-center align-middle font-semibold sb-td sb-td-info w-28 md:w-32 lg:w-36 truncate">{player.name}</td>
-                                                            <td className="py-0.5 px-1 text-center align-middle opacity-70 sb-td sb-td-info w-20 md:w-24 lg:w-28 truncate">{player.club}</td>
-                                                            <td colSpan={11} className="py-0.5 px-1 align-middle text-center opacity-50 sb-td">{t('noCourseDisplay')}</td>
-                                                            <td className={cn("py-0.5 px-1 align-middle font-bold sb-rank sb-td", player.hasForfeited ? "text-xs" : "text-xl")}>
-                                                                {player.hasForfeited ? (() => {
-                                                                    const logs = playerScoreLogs[player.id] || [];
-                                                                    let foundType: string = 'forfeit';
-                                                                    for (const l of logs) {
-                                                                        if (l.newValue === 0 && (l.modifiedByType === 'judge' || l.modifiedByType === 'admin')) {
-                                                                            if (l.comment?.includes('불참')) { foundType = 'absent'; break; }
-                                                                            if (l.comment?.includes('실격')) { foundType = 'disqualified'; break; }
-                                                                            if (l.comment?.includes('기권')) { foundType = 'forfeit'; break; }
-                                                                        }
-                                                                    }
-                                                                    return t(foundType as any);
-                                                                })() : (player.hasAnyScore ? player.totalScore : '-')}
-                                                            </td>
-                                                            <td className={cn("py-0.5 px-1 align-middle font-bold", player.hasForfeited ? "text-xs" : "text-xl")}>
-                                                                {player.rank !== null ? formatRank(player.rank, currentLang) : ''}
-                                                            </td>
-                                                        </tr>
-                                                    )}
-                                                </React.Fragment>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </TooltipProvider>
-                            </div>
-                        </div >
-                    )
-                })}
-            </div >
-
+                ) : (
+                    groupsToDisplay.slice(0, displayedGroupCount).map((groupName) => (
+                        <ScoreboardTable
+                            key={groupName}
+                            groupName={groupName}
+                            groupPlayers={finalDataByGroup[groupName]}
+                            tournament={tournament}
+                            scores={scores}
+                            currentLang={currentLang}
+                            playerScoreLogs={playerScoreLogs}
+                            t={t}
+                            translateGroupName={translateGroupName}
+                            translateCourseName={translateCourseName}
+                            groupProgressValue={groupProgress[groupName]}
+                        />
+                    ))
+                )}
+            </div>
             {/* 왼쪽 위: 언어 선택 - 모바일에서는 숨김 */}
-            {!isMobile && (
-                <div className="fixed left-4 flex items-center gap-4 z-50 group/lang" style={{ height: '36px', top: '3rem' }}>
-                    <div className="flex items-center gap-2 opacity-0 group-hover/lang:opacity-100 transition-opacity duration-300 h-full">
-                        <Globe className="h-5 w-5 text-gray-400" />
-                        <Label htmlFor="language-select" className="font-bold text-sm text-gray-300">{t('language')}</Label>
-                        <Select value={languageMode} onValueChange={(v) => setLanguageMode(v as 'korean' | 'english' | 'cycle')}>
-                            <SelectTrigger id="language-select" className="w-[120px] h-9 bg-gray-800/80 backdrop-blur-sm border-gray-600 text-white focus:ring-yellow-400">
-                                <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent className="bg-gray-900 text-white border-gray-700">
-                                <SelectItem value="korean">{t('korean')}</SelectItem>
-                                <SelectItem value="english">{t('english')}</SelectItem>
-                                <SelectItem value="cycle">{t('cycle')} (10s)</SelectItem>
-                            </SelectContent>
-                        </Select>
-                    </div>
-                    {/* 순환 모드 표시 */}
-                    {
-                        languageMode === 'cycle' && (
+            {
+                !isMobile && (
+                    <div className="fixed left-4 flex items-center gap-4 z-50 group/lang" style={{ height: '36px', top: '3rem' }}>
+                        <div className="flex items-center gap-2 opacity-0 group-hover/lang:opacity-100 transition-opacity duration-300 h-full">
+                            <Globe className="h-5 w-5 text-gray-400" />
+                            <Label htmlFor="language-select" className="font-bold text-sm text-gray-300">{t('language')}</Label>
+                            <Select value={languageMode} onValueChange={(v) => setLanguageMode(v as 'korean' | 'english' | 'cycle')}>
+                                <SelectTrigger id="language-select" className="w-[120px] h-9 bg-gray-800/80 backdrop-blur-sm border-gray-600 text-white focus:ring-yellow-400">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent className="bg-gray-900 text-white border-gray-700">
+                                    <SelectItem value="korean">{t('korean')}</SelectItem>
+                                    <SelectItem value="english">{t('english')}</SelectItem>
+                                    <SelectItem value="cycle">{t('cycle')} (10s)</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        {/* 순환 모드 표시 */}
+                        {languageMode === 'cycle' && (
                             <div className="text-xs text-yellow-400 animate-pulse flex items-center h-full">
                                 {currentLang === 'ko' ? '🇰🇷' : '🇺🇸'}
                             </div>
-                        )
-                    }
-                </div>
-            )}
+                        )}
+                    </div>
+                )
+            }
 
             {/* 왼쪽 위: 테마 선택 (언어 선택 아래) - 모바일에서는 숨김 */}
-            {!isMobile && (
-                <div className="fixed left-4 flex items-center gap-4 z-50 group/theme" style={{ height: '36px', top: '6rem' }}>
-                    <div className="flex items-center gap-2 opacity-0 group-hover/theme:opacity-100 transition-opacity duration-300 h-full">
-                        <Palette className="h-5 w-5 text-gray-400" />
-                        <Label htmlFor="theme-select" className="font-bold text-sm text-gray-300">{t('theme')}</Label>
-                        <Select value={theme} onValueChange={(v) => setTheme(v as 'dark' | 'grey' | 'light')}>
-                            <SelectTrigger id="theme-select" className="w-[120px] h-9 sb-select-trigger backdrop-blur-sm focus:ring-yellow-400">
-                                <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent className="sb-select-content">
-                                <SelectItem value="dark">{t('dark')}</SelectItem>
-                                <SelectItem value="grey">{t('grey')}</SelectItem>
-                                <SelectItem value="light">{t('light')}</SelectItem>
-                            </SelectContent>
-                        </Select>
-                    </div>
-                </div>
-            )}
-
-            {/* 왼쪽 위: 전체화면 알림 (버튼 대신 터치 유도 힌트, 필요 시 잠시 띄움 - 현재는 제거하고 터치 시 자동 동작) */}
-            {/* 기존 버튼 제거됨 */}
-
-            {/* 오른쪽 위: 그룹 선택 */}
-            < div className="fixed top-4 right-4 flex flex-col items-end gap-2 z-50 group" >
-                <div className="flex items-center gap-4">
-                    <div className={cn(
-                        "flex items-center gap-2 transition-opacity duration-300",
-                        forceGroupSelectorVisible ? "opacity-100" : "opacity-0 group-hover:opacity-100" // 모바일 초기 노출 또는 호버 시 노출
-                    )}>
-                        <Label htmlFor="group-filter" className="font-bold text-sm text-gray-300">{t('selectGroup')}</Label>
-                        <div className="relative">
-                            <Select value={filterGroup} onValueChange={(value) => {
-                                // 1. 모바일: 선택창을 즉시 닫기 위해 UI 상태 우선 변경
-                                if (isMobile) {
-                                    setForceGroupSelectorVisible(false);
-                                }
-
-                                // 2. 데이터 변경은 렌더링 부하가 크므로, UI가 닫힌 직후에 실행되도록 지연 처리
-                                // (이렇게 하면 선택창이 버벅임 없이 바로 닫히는 것처럼 느껴짐)
-                                setTimeout(() => {
-                                    startTransition(() => {
-                                        setFilterGroup(value);
-                                        // 순환이 활성화되어 있으면 수동 변경 시 순환 중지
-                                        if (isRotationActive) {
-                                            setIsRotationActive(false);
-                                        }
-                                    });
-                                }, 10);
-                            }}>
-                                <SelectTrigger id="group-filter" className="w-[200px] h-9 bg-gray-800/80 backdrop-blur-sm border-gray-600 text-white focus:ring-yellow-400">
-                                    <SelectValue placeholder={t('selectGroup')} />
+            {
+                !isMobile && (
+                    <div className="fixed left-4 flex items-center gap-4 z-50 group/theme" style={{ height: '36px', top: '6rem' }}>
+                        <div className="flex items-center gap-2 opacity-0 group-hover/theme:opacity-100 transition-opacity duration-300 h-full">
+                            <Palette className="h-5 w-5 text-gray-400" />
+                            <Label htmlFor="theme-select" className="font-bold text-sm text-gray-300">{t('theme')}</Label>
+                            <Select value={theme} onValueChange={(v) => setTheme(v as 'dark' | 'grey' | 'light')}>
+                                <SelectTrigger id="theme-select" className="w-[120px] h-9 sb-select-trigger backdrop-blur-sm focus:ring-yellow-400">
+                                    <SelectValue />
                                 </SelectTrigger>
-                                <SelectContent className="bg-gray-900 text-white border-gray-700">
-                                    <SelectItem value="all">{t('viewAllGroups')}</SelectItem>
-                                    {allGroupsList.map(g => <SelectItem key={g} value={g}>{translateGroupName(g, currentLang)}</SelectItem>)}
+                                <SelectContent className="sb-select-content">
+                                    <SelectItem value="dark">{t('dark')}</SelectItem>
+                                    <SelectItem value="grey">{t('grey')}</SelectItem>
+                                    <SelectItem value="light">{t('light')}</SelectItem>
                                 </SelectContent>
                             </Select>
-                            {/* 순환 중 표시 */}
-                            {isRotationActive && rotationGroups.length > 0 && (
-                                <div className="absolute -top-1 -right-1 w-3 h-3 bg-yellow-400 rounded-full animate-pulse" />
-                            )}
                         </div>
                     </div>
+                )
+            }
+
+            {/* 오른쪽 위: 그룹 선택 및 설정 */}
+            <div className="fixed top-4 right-4 flex flex-col items-end gap-2 z-50 group">
+                <div className="flex items-center gap-4">
+                    <GroupSelector
+                        filterGroup={filterGroup}
+                        allGroupsList={allGroupsList}
+                        translateGroupName={translateGroupName}
+                        currentLang={currentLang}
+                        onValueChange={handleGroupFilterChange}
+                        forceGroupSelectorVisible={forceGroupSelectorVisible}
+                        isRotationActive={isRotationActive}
+                        rotationGroups={rotationGroups}
+                        t={t}
+                    />
 
                     <div className="flex flex-col gap-2">
                         <button
-                            onClick={() => handleScroll(-50)}
+                            onClick={handleScroll(-500)}
                             aria-label="Scroll Up"
                             className={cn(
                                 "bg-gray-800/70 text-white p-2 rounded-full hover:bg-gray-700 transition-opacity duration-300",
@@ -2622,7 +2903,7 @@ function ExternalScoreboard() {
                             <ChevronUp className="h-6 w-6" />
                         </button>
                         <button
-                            onClick={() => handleScroll(50)}
+                            onClick={handleScroll(500)}
                             aria-label="Scroll Down"
                             className={cn(
                                 "bg-gray-800/70 text-white p-2 rounded-full hover:bg-gray-700 transition-opacity duration-300",
@@ -2634,147 +2915,21 @@ function ExternalScoreboard() {
                     </div>
                 </div>
 
-                {/* 그룹 순환 설정 (마우스 오버 시 표시) - 모바일 제외 */}
                 {!isMobile && (
-                    <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-gray-900/95 backdrop-blur-sm border border-gray-700 rounded-lg p-4 min-w-[280px]">
-                        <div className="flex flex-col gap-3">
-                            <div className="flex items-center justify-between">
-                                <Label className="font-bold text-sm text-gray-300">그룹 순환</Label>
-                                <div className="flex items-center gap-2">
-                                    <Checkbox
-                                        id="rotation-active"
-                                        checked={isRotationActive}
-                                        onCheckedChange={(checked) => {
-                                            const newValue = checked === true;
-                                            // 사용자가 화면에서 직접 순환 체크박스를 건드렸음을 기록
-                                            hasUserToggledRotationRef.current = true;
-
-                                            startTransition(() => {
-                                                setIsRotationActive(newValue);
-
-                                                if (newValue) {
-                                                    // 현재 rotationGroupsRef / rotationGroups / allGroupsList 중에서
-                                                    // 실제로 화면에 표시 가능한(visibleGroups에 포함된) 첫 번째 그룹만
-                                                    // 초기 순환 대상으로 사용. 유효한 그룹이 없으면 현재 화면 유지.
-                                                    const baseGroups =
-                                                        (rotationGroupsRef.current && rotationGroupsRef.current.length > 0)
-                                                            ? rotationGroupsRef.current
-                                                            : (rotationGroups.length > 0 ? rotationGroups : allGroupsList);
-
-                                                    const firstValidGroup = baseGroups.find(g => visibleGroups.includes(g));
-
-                                                    if (firstValidGroup) {
-                                                        const idxInRotation = rotationGroups.indexOf(firstValidGroup);
-                                                        currentRotationIndexRef.current = idxInRotation >= 0 ? idxInRotation : 0;
-                                                        setFilterGroup(firstValidGroup);
-                                                    }
-                                                }
-                                            });
-
-                                            // localStorage에 저장 (새로고침 시 유지, 각 모니터별로 독립적)
-                                            try {
-                                                safeLocalStorageSetItem('scoreboardRotation', JSON.stringify({
-                                                    isActive: newValue,
-                                                    intervalSeconds: rotationInterval,
-                                                    selectedGroups: rotationGroups
-                                                }));
-                                            } catch (error) {
-                                                console.error('순환 설정 저장 실패:', error);
-                                            }
-                                        }}
-                                        className="border-gray-600"
-                                    />
-                                    <Label htmlFor="rotation-active" className="text-xs text-gray-400 cursor-pointer">
-                                        활성화
-                                    </Label>
-                                </div>
-                            </div>
-
-                            {isRotationActive && (
-                                <>
-                                    <div className="flex flex-col gap-2">
-                                        <Label className="text-xs text-gray-400">순환할 그룹 선택</Label>
-                                        <div className="flex flex-col gap-1.5 max-h-32 overflow-y-auto">
-                                            {allGroupsList.map(group => (
-                                                <div key={group} className="flex items-center gap-2">
-                                                    <Checkbox
-                                                        id={`rotation-group-${group}`}
-                                                        checked={rotationGroups.includes(group)}
-                                                        onCheckedChange={(checked) => {
-                                                            let newGroups: string[];
-                                                            if (checked === true) {
-                                                                newGroups = [...rotationGroups, group];
-                                                                startTransition(() => {
-                                                                    setRotationGroups(newGroups);
-                                                                });
-                                                            } else {
-                                                                newGroups = rotationGroups.filter(g => g !== group);
-                                                                startTransition(() => {
-                                                                    setRotationGroups(newGroups);
-                                                                });
-                                                            }
-                                                            // localStorage에 저장 (새로고침 시 유지, 각 모니터별로 독립적)
-                                                            try {
-                                                                safeLocalStorageSetItem('scoreboardRotation', JSON.stringify({
-                                                                    isActive: isRotationActive,
-                                                                    intervalSeconds: rotationInterval,
-                                                                    selectedGroups: newGroups
-                                                                }));
-                                                            } catch (error) {
-                                                                console.error('순환 설정 저장 실패:', error);
-                                                            }
-                                                        }}
-                                                        className="border-gray-600"
-                                                    />
-                                                    <Label htmlFor={`rotation-group-${group}`} className="text-xs text-gray-300 cursor-pointer">
-                                                        {translateGroupName(group, currentLang)}
-                                                    </Label>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-
-                                    <div className="flex flex-col gap-2">
-                                        <Label className="text-xs text-gray-400">순환 시간</Label>
-                                        <Select
-                                            value={rotationInterval.toString()}
-                                            onValueChange={(value) => {
-                                                const newInterval = parseInt(value);
-                                                startTransition(() => {
-                                                    setRotationInterval(newInterval);
-                                                });
-                                                // localStorage에 저장 (새로고침 시 유지, 각 모니터별로 독립적)
-                                                try {
-                                                    safeLocalStorageSetItem('scoreboardRotation', JSON.stringify({
-                                                        isActive: isRotationActive,
-                                                        intervalSeconds: newInterval,
-                                                        selectedGroups: rotationGroups
-                                                    }));
-                                                } catch (error) {
-                                                    console.error('순환 설정 저장 실패:', error);
-                                                }
-                                            }}
-                                        >
-                                            <SelectTrigger className="w-full h-8 bg-gray-800/80 border-gray-600 text-white text-xs">
-                                                <SelectValue />
-                                            </SelectTrigger>
-                                            <SelectContent className="bg-gray-900 text-white border-gray-700">
-                                                <SelectItem value="10">10초</SelectItem>
-                                                <SelectItem value="30">30초</SelectItem>
-                                                <SelectItem value="60">1분</SelectItem>
-                                                <SelectItem value="120">2분</SelectItem>
-                                                <SelectItem value="180">3분</SelectItem>
-                                                <SelectItem value="240">4분</SelectItem>
-                                                <SelectItem value="300">5분</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-                                </>
-                            )}
-                        </div>
-                    </div>
+                    <RotationSettings
+                        isRotationActive={isRotationActive}
+                        allGroupsList={allGroupsList}
+                        rotationGroups={rotationGroups}
+                        rotationInterval={rotationInterval}
+                        translateGroupName={translateGroupName}
+                        currentLang={currentLang}
+                        onRotationToggle={handleRotationToggle}
+                        onGroupToggle={handleRotationGroupToggle}
+                        onIntervalChange={handleRotationIntervalChange}
+                        t={t}
+                    />
                 )}
-            </div >
+            </div>
         </>
     );
 }
