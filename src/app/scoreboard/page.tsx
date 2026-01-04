@@ -2604,17 +2604,22 @@ function ExternalScoreboard() {
                         <Label htmlFor="group-filter" className="font-bold text-sm text-gray-300">{t('selectGroup')}</Label>
                         <div className="relative">
                             <Select value={filterGroup} onValueChange={(value) => {
-                                startTransition(() => {
-                                    setFilterGroup(value);
-                                    // 순환이 활성화되어 있으면 수동 변경 시 순환 중지
-                                    if (isRotationActive) {
-                                        setIsRotationActive(false);
-                                    }
-                                    // 모바일: 그룹 선택 시 강제 노출 해제 (선택창 사라짐/투명화)
-                                    if (isMobile) {
-                                        setForceGroupSelectorVisible(false);
-                                    }
-                                });
+                                // 1. 모바일: 선택창을 즉시 닫기 위해 UI 상태 우선 변경
+                                if (isMobile) {
+                                    setForceGroupSelectorVisible(false);
+                                }
+
+                                // 2. 데이터 변경은 렌더링 부하가 크므로, UI가 닫힌 직후에 실행되도록 지연 처리
+                                // (이렇게 하면 선택창이 버벅임 없이 바로 닫히는 것처럼 느껴짐)
+                                setTimeout(() => {
+                                    startTransition(() => {
+                                        setFilterGroup(value);
+                                        // 순환이 활성화되어 있으면 수동 변경 시 순환 중지
+                                        if (isRotationActive) {
+                                            setIsRotationActive(false);
+                                        }
+                                    });
+                                }, 10);
                             }}>
                                 <SelectTrigger id="group-filter" className="w-[200px] h-9 bg-gray-800/80 backdrop-blur-sm border-gray-600 text-white focus:ring-yellow-400">
                                     <SelectValue placeholder={t('selectGroup')} />
