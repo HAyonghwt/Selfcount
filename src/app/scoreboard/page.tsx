@@ -391,8 +391,8 @@ const SuddenDeathTable = React.memo(({
                         </tr>
                     </thead>
                     <tbody className="text-xl">
-                        {processedData.map(player => (
-                            <tr key={player.id} className="border-b border-[color:var(--sb-cell-border)] last:border-0">
+                        {processedData.map((player, playerIndex) => (
+                            <tr key={player.id} className={cn("border-b border-[color:var(--sb-cell-border)] last:border-0", playerIndex % 2 === 1 && "sb-tr-alt")}>
                                 <td className="py-1 px-2 text-center align-middle font-semibold sb-td sb-td-info">{player.name}</td>
                                 <td className="py-1 px-2 text-center align-middle opacity-70 sb-td sb-td-info">{player.club}</td>
                                 {data.holes.map((hole: number) => <td key={hole} className="py-1 px-2 align-middle font-mono font-bold text-2xl sb-td">{player.scoresPerHole[hole] ?? '-'}</td>)}
@@ -509,10 +509,10 @@ const ScoreboardTable = React.memo(({
                             </tr>
                         </thead>
                         <tbody className="text-base">
-                            {groupPlayers.map((player: ProcessedPlayer) => (
+                            {groupPlayers.map((player: ProcessedPlayer, playerIndex: number) => (
                                 <React.Fragment key={player.id}>
                                     {player.assignedCourses.length > 0 ? player.assignedCourses.map((course: any, courseIndex: number) => (
-                                        <tr key={`${player.id}-${course.id}`} className="border-b border-[color:var(--sb-cell-border)] last:border-0">
+                                        <tr key={`${player.id}-${course.id}`} className={cn("border-b border-[color:var(--sb-cell-border)] last:border-0", playerIndex % 2 === 1 && "sb-tr-alt")}>
                                             {courseIndex === 0 && (
                                                 <>
                                                     <td rowSpan={player.assignedCourses.length || 1} className="py-0.5 px-1 align-middle font-bold sb-td sb-td-info w-12 truncate">{player.jo}</td>
@@ -660,7 +660,7 @@ const ScoreboardTable = React.memo(({
                                             )}
                                         </tr>
                                     )) : (
-                                        <tr className="border-b border-[color:var(--sb-cell-border)] last:border-0">
+                                        <tr className={cn("border-b border-[color:var(--sb-cell-border)] last:border-0", playerIndex % 2 === 1 && "sb-tr-alt")}>
                                             <td className="py-0.5 px-1 align-middle font-bold sb-td sb-td-info w-12 truncate">{player.jo}</td>
                                             <td className="py-0.5 px-1 text-center align-middle font-semibold sb-td sb-td-info w-28 md:w-32 lg:w-36 truncate">{player.name}</td>
                                             <td className="py-0.5 px-1 text-center align-middle opacity-70 sb-td sb-td-info w-20 md:w-24 lg:w-28 truncate">{player.club}</td>

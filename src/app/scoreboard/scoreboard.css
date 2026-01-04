@@ -11,6 +11,9 @@
     --sb-sub-text-color: #4ade80;
     /* green-400 */
 
+    --sb-bg-alt-color: #0c0c0c;
+    /* Very subtle grey for a premium look, requested by user */
+
     --sb-table-border-color: #1f2937;
     /* gray-800 */
     --sb-table-header-bg: transparent;
@@ -49,6 +52,9 @@
     --sb-sub-text-color: #4ade80;
     /* green-400 */
 
+    --sb-bg-alt-color: #1e1e21;
+    /* Subtle contrast for Grey theme */
+
     --sb-table-border-color: #27272a;
     /* zinc-800 */
     --sb-table-header-bg: #27272a;
@@ -79,6 +85,9 @@
     /* Title Color (User Req) */
     --sb-sub-text-color: #4B75F2;
     /* Blue (Image 12) */
+
+    --sb-bg-alt-color: #f5f9ff;
+    /* Very subtle light blue for alternating rows in Light theme */
 
     --sb-table-border-color: #9ca3af;
     /* gray-400 (Darker Grey Border) */
@@ -168,6 +177,10 @@
 .sb-td {
     border-right: 1px solid var(--sb-cell-border);
     border-bottom: 1px solid var(--sb-cell-border);
+}
+
+.sb-tr-alt {
+    background-color: var(--sb-bg-alt-color);
 }
 
 /* Info Column Style (for Name/Group/Club) */
