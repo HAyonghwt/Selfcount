@@ -2195,6 +2195,40 @@ function ExternalScoreboard() {
                                                                     </span>
                                                                 );
 
+                                                                const cellContent = (
+                                                                    <>
+                                                                        {/* 수정된 점수만 툴팁/팝오버 기능 제공 (성능 최적화) */}
+                                                                        {isModified ? (
+                                                                            isMobile ? (
+                                                                                <Popover>
+                                                                                    <PopoverTrigger asChild>
+                                                                                        {scoreDisplay}
+                                                                                    </PopoverTrigger>
+                                                                                    {tooltipContent && (
+                                                                                        <PopoverContent className="whitespace-pre-line text-sm bg-gray-900 border-gray-700 text-white z-[9999]" side="top">
+                                                                                            {tooltipContent}
+                                                                                        </PopoverContent>
+                                                                                    )}
+                                                                                </Popover>
+                                                                            ) : (
+                                                                                <Tooltip>
+                                                                                    <TooltipTrigger asChild>
+                                                                                        {scoreDisplay}
+                                                                                    </TooltipTrigger>
+                                                                                    {tooltipContent && (
+                                                                                        <TooltipContent side="top" className="whitespace-pre-line">
+                                                                                            {tooltipContent}
+                                                                                        </TooltipContent>
+                                                                                    )}
+                                                                                </Tooltip>
+                                                                            )
+                                                                        ) : (
+                                                                            /* 수정되지 않은 일반 점수는 툴팁 없이 렌더링 (DOM 감소) */
+                                                                            scoreDisplay
+                                                                        )}
+                                                                    </>
+                                                                );
+
                                                                 return (
                                                                     <td
                                                                         key={i}
@@ -2209,30 +2243,7 @@ function ExternalScoreboard() {
                                                                             WebkitTouchCallout: 'none'
                                                                         }}
                                                                     >
-                                                                        {/* 모바일: 팝오버 사용 (터치 이슈 해결) / 데스크탑: 툴팁 사용 */}
-                                                                        {isModified && isMobile ? (
-                                                                            <Popover>
-                                                                                <PopoverTrigger asChild>
-                                                                                    {scoreDisplay}
-                                                                                </PopoverTrigger>
-                                                                                {tooltipContent && (
-                                                                                    <PopoverContent className="whitespace-pre-line text-sm bg-gray-900 border-gray-700 text-white z-[9999]" side="top">
-                                                                                        {tooltipContent}
-                                                                                    </PopoverContent>
-                                                                                )}
-                                                                            </Popover>
-                                                                        ) : (
-                                                                            <Tooltip>
-                                                                                <TooltipTrigger asChild>
-                                                                                    {scoreDisplay}
-                                                                                </TooltipTrigger>
-                                                                                {isModified && tooltipContent && (
-                                                                                    <TooltipContent side="top" className="whitespace-pre-line">
-                                                                                        {tooltipContent}
-                                                                                    </TooltipContent>
-                                                                                )}
-                                                                            </Tooltip>
-                                                                        )}
+                                                                        {cellContent}
                                                                     </td>
                                                                 );
                                                             })}
