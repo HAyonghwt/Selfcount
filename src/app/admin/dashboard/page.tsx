@@ -124,6 +124,259 @@ function getTotalParForPlayer(courses: any, assignedCourses: any[]) {
     return total;
 }
 
+// 점수 수정 모달 컴포넌트 (로컬 상태로 관리하여 부모 리렌더링 방지)
+const ScoreEditModalComponent = React.memo(({
+    open,
+    playerId,
+    courseId,
+    holeIndex,
+    initialScore,
+    initialForfeitType,
+    playerName,
+    courseName,
+    onClose,
+    onSave,
+    finalDataByGroup,
+    playerScoreLogs,
+    scores
+}: {
+    open: boolean;
+    playerId: string;
+    courseId: string;
+    holeIndex: number;
+    initialScore: string;
+    initialForfeitType: 'absent' | 'disqualified' | 'forfeit' | null;
+    playerName: string;
+    courseName: string;
+    onClose: () => void;
+    onSave: (score: string, forfeitType: 'absent' | 'disqualified' | 'forfeit' | null) => Promise<void>;
+    finalDataByGroup: any;
+    playerScoreLogs: { [playerId: string]: ScoreLog[] };
+    scores: any;
+}) => {
+    const [localScore, setLocalScore] = useState(initialScore);
+    const [localForfeitType, setLocalForfeitType] = useState(initialForfeitType);
+    const { toast } = useToast();
+
+    // 모달이 열릴 때 초기값 설정
+    useEffect(() => {
+        if (open) {
+            setLocalScore(initialScore);
+            setLocalForfeitType(initialForfeitType);
+        }
+    }, [open, playerId, courseId, holeIndex, initialScore, initialForfeitType]);
+
+    const handleLocalSave = async () => {
+        await onSave(localScore, localForfeitType);
+    };
+
+    if (!open) return null;
+
+    return (
+        <Dialog open={open} onOpenChange={onClose}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>점수 수정</DialogTitle>
+                    <DialogDescription>
+                        선수: <b>{playerName}</b> / 코스: <b>{courseName}</b> / 홀: <b>{holeIndex + 1}번</b>
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="flex items-center justify-center gap-4 py-4">
+                    <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-12 w-12"
+                        onClick={() => {
+                            const currentScore = localScore === '' ? null : Number(localScore);
+                            let newScore: number;
+                            if (currentScore === null) {
+                                newScore = 1;
+                            } else if (currentScore === 0) {
+                                newScore = 1;
+                            } else if (currentScore >= 10) {
+                                newScore = 10;
+                            } else {
+                                newScore = currentScore + 1;
+                            }
+                            setLocalScore(String(newScore));
+                            if (newScore > 0) {
+                                setLocalForfeitType(null);
+                            }
+                        }}
+                    >
+                        <ChevronUp className="h-6 w-6" />
+                    </Button>
+                    <span className={cn(
+                        "font-bold tabular-nums text-center min-w-[80px]",
+                        (localScore === "0" || Number(localScore) === 0) ? "text-xs text-red-600" : "text-4xl"
+                    )}>
+                        {(localScore === "0" || Number(localScore) === 0) ?
+                            (localForfeitType === 'absent' ? '불참' :
+                                localForfeitType === 'disqualified' ? '실격' :
+                                    localForfeitType === 'forfeit' ? '기권' : '기권') :
+                            (localScore === '' ? '-' : localScore)}
+                    </span>
+                    <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-12 w-12"
+                        onClick={() => {
+                            const currentScore = localScore === '' ? null : Number(localScore);
+                            let newScore: number | null;
+                            let newForfeitType: 'absent' | 'disqualified' | 'forfeit' | null = localForfeitType;
+
+                            if (currentScore === null || currentScore === 0) {
+                                if (currentScore === null) {
+                                    newScore = 1;
+                                    newForfeitType = null;
+                                } else {
+                                    newScore = 0;
+                                    if (newForfeitType === null || newForfeitType === 'absent') {
+                                        newForfeitType = 'disqualified';
+                                    } else if (newForfeitType === 'disqualified') {
+                                        newForfeitType = 'forfeit';
+                                    } else if (newForfeitType === 'forfeit') {
+                                        newForfeitType = 'absent';
+                                    }
+                                }
+                            } else if (currentScore === 1) {
+                                newScore = 0;
+                                newForfeitType = 'absent';
+                            } else {
+                                newScore = currentScore - 1;
+                                newForfeitType = null;
+                            }
+
+                            setLocalScore(newScore === null ? '' : String(newScore));
+                            setLocalForfeitType(newForfeitType);
+                        }}
+                    >
+                        <ChevronDown className="h-6 w-6" />
+                    </Button>
+                </div>
+                <DialogFooter>
+                    <Button onClick={handleLocalSave}>저장</Button>
+                    <Button variant="outline" onClick={onClose}>취소</Button>
+                    {(localScore === "0" || Number(localScore) === 0) && (
+                        <Button
+                            className="bg-yellow-500 hover:bg-yellow-600 text-white ml-2"
+                            onClick={async () => {
+                                if (!db) {
+                                    toast({ title: '오류', description: '데이터베이스 연결이 없습니다.', variant: 'destructive' });
+                                    return;
+                                }
+                                const player = Object.values(finalDataByGroup).flat().find((p: any) => p.id === playerId);
+                                if (!player) return;
+                                const logs = playerScoreLogs[player.id] || [];
+                                let restored = false;
+                                try {
+                                    const backupRef = ref(db, `backups/scoresBeforeForfeit/${player.id}`);
+                                    const backupSnap = await get(backupRef);
+                                    if (backupSnap.exists()) {
+                                        const backup = backupSnap.val();
+                                        await set(ref(db, `scores/${player.id}`), backup?.data || {});
+                                        await set(backupRef, null);
+                                        restored = true;
+                                    }
+                                } catch (e) {
+                                    console.warn('백업 복원 실패, 로그 기반 복원으로 폴백합니다:', e);
+                                }
+
+                                if (!restored) {
+                                    let anyRestored = false;
+                                    for (const course of player.assignedCourses) {
+                                        for (let h = 1; h <= 9; h++) {
+                                            if (scores?.[player.id]?.[course.id]?.[h] === 0) {
+                                                const zeroLogIdx = logs.findIndex(l =>
+                                                    l.holeNumber === h &&
+                                                    l.newValue === 0 &&
+                                                    (l.modifiedByType === 'judge' || l.modifiedByType === 'admin' || l.modifiedByType === 'captain')
+                                                );
+                                                let restoreValue = null;
+                                                if (zeroLogIdx !== -1) {
+                                                    for (let j = zeroLogIdx - 1; j >= 0; j--) {
+                                                        const l = logs[j];
+                                                        if (
+                                                            l.holeNumber === h &&
+                                                            l.newValue !== 0 &&
+                                                            l.newValue !== null &&
+                                                            l.newValue !== undefined
+                                                        ) {
+                                                            restoreValue = l.newValue;
+                                                            break;
+                                                        }
+                                                    }
+                                                }
+                                                await set(ref(db, `scores/${player.id}/${course.id}/${h}`), restoreValue);
+                                                await logScoreChange({
+                                                    matchId: 'tournaments/current',
+                                                    playerId: player.id,
+                                                    scoreType: 'holeScore',
+                                                    courseId: course.id,
+                                                    holeNumber: h,
+                                                    oldValue: 0,
+                                                    newValue: restoreValue === null ? 0 : restoreValue,
+                                                    modifiedBy: 'admin',
+                                                    modifiedByType: 'admin',
+                                                    comment: '기권 해제 복구'
+                                                });
+                                                invalidatePlayerLogCache(player.id);
+                                                anyRestored = true;
+                                            }
+                                        }
+                                    }
+                                    restored = anyRestored;
+                                }
+
+                                if (restored) {
+                                    try {
+                                        const playerScoresSnap = await get(ref(db, `scores/${player.id}`));
+                                        if (playerScoresSnap.exists()) {
+                                            const fixed: any = {};
+                                            const data = playerScoresSnap.val() || {};
+                                            Object.keys(data).forEach((courseId: string) => {
+                                                const holes = data[courseId] || {};
+                                                Object.keys(holes).forEach((h: string) => {
+                                                    if (holes[h] === 0) {
+                                                        if (!fixed[courseId]) fixed[courseId] = {};
+                                                        fixed[courseId][h] = null;
+                                                    }
+                                                });
+                                            });
+                                            if (Object.keys(fixed).length > 0) {
+                                                const merged: any = { ...data };
+                                                Object.keys(fixed).forEach((cid: string) => {
+                                                    merged[cid] = { ...(merged[cid] || {}), ...fixed[cid] };
+                                                });
+                                                await set(ref(db, `scores/${player.id}`), merged);
+                                            }
+                                        }
+                                    } catch (e) {
+                                        console.warn('0점 정리 실패(무시):', e);
+                                    }
+                                    toast({ title: '기권 해제 완료', description: '이전 점수로 복구되었습니다.' });
+                                    try {
+                                        const logs = await getPlayerScoreLogsOptimized(player.id);
+                                        // setPlayerScoreLogs는 부모에서 관리하므로 여기서는 호출하지 않음
+                                    } catch { }
+                                } else {
+                                    toast({ title: '복구할 점수가 없습니다.', description: '이미 기권이 해제된 상태입니다.' });
+                                }
+                                onClose();
+                            }}
+                        >
+                            기권/불참/실격 해제
+                        </Button>
+                    )}
+                    {(localScore === "0" || Number(localScore) === 0) && (
+                        <div className="w-full text-center text-sm text-yellow-700 mt-2">기권/불참/실격 처리 이전의 모든 점수를 복구합니다.</div>
+                    )}
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+});
+
 // 외부 전광판과 완전히 동일한 ± 및 총타수 계산 함수
 function getPlayerTotalAndPlusMinus(courses: any, player: any) {
     let total = 0;
@@ -199,9 +452,11 @@ export default function AdminDashboard() {
 
     // 🚀 성능 최적화: 캐싱된 tieBreak 함수
     const cachedTieBreak = useCallback((a: any, b: any, sortedCourses: any[]) => {
-        const courseOrderKey = sortedCourses.map(c => c?.id || '').join(',');
-        const cacheKey = `${a.id}-${b.id}-${courseOrderKey}`;
-        const reverseCacheKey = `${b.id}-${a.id}-${courseOrderKey}`;
+        // 코스 ID만 추출하여 키 생성 (이름 제외 등 불필요한 연산 제거)
+        // sortedCourses가 변하지 않는 한 id들의 조합은 동일하므로 id만 쓰면 됨
+        const courseIds = sortedCourses.map(c => c?.id).join(',');
+        const cacheKey = `${a.id},${b.id},${courseIds}`;
+        const reverseCacheKey = `${b.id},${a.id},${courseIds}`;
 
         if (tieBreakCacheRef.current.has(cacheKey)) {
             return tieBreakCacheRef.current.get(cacheKey)!;
@@ -233,220 +488,225 @@ export default function AdminDashboard() {
 
     // 🟢 메모리 최적화 - 의존성 최소화 및 조건부 계산 (스코프 문제 해결을 위해 상단 이동)
     const processedDataByGroup = useMemo(() => {
-        const allCoursesList = Object.values(courses).filter(Boolean);
-        if (Object.keys(players).length === 0 || allCoursesList.length === 0) return {};
+        try {
+            const allCoursesList = Object.values(courses).filter(Boolean);
+            if (Object.keys(players).length === 0 || allCoursesList.length === 0) return {};
 
-        // 모든 선수 처리 (filterGroup은 표시용 필터이지 데이터 처리 필터가 아님)
-        const playersToProcess = Object.entries(players);
+            // 모든 선수 처리 (filterGroup은 표시용 필터이지 데이터 처리 필터가 아님)
+            const playersToProcess = Object.entries(players);
 
-        const allProcessedPlayers: any[] = playersToProcess.map(([playerId, player]: [string, any]) => {
-            const playerGroupData = groupsData[player.group];
-            // 코스 순서 정보 가져오기 (기존 호환성: boolean → number 변환)
-            const coursesOrder = playerGroupData?.courses || {};
-            const assignedCourseIds = Object.keys(coursesOrder).filter((cid: string) => {
-                const order = coursesOrder[cid];
-                // boolean이면 true인 것만, number면 0보다 큰 것만
-                return typeof order === 'boolean' ? order : (typeof order === 'number' && order > 0);
-            });
-            // courses 객체에서 해당 id만 찾아 배열로 만듦 (id 타입 일치 보장)
-            const coursesForPlayer = assignedCourseIds
-                .map(cid => {
-                    const key = Object.keys(courses).find(k => String(k) === String(cid));
-                    return key ? courses[key] : undefined;
-                })
-                .filter(Boolean);
-            // 코스 순서대로 정렬 (order가 큰 것이 마지막 = 백카운트 기준)
-            coursesForPlayer.sort((a: any, b: any) => {
-                const orderA = coursesOrder[String(a.id)];
-                const orderB = coursesOrder[String(b.id)];
-
-                // 그룹의 courses에서 순서 가져오기, 없으면 코스의 order 사용
-                let numA: number;
-                if (typeof orderA === 'boolean') {
-                    numA = orderA ? (a.order || 0) : 0;
-                } else if (typeof orderA === 'number' && orderA > 0) {
-                    numA = orderA;
-                } else {
-                    numA = a.order || 0;
-                }
-
-                let numB: number;
-                if (typeof orderB === 'boolean') {
-                    numB = orderB ? (b.order || 0) : 0;
-                } else if (typeof orderB === 'number' && orderB > 0) {
-                    numB = orderB;
-                } else {
-                    numB = b.order || 0;
-                }
-
-                return numA - numB; // 작은 순서가 먼저
-            });
-            // 백카운트를 위한 상세 점수 구성
-            const courseScores: { [key: string]: number } = {};
-            const detailedScores: { [key: string]: { [hole: string]: number } } = {};
-            let total = 0;
-            let playedAnyHole = false;
-
-            coursesForPlayer.forEach((course: any) => {
-                const pScores = scores[playerId]?.[course.id] || {};
-                let cTotal = 0;
-                detailedScores[course.id] = {};
-
-                for (let h = 1; h <= 9; h++) {
-                    const s = pScores[h];
-                    if (isValidNumber(s)) {
-                        cTotal += s;
-                        total += s;
-                        detailedScores[course.id][h] = s;
-                        playedAnyHole = true;
-                    }
-                }
-                courseScores[course.id] = cTotal;
-            });
-
-            // coursesData 필드 구성 (UI 렌더링용)
-            const coursesDataForPlayer: { [key: string]: any } = {};
-            coursesForPlayer.forEach((course: any) => {
-                const pScores = scores[playerId]?.[course.id] || {};
-                const holeScores = Array.from({ length: 9 }, (_, i) => {
-                    const s = pScores[i + 1];
-                    return isValidNumber(s) ? s : null;
+            const allProcessedPlayers: any[] = playersToProcess.map(([playerId, player]: [string, any]) => {
+                const playerGroupData = groupsData[player.group];
+                // 코스 순서 정보 가져오기 (기존 호환성: boolean → number 변환)
+                const coursesOrder = playerGroupData?.courses || {};
+                const assignedCourseIds = Object.keys(coursesOrder).filter((cid: string) => {
+                    const order = coursesOrder[cid];
+                    // boolean이면 true인 것만, number면 0보다 큰 것만
+                    return typeof order === 'boolean' ? order : (typeof order === 'number' && order > 0);
                 });
-                coursesDataForPlayer[course.id] = {
-                    courseName: course.name,
-                    courseTotal: courseScores[course.id] || 0,
-                    holeScores: holeScores
+                // courses 객체에서 해당 id만 찾아 배열로 만듦 (id 타입 일치 보장)
+                const coursesForPlayer = assignedCourseIds
+                    .map(cid => {
+                        const key = Object.keys(courses).find(k => String(k) === String(cid));
+                        return key ? courses[key] : undefined;
+                    })
+                    .filter(Boolean);
+                // 코스 순서대로 정렬 (order가 큰 것이 마지막 = 백카운트 기준)
+                coursesForPlayer.sort((a: any, b: any) => {
+                    const orderA = coursesOrder[String(a.id)];
+                    const orderB = coursesOrder[String(b.id)];
+
+                    // 그룹의 courses에서 순서 가져오기, 없으면 코스의 order 사용
+                    let numA: number;
+                    if (typeof orderA === 'boolean') {
+                        numA = orderA ? (a.order || 0) : 0;
+                    } else if (typeof orderA === 'number' && orderA > 0) {
+                        numA = orderA;
+                    } else {
+                        numA = a.order || 0;
+                    }
+
+                    let numB: number;
+                    if (typeof orderB === 'boolean') {
+                        numB = orderB ? (b.order || 0) : 0;
+                    } else if (typeof orderB === 'number' && orderB > 0) {
+                        numB = orderB;
+                    } else {
+                        numB = b.order || 0;
+                    }
+
+                    return numA - numB; // 작은 순서가 먼저
+                });
+                // 백카운트를 위한 상세 점수 구성
+                const courseScores: { [key: string]: number } = {};
+                const detailedScores: { [key: string]: { [hole: string]: number } } = {};
+                let total = 0;
+                let playedAnyHole = false;
+
+                coursesForPlayer.forEach((course: any) => {
+                    const pScores = scores[playerId]?.[course.id] || {};
+                    let cTotal = 0;
+                    detailedScores[course.id] = {};
+
+                    for (let h = 1; h <= 9; h++) {
+                        const s = pScores[h];
+                        if (isValidNumber(s)) {
+                            cTotal += s;
+                            total += s;
+                            detailedScores[course.id][h] = s;
+                            playedAnyHole = true;
+                        }
+                    }
+                    courseScores[course.id] = cTotal;
+                });
+
+                // coursesData 필드 구성 (UI 렌더링용)
+                const coursesDataForPlayer: { [key: string]: any } = {};
+                coursesForPlayer.forEach((course: any) => {
+                    const pScores = scores[playerId]?.[course.id] || {};
+                    const holeScores = Array.from({ length: 9 }, (_, i) => {
+                        const s = pScores[i + 1];
+                        return isValidNumber(s) ? s : null;
+                    });
+                    coursesDataForPlayer[course.id] = {
+                        courseName: course.name,
+                        courseTotal: courseScores[course.id] || 0,
+                        holeScores: holeScores
+                    };
+                });
+
+                // 외부 전광판과 동일한 ± 및 총타수 계산
+                const { total: totalScore, plusMinus } = getPlayerTotalAndPlusMinus(courses, {
+                    assignedCourses: coursesForPlayer,
+                    coursesData: coursesDataForPlayer
+                });
+
+                return {
+                    id: playerId,
+                    ...player,
+                    totalScore: totalScore ?? 0,
+                    hasAnyScore: playedAnyHole,
+                    hasForfeited: (() => {
+                        // 모든 배정 코스의 모든 홀이 0점인지 확인
+                        if (coursesForPlayer.length === 0) return false;
+                        let hasZeroScore = false;
+                        for (const course of coursesForPlayer) {
+                            const pScores = scores[playerId]?.[course.id] || {};
+                            for (let h = 1; h <= 9; h++) {
+                                if (pScores[h] === 0) {
+                                    hasZeroScore = true;
+                                    break;
+                                }
+                            }
+                            if (hasZeroScore) break;
+                        }
+
+                        // 0점이 있으면 기권 타입 추출 (나중에 로그에서 가져올 예정)
+                        return hasZeroScore ? 'pending' : null;
+                    })(),
+                    assignedCourses: coursesForPlayer,
+                    plusMinus,
+                    // 백카운트 계산을 위한 데이터 추가
+                    courseScores,
+                    detailedScores,
+                    coursesData: coursesDataForPlayer, // UI 렌더링을 위해 추가
+                    total: total // tieBreak 함수에서 사용
                 };
             });
+            const groupedData = allProcessedPlayers.reduce((acc, player) => {
+                const groupName = player.group || '미지정';
+                if (!acc[groupName]) {
+                    acc[groupName] = [];
+                }
+                acc[groupName].push(player);
+                return acc;
+            }, {} as Record<string, any[]>);
 
-            // 외부 전광판과 동일한 ± 및 총타수 계산
-            const { total: totalScore, plusMinus } = getPlayerTotalAndPlusMinus(courses, {
-                assignedCourses: coursesForPlayer,
-                coursesData: coursesDataForPlayer
-            });
+            // 모든 그룹 순위 계산 (filterGroup은 표시용 필터이지 데이터 처리 필터가 아님)
+            const rankedData: { [key: string]: ProcessedPlayer[] } = {};
+            const groupsToRank = Object.keys(groupedData);
 
-            return {
-                id: playerId,
-                ...player,
-                totalScore: totalScore ?? 0,
-                hasAnyScore: playedAnyHole,
-                hasForfeited: (() => {
-                    // 모든 배정 코스의 모든 홀이 0점인지 확인
-                    if (coursesForPlayer.length === 0) return false;
-                    let hasZeroScore = false;
-                    for (const course of coursesForPlayer) {
-                        const pScores = scores[playerId]?.[course.id] || {};
-                        for (let h = 1; h <= 9; h++) {
-                            if (pScores[h] === 0) {
-                                hasZeroScore = true;
-                                break;
-                            }
-                        }
-                        if (hasZeroScore) break;
+            for (const groupName of groupsToRank) {
+                // 코스 순서 기반으로 정렬 (order가 큰 것이 마지막 = 백카운트 기준)
+                const groupPlayers = groupedData[groupName];
+                const groupData = groupsData[groupName];
+                const coursesOrder = groupData?.courses || {};
+                const allCoursesForGroup = [...(groupPlayers[0]?.assignedCourses || [])].filter(c => c && c.id !== undefined);
+                // 코스 순서대로 정렬 (order가 큰 것이 마지막)
+                const coursesForGroup = [...allCoursesForGroup].sort((a: any, b: any) => {
+                    const orderA = coursesOrder[String(a.id)];
+                    const orderB = coursesOrder[String(b.id)];
+
+                    // 그룹의 courses에서 순서 가져오기, 없으면 코스의 order 사용
+                    let numA: number;
+                    if (typeof orderA === 'boolean') {
+                        numA = orderA ? (a.order || 0) : 0;
+                    } else if (typeof orderA === 'number' && orderA > 0) {
+                        numA = orderA;
+                    } else {
+                        numA = a.order || 0;
                     }
 
-                    // 0점이 있으면 기권 타입 추출 (나중에 로그에서 가져올 예정)
-                    return hasZeroScore ? 'pending' : null;
-                })(),
-                assignedCourses: coursesForPlayer,
-                plusMinus,
-                // 백카운트 계산을 위한 데이터 추가
-                courseScores,
-                detailedScores,
-                coursesData: coursesDataForPlayer, // UI 렌더링을 위해 추가
-                total: total // tieBreak 함수에서 사용
-            };
-        });
-        const groupedData = allProcessedPlayers.reduce((acc, player) => {
-            const groupName = player.group || '미지정';
-            if (!acc[groupName]) {
-                acc[groupName] = [];
-            }
-            acc[groupName].push(player);
-            return acc;
-        }, {} as Record<string, any[]>);
+                    let numB: number;
+                    if (typeof orderB === 'boolean') {
+                        numB = orderB ? (b.order || 0) : 0;
+                    } else if (typeof orderB === 'number' && orderB > 0) {
+                        numB = orderB;
+                    } else {
+                        numB = b.order || 0;
+                    }
 
-        // 모든 그룹 순위 계산 (filterGroup은 표시용 필터이지 데이터 처리 필터가 아님)
-        const rankedData: { [key: string]: ProcessedPlayer[] } = {};
-        const groupsToRank = Object.keys(groupedData);
-
-        for (const groupName of groupsToRank) {
-            // 코스 순서 기반으로 정렬 (order가 큰 것이 마지막 = 백카운트 기준)
-            const groupPlayers = groupedData[groupName];
-            const groupData = groupsData[groupName];
-            const coursesOrder = groupData?.courses || {};
-            const allCoursesForGroup = [...(groupPlayers[0]?.assignedCourses || [])].filter(c => c && c.id !== undefined);
-            // 코스 순서대로 정렬 (order가 큰 것이 마지막)
-            const coursesForGroup = [...allCoursesForGroup].sort((a: any, b: any) => {
-                const orderA = coursesOrder[String(a.id)];
-                const orderB = coursesOrder[String(b.id)];
-
-                // 그룹의 courses에서 순서 가져오기, 없으면 코스의 order 사용
-                let numA: number;
-                if (typeof orderA === 'boolean') {
-                    numA = orderA ? (a.order || 0) : 0;
-                } else if (typeof orderA === 'number' && orderA > 0) {
-                    numA = orderA;
-                } else {
-                    numA = a.order || 0;
-                }
-
-                let numB: number;
-                if (typeof orderB === 'boolean') {
-                    numB = orderB ? (b.order || 0) : 0;
-                } else if (typeof orderB === 'number' && orderB > 0) {
-                    numB = orderB;
-                } else {
-                    numB = b.order || 0;
-                }
-
-                return numA - numB; // 작은 순서가 먼저
-            });
-            // 백카운트는 마지막 코스부터 역순이므로 reverse
-            const coursesForBackcount = [...coursesForGroup].reverse();
-
-            const playersToSort = groupedData[groupName].filter((p: any) => p.hasAnyScore && !p.hasForfeited);
-            const otherPlayers = groupedData[groupName].filter((p: any) => !p.hasAnyScore || p.hasForfeited);
-            if (playersToSort.length > 0) {
-                // 1. plusMinus 오름차순 정렬, tieBreak(백카운트) 적용
-                playersToSort.sort((a: any, b: any) => {
-                    if (a.plusMinus !== b.plusMinus) return a.plusMinus - b.plusMinus;
-                    return cachedTieBreak(a, b, coursesForBackcount);
+                    return numA - numB; // 작은 순서가 먼저
                 });
-                // 2. 1위 동점자 모두 rank=1, 그 다음 선수부터 등수 건너뛰기
-                const minPlusMinus = playersToSort[0].plusMinus;
-                let rank = 1;
-                let oneRankCount = 0;
-                // 1위 동점자 처리
-                for (let i = 0; i < playersToSort.length; i++) {
-                    if (playersToSort[i].plusMinus === minPlusMinus) {
-                        playersToSort[i].rank = 1;
-                        oneRankCount++;
-                    } else {
-                        break;
+                // 백카운트는 마지막 코스부터 역순이므로 reverse
+                const coursesForBackcount = [...coursesForGroup].reverse();
+
+                const playersToSort = groupedData[groupName].filter((p: any) => p.hasAnyScore && !p.hasForfeited);
+                const otherPlayers = groupedData[groupName].filter((p: any) => !p.hasAnyScore || p.hasForfeited);
+                if (playersToSort.length > 0) {
+                    // 1. plusMinus 오름차순 정렬, tieBreak(백카운트) 적용
+                    playersToSort.sort((a: any, b: any) => {
+                        if (a.plusMinus !== b.plusMinus) return a.plusMinus - b.plusMinus;
+                        return cachedTieBreak(a, b, coursesForBackcount);
+                    });
+                    // 2. 1위 동점자 모두 rank=1, 그 다음 선수부터 등수 건너뛰기
+                    const minPlusMinus = playersToSort[0].plusMinus;
+                    let rank = 1;
+                    let oneRankCount = 0;
+                    // 1위 동점자 처리
+                    for (let i = 0; i < playersToSort.length; i++) {
+                        if (playersToSort[i].plusMinus === minPlusMinus) {
+                            playersToSort[i].rank = 1;
+                            oneRankCount++;
+                        } else {
+                            break;
+                        }
+                    }
+                    // 2위 이하(실제로는 1위 동점자 수+1 등수부터) 백카운트 등수 부여
+                    rank = oneRankCount + 1;
+                    for (let i = oneRankCount; i < playersToSort.length; i++) {
+                        // 바로 앞 선수와 plusMinus, tieBreak 모두 같으면 같은 등수, 아니면 증가
+                        const prev = playersToSort[i - 1];
+                        const curr = playersToSort[i];
+                        if (
+                            curr.plusMinus === prev.plusMinus &&
+                            cachedTieBreak(curr, prev, coursesForBackcount) === 0
+                        ) {
+                            curr.rank = playersToSort[i - 1].rank;
+                        } else {
+                            curr.rank = rank;
+                        }
+                        rank++;
                     }
                 }
-                // 2위 이하(실제로는 1위 동점자 수+1 등수부터) 백카운트 등수 부여
-                rank = oneRankCount + 1;
-                for (let i = oneRankCount; i < playersToSort.length; i++) {
-                    // 바로 앞 선수와 plusMinus, tieBreak 모두 같으면 같은 등수, 아니면 증가
-                    const prev = playersToSort[i - 1];
-                    const curr = playersToSort[i];
-                    if (
-                        curr.plusMinus === prev.plusMinus &&
-                        cachedTieBreak(curr, prev, coursesForBackcount) === 0
-                    ) {
-                        curr.rank = playersToSort[i - 1].rank;
-                    } else {
-                        curr.rank = rank;
-                    }
-                    rank++;
-                }
+                const finalPlayers = [...playersToSort, ...otherPlayers.map((p: any) => ({ ...p, rank: null }))];
+                rankedData[groupName] = finalPlayers;
             }
-            const finalPlayers = [...playersToSort, ...otherPlayers.map((p: any) => ({ ...p, rank: null }))];
-            rankedData[groupName] = finalPlayers;
+            return rankedData;
+        } catch (error) {
+            console.error("Critical Error in processedDataByGroup:", error);
+            return {}; // 오류 발생 시 빈 객체 반환하여 렌더링 충돌 방지
         }
-        return rankedData;
     }, [players, scores, courses, groupsData, cachedTieBreak]);
 
     const processSuddenDeath = (suddenDeathData: any) => {
@@ -673,7 +933,9 @@ export default function AdminDashboard() {
         courseId: '',
         holeIndex: -1,
         score: '',
-        forfeitType: null as 'absent' | 'disqualified' | 'forfeit' | null
+        forfeitType: null as 'absent' | 'disqualified' | 'forfeit' | null,
+        playerName: '', // 성능 최적화: 모달 내부에서 조회하지 않도록 저장
+        courseName: '' // 성능 최적화: 모달 내부에서 조회하지 않도록 저장
     });
 
     // 점수 초기화 모달 상태
@@ -1440,14 +1702,16 @@ export default function AdminDashboard() {
     };
 
     // 점수 저장 임시 함수(실제 저장/재계산 로직은 추후 구현)
-    const handleScoreEditSave = async () => {
+    const handleScoreEditSave = async (scoreToSave?: string, forfeitTypeToSave?: 'absent' | 'disqualified' | 'forfeit' | null) => {
         if (!db) {
             toast({ title: '오류', description: '데이터베이스 연결이 없습니다.', variant: 'destructive' });
             return;
         }
-        const { playerId, courseId, holeIndex, score } = scoreEditModal;
+        const score = scoreToSave !== undefined ? scoreToSave : scoreEditModal.score;
+        const forfeitType = forfeitTypeToSave !== undefined ? forfeitTypeToSave : scoreEditModal.forfeitType;
+        const { playerId, courseId, holeIndex } = scoreEditModal;
         if (!playerId || !courseId || holeIndex === -1) {
-            setScoreEditModal({ ...scoreEditModal, open: false });
+            setScoreEditModal(prev => ({ ...prev, open: false }));
             return;
         }
         try {
@@ -1481,95 +1745,111 @@ export default function AdminDashboard() {
 
                     // 그룹에 배정된 코스 id 목록
                     const assignedCourseIds = group.courses ? Object.keys(group.courses).filter((cid: any) => group.courses[cid]) : [];
+
+                    // 병렬 처리로 성능 최적화: 모든 점수 저장과 로그 기록을 병렬로 처리
+                    const updatePromises: Promise<void>[] = [];
+
                     for (const cid of assignedCourseIds) {
                         for (let h = 1; h <= 9; h++) {
                             const prevScore = scores?.[playerId]?.[cid]?.[h];
                             const oldValue = prevScore === undefined || prevScore === null ? 0 : prevScore;
 
-                            // 모든 홀을 0점으로 설정
-                            await set(ref(db, `scores/${playerId}/${cid}/${h}`), 0);
+                            // 점수 저장과 로그 기록을 병렬로 처리
+                            const isDirectEdit = cid === courseId && h === holeIndex + 1;
+                            const comment = isDirectEdit
+                                ? `관리자 직접 ${forfeitTypeText} (코스: ${cid}, 홀: ${h})`
+                                : `관리자페이지에서 ${forfeitTypeText} 처리 (코스: ${cid}, 홀: ${h})`;
 
-                            // 직접 입력한 코스/홀과 다른 홀을 구분하여 로그 기록
-                            if (cid === courseId && h === holeIndex + 1) {
-                                await logScoreChange({
-                                    matchId: 'tournaments/current',
-                                    playerId,
-                                    scoreType: 'holeScore',
-                                    holeNumber: h,
-                                    oldValue: oldValue,
-                                    newValue: 0,
-                                    modifiedBy: 'admin',
-                                    modifiedByType: 'admin',
-                                    comment: `관리자 직접 ${forfeitTypeText} (코스: ${cid}, 홀: ${h})`,
-                                    courseId: cid
-                                });
-                            } else {
-                                await logScoreChange({
-                                    matchId: 'tournaments/current',
-                                    playerId,
-                                    scoreType: 'holeScore',
-                                    holeNumber: h,
-                                    oldValue: oldValue,
-                                    newValue: 0,
-                                    modifiedBy: 'admin',
-                                    modifiedByType: 'admin',
-                                    comment: `관리자페이지에서 ${forfeitTypeText} 처리 (코스: ${cid}, 홀: ${h})`,
-                                    courseId: cid
-                                });
-                            }
-
-                            // 실시간 업데이트를 위한 로그 캐시 무효화
-                            invalidatePlayerLogCache(playerId);
+                            // 점수 저장과 로그 기록을 하나의 Promise로 묶어서 병렬 처리
+                            updatePromises.push(
+                                (async () => {
+                                    await set(ref(db, `scores/${playerId}/${cid}/${h}`), 0);
+                                    await logScoreChange({
+                                        matchId: 'tournaments/current',
+                                        playerId,
+                                        scoreType: 'holeScore',
+                                        holeNumber: h,
+                                        oldValue: oldValue,
+                                        newValue: 0,
+                                        modifiedBy: 'admin',
+                                        modifiedByType: 'admin',
+                                        comment: comment,
+                                        courseId: cid
+                                    });
+                                })()
+                            );
                         }
                     }
+
+                    // 모든 업데이트를 병렬로 실행
+                    await Promise.all(updatePromises);
+
+                    // 실시간 업데이트를 위한 로그 캐시 무효화 (한 번만)
+                    invalidatePlayerLogCache(playerId);
                 }
-                setScoreEditModal({ ...scoreEditModal, open: false });
+                setScoreEditModal(prev => ({ ...prev, open: false }));
                 // 점수 로그 재조회 (최적화됨)
                 try {
                     const logs = await getPlayerScoreLogsOptimized(playerId);
                     setPlayerScoreLogs((prev: any) => ({ ...prev, [playerId]: logs }));
                 } catch { }
+                toast({ title: '점수 저장 완료', description: '점수가 성공적으로 저장되었습니다.' });
                 return;
             }
             // 기존 점수 조회(0점이 아닐 때만 기존 방식)
             const prevScore = scores?.[playerId]?.[courseId]?.[holeIndex + 1] ?? null;
-            await set(ref(db, `scores/${playerId}/${courseId}/${holeIndex + 1}`), scoreValue);
-            // 점수 변경 로그 기록
+
+            // 점수 저장과 로그 기록을 병렬로 처리하여 성능 최적화
             if (prevScore !== scoreValue) {
                 try {
-                    await logScoreChange({
-                        matchId: 'tournaments/current',
-                        playerId,
-                        scoreType: 'holeScore',
-                        holeNumber: holeIndex + 1,
-                        oldValue: prevScore || 0,
-                        newValue: scoreValue || 0,
-                        modifiedBy: 'admin',
-                        modifiedByType: 'admin',
-                        comment: `코스: ${courseId}`,
-                        courseId: courseId
-                    });
+                    // 점수 저장과 로그 기록을 병렬로 실행
+                    await Promise.all([
+                        set(ref(db, `scores/${playerId}/${courseId}/${holeIndex + 1}`), scoreValue),
+                        logScoreChange({
+                            matchId: 'tournaments/current',
+                            playerId,
+                            scoreType: 'holeScore',
+                            holeNumber: holeIndex + 1,
+                            oldValue: prevScore || 0,
+                            newValue: scoreValue || 0,
+                            modifiedBy: 'admin',
+                            modifiedByType: 'admin',
+                            comment: `코스: ${courseId}`,
+                            courseId: courseId
+                        })
+                    ]);
 
                     // 실시간 업데이트를 위한 로그 캐시 무효화
                     invalidatePlayerLogCache(playerId);
-                    // 점수 로그 저장 후 해당 선수 로그 즉시 갱신 (최적화됨)
-                    try {
-                        const logs = await getPlayerScoreLogsOptimized(playerId);
-                        setPlayerScoreLogs((prev: any) => ({
-                            ...prev,
-                            [playerId]: logs
-                        }));
-                    } catch (e) {
-                        console.error("점수 로그 재조회 에러", e);
-                    }
+
+                    // 점수 로그 저장 후 해당 선수 로그 즉시 갱신 (최적화됨) - 비동기로 처리하여 저장 속도 향상
+                    getPlayerScoreLogsOptimized(playerId)
+                        .then(logs => {
+                            setPlayerScoreLogs((prev: any) => ({
+                                ...prev,
+                                [playerId]: logs
+                            }));
+                        })
+                        .catch(e => {
+                            console.error("점수 로그 재조회 에러", e);
+                        });
                 } catch (e) {
                     console.error("로그 기록 에러", e);
                 }
+            } else {
+                // 점수가 변경되지 않았어도 저장은 수행 (null -> null 등)
+                await set(ref(db, `scores/${playerId}/${courseId}/${holeIndex + 1}`), scoreValue);
             }
-            setScoreEditModal({ ...scoreEditModal, open: false });
+            setScoreEditModal(prev => ({ ...prev, open: false }));
+            toast({ title: '점수 저장 완료', description: '점수가 성공적으로 저장되었습니다.' });
         } catch (e) {
-            setScoreEditModal({ ...scoreEditModal, open: false });
-            toast({ title: '점수 저장 실패', description: '점수 저장 중 오류가 발생했습니다.', variant: 'destructive' });
+            console.error("점수 저장 에러", e);
+            setScoreEditModal(prev => ({ ...prev, open: false }));
+            toast({
+                title: '점수 저장 실패',
+                description: e instanceof Error ? e.message : '점수 저장 중 오류가 발생했습니다.',
+                variant: 'destructive'
+            });
         }
     };
     // 항상 현재 도메인 기준으로 절대주소 생성
@@ -1762,35 +2042,114 @@ export default function AdminDashboard() {
                 }
             });
 
-            // Scores: 외부 전광판과 동일한 실시간 반영 (해시 비교 개선)
-            let lastScoresHash = '';
+            // Scores: 외부 전광판(ExternalScoreboard)과 동일한 최적화된 로직 적용
+            // Scores: 실시간 반영 (최적화는 useEffect에서 처리하므로 여기서는 단순 업데이트)
             const unsubScores = onValue(scoresRef, snap => {
                 const data = snap.val() || {};
-                setScores((prev: any) => {
-                    // 🟢 외부 전광판과 동일한 해시 비교 방식
-                    const newHash = JSON.stringify(data);
-                    if (newHash !== lastScoresHash) {
-                        lastScoresHash = newHash;
+                setScores(data);
+            });
+            /* DEPRECATED LOGIC:
+            // const unsubScores = onValue(scoresRef, snap => {
+            //    const data = snap.val() || {};
 
-                        // 🟢 점수 변경 감지 시 해당 선수들의 로그 캐시 무효화 (외부 전광판 방식)
-                        if (prev && Object.keys(prev).length > 0) {
-                            const changedPlayerIds = Object.keys(data).filter(playerId => {
-                                const prevScores = prev[playerId] || {};
-                                const newScores = data[playerId] || {};
-                                return JSON.stringify(prevScores) !== JSON.stringify(newScores);
-                            });
+            //    setScores((prev: any) => {
+                    // 최적화: 전체 객체 직렬화 대신 빠른 참조 및 키 비교
 
-                            // 변경된 선수들의 로그 캐시 무효화
-                            changedPlayerIds.forEach(playerId => {
+                    // 1. 참조가 같으면 변경 없음
+                    if (prev === data) {
+                        return prev;
+                    }
+
+                    // 2. 키 개수 비교 (빠른 1차 필터)
+                    const prevKeys = prev ? Object.keys(prev) : [];
+                    const newKeys = Object.keys(data);
+
+                    if (prevKeys.length !== newKeys.length) {
+                        // 키 개수가 다르면 변경됨 -> 모든 변경된 선수 로그 캐시 무효화
+                        const changedPlayerIds = [...new Set([...prevKeys, ...newKeys])];
+                        changedPlayerIds.forEach(playerId => {
+                            try {
                                 invalidatePlayerLogCache(playerId);
-                            });
-                        }
-
+                            } catch (e) { }
+                        });
                         return data;
                     }
-                    return prev;
-                });
-            });
+
+                    // 3. 변경된 선수만 감지 (깊은 비교 최소화)
+                    const changedPlayerIds: string[] = [];
+                    for (const playerId of newKeys) {
+                        const prevScores = prev[playerId];
+                        const newScores = data[playerId];
+
+                        // 참조가 같으면 변경 없음
+                        if (prevScores === newScores) continue;
+
+                        // null/undefined 체크
+                        if (!prevScores || !newScores) {
+                            changedPlayerIds.push(playerId);
+                            continue;
+                        }
+
+                        // 키 개수 비교 (빠른 필터)
+                        const prevScoreKeys = Object.keys(prevScores);
+                        const newScoreKeys = Object.keys(newScores);
+                        if (prevScoreKeys.length !== newScoreKeys.length) {
+                            changedPlayerIds.push(playerId);
+                            continue;
+                        }
+
+                        // 코스별 점수 비교 (최소한의 깊은 비교)
+                        let hasChanged = false;
+                        for (const courseId of newScoreKeys) {
+                            const prevCourseScores = prevScores[courseId];
+                            const newCourseScores = newScores[courseId];
+
+                            // 참조가 같으면 변경 없음
+                            if (prevCourseScores === newCourseScores) continue;
+
+                            // 객체 비교 (홀별 점수)
+                            if (typeof prevCourseScores === 'object' && typeof newCourseScores === 'object') {
+                                const prevHoles = Object.keys(prevCourseScores || {});
+                                const newHoles = Object.keys(newCourseScores || {});
+                                if (prevHoles.length !== newHoles.length) {
+                                    hasChanged = true;
+                                    break;
+                                }
+                                // 홀별 점수 값 비교
+                                for (const hole of newHoles) {
+                                    if (prevCourseScores[hole] !== newCourseScores[hole]) {
+                                        hasChanged = true;
+                                        break;
+                                    }
+                                }
+                                if (hasChanged) break;
+                            } else if (prevCourseScores !== newCourseScores) {
+                                hasChanged = true;
+                                break;
+                            }
+                        }
+
+                        if (hasChanged) {
+                            changedPlayerIds.push(playerId);
+                        }
+                    }
+
+                    // 변경사항이 없으면 이전 상태 유지
+                    if (changedPlayerIds.length === 0) {
+                        return prev;
+                    }
+
+                    // 변경된 선수들의 로그 캐시 무효화
+                    changedPlayerIds.forEach(playerId => {
+                        try {
+                            invalidatePlayerLogCache(playerId);
+                        } catch (e) { }
+                    });
+
+                    return data;
+                // });
+            // });
+            */
 
             // 구독 등록
             activeUnsubsRef.current.push(unsubPlayersChanges);
@@ -3085,32 +3444,51 @@ export default function AdminDashboard() {
         fetchLogs();
     }, [finalDataByGroup]); // finalDataByGroup 변경 시에만 실행
 
+    // 이전 점수를 추적하기 위한 Ref (최적화용)
+    const prevScoresRef = useRef<any>({});
+
     // 점수 변경 시 해당 선수의 로그만 즉시 업데이트 (외부 전광판과 동일)
     useEffect(() => {
         const updateLogsForChangedScores = async () => {
-            if (!scores || Object.keys(scores).length === 0) return;
+            if (!scores) return;
 
-            // 점수가 변경된 선수들의 로그만 업데이트
-            const scorePlayerIds = Object.keys(scores);
+            const prevScores = prevScoresRef.current;
+            const currentScores = scores;
 
-            for (const playerId of scorePlayerIds) {
-                try {
-                    // 최적화된 함수로 로그 가져오기 (캐시 적용)
-                    const logs = await getPlayerScoreLogsOptimized(playerId);
+            // 점수가 변경된 선수만 찾아서 업데이트 (Diffing)
+            const allPlayerIds = new Set([...Object.keys(prevScores), ...Object.keys(currentScores)]);
+            const changedPlayerIds: string[] = [];
 
-                    setPlayerScoreLogs((prev: any) => ({
-                        ...prev,
-                        [playerId]: logs
-                    }));
-                } catch (error) {
-                    console.error(`❌ ScoreLogs 로딩 실패 - 선수 ${playerId}:`, error);
-                    // 에러 발생 시 빈 배열로 설정
-                    setPlayerScoreLogs((prev: any) => ({
-                        ...prev,
-                        [playerId]: []
-                    }));
+            allPlayerIds.forEach(playerId => {
+                const prev = prevScores[playerId];
+                const curr = currentScores[playerId];
+
+                // 1. 참조가 같으면 패스
+                if (prev === curr) return;
+
+                // 2. 둘 중 하나가 없으면 변경됨
+                if (!prev || !curr) {
+                    changedPlayerIds.push(playerId);
+                    return;
+                }
+
+                // 3. 내용 비교 (JSON stringify가 가장 안전하고 확실함 - 선수 단위라 비용 적음)
+                if (JSON.stringify(prev) !== JSON.stringify(curr)) {
+                    changedPlayerIds.push(playerId);
+                }
+            });
+
+            // 변경된 선수들만 로그 업데이트 실행
+            if (changedPlayerIds.length > 0) {
+                // console.log(`점수 변경 감지: ${changedPlayerIds.length}명 업데이트`);
+                for (const playerId of changedPlayerIds) {
+                    // 비동기로 처리하여 메인 스레드 차단 방지
+                    updatePlayerLogImmediately(playerId).catch(e => console.error(e));
                 }
             }
+
+            // 현재 상태를 이전 상태로 저장
+            prevScoresRef.current = currentScores;
         };
 
         updateLogsForChangedScores();
@@ -3257,9 +3635,14 @@ export default function AdminDashboard() {
         }
     }
 
-    // useEffect로 scores, players, groupsData 변경 시 자동 기권 체크
+    // useEffect로 scores, players, groupsData 변경 시 자동 기권 체크 (디바운스 적용)
     useEffect(() => {
-        autoForfeitPlayersByMissingScores({ players, scores, groupsData, toast });
+        // 2초 디바운스: 점수 입력이 멈춘 후 2초 뒤에만 체크
+        const timer = setTimeout(() => {
+            autoForfeitPlayersByMissingScores({ players, scores, groupsData, toast });
+        }, 2000);
+
+        return () => clearTimeout(timer);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [scores, players, groupsData]);
 
@@ -3492,7 +3875,9 @@ export default function AdminDashboard() {
                                                                                 courseId: course.id,
                                                                                 holeIndex: i,
                                                                                 score: currentScore === null ? '' : String(currentScore),
-                                                                                forfeitType: initialForfeitType
+                                                                                forfeitType: initialForfeitType,
+                                                                                playerName: player.name,
+                                                                                courseName: player.coursesData[course.id]?.courseName || ''
                                                                             });
                                                                         }}
                                                                     >
@@ -3524,229 +3909,6 @@ export default function AdminDashboard() {
                                                                     </TableCell>
                                                                 );
                                                             })}
-
-                                                            {/* 점수 수정 모달 */}
-                                                            {scoreEditModal?.open && scoreEditModal.playerId === player.id && scoreEditModal.courseId === course.id && (
-                                                                <Dialog open={scoreEditModal.open} onOpenChange={open => setScoreEditModal({ ...scoreEditModal, open })}>
-                                                                    <DialogContent>
-                                                                        <DialogHeader>
-                                                                            <DialogTitle>점수 수정</DialogTitle>
-                                                                            <DialogDescription>
-                                                                                선수: <b>{player.name}</b> / 코스: <b>{player.coursesData[course.id]?.courseName}</b> / 홀: <b>{scoreEditModal.holeIndex + 1}번</b>
-                                                                            </DialogDescription>
-                                                                        </DialogHeader>
-                                                                        <div className="flex items-center justify-center gap-4 py-4">
-                                                                            <Button
-                                                                                variant="outline"
-                                                                                size="icon"
-                                                                                className="h-12 w-12"
-                                                                                onClick={() => {
-                                                                                    const currentScore = scoreEditModal.score === '' ? null : Number(scoreEditModal.score);
-                                                                                    let newScore: number;
-                                                                                    if (currentScore === null) {
-                                                                                        newScore = 1;
-                                                                                    } else if (currentScore === 0) {
-                                                                                        newScore = 1;
-                                                                                    } else if (currentScore >= 10) {
-                                                                                        newScore = 10;
-                                                                                    } else {
-                                                                                        newScore = currentScore + 1;
-                                                                                    }
-                                                                                    setScoreEditModal({
-                                                                                        ...scoreEditModal,
-                                                                                        score: String(newScore),
-                                                                                        forfeitType: newScore > 0 ? null : scoreEditModal.forfeitType
-                                                                                    });
-                                                                                }}
-                                                                            >
-                                                                                <ChevronUp className="h-6 w-6" />
-                                                                            </Button>
-                                                                            <span className={cn(
-                                                                                "font-bold tabular-nums text-center min-w-[80px]",
-                                                                                (scoreEditModal.score === "0" || Number(scoreEditModal.score) === 0) ? "text-xs text-red-600" : "text-4xl"
-                                                                            )}>
-                                                                                {(scoreEditModal.score === "0" || Number(scoreEditModal.score) === 0) ?
-                                                                                    (scoreEditModal.forfeitType === 'absent' ? '불참' :
-                                                                                        scoreEditModal.forfeitType === 'disqualified' ? '실격' :
-                                                                                            scoreEditModal.forfeitType === 'forfeit' ? '기권' : '기권') :
-                                                                                    (scoreEditModal.score === '' ? '-' : scoreEditModal.score)}
-                                                                            </span>
-                                                                            <Button
-                                                                                variant="outline"
-                                                                                size="icon"
-                                                                                className="h-12 w-12"
-                                                                                onClick={() => {
-                                                                                    const currentScore = scoreEditModal.score === '' ? null : Number(scoreEditModal.score);
-                                                                                    let newScore: number | null;
-                                                                                    let newForfeitType: 'absent' | 'disqualified' | 'forfeit' | null = scoreEditModal.forfeitType;
-
-                                                                                    if (currentScore === null || currentScore === 0) {
-                                                                                        // 점수가 없거나 0점인 경우 불참->실격->기권->불참 순환
-                                                                                        if (currentScore === null) {
-                                                                                            // 점수가 없는 경우 1로 시작
-                                                                                            newScore = 1;
-                                                                                            newForfeitType = null;
-                                                                                        } else {
-                                                                                            // 0점인 경우 불참->실격->기권->불참 순환
-                                                                                            newScore = 0;
-                                                                                            if (newForfeitType === null || newForfeitType === 'absent') {
-                                                                                                newForfeitType = 'disqualified';
-                                                                                            } else if (newForfeitType === 'disqualified') {
-                                                                                                newForfeitType = 'forfeit';
-                                                                                            } else if (newForfeitType === 'forfeit') {
-                                                                                                newForfeitType = 'absent';
-                                                                                            }
-                                                                                        }
-                                                                                    } else if (currentScore === 1) {
-                                                                                        // 1점에서 하향 클릭 시 0점(불참)으로
-                                                                                        newScore = 0;
-                                                                                        newForfeitType = 'absent';
-                                                                                    } else {
-                                                                                        // 2점 이상에서 하향 클릭 시 1 감소
-                                                                                        newScore = currentScore - 1;
-                                                                                        newForfeitType = null;
-                                                                                    }
-
-                                                                                    setScoreEditModal({
-                                                                                        ...scoreEditModal,
-                                                                                        score: newScore === null ? '' : String(newScore),
-                                                                                        forfeitType: newForfeitType
-                                                                                    });
-                                                                                }}
-                                                                            >
-                                                                                <ChevronDown className="h-6 w-6" />
-                                                                            </Button>
-                                                                        </div>
-                                                                        <DialogFooter>
-                                                                            <Button onClick={() => handleScoreEditSave()}>저장</Button>
-                                                                            <Button variant="outline" onClick={() => setScoreEditModal({ ...scoreEditModal, open: false })}>취소</Button>
-                                                                            {/* 기권 해제 버튼: 0점(기권) 상태에서만 노출 */}
-                                                                            {(scoreEditModal.score === "0" || Number(scoreEditModal.score) === 0) && (
-                                                                                <Button
-                                                                                    className="bg-yellow-500 hover:bg-yellow-600 text-white ml-2"
-                                                                                    onClick={async () => {
-                                                                                        if (!db) {
-                                                                                            toast({ title: '오류', description: '데이터베이스 연결이 없습니다.', variant: 'destructive' });
-                                                                                            return;
-                                                                                        }
-                                                                                        // 선수, 코스, 그룹 정보 찾기
-                                                                                        const player = Object.values(finalDataByGroup).flat().find((p: any) => p.id === scoreEditModal.playerId);
-                                                                                        if (!player) return;
-                                                                                        // 1) 백업 우선 복원: /backups/scoresBeforeForfeit/{playerId}가 있으면 해당 데이터로 통째로 복원
-                                                                                        const logs = playerScoreLogs[player.id] || [];
-                                                                                        let restored = false;
-                                                                                        try {
-                                                                                            const backupRef = ref(db, `backups/scoresBeforeForfeit/${player.id}`);
-                                                                                            const backupSnap = await get(backupRef);
-                                                                                            if (backupSnap.exists()) {
-                                                                                                const backup = backupSnap.val();
-                                                                                                // scores/{playerId} 전체를 백업본으로 덮어쓰기(복원)
-                                                                                                await set(ref(db, `scores/${player.id}`), backup?.data || {});
-                                                                                                // 복원 후 백업은 제거(원터치)
-                                                                                                await set(backupRef, null);
-                                                                                                restored = true;
-                                                                                            }
-                                                                                        } catch (e) {
-                                                                                            console.warn('백업 복원 실패, 로그 기반 복원으로 폴백합니다:', e);
-                                                                                        }
-
-                                                                                        // 2) 폴백: 백업이 없으면 기존 로그 기반 복원(현재 로직) 수행
-                                                                                        if (!restored) {
-                                                                                            let anyRestored = false;
-                                                                                            for (const course of player.assignedCourses) {
-                                                                                                for (let h = 1; h <= 9; h++) {
-                                                                                                    if (scores?.[player.id]?.[course.id]?.[h] === 0) {
-                                                                                                        const zeroLogIdx = logs.findIndex(l =>
-                                                                                                            l.holeNumber === h &&
-                                                                                                            l.newValue === 0 &&
-                                                                                                            (l.modifiedByType === 'judge' || l.modifiedByType === 'admin' || l.modifiedByType === 'captain')
-                                                                                                        );
-                                                                                                        let restoreValue = null;
-                                                                                                        if (zeroLogIdx !== -1) {
-                                                                                                            for (let j = zeroLogIdx - 1; j >= 0; j--) {
-                                                                                                                const l = logs[j];
-                                                                                                                if (
-                                                                                                                    l.holeNumber === h &&
-                                                                                                                    l.newValue !== 0 &&
-                                                                                                                    l.newValue !== null &&
-                                                                                                                    l.newValue !== undefined
-                                                                                                                ) {
-                                                                                                                    restoreValue = l.newValue;
-                                                                                                                    break;
-                                                                                                                }
-                                                                                                            }
-                                                                                                        }
-                                                                                                        await set(ref(db, `scores/${player.id}/${course.id}/${h}`), restoreValue);
-                                                                                                        await logScoreChange({
-                                                                                                            matchId: 'tournaments/current',
-                                                                                                            playerId: player.id,
-                                                                                                            scoreType: 'holeScore',
-                                                                                                            courseId: course.id,
-                                                                                                            holeNumber: h,
-                                                                                                            oldValue: 0,
-                                                                                                            newValue: restoreValue === null ? 0 : restoreValue,
-                                                                                                            modifiedBy: 'admin',
-                                                                                                            modifiedByType: 'admin',
-                                                                                                            comment: '기권 해제 복구'
-                                                                                                        });
-                                                                                                        invalidatePlayerLogCache(player.id);
-                                                                                                        anyRestored = true;
-                                                                                                    }
-                                                                                                }
-                                                                                            }
-                                                                                            restored = anyRestored;
-                                                                                        }
-
-                                                                                        if (restored) {
-                                                                                            // 안전 처리: 남아있는 0점(기권 표식)을 모두 null로 치환하여 합계/순위 계산에 반영되게 함
-                                                                                            try {
-                                                                                                const playerScoresSnap = await get(ref(db, `scores/${player.id}`));
-                                                                                                if (playerScoresSnap.exists()) {
-                                                                                                    const fixed: any = {};
-                                                                                                    const data = playerScoresSnap.val() || {};
-                                                                                                    Object.keys(data).forEach((courseId: string) => {
-                                                                                                        const holes = data[courseId] || {};
-                                                                                                        Object.keys(holes).forEach((h: string) => {
-                                                                                                            if (holes[h] === 0) {
-                                                                                                                if (!fixed[courseId]) fixed[courseId] = {};
-                                                                                                                fixed[courseId][h] = null;
-                                                                                                            }
-                                                                                                        });
-                                                                                                    });
-                                                                                                    if (Object.keys(fixed).length > 0) {
-                                                                                                        // null로 치환 적용
-                                                                                                        const merged: any = { ...data };
-                                                                                                        Object.keys(fixed).forEach((cid: string) => {
-                                                                                                            merged[cid] = { ...(merged[cid] || {}), ...fixed[cid] };
-                                                                                                        });
-                                                                                                        await set(ref(db, `scores/${player.id}`), merged);
-                                                                                                    }
-                                                                                                }
-                                                                                            } catch (e) {
-                                                                                                console.warn('0점 정리 실패(무시):', e);
-                                                                                            }
-                                                                                            toast({ title: '기권 해제 완료', description: '이전 점수로 복구되었습니다.' });
-                                                                                            try {
-                                                                                                const logs = await getPlayerScoreLogsOptimized(player.id);
-                                                                                                setPlayerScoreLogs(prev => ({ ...prev, [player.id]: logs }));
-                                                                                            } catch { }
-                                                                                        } else {
-                                                                                            toast({ title: '복구할 점수가 없습니다.', description: '이미 기권이 해제된 상태입니다.' });
-                                                                                        }
-                                                                                        setScoreEditModal({ ...scoreEditModal, open: false });
-                                                                                    }}
-                                                                                >
-                                                                                    기권/불참/실격 해제
-                                                                                </Button>
-                                                                            )}
-                                                                            {/* 안내문구 */}
-                                                                            {(scoreEditModal.score === "0" || Number(scoreEditModal.score) === 0) && (
-                                                                                <div className="w-full text-center text-sm text-yellow-700 mt-2">기권/불참/실격 처리 이전의 모든 점수를 복구합니다.</div>
-                                                                            )}
-                                                                        </DialogFooter>
-                                                                    </DialogContent>
-                                                                </Dialog>
-                                                            )}
 
                                                             <TableCell className="text-center font-bold px-2 py-1 border-r">
                                                                 {(() => {
@@ -4182,6 +4344,27 @@ export default function AdminDashboard() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+
+            {/* 점수 수정 모달 - 로컬 상태로 관리하여 부모 리렌더링 방지 */}
+            <ScoreEditModalComponent
+                open={scoreEditModal.open}
+                playerId={scoreEditModal.playerId}
+                courseId={scoreEditModal.courseId}
+                holeIndex={scoreEditModal.holeIndex}
+                initialScore={scoreEditModal.score}
+                initialForfeitType={scoreEditModal.forfeitType}
+                playerName={scoreEditModal.playerName}
+                courseName={scoreEditModal.courseName}
+                onClose={() => setScoreEditModal(prev => ({ ...prev, open: false }))}
+                onSave={async (score, forfeitType) => {
+                    setScoreEditModal(prev => ({ ...prev, score, forfeitType }));
+                    await handleScoreEditSave(score, forfeitType);
+                }}
+                finalDataByGroup={finalDataByGroup}
+                playerScoreLogs={playerScoreLogs}
+                scores={scores}
+            />
+
             {/* 기권 확인 모달 */}
             {/* {forfeitModal.open && forfeitModal.player && (
             <Dialog open={forfeitModal.open} onOpenChange={open => setForfeitModal({ open, player: open ? forfeitModal.player : null })}>
