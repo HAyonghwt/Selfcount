@@ -2925,6 +2925,26 @@ function ExternalScoreboard() {
                     )}
                 </div>
 
+                {/* 모바일 테마 선택: 그룹 선택 하단 영역 터치 시 노출 (PC 버전은 2865행의 기존 코드 유지) */}
+                {isMobile && (
+                    <div className="group/mobile-theme flex flex-col items-end w-full pt-4 min-h-[50px]">
+                        <div className="opacity-0 group-hover/mobile-theme:opacity-100 transition-opacity duration-300 flex items-center gap-2">
+                            <Palette className="h-5 w-5 text-gray-400" />
+                            <Label htmlFor="theme-select-mobile" className="font-bold text-sm text-gray-300">{t('theme')}</Label>
+                            <Select value={theme} onValueChange={(v) => setTheme(v as 'dark' | 'grey' | 'light')}>
+                                <SelectTrigger id="theme-select-mobile" className="w-[120px] h-9 sb-select-trigger backdrop-blur-sm focus:ring-yellow-400">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent className="sb-select-content">
+                                    <SelectItem value="dark">{t('dark')}</SelectItem>
+                                    <SelectItem value="grey">{t('grey')}</SelectItem>
+                                    <SelectItem value="light">{t('light')}</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </div>
+                )}
+
                 {!isMobile && (
                     <RotationSettings
                         isRotationActive={isRotationActive}
