@@ -263,6 +263,43 @@ function getPlayerTotalAndPlusMinusAllCourses(tournament: any, player: any, allA
 export default function ScoreboardPage() {
     const [giftEventStatus, setGiftEventStatus] = useState<string>('');
     const [giftEventData, setGiftEventData] = useState<any>({});
+    const [isRedirecting, setIsRedirecting] = useState(false);
+
+    // 인앱 브라우저 강제 탈출 (카카오톡 등에서 외부 브라우저로 열기)
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+
+        const userAgent = navigator.userAgent.toLowerCase();
+        const targetUrl = window.location.href;
+
+        // 1. 카카오톡 인앱 브라우저 감지
+        if (userAgent.match(/kakaotalk/i)) {
+            setIsRedirecting(true);
+            // 카카오톡 외부 브라우저 호출 (kakaotalk://web/openExternal)
+            window.location.href = 'kakaotalk://web/openExternal?url=' + encodeURIComponent(targetUrl);
+            return;
+        }
+
+        // 2. 라인 인앱 브라우저 감지
+        if (userAgent.match(/line/i)) {
+            setIsRedirecting(true);
+            const separator = targetUrl.includes('?') ? '&' : '?';
+            window.location.href = `${targetUrl}${separator}openExternalBrowser=1`;
+            return;
+        }
+
+        // 3. 기타 인앱 브라우저 감지
+        if (userAgent.match(/inapp|naver|snapchat|wirtschaftswoche|thunderbird|instagram|everytimeapp|whatsApp|electron|wadiz|aliapp|zumapp|iphone(.*)whale|android(.*)whale|kakaostory|band|twitter|DaumApps|DaumDevice\/mobile|FB_IAB|FB4A|FBAN|FBIOS|FBSS|SamsungBrowser\/[^1]/i)) {
+            if (userAgent.match(/android/i)) {
+                setIsRedirecting(true);
+                const cleanUrl = targetUrl.replace(/https?:\/\//i, '');
+                const scheme = `intent://${cleanUrl}#Intent;scheme=http;package=com.android.chrome;end`;
+                window.location.href = scheme;
+            }
+        }
+    }, []);
+
+
 
     useEffect(() => {
         if (!db) return;
@@ -276,6 +313,11 @@ export default function ScoreboardPage() {
         return () => unsub();
     }, []);
 
+
+
+    if (isRedirecting) {
+        return <div className="min-h-screen bg-black flex items-center justify-center text-white p-4 font-bold text-lg text-center break-keep">카카오 화면이 작아서<br />구글 크롬으로 안전하게 엽니다</div>;
+    }
 
     if (giftEventStatus === 'waiting') {
         return <GiftEventStandby />;
@@ -375,6 +417,8 @@ function ExternalScoreboard() {
             setCurrentLang(languageMode === 'korean' ? 'ko' : 'en');
         }
     }, [languageMode]);
+
+
 
     // 그룹 순환 로직은 finalDataByGroup 선언 이후로 이동 (아래 참조)
 
