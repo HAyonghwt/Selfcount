@@ -11,6 +11,7 @@ import GiftEventDisplay from '@/components/gift-event/GiftEventDisplay';
 import GiftEventStandby from '@/components/gift-event/GiftEventStandby';
 import { getPlayerScoreLogs, getPlayerScoreLogsOptimized, ScoreLog, invalidatePlayerLogCache } from '@/lib/scoreLogs';
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip';
+import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import './scoreboard.css';
 
 // 다국어 번역 객체
@@ -1939,23 +1940,7 @@ function ExternalScoreboard() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [lastUpdateTime]); // lastUpdateTime 변경 시 실행 (심판/관리자 모두 동일)
 
-    // 모바일 툴팁 상태 관리 (셀별로 open)
-    const [openTooltip, setOpenTooltip] = useState<{ playerId: string; courseId: string; holeIndex: number } | null>(null);
-    const touchStartTimeRef = useRef<{ [key: string]: number }>({});
-    const touchTimerRef = useRef<{ [key: string]: NodeJS.Timeout }>({});
 
-    // 모바일 외부 터치 시 툴팁 닫기
-    useEffect(() => {
-        if (!openTooltip) return;
-        const handleTouch = (e: TouchEvent) => {
-            // 셀 내부 터치면 무시
-            const tooltipEl = document.getElementById('score-tooltip-' + openTooltip.playerId + '-' + openTooltip.courseId + '-' + openTooltip.holeIndex);
-            if (tooltipEl && e.target instanceof Node && tooltipEl.contains(e.target)) return;
-            setOpenTooltip(null);
-        };
-        document.addEventListener('touchstart', handleTouch, { passive: true });
-        return () => document.removeEventListener('touchstart', handleTouch);
-    }, [openTooltip]);
 
 
     const handleScroll = (amount: number) => {
@@ -2159,9 +2144,7 @@ function ExternalScoreboard() {
                                                                 const holeNumber = i + 1;
                                                                 // 관리자 대시보드와 동일한 방식으로 로그 조회 (배열에서 find 사용)
                                                                 const logs = playerScoreLogs[player.id] || [];
-                                                                const cellLog = Array.isArray(logs)
-                                                                    ? logs.find(l => String(l.courseId) === String(course.id) && Number(l.holeNumber) === holeNumber)
-                                                                    : (playerScoreLogs[player.id]?.[course.id]?.[holeNumber]); // 맵 구조 폴백
+                                                                const cellLog = logs.find(l => String(l.courseId) === String(course.id) && Number(l.holeNumber) === holeNumber);
                                                                 const isModified = !!cellLog && cellLog.oldValue !== 0 && cellLog.oldValue !== cellLog.newValue;
 
                                                                 const tooltipContent = cellLog ? (
@@ -2177,13 +2160,40 @@ function ExternalScoreboard() {
                                                                     </div>
                                                                 ) : null;
 
-                                                                const tooltipOpen = openTooltip && openTooltip.playerId === player.id && openTooltip.courseId === course.id && openTooltip.holeIndex === i;
-
                                                                 const par = getParForHole(tournament, course.id, i);
                                                                 let pm = null;
                                                                 if (par !== null && score !== null && score !== undefined) {
                                                                     pm = score - par;
                                                                 }
+
+                                                                const scoreDisplay = (
+                                                                    <span
+                                                                        className={cn("cursor-pointer", isModified ? "sb-score-plus font-bold" : "")}
+                                                                        style={{
+                                                                            ...(isModified ? { position: 'relative', zIndex: 10 } : {})
+                                                                        }}
+                                                                    >
+                                                                        {score === null ?
+                                                                            '-' :
+                                                                            score === 0 ?
+                                                                                <span className={cn("text-xs", isModified ? "sb-score-plus" : "")}>0</span> :
+                                                                                <>
+                                                                                    <span className={cn(isModified ? "sb-score-plus" : "")}>{String(score)}</span>
+                                                                                    {pm !== null && (
+                                                                                        <span
+                                                                                            className={cn(
+                                                                                                "ml-1 text-xs align-middle",
+                                                                                                pm < 0 ? "sb-score-minus" : pm > 0 ? "sb-score-plus" : "sb-score-zero"
+                                                                                            )}
+                                                                                            style={{ fontSize: '0.7em', fontWeight: 600 }}
+                                                                                        >
+                                                                                            {pm === 0 ? 'E' : (pm > 0 ? `+${pm}` : pm)}
+                                                                                        </span>
+                                                                                    )}
+                                                                                </>
+                                                                        }
+                                                                    </span>
+                                                                );
 
                                                                 return (
                                                                     <td
@@ -2194,59 +2204,35 @@ function ExternalScoreboard() {
                                                                             isModified ? 'sb-score-plus font-bold cursor-pointer' : ''
                                                                         )}
                                                                         style={{
-                                                                            ...(isModified ? { position: 'relative', zIndex: 10 } : {}),
                                                                             userSelect: 'none',
                                                                             WebkitUserSelect: 'none',
                                                                             WebkitTouchCallout: 'none'
                                                                         }}
-                                                                        onClick={isModified && isMobile ? (e) => {
-                                                                            // 즉시 반응하도록 수정 (롱프레스 제거)
-                                                                            e.stopPropagation();
-                                                                            if (tooltipOpen) setOpenTooltip(null);
-                                                                            else setOpenTooltip({ playerId: player.id, courseId: course.id, holeIndex: i });
-                                                                        } : undefined}
-                                                                        id={isModified ? `score-tooltip-${player.id}-${course.id}-${i}` : undefined}
                                                                     >
-                                                                        <Tooltip open={isMobile && isModified ? (tooltipOpen ? true : false) : undefined}>
-                                                                            <TooltipTrigger asChild>
-                                                                                <span
-                                                                                    className="cursor-pointer"
-                                                                                    onClick={(e) => {
-                                                                                        if (isModified && isMobile) {
-                                                                                            e.stopPropagation();
-                                                                                            e.preventDefault(); // 기본 동작 방지
-                                                                                            if (tooltipOpen) setOpenTooltip(null);
-                                                                                            else setOpenTooltip({ playerId: player.id, courseId: course.id, holeIndex: i });
-                                                                                        }
-                                                                                    }}
-                                                                                >
-                                                                                    {score === null ?
-                                                                                        '-' :
-                                                                                        score === 0 ?
-                                                                                            <span className={cn("text-xs", isModified ? "sb-score-plus" : "")}>0</span> :
-                                                                                            <>
-                                                                                                <span className={cn(isModified ? "sb-score-plus" : "")}>{String(score)}</span>
-                                                                                                {pm !== null && (
-                                                                                                    <span
-                                                                                                        className={cn(
-                                                                                                            "ml-1 text-xs align-middle",
-                                                                                                            pm < 0 ? "sb-score-minus" : pm > 0 ? "sb-score-plus" : "sb-score-zero"
-                                                                                                        )}
-                                                                                                        style={{ fontSize: '0.7em', fontWeight: 600 }}
-                                                                                                    >
-                                                                                                        {pm === 0 ? 'E' : (pm > 0 ? `+${pm}` : pm)}
-                                                                                                    </span>
-                                                                                                )}
-                                                                                            </>
-                                                                                    }
-                                                                                </span>
-                                                                            </TooltipTrigger>
-                                                                            {isModified && tooltipContent && (
-                                                                                <TooltipContent side="top" className="whitespace-pre-line">
-                                                                                    {tooltipContent}
-                                                                                </TooltipContent>
-                                                                            )}
-                                                                        </Tooltip>
+                                                                        {/* 모바일: 팝오버 사용 (터치 이슈 해결) / 데스크탑: 툴팁 사용 */}
+                                                                        {isModified && isMobile ? (
+                                                                            <Popover>
+                                                                                <PopoverTrigger asChild>
+                                                                                    {scoreDisplay}
+                                                                                </PopoverTrigger>
+                                                                                {tooltipContent && (
+                                                                                    <PopoverContent className="whitespace-pre-line text-sm bg-gray-900 border-gray-700 text-white z-[9999]" side="top">
+                                                                                        {tooltipContent}
+                                                                                    </PopoverContent>
+                                                                                )}
+                                                                            </Popover>
+                                                                        ) : (
+                                                                            <Tooltip>
+                                                                                <TooltipTrigger asChild>
+                                                                                    {scoreDisplay}
+                                                                                </TooltipTrigger>
+                                                                                {isModified && tooltipContent && (
+                                                                                    <TooltipContent side="top" className="whitespace-pre-line">
+                                                                                        {tooltipContent}
+                                                                                    </TooltipContent>
+                                                                                )}
+                                                                            </Tooltip>
+                                                                        )}
                                                                     </td>
                                                                 );
                                                             })}
@@ -2330,19 +2316,13 @@ function ExternalScoreboard() {
                                                             <td colSpan={11} className="py-0.5 px-1 align-middle text-center opacity-50 sb-td">{t('noCourseDisplay')}</td>
                                                             <td className={cn("py-0.5 px-1 align-middle font-bold sb-rank sb-td", player.hasForfeited ? "text-xs" : "text-xl")}>
                                                                 {player.hasForfeited ? (() => {
-                                                                    const playerLogMap = playerScoreLogs[player.id] || {};
+                                                                    const logs = playerScoreLogs[player.id] || [];
                                                                     let foundType: string = 'forfeit';
-                                                                    let stopLoop = false;
-                                                                    for (const cid in playerLogMap) {
-                                                                        if (stopLoop) break;
-                                                                        const courseLogs = playerLogMap[cid];
-                                                                        for (const hNum in courseLogs) {
-                                                                            const l = courseLogs[Number(hNum)];
-                                                                            if (l.newValue === 0 && (l.modifiedByType === 'judge' || l.modifiedByType === 'admin')) {
-                                                                                if (l.comment?.includes('불참')) { foundType = 'absent'; stopLoop = true; break; }
-                                                                                if (l.comment?.includes('실격')) { foundType = 'disqualified'; stopLoop = true; break; }
-                                                                                if (l.comment?.includes('기권')) { foundType = 'forfeit'; stopLoop = true; break; }
-                                                                            }
+                                                                    for (const l of logs) {
+                                                                        if (l.newValue === 0 && (l.modifiedByType === 'judge' || l.modifiedByType === 'admin')) {
+                                                                            if (l.comment?.includes('불참')) { foundType = 'absent'; break; }
+                                                                            if (l.comment?.includes('실격')) { foundType = 'disqualified'; break; }
+                                                                            if (l.comment?.includes('기권')) { foundType = 'forfeit'; break; }
                                                                         }
                                                                     }
                                                                     return t(foundType as any);
