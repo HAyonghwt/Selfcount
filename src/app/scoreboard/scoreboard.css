@@ -73,50 +73,49 @@
     --sb-info-col-bg: transparent;
 }
 
-/* Light Mode (Custom Design from Images) */
+/* Light Mode (Sophisticated Palette: Pistachio, Turquoise, Cerulean, Spruce) */
 [data-theme='light'] {
     --sb-bg-color: #ffffff;
-    --sb-text-color: #1f2937;
-    /* gray-800 */
-    --sb-border-color: #9ca3af;
-    /* gray-400 - Updated to match cell borders (User Req) */
+    --sb-text-color: #283B42;
+    /* Spruce */
+    --sb-border-color: #85B8CB;
+    /* Turquoise */
 
-    --sb-header-text-color: #292424;
-    /* Title Color (User Req) */
-    --sb-sub-text-color: #4B75F2;
-    /* Blue (Image 12) */
+    --sb-header-text-color: #1D6A96;
+    /* Cerulean */
+    --sb-sub-text-color: #1D6A96;
+    /* Cerulean */
 
-    --sb-bg-alt-color: #f5f9ff;
-    /* Very subtle light blue for alternating rows in Light theme */
+    --sb-bg-alt-color: #f7f9f9;
+    /* Very subtle light background for alternate rows */
 
-    --sb-table-border-color: #9ca3af;
-    /* gray-400 (Darker Grey Border) */
-    --sb-table-header-bg: #0e07cc;
-    /* Vivid Blue Header (User Req) */
+    --sb-table-border-color: #85B8CB;
+    /* Turquoise */
+    --sb-table-header-bg: #283B42;
+    /* Spruce - Dark Premium Header */
     --sb-table-header-text: #ffffff;
-    /* White Text */
-    --sb-table-row-hover: #f3f4f6;
-    /* gray-100 */
+    /* White Text on dark header */
+    --sb-table-row-hover: #f1f5f4;
+    /* Subtle hover */
     --sb-table-stripe-bg: transparent;
-    /* Disable default stripe on header if mapped to holes? No, specific override below */
 
-    --sb-cell-border: #9ca3af;
-    /* gray-400 (Darker Cell Borders) */
-    --sb-rank-gold: #0903A6;
-    /* Dark Blue for Rank/Total (User Req) */
+    --sb-cell-border: #85B8CB;
+    /* Turquoise */
+    --sb-rank-gold: #1D6A96;
+    /* Cerulean Accent for Rank */
 
     /* Select/Dropdown Colors */
     --sb-select-bg: #ffffff;
-    --sb-select-border: #d1d5db;
-    --sb-select-text: #1f2937;
+    --sb-select-border: #85B8CB;
+    --sb-select-text: #283B42;
 
-    /* Custom: Info Column Background in Light Mode */
-    --sb-info-col-bg: #B3C8F2;
-    /* Light Blue (Image 11/12) */
+    /* Information Column (Name/Club) */
+    --sb-info-col-bg: #D1DDDB;
+    /* Pistachio */
 
-    /* Custom: Hole Header Background */
-    --sb-hole-header-bg: #462ae7;
-    /* User Req: Changed from Light Blue to Deep Purple-Blue */
+    /* Hole Header Background */
+    --sb-hole-header-bg: #1D6A96;
+    /* Cerulean */
 }
 
 /* Default vars for new custom props */
