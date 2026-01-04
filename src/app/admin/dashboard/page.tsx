@@ -1719,7 +1719,8 @@ export default function AdminDashboard() {
             // 0점(기권/불참/실격) 입력 시 또는 점수가 없고 forfeitType이 있는 경우: 소속 그룹의 모든 코스/홀에 0점 입력
             if (scoreValue === 0 || (scoreValue === null && scoreEditModal.forfeitType)) {
                 // forfeitType이 없으면 기본값으로 'forfeit' 설정
-                const forfeitType = scoreEditModal.forfeitType || 'forfeit';
+                // [Fix] Shadowing 제거: 상위 스코프의 forfeitType 변수(인자값 포함)를 사용해야 함
+                const effectiveForfeitType = forfeitType || 'forfeit';
 
                 // 선수 정보 찾기
                 const player = players[playerId];
@@ -1740,8 +1741,8 @@ export default function AdminDashboard() {
                     }
 
                     // 기권 타입에 따른 메시지
-                    const forfeitTypeText = forfeitType === 'absent' ? '불참' :
-                        forfeitType === 'disqualified' ? '실격' : '기권';
+                    const forfeitTypeText = effectiveForfeitType === 'absent' ? '불참' :
+                        effectiveForfeitType === 'disqualified' ? '실격' : '기권';
 
                     // 그룹에 배정된 코스 id 목록
                     const assignedCourseIds = group.courses ? Object.keys(group.courses).filter((cid: any) => group.courses[cid]) : [];
