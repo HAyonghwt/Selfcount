@@ -499,6 +499,23 @@ function ExternalScoreboard() {
 
 
 
+    // 모바일 시스템 언어 감지 및 자동 설정
+    useEffect(() => {
+        if (isMobile && typeof navigator !== 'undefined') {
+            const systemLang = navigator.language || (navigator as any).userLanguage;
+            if (systemLang) {
+                const isKorean = systemLang.toLowerCase().includes('ko');
+                if (isKorean) {
+                    setLanguageMode('korean');
+                    setCurrentLang('ko');
+                } else {
+                    setLanguageMode('english');
+                    setCurrentLang('en');
+                }
+            }
+        }
+    }, [isMobile]);
+
     // 번역 함수
     const t = useCallback((key: keyof typeof translations.ko) => {
         return translations[currentLang][key];
