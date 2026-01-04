@@ -2,7 +2,7 @@
 import React, { useEffect, useState, useMemo, useRef, useCallback, useTransition } from 'react';
 import { db, ensureAuthenticated } from '@/lib/firebase';
 import { ref, onValue, onChildChanged, off, query } from 'firebase/database';
-import { Flame, ChevronUp, ChevronDown, Globe, Palette } from 'lucide-react';
+import { Flame, ChevronUp, ChevronDown, Globe, Palette, Maximize, Minimize } from 'lucide-react';
 import { cn, safeLocalStorageGetItem, safeLocalStorageSetItem } from '@/lib/utils';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
@@ -349,6 +349,18 @@ const getForfeitTypeFromLogs = (logs: ScoreLog[]): 'absent' | 'disqualified' | '
 // 외부 전광판 컴포넌트
 function ExternalScoreboard() {
     const [loading, setLoading] = useState(true);
+
+    // 모바일 감지 (컴포넌트 마운트 시 한 번만 계산 - 성능 최적화)
+    const [isMobile] = useState(() =>
+        typeof window !== 'undefined' &&
+        window.matchMedia &&
+        window.matchMedia('(pointer: coarse)').matches
+    );
+
+    // 모바일에서 그룹 선택창을 초기에만 강제로 보여주기 위한 상태
+    // 초기값: 모바일이면 true, 아니면 false
+    const [forceGroupSelectorVisible, setForceGroupSelectorVisible] = useState(isMobile);
+
     const [players, setPlayers] = useState({});
     const [scores, setScores] = useState({});
     const [tournament, setTournament] = useState<any>({});
@@ -384,12 +396,107 @@ function ExternalScoreboard() {
     // 테마 상태 (기본값: dark)
     const [theme, setTheme] = useState<'dark' | 'grey' | 'light'>('dark');
 
-    // 모바일 감지 (컴포넌트 마운트 시 한 번만 계산 - 성능 최적화)
-    const [isMobile] = useState(() =>
-        typeof window !== 'undefined' &&
-        window.matchMedia &&
-        window.matchMedia('(pointer: coarse)').matches
-    );
+    // 전체화면 상태 및 토글 함수
+    const [isFullscreen, setIsFullscreen] = useState(false);
+    const hasTriggeredFullscreen = useRef(false); // 한 번만 시도하도록 제어
+
+    const enableFullscreen = () => {
+        // 이미 실행 중인 요청이 있거나, 실제 전체화면 상태라면 무시
+        if (hasTriggeredFullscreen.current) return;
+
+        const element = document.documentElement as any;
+        const requestMethod = element.requestFullscreen ||
+            element.webkitRequestFullscreen ||
+            element.mozRequestFullScreen ||
+            element.msRequestFullscreen;
+
+        if (requestMethod) {
+            // 이미 전체화면인지 확인 (표준 및 벤더 프리픽스)
+            const isFs = document.fullscreenElement ||
+                (document as any).webkitFullscreenElement ||
+                (document as any).mozFullScreenElement ||
+                (document as any).msFullscreenElement;
+
+            if (!isFs) {
+                // 진입 요청 시작
+                hasTriggeredFullscreen.current = true;
+
+                // 실행
+                requestMethod.call(element).then(() => {
+                    // 성공 시 별도 작업 불필요 (onFullscreenChange에서 처리)
+                }).catch((err: any) => {
+                    console.log(`Fullscreen attempt failed: ${err.message}`);
+                    hasTriggeredFullscreen.current = false; // 실패 시 재시도 허용
+                });
+            }
+        }
+    };
+
+    // 전체화면 변경 감지 및 글로벌 리스너 등록
+    useEffect(() => {
+        const onFullscreenChange = () => {
+            const isFs = !!(document.fullscreenElement ||
+                (document as any).webkitFullscreenElement ||
+                (document as any).mozFullScreenElement ||
+                (document as any).msFullscreenElement);
+
+            setIsFullscreen(isFs);
+            if (!isFs) {
+                hasTriggeredFullscreen.current = false;
+            }
+        };
+
+        const handleInteraction = () => {
+            enableFullscreen();
+        };
+
+        // 표준 및 벤더별 이벤트 리스너
+        document.addEventListener('fullscreenchange', onFullscreenChange);
+        document.addEventListener('webkitfullscreenchange', onFullscreenChange);
+        document.addEventListener('mozfullscreenchange', onFullscreenChange);
+        document.addEventListener('MSFullscreenChange', onFullscreenChange);
+
+        // 사용자 상호작용 감지 (전역)
+        document.addEventListener('click', handleInteraction);
+
+        let cleanupScroll: (() => void) | null = null;
+
+        // 모바일과 PC의 전체화면 트리거 분리
+        if (isMobile) {
+            // 모바일: 스크롤 시 전체화면 시도
+            // scrollContainerRef가 존재할 때 해당 요소에 이벤트 리스너 추가
+            const scrollContainer = scrollContainerRef.current;
+            if (scrollContainer) {
+                const handleScrollInteraction = () => {
+                    enableFullscreen();
+                };
+                scrollContainer.addEventListener('scroll', handleScrollInteraction, { passive: true });
+                cleanupScroll = () => {
+                    if (scrollContainer) {
+                        scrollContainer.removeEventListener('scroll', handleScrollInteraction);
+                    }
+                };
+            }
+        } else {
+            // PC: 터치/클릭 시 전체화면 시도 (기존 유지)
+            document.addEventListener('touchstart', handleInteraction, { passive: true });
+        }
+
+        return () => {
+            document.removeEventListener('fullscreenchange', onFullscreenChange);
+            document.removeEventListener('webkitfullscreenchange', onFullscreenChange);
+            document.removeEventListener('mozfullscreenchange', onFullscreenChange);
+            document.removeEventListener('MSFullscreenChange', onFullscreenChange);
+            document.removeEventListener('click', handleInteraction);
+            document.removeEventListener('touchstart', handleInteraction);
+
+            if (cleanupScroll) {
+                cleanupScroll();
+            }
+        };
+    }, [isMobile]); // isMobile 변경 시 재실행
+
+
 
 
     // 번역 함수
@@ -2155,7 +2262,11 @@ function ExternalScoreboard() {
                 .scoreboard-container::-webkit-scrollbar { display: none; }
                 .scoreboard-container { -ms-overflow-style: none; scrollbar-width: none; }
             `}</style>
-            <div ref={scrollContainerRef} className="scoreboard-container h-screen overflow-y-auto p-2 sm:p-4 md:p-6 font-sans" data-theme={theme}>
+            <div
+                ref={scrollContainerRef}
+                className="scoreboard-container h-screen overflow-y-auto p-2 sm:p-4 md:p-6 font-sans"
+                data-theme={theme}
+            >
                 {individualSuddenDeathData?.isActive && (
                     <SuddenDeathTable type="individual" data={individualSuddenDeathData} processedData={processedIndividualSuddenDeathData} />
                 )}
@@ -2432,54 +2543,64 @@ function ExternalScoreboard() {
                 })}
             </div >
 
-            {/* 왼쪽 위: 언어 선택 */}
-            < div className="fixed left-4 flex items-center gap-4 z-50 group/lang" style={{ height: '36px', top: '3rem' }}>
-                <div className="flex items-center gap-2 opacity-0 group-hover/lang:opacity-100 transition-opacity duration-300 h-full">
-                    <Globe className="h-5 w-5 text-gray-400" />
-                    <Label htmlFor="language-select" className="font-bold text-sm text-gray-300">{t('language')}</Label>
-                    <Select value={languageMode} onValueChange={(v) => setLanguageMode(v as 'korean' | 'english' | 'cycle')}>
-                        <SelectTrigger id="language-select" className="w-[120px] h-9 bg-gray-800/80 backdrop-blur-sm border-gray-600 text-white focus:ring-yellow-400">
-                            <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent className="bg-gray-900 text-white border-gray-700">
-                            <SelectItem value="korean">{t('korean')}</SelectItem>
-                            <SelectItem value="english">{t('english')}</SelectItem>
-                            <SelectItem value="cycle">{t('cycle')} (10s)</SelectItem>
-                        </SelectContent>
-                    </Select>
+            {/* 왼쪽 위: 언어 선택 - 모바일에서는 숨김 */}
+            {!isMobile && (
+                <div className="fixed left-4 flex items-center gap-4 z-50 group/lang" style={{ height: '36px', top: '3rem' }}>
+                    <div className="flex items-center gap-2 opacity-0 group-hover/lang:opacity-100 transition-opacity duration-300 h-full">
+                        <Globe className="h-5 w-5 text-gray-400" />
+                        <Label htmlFor="language-select" className="font-bold text-sm text-gray-300">{t('language')}</Label>
+                        <Select value={languageMode} onValueChange={(v) => setLanguageMode(v as 'korean' | 'english' | 'cycle')}>
+                            <SelectTrigger id="language-select" className="w-[120px] h-9 bg-gray-800/80 backdrop-blur-sm border-gray-600 text-white focus:ring-yellow-400">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent className="bg-gray-900 text-white border-gray-700">
+                                <SelectItem value="korean">{t('korean')}</SelectItem>
+                                <SelectItem value="english">{t('english')}</SelectItem>
+                                <SelectItem value="cycle">{t('cycle')} (10s)</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    {/* 순환 모드 표시 */}
+                    {
+                        languageMode === 'cycle' && (
+                            <div className="text-xs text-yellow-400 animate-pulse flex items-center h-full">
+                                {currentLang === 'ko' ? '🇰🇷' : '🇺🇸'}
+                            </div>
+                        )
+                    }
                 </div>
-                {/* 순환 모드 표시 */}
-                {
-                    languageMode === 'cycle' && (
-                        <div className="text-xs text-yellow-400 animate-pulse flex items-center h-full">
-                            {currentLang === 'ko' ? '🇰🇷' : '🇺🇸'}
-                        </div>
-                    )
-                }
-            </div >
+            )}
 
-            {/* 왼쪽 위: 테마 선택 (언어 선택 아래) */}
-            < div className="fixed left-4 flex items-center gap-4 z-50 group/theme" style={{ height: '36px', top: '6rem' }}>
-                <div className="flex items-center gap-2 opacity-0 group-hover/theme:opacity-100 transition-opacity duration-300 h-full">
-                    <Palette className="h-5 w-5 text-gray-400" />
-                    <Label htmlFor="theme-select" className="font-bold text-sm text-gray-300">{t('theme')}</Label>
-                    <Select value={theme} onValueChange={(v) => setTheme(v as 'dark' | 'grey' | 'light')}>
-                        <SelectTrigger id="theme-select" className="w-[120px] h-9 sb-select-trigger backdrop-blur-sm focus:ring-yellow-400">
-                            <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent className="sb-select-content">
-                            <SelectItem value="dark">{t('dark')}</SelectItem>
-                            <SelectItem value="grey">{t('grey')}</SelectItem>
-                            <SelectItem value="light">{t('light')}</SelectItem>
-                        </SelectContent>
-                    </Select>
+            {/* 왼쪽 위: 테마 선택 (언어 선택 아래) - 모바일에서는 숨김 */}
+            {!isMobile && (
+                <div className="fixed left-4 flex items-center gap-4 z-50 group/theme" style={{ height: '36px', top: '6rem' }}>
+                    <div className="flex items-center gap-2 opacity-0 group-hover/theme:opacity-100 transition-opacity duration-300 h-full">
+                        <Palette className="h-5 w-5 text-gray-400" />
+                        <Label htmlFor="theme-select" className="font-bold text-sm text-gray-300">{t('theme')}</Label>
+                        <Select value={theme} onValueChange={(v) => setTheme(v as 'dark' | 'grey' | 'light')}>
+                            <SelectTrigger id="theme-select" className="w-[120px] h-9 sb-select-trigger backdrop-blur-sm focus:ring-yellow-400">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent className="sb-select-content">
+                                <SelectItem value="dark">{t('dark')}</SelectItem>
+                                <SelectItem value="grey">{t('grey')}</SelectItem>
+                                <SelectItem value="light">{t('light')}</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
                 </div>
-            </div >
+            )}
+
+            {/* 왼쪽 위: 전체화면 알림 (버튼 대신 터치 유도 힌트, 필요 시 잠시 띄움 - 현재는 제거하고 터치 시 자동 동작) */}
+            {/* 기존 버튼 제거됨 */}
 
             {/* 오른쪽 위: 그룹 선택 */}
             < div className="fixed top-4 right-4 flex flex-col items-end gap-2 z-50 group" >
                 <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                    <div className={cn(
+                        "flex items-center gap-2 transition-opacity duration-300",
+                        forceGroupSelectorVisible ? "opacity-100" : "opacity-0 group-hover:opacity-100" // 모바일 초기 노출 또는 호버 시 노출
+                    )}>
                         <Label htmlFor="group-filter" className="font-bold text-sm text-gray-300">{t('selectGroup')}</Label>
                         <div className="relative">
                             <Select value={filterGroup} onValueChange={(value) => {
@@ -2488,6 +2609,10 @@ function ExternalScoreboard() {
                                     // 순환이 활성화되어 있으면 수동 변경 시 순환 중지
                                     if (isRotationActive) {
                                         setIsRotationActive(false);
+                                    }
+                                    // 모바일: 그룹 선택 시 강제 노출 해제 (선택창 사라짐/투명화)
+                                    if (isMobile) {
+                                        setForceGroupSelectorVisible(false);
                                     }
                                 });
                             }}>
@@ -2510,158 +2635,166 @@ function ExternalScoreboard() {
                         <button
                             onClick={() => handleScroll(-50)}
                             aria-label="Scroll Up"
-                            className="bg-gray-800/70 text-white p-2 rounded-full hover:bg-gray-700 transition-opacity opacity-0 group-hover:opacity-100 duration-300"
+                            className={cn(
+                                "bg-gray-800/70 text-white p-2 rounded-full hover:bg-gray-700 transition-opacity duration-300",
+                                forceGroupSelectorVisible ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                            )}
                         >
                             <ChevronUp className="h-6 w-6" />
                         </button>
                         <button
                             onClick={() => handleScroll(50)}
                             aria-label="Scroll Down"
-                            className="bg-gray-800/70 text-white p-2 rounded-full hover:bg-gray-700 transition-opacity opacity-0 group-hover:opacity-100 duration-300"
+                            className={cn(
+                                "bg-gray-800/70 text-white p-2 rounded-full hover:bg-gray-700 transition-opacity duration-300",
+                                forceGroupSelectorVisible ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                            )}
                         >
                             <ChevronDown className="h-6 w-6" />
                         </button>
                     </div>
                 </div>
 
-                {/* 그룹 순환 설정 (마우스 오버 시 표시) */}
-                <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-gray-900/95 backdrop-blur-sm border border-gray-700 rounded-lg p-4 min-w-[280px]">
-                    <div className="flex flex-col gap-3">
-                        <div className="flex items-center justify-between">
-                            <Label className="font-bold text-sm text-gray-300">그룹 순환</Label>
-                            <div className="flex items-center gap-2">
-                                <Checkbox
-                                    id="rotation-active"
-                                    checked={isRotationActive}
-                                    onCheckedChange={(checked) => {
-                                        const newValue = checked === true;
-                                        // 사용자가 화면에서 직접 순환 체크박스를 건드렸음을 기록
-                                        hasUserToggledRotationRef.current = true;
+                {/* 그룹 순환 설정 (마우스 오버 시 표시) - 모바일 제외 */}
+                {!isMobile && (
+                    <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-gray-900/95 backdrop-blur-sm border border-gray-700 rounded-lg p-4 min-w-[280px]">
+                        <div className="flex flex-col gap-3">
+                            <div className="flex items-center justify-between">
+                                <Label className="font-bold text-sm text-gray-300">그룹 순환</Label>
+                                <div className="flex items-center gap-2">
+                                    <Checkbox
+                                        id="rotation-active"
+                                        checked={isRotationActive}
+                                        onCheckedChange={(checked) => {
+                                            const newValue = checked === true;
+                                            // 사용자가 화면에서 직접 순환 체크박스를 건드렸음을 기록
+                                            hasUserToggledRotationRef.current = true;
 
-                                        startTransition(() => {
-                                            setIsRotationActive(newValue);
-
-                                            if (newValue) {
-                                                // 현재 rotationGroupsRef / rotationGroups / allGroupsList 중에서
-                                                // 실제로 화면에 표시 가능한(visibleGroups에 포함된) 첫 번째 그룹만
-                                                // 초기 순환 대상으로 사용. 유효한 그룹이 없으면 현재 화면 유지.
-                                                const baseGroups =
-                                                    (rotationGroupsRef.current && rotationGroupsRef.current.length > 0)
-                                                        ? rotationGroupsRef.current
-                                                        : (rotationGroups.length > 0 ? rotationGroups : allGroupsList);
-
-                                                const firstValidGroup = baseGroups.find(g => visibleGroups.includes(g));
-
-                                                if (firstValidGroup) {
-                                                    const idxInRotation = rotationGroups.indexOf(firstValidGroup);
-                                                    currentRotationIndexRef.current = idxInRotation >= 0 ? idxInRotation : 0;
-                                                    setFilterGroup(firstValidGroup);
-                                                }
-                                            }
-                                        });
-
-                                        // localStorage에 저장 (새로고침 시 유지, 각 모니터별로 독립적)
-                                        try {
-                                            safeLocalStorageSetItem('scoreboardRotation', JSON.stringify({
-                                                isActive: newValue,
-                                                intervalSeconds: rotationInterval,
-                                                selectedGroups: rotationGroups
-                                            }));
-                                        } catch (error) {
-                                            console.error('순환 설정 저장 실패:', error);
-                                        }
-                                    }}
-                                    className="border-gray-600"
-                                />
-                                <Label htmlFor="rotation-active" className="text-xs text-gray-400 cursor-pointer">
-                                    활성화
-                                </Label>
-                            </div>
-                        </div>
-
-                        {isRotationActive && (
-                            <>
-                                <div className="flex flex-col gap-2">
-                                    <Label className="text-xs text-gray-400">순환할 그룹 선택</Label>
-                                    <div className="flex flex-col gap-1.5 max-h-32 overflow-y-auto">
-                                        {allGroupsList.map(group => (
-                                            <div key={group} className="flex items-center gap-2">
-                                                <Checkbox
-                                                    id={`rotation-group-${group}`}
-                                                    checked={rotationGroups.includes(group)}
-                                                    onCheckedChange={(checked) => {
-                                                        let newGroups: string[];
-                                                        if (checked === true) {
-                                                            newGroups = [...rotationGroups, group];
-                                                            startTransition(() => {
-                                                                setRotationGroups(newGroups);
-                                                            });
-                                                        } else {
-                                                            newGroups = rotationGroups.filter(g => g !== group);
-                                                            startTransition(() => {
-                                                                setRotationGroups(newGroups);
-                                                            });
-                                                        }
-                                                        // localStorage에 저장 (새로고침 시 유지, 각 모니터별로 독립적)
-                                                        try {
-                                                            safeLocalStorageSetItem('scoreboardRotation', JSON.stringify({
-                                                                isActive: isRotationActive,
-                                                                intervalSeconds: rotationInterval,
-                                                                selectedGroups: newGroups
-                                                            }));
-                                                        } catch (error) {
-                                                            console.error('순환 설정 저장 실패:', error);
-                                                        }
-                                                    }}
-                                                    className="border-gray-600"
-                                                />
-                                                <Label htmlFor={`rotation-group-${group}`} className="text-xs text-gray-300 cursor-pointer">
-                                                    {translateGroupName(group, currentLang)}
-                                                </Label>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-
-                                <div className="flex flex-col gap-2">
-                                    <Label className="text-xs text-gray-400">순환 시간</Label>
-                                    <Select
-                                        value={rotationInterval.toString()}
-                                        onValueChange={(value) => {
-                                            const newInterval = parseInt(value);
                                             startTransition(() => {
-                                                setRotationInterval(newInterval);
+                                                setIsRotationActive(newValue);
+
+                                                if (newValue) {
+                                                    // 현재 rotationGroupsRef / rotationGroups / allGroupsList 중에서
+                                                    // 실제로 화면에 표시 가능한(visibleGroups에 포함된) 첫 번째 그룹만
+                                                    // 초기 순환 대상으로 사용. 유효한 그룹이 없으면 현재 화면 유지.
+                                                    const baseGroups =
+                                                        (rotationGroupsRef.current && rotationGroupsRef.current.length > 0)
+                                                            ? rotationGroupsRef.current
+                                                            : (rotationGroups.length > 0 ? rotationGroups : allGroupsList);
+
+                                                    const firstValidGroup = baseGroups.find(g => visibleGroups.includes(g));
+
+                                                    if (firstValidGroup) {
+                                                        const idxInRotation = rotationGroups.indexOf(firstValidGroup);
+                                                        currentRotationIndexRef.current = idxInRotation >= 0 ? idxInRotation : 0;
+                                                        setFilterGroup(firstValidGroup);
+                                                    }
+                                                }
                                             });
+
                                             // localStorage에 저장 (새로고침 시 유지, 각 모니터별로 독립적)
                                             try {
                                                 safeLocalStorageSetItem('scoreboardRotation', JSON.stringify({
-                                                    isActive: isRotationActive,
-                                                    intervalSeconds: newInterval,
+                                                    isActive: newValue,
+                                                    intervalSeconds: rotationInterval,
                                                     selectedGroups: rotationGroups
                                                 }));
                                             } catch (error) {
                                                 console.error('순환 설정 저장 실패:', error);
                                             }
                                         }}
-                                    >
-                                        <SelectTrigger className="w-full h-8 bg-gray-800/80 border-gray-600 text-white text-xs">
-                                            <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent className="bg-gray-900 text-white border-gray-700">
-                                            <SelectItem value="10">10초</SelectItem>
-                                            <SelectItem value="30">30초</SelectItem>
-                                            <SelectItem value="60">1분</SelectItem>
-                                            <SelectItem value="120">2분</SelectItem>
-                                            <SelectItem value="180">3분</SelectItem>
-                                            <SelectItem value="240">4분</SelectItem>
-                                            <SelectItem value="300">5분</SelectItem>
-                                        </SelectContent>
-                                    </Select>
+                                        className="border-gray-600"
+                                    />
+                                    <Label htmlFor="rotation-active" className="text-xs text-gray-400 cursor-pointer">
+                                        활성화
+                                    </Label>
                                 </div>
-                            </>
-                        )}
+                            </div>
+
+                            {isRotationActive && (
+                                <>
+                                    <div className="flex flex-col gap-2">
+                                        <Label className="text-xs text-gray-400">순환할 그룹 선택</Label>
+                                        <div className="flex flex-col gap-1.5 max-h-32 overflow-y-auto">
+                                            {allGroupsList.map(group => (
+                                                <div key={group} className="flex items-center gap-2">
+                                                    <Checkbox
+                                                        id={`rotation-group-${group}`}
+                                                        checked={rotationGroups.includes(group)}
+                                                        onCheckedChange={(checked) => {
+                                                            let newGroups: string[];
+                                                            if (checked === true) {
+                                                                newGroups = [...rotationGroups, group];
+                                                                startTransition(() => {
+                                                                    setRotationGroups(newGroups);
+                                                                });
+                                                            } else {
+                                                                newGroups = rotationGroups.filter(g => g !== group);
+                                                                startTransition(() => {
+                                                                    setRotationGroups(newGroups);
+                                                                });
+                                                            }
+                                                            // localStorage에 저장 (새로고침 시 유지, 각 모니터별로 독립적)
+                                                            try {
+                                                                safeLocalStorageSetItem('scoreboardRotation', JSON.stringify({
+                                                                    isActive: isRotationActive,
+                                                                    intervalSeconds: rotationInterval,
+                                                                    selectedGroups: newGroups
+                                                                }));
+                                                            } catch (error) {
+                                                                console.error('순환 설정 저장 실패:', error);
+                                                            }
+                                                        }}
+                                                        className="border-gray-600"
+                                                    />
+                                                    <Label htmlFor={`rotation-group-${group}`} className="text-xs text-gray-300 cursor-pointer">
+                                                        {translateGroupName(group, currentLang)}
+                                                    </Label>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    <div className="flex flex-col gap-2">
+                                        <Label className="text-xs text-gray-400">순환 시간</Label>
+                                        <Select
+                                            value={rotationInterval.toString()}
+                                            onValueChange={(value) => {
+                                                const newInterval = parseInt(value);
+                                                startTransition(() => {
+                                                    setRotationInterval(newInterval);
+                                                });
+                                                // localStorage에 저장 (새로고침 시 유지, 각 모니터별로 독립적)
+                                                try {
+                                                    safeLocalStorageSetItem('scoreboardRotation', JSON.stringify({
+                                                        isActive: isRotationActive,
+                                                        intervalSeconds: newInterval,
+                                                        selectedGroups: rotationGroups
+                                                    }));
+                                                } catch (error) {
+                                                    console.error('순환 설정 저장 실패:', error);
+                                                }
+                                            }}
+                                        >
+                                            <SelectTrigger className="w-full h-8 bg-gray-800/80 border-gray-600 text-white text-xs">
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent className="bg-gray-900 text-white border-gray-700">
+                                                <SelectItem value="10">10초</SelectItem>
+                                                <SelectItem value="30">30초</SelectItem>
+                                                <SelectItem value="60">1분</SelectItem>
+                                                <SelectItem value="120">2분</SelectItem>
+                                                <SelectItem value="180">3분</SelectItem>
+                                                <SelectItem value="240">4분</SelectItem>
+                                                <SelectItem value="300">5분</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                </>
+                            )}
+                        </div>
                     </div>
-                </div>
+                )}
             </div >
         </>
     );
