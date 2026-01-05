@@ -1008,7 +1008,7 @@ export default function ScorePrintTool() {
         try {
             const groupsToPrint = printModal.showAllGroups ? allGroupsList : printModal.selectedGroups;
             const totalGroups = groupsToPrint.length;
-            const tournamentName = tournament.name || 'Park Golf Championship';
+            const tournamentName = tournament.name || '골프 대회';
             const printDate = new Date().toLocaleString('ko-KR');
 
             if (totalGroups === 0) {
@@ -1017,22 +1017,15 @@ export default function ScorePrintTool() {
                 return;
             }
 
-            toast({ title: "이미지 저장 시작", description: "그룹별로 분리하여 저장 중..." });
+            toast({ title: "이미지 저장 시작", description: "인쇄용 PDF와 동일한 스타일로 저장 중..." });
 
-            // 로고 스타일 (calc 제거 및 구조 최적화)
+            // 로고 HTML (인쇄용과 동일하게 구성)
             const logoOverlayStyle = (printModal.logoEnabled && backgroundLogoUrl) ? `
                 .logo-overlay {
                     position: absolute;
-                    top: 0;
-                    left: 0;
-                    right: 0;
-                    bottom: 0;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    pointer-events: none;
-                    z-index: 0;
-                    overflow: hidden;
+                    top: 0; left: 0; right: 0; bottom: 0;
+                    display: flex; align-items: center; justify-content: center;
+                    pointer-events: none; z-index: 0; overflow: hidden;
                 }
                 .logo-overlay img {
                     width: ${printModal.logoSize * 100}%;
@@ -1041,350 +1034,259 @@ export default function ScorePrintTool() {
                 }
             ` : '';
 
-            // 공통 스타일 (홈 전광판과 동일)
+            // 스타일 (인쇄용 generatePrintHTML의 스타일과 완전히 일치시킴)
             const styleContent = `
                 <style>
-                    @media print {
-                        .no-print { display: none !important; }
-                        @page { margin: 5mm; }
+                    body { margin: 0; padding: 0; background-color: white; }
+                    .print-wrapper { 
+                        font-family: 'Arial', sans-serif; 
+                        padding: 20px; 
+                        width: 1000px; /* 고정 너비 */
+                        box-sizing: border-box; 
+                        position: relative; 
+                        background: white;
                     }
-                    body { margin: 0; padding: 0; background-color: #f8fafc; }
-                    .print-controls {
-                        position: fixed; top: 0; left: 0; right: 0;
-                        background: white; padding: 15px;
-                        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-                        display: flex; gap: 10px; justify-content: center;
-                        z-index: 9999;
-                    }
-                    .btn {
-                        padding: 10px 20px; border-radius: 8px; font-weight: bold; border: none; cursor: pointer; font-size: 16px;
-                    }
-                    .btn-print { background: #2563eb; color: white; }
-                    .btn-close { background: #e2e8f0; color: #1e293b; }
-                    .print-wrapper { font-family: 'Pretendard', sans-serif; text-align: center; color: #1e293b; width: 100%; box-sizing: border-box; position: relative; background: white; margin-top: 70px; }
                     ${logoOverlayStyle}
-                    .print-header { 
-                        background-color: #3b82f6; 
-                        color: white; 
-                        padding: 30px 20px; 
-                        border-radius: 12px; 
-                        margin-bottom: 40px;
-                        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-                        width: 100%;
-                        box-sizing: border-box;
+                    .print-header {
+                        background: linear-gradient(135deg, #1e3a8a, #3b82f6);
+                        color: white;
+                        padding: 12px;
+                        text-align: center;
+                        margin-bottom: 15px;
+                        border-radius: 8px;
                     }
-                    .print-title { font-size: 32px; font-weight: 800; margin-bottom: 12px; }
-                    .print-date { font-size: 16px; opacity: 0.9; }
-                    .group-section { text-align: left; margin-bottom: 15px; margin-top: 40px; display: flex; align-items: center; justify-content: space-between; gap: 8px;}
-                    .group-left { display: flex; align-items: center; gap: 8px; }
-                    .group-icon { font-size: 24px; }
-                    .group-title { font-size: 22px; font-weight: 700; color: #334155; display: flex; align-items: center; gap: 12px; }
-                    .group-title-english { font-size: 18px; font-weight: 500; color: #64748b; }
+                    .print-header h1 { margin: 0; font-size: 24px; font-weight: bold; }
+                    .print-header p { margin: 2px 0 0 0; font-size: 14px; opacity: 0.9; }
                     
-                    .print-table { 
-                        width: 100%; 
-                        border-collapse: collapse; 
-                        margin-bottom: 10px; 
-                        background-color: white;
-                        font-size: 16px;
-                        table-layout: fixed; 
-                    }
-                    .print-table th { 
-                        background-color: #f1f5f9; 
-                        color: #475569; 
-                        font-weight: 700; 
-                        padding: 18px 8px; 
-                        border: 1px solid #e2e8f0;
-                        vertical-align: middle;
-                        line-height: 1.4;
-                    }
-                    .print-table th .header-korean {
-                        display: block;
+                    .group-section { margin-bottom: 25px; position: relative; z-index: 1; }
+                    .group-title {
+                        background: #f8fafc;
+                        color: #1e293b;
+                        padding: 8px 12px;
                         font-size: 18px;
-                        margin-bottom: 2px;
+                        font-weight: bold;
+                        border-left: 4px solid #3b82f6;
+                        margin-bottom: 10px;
+                        display: flex;
+                        align-items: center;
+                        justify-content: space-between;
                     }
-                    .print-table th .header-english {
-                        display: block;
+                    .group-title-english {
                         font-size: 14px;
                         font-weight: 500;
                         color: #64748b;
+                        margin-left: 10px;
                     }
-                    .print-table td { 
-                        padding: 12px 8px; 
-                        border: 1px solid #e2e8f0; 
+                    
+                    .score-table {
+                        width: 100%;
+                        border-collapse: collapse;
+                        margin-bottom: 15px;
+                        font-size: 14px;
+                        table-layout: auto;
+                        background: white;
+                    }
+                    .score-table th {
+                        background: #f1f5f9;
+                        color: #1e293b;
+                        padding: 6px 2px;
+                        border: 1px solid #94a3b8;
+                        text-align: center;
+                        font-weight: bold;
+                        font-size: 13px;
+                    }
+                    .score-table th .header-korean { display: block; font-size: 13px; margin-bottom: 1px; }
+                    .score-table th .header-english { display: block; font-size: 10px; font-weight: 500; color: #64748b; }
+                    
+                    .score-table td {
+                        padding: 5px 4px;
+                        border: 1px solid #94a3b8;
+                        text-align: center;
                         vertical-align: middle;
-                        color: #334155;
-                        font-weight: 500;
-                        font-size: 16px;
+                        font-size: 15px;
                     }
-                    /* 순위, 조: 줄바꿈 방지 */
-                    .print-table td.rank-cell,
-                    .print-table td.jo-cell {
-                        white-space: nowrap;
-                        overflow: hidden;
-                    }
-                    /* 선수명: 줄바꿈 허용 (영어 이름 대응) */
-                    .print-table td.name-cell {
-                        white-space: normal;
-                        word-break: break-word;
-                    }
-                    /* 소속, 코스: 줄바꿈 방지 */
-                    .print-table td.affiliation-cell,
-                    .print-table td.course-cell {
-                        white-space: nowrap;
-                        overflow: hidden;
-                    }
-                    /* 순위: 20px, 남색 강조 */
-                    .print-table td.rank-cell {
-                        font-size: 20px;
-                        font-weight: bold;
+                    .score-table td.rank-cell {
+                        font-weight: 800;
+                        font-size: 22px;
                         color: #1e40af;
+                        background-color: #f8fafc;
                     }
-                    .rank-1 { color: #2563eb; font-weight: 800; font-size: 20px; }
-                    .rank-2 { color: #1e293b; font-weight: 700; font-size: 20px; }
-                    .rank-3 { color: #1e293b; font-weight: 700; font-size: 20px; }
-                    /* 조: 16px */
-                    .print-table td.jo-cell {
-                        font-size: 16px;
-                    }
-                    /* 이름: 18px, 줄바꿈 허용 */
-                    .print-table td.name-cell {
-                        font-size: 18px;
+                    .score-table td.name-cell {
                         font-weight: bold;
-                    }
-                    /* 소속: 16px */
-                    .print-table td.affiliation-cell {
                         font-size: 16px;
                     }
-                    /* 코스: 16px */
-                    .print-table td.course-cell {
-                        font-size: 16px;
+                    .score-table td.course-cell {
+                        font-weight: bold;
+                        color: #059669;
+                        font-size: 14px;
                     }
-                    /* 홀 점수: 16px */
-                    .print-table td.hole-score {
-                        font-size: 16px;
+                    .score-table td.hole-score {
+                        font-family: 'Courier New', monospace;
+                        font-weight: bold;
+                        font-size: 15px;
                     }
-                    /* 합계: 18px, 빨강 (홀 점수보다 크고, 순위/총타수보다 작음) */
-                    .print-table td.col-sum { 
-                        font-weight: 700 !important; 
-                        font-size: 18px !important;
-                        color: #dc2626 !important; 
+                    .score-table td.course-total {
+                        font-weight: 800;
+                        font-size: 18px;
+                        color: #dc2626;
+                        background-color: #fffafb;
                     }
-                    /* 총타수: 20px, 남색 강조 */
-                    .print-table td.col-total { 
-                        font-weight: 800 !important; 
-                        font-size: 20px !important;
-                        color: #1e40af !important; 
-                        background-color: #f8fafc !important; 
+                    .score-table td.total-score {
+                        font-weight: 800;
+                        font-size: 22px;
+                        color: #1e40af;
+                        background-color: #f0f7ff;
                     }
                     
                     .pm-score {
                         font-size: 10px;
                         font-weight: 700;
-                        margin-left: 1px;
-                        display: inline-block;
+                        margin-left: 2px;
+                        vertical-align: middle;
                     }
                     .pm-plus { color: #dc2626; }
                     .pm-minus { color: #2563eb; }
                     .pm-even { color: #64748b; }
                     
-                    .text-center { text-align: center; }
-                    .font-bold { font-weight: 700; }
+                    .print-footer {
+                        margin-top: 30px;
+                        text-align: center;
+                        color: #64748b;
+                        font-size: 12px;
+                        border-top: 1px solid #e2e8f0;
+                        padding-top: 10px;
+                    }
                 </style>
             `;
 
             // 그룹별 반복 처리
             for (let i = 0; i < totalGroups; i++) {
                 const groupName = groupsToPrint[i];
-                const groupPlayers = (processedData[groupName] || []).filter((p: any) => {
-                    return p && (p.hasAnyScore || p.coursesData);
-                });
+                const groupPlayers = (processedData[groupName] || []).filter((p: any) => p && (p.hasAnyScore || p.coursesData));
 
                 if (groupPlayers.length === 0) continue;
 
                 const sortedPlayers = [...groupPlayers].sort((a: any, b: any) => (a.rank || 999) - (b.rank || 999));
                 const groupNameEnglish = getGroupNameEnglish(groupName);
-                const playersPerPage = 50;
+                const playersPerPage = 30; // 이미지용은 페이지당 인원을 약간 줄여 가독성 향상
                 const totalPages = Math.ceil(sortedPlayers.length / playersPerPage);
 
-                // 페이지별로 처리
                 for (let pageNum = 0; pageNum < totalPages; pageNum++) {
-                    const startIdx = pageNum * playersPerPage;
-                    const endIdx = Math.min(startIdx + playersPerPage, sortedPlayers.length);
-                    const pagePlayers = sortedPlayers.slice(startIdx, endIdx);
-                    const isFirstPage = pageNum === 0;
+                    const pagePlayers = sortedPlayers.slice(pageNum * playersPerPage, (pageNum + 1) * playersPerPage);
 
                     const container = document.createElement('div');
+                    container.className = 'print-container-temp';
                     container.style.cssText = `
-                        position: absolute; 
-                        left: -9999px; 
-                        top: 0; 
-                        width: 1200px !important; 
-                        min-width: 1200px !important; 
-                        max-width: none !important;
-                        background-color: white; 
-                        padding: 40px; 
-                        z-index: -1;
-                        overflow: visible !important;
+                        position: absolute; left: -9999px; top: 0; width: 1000px;
+                        background-color: white; z-index: -1;
                     `;
                     document.body.appendChild(container);
 
-                    let htmlContent = styleContent;
-
-                    if (isFirstPage) {
-                        htmlContent += `
-                            <div class="print-wrapper">
-                                ${printModal.logoEnabled && backgroundLogoUrl ? `
-                                    <div class="logo-overlay">
-                                        <img src="${backgroundLogoUrl}" />
-                                    </div>
-                                ` : ''}
-                                <div class="print-header">
-                                    <div class="print-title">⛳ ${tournamentName}</div>
-                                    <div class="print-date">인쇄일시: ${printDate}</div>
-                                </div>
-                        `;
-                    } else {
-                        htmlContent += `
-                            <div class="print-wrapper">
-                                ${printModal.logoEnabled && backgroundLogoUrl ? `
-                                    <div class="logo-overlay">
-                                        <img src="${backgroundLogoUrl}" />
-                                    </div>
-                                ` : ''}
-                        `;
-                    }
-
-                    htmlContent += `
-                        <div class="group-section">
-                            <div class="group-left">
-                                <span class="group-icon">📊</span>
-                                <span class="group-title">
-                                    ${groupName}
-                                    <span class="group-title-english">${groupNameEnglish}</span>
-                                </span>
+                    let htmlContent = `
+                        ${styleContent}
+                        <div class="print-wrapper">
+                            ${printModal.logoEnabled && backgroundLogoUrl ? `<div class="logo-overlay"><img src="${backgroundLogoUrl}" /></div>` : ''}
+                            <div class="print-header">
+                                <h1>🏌️‍♂️ ${tournamentName}</h1>
+                                <p>생성일시: ${printDate}</p>
                             </div>
-                        </div>
-                        <table class="print-table">
-                            <colgroup>
-                                <col style="width: 8%;">
-                                <col style="width: 5%;">
-                                <col style="width: 12%;">
-                                <col style="width: 8%;">
-                                <col style="width: 7%;">
-                                ${Array.from({ length: 9 }).map(() => `<col style="width: 4.5%;">`).join('')}
-                                <col style="width: 5%;">
-                                <col style="width: 6%;">
-                            </colgroup>
-                            <thead>
-                                <tr>
-                                    <th>
-                                        <span class="header-korean">순위</span>
-                                        <span class="header-english">Rank</span>
-                                    </th>
-                                    <th>
-                                        <span class="header-korean">조</span>
-                                        <span class="header-english">Group</span>
-                                    </th>
-                                    <th>
-                                        <span class="header-korean">선수명(팀명)</span>
-                                        <span class="header-english">Player Name (Team)</span>
-                                    </th>
-                                    <th>
-                                        <span class="header-korean">소속</span>
-                                        <span class="header-english">Club</span>
-                                    </th>
-                                    <th>
-                                        <span class="header-korean">코스</span>
-                                        <span class="header-english">Course</span>
-                                    </th>
-                                    ${Array.from({ length: 9 }).map((_, i) => `<th>${i + 1}</th>`).join('')}
-                                    <th>
-                                        <span class="header-korean">합계</span>
-                                        <span class="header-english">Sum</span>
-                                    </th>
-                                    <th>
-                                        <span class="header-korean">총타수</span>
-                                        <span class="header-english">Total</span>
-                                    </th>
-                                </tr>
-                            </thead>
-                            <tbody>
+                            <div class="group-section">
+                                <div class="group-title">
+                                    <div style="display: flex; align-items: center; gap: 10px;">
+                                        <span>📊</span>
+                                        <span>${groupName} 그룹</span>
+                                        <span class="group-title-english">${groupNameEnglish}</span>
+                                    </div>
+                                    ${totalPages > 1 ? `<span style="font-size: 16px; color: #64748b;">(Page ${pageNum + 1}/${totalPages})</span>` : ''}
+                                </div>
+                                <table class="score-table">
+                                    <thead>
+                                        <tr>
+                                            <th style="width: 60px;"><span class="header-korean">순위</span><span class="header-english">Rank</span></th>
+                                            <th style="width: 50px;"><span class="header-korean">조</span><span class="header-english">Group</span></th>
+                                            <th style="width: auto;"><span class="header-korean">선수명(팀명)</span><span class="header-english">Player Name</span></th>
+                                            <th style="width: 120px;"><span class="header-korean">소속</span><span class="header-english">Club</span></th>
+                                            <th style="width: 100px;"><span class="header-korean">코스</span><span class="header-english">Course</span></th>
+                                            ${Array.from({ length: 9 }).map((_, idx) => `<th style="width: 45px;">${idx + 1}</th>`).join('')}
+                                            <th style="width: 60px;"><span class="header-korean">합계</span><span class="header-english">Sum</span></th>
+                                            <th style="width: 70px;"><span class="header-korean">총타수</span><span class="header-english">Total</span></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
                     `;
 
                     pagePlayers.forEach((player: any) => {
                         const allCourses = player.assignedCourses || [];
-                        const courses = printModal.showAllCourses
+                        const filteredCourses = printModal.showAllCourses
                             ? allCourses
                             : allCourses.filter((c: any) => {
                                 const cName = player.coursesData[c.id]?.courseName || c.name;
                                 return printModal.selectedCourses.includes(cName);
                             });
 
-                        const rowSpan = courses.length || 1;
-                        const rankClass = player.rank === 1 ? 'rank-1' : (player.rank <= 3 ? `rank-${player.rank}` : '');
+                        const rowSpan = filteredCourses.length || 1;
 
-                        htmlContent += `<tr>`;
-                        htmlContent += `<td rowspan="${rowSpan}" class="text-center rank-cell ${rankClass}">${player.rank ? player.rank + '위' : '-'}</td>`;
-                        htmlContent += `<td rowspan="${rowSpan}" class="text-center jo-cell">${player.jo}</td>`;
-                        htmlContent += `<td rowspan="${rowSpan}" class="text-center name-cell font-bold">${player.name}</td>`;
-                        htmlContent += `<td rowspan="${rowSpan}" class="text-center affiliation-cell">${player.affiliation || '-'}</td>`;
+                        filteredCourses.forEach((course: any, courseIndex: number) => {
+                            const courseData = player.coursesData[course.id];
+                            const holeScores = courseData?.holeScores || Array(9).fill(null);
 
-                        if (courses.length > 0) {
-                            const firstCourse = courses[0];
-                            const cData = player.coursesData[firstCourse.id];
-                            htmlContent += `<td class="text-center course-cell font-bold" style="color: #059669;">${cData?.courseName || firstCourse.name}</td>`;
-
-                            for (let i = 0; i < 9; i++) {
-                                const s = cData?.holeScores[i];
-                                let cellContent = s !== null && s !== undefined ? s.toString() : '-';
-                                // ±타수 추가
-                                const par = (tournament.courses as any)?.[firstCourse.id]?.pars?.[i];
-                                if (typeof s === 'number' && s > 0 && typeof par === 'number') {
-                                    const pm = s - par;
-                                    const pmText = pm === 0 ? 'E' : (pm > 0 ? `+${pm}` : pm);
-                                    const pmClass = pm === 0 ? 'pm-even' : (pm > 0 ? 'pm-plus' : 'pm-minus');
-                                    cellContent += `<span class="pm-score ${pmClass}">${pmText}</span>`;
-                                }
-                                htmlContent += `<td class="text-center hole-score">${cellContent}</td>`;
-                            }
-
-                            htmlContent += `<td class="text-center col-sum">${cData?.courseTotal || '-'}</td>`;
-                            htmlContent += `<td rowspan="${rowSpan}" class="text-center col-total">
-                                ${player.hasForfeited
-                                    ? '<span style="color:red">기권</span>'
-                                    : (player.hasAnyScore ? player.totalScore : '-')}
-                            </td>`;
-                        } else {
-                            htmlContent += `<td colspan="11" class="text-center">선택된 코스 없음</td>`;
-                            htmlContent += `<td class="text-center">${player.hasForfeited ? '<span style="color:red">기권</span>' : (player.hasAnyScore ? player.totalScore : '-')}</td>`;
-                        }
-                        htmlContent += `</tr>`;
-
-                        for (let k = 1; k < courses.length; k++) {
-                            const nextCourse = courses[k];
-                            const cData = player.coursesData[nextCourse.id];
                             htmlContent += `<tr>`;
-                            htmlContent += `<td class="text-center course-cell font-bold" style="color: #059669;">${cData?.courseName || nextCourse.name}</td>`;
-                            for (let i = 0; i < 9; i++) {
-                                const s = cData?.holeScores[i];
-                                let cellContent = s !== null && s !== undefined ? s.toString() : '-';
-                                // ±타수 추가
-                                const par = (tournament.courses as any)?.[nextCourse.id]?.pars?.[i];
+                            if (courseIndex === 0) {
+                                const rankText = player.rank !== null ? `${player.rank}위` : (player.hasForfeited ? (player.forfeitType === 'absent' ? '불참' : player.forfeitType === 'disqualified' ? '실격' : '기권') : '-');
+                                htmlContent += `
+                                    <td rowspan="${rowSpan}" class="rank-cell">${rankText}</td>
+                                    <td rowspan="${rowSpan}">${player.jo}</td>
+                                    <td rowspan="${rowSpan}" class="name-cell">${player.name}</td>
+                                    <td rowspan="${rowSpan}">${player.affiliation || '-'}</td>
+                                `;
+                            }
+
+                            htmlContent += `<td class="course-cell">${courseData?.courseName || course.name}</td>`;
+
+                            holeScores.forEach((s: number | null, holeIdx: number) => {
+                                let sContent = s !== null ? s.toString() : '-';
+                                const par = (tournament.courses as any)?.[course.id]?.pars?.[holeIdx];
                                 if (typeof s === 'number' && s > 0 && typeof par === 'number') {
                                     const pm = s - par;
                                     const pmText = pm === 0 ? 'E' : (pm > 0 ? `+${pm}` : pm);
                                     const pmClass = pm === 0 ? 'pm-even' : (pm > 0 ? 'pm-plus' : 'pm-minus');
-                                    cellContent += `<span class="pm-score ${pmClass}">${pmText}</span>`;
+                                    sContent += ` <span class="pm-score ${pmClass}">${pmText}</span>`;
                                 }
-                                htmlContent += `<td class="text-center hole-score">${cellContent}</td>`;
+                                htmlContent += `<td class="hole-score">${sContent}</td>`;
+                            });
+
+                            htmlContent += `<td class="course-total">${courseData?.courseTotal || 0}</td>`;
+
+                            if (courseIndex === 0) {
+                                const totalText = player.hasForfeited ? (player.forfeitType === 'absent' ? '불참' : player.forfeitType === 'disqualified' ? '실격' : '기권') : (player.hasAnyScore ? player.totalScore : '-');
+                                htmlContent += `<td rowspan="${rowSpan}" class="total-score">${totalText}</td>`;
                             }
-                            htmlContent += `<td class="text-center col-sum">${cData?.courseTotal || '-'}</td>`;
                             htmlContent += `</tr>`;
+                        });
+
+                        if (filteredCourses.length === 0) {
+                            htmlContent += `
+                                <tr>
+                                    <td class="rank-cell">${player.rank ? player.rank + '위' : '-'}</td>
+                                    <td>${player.jo}</td>
+                                    <td class="name-cell">${player.name}</td>
+                                    <td>${player.affiliation || '-'}</td>
+                                    <td colspan="11" style="color: #94a3b8;">데이터 없음</td>
+                                    <td class="total-score">${player.hasAnyScore ? player.totalScore : '-'}</td>
+                                </tr>
+                            `;
                         }
                     });
 
-                    htmlContent += `</tbody></table></div>`;
+                    htmlContent += `
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div class="print-footer">
+                                <p>🏆 ${tournamentName} - ParkScore 공식 점수표</p>
+                            </div>
+                        </div>
+                    `;
 
                     container.innerHTML = htmlContent;
 
@@ -1394,36 +1296,33 @@ export default function ScorePrintTool() {
                         scale: 2,
                         useCORS: true,
                         backgroundColor: '#ffffff',
-                        windowWidth: 1200,
-                        width: 1200,
-                        x: 0,
-                        scrollX: 0
+                        width: 1000,
+                        windowWidth: 1000
                     });
 
                     // 다운로드
                     const image = canvas.toDataURL("image/png");
                     const link = document.createElement("a");
                     link.href = image;
-                    const pageSuffix = totalPages > 1 ? `_${pageNum + 1}페이지` : '';
-                    link.download = `${tournamentName || 'Scores'}_${groupName}_점수표${pageSuffix}_${new Date().toISOString().slice(0, 10)}.png`;
+                    const pageSuffix = totalPages > 1 ? `_${pageNum + 1}_페이지` : '';
+                    link.download = `${tournamentName}_${groupName}_점수표${pageSuffix}.png`;
                     document.body.appendChild(link);
                     link.click();
                     document.body.removeChild(link);
                     document.body.removeChild(container);
 
                     if (pageNum < totalPages - 1) {
-                        toast({ description: `${groupName} ${pageNum + 1}/${totalPages} 페이지 저장 완료...` });
-                        await new Promise(resolve => setTimeout(resolve, 1000));
+                        toast({ description: `${groupName} ${pageNum + 1}/${totalPages} 저장 중...` });
+                        await new Promise(resolve => setTimeout(resolve, 800));
                     }
                 }
 
                 if (i < totalGroups - 1) {
-                    toast({ description: `${groupName} 저장 완료... (${i + 1}/${totalGroups})` });
-                    await new Promise(resolve => setTimeout(resolve, 1500));
+                    await new Promise(resolve => setTimeout(resolve, 1000));
                 }
             }
 
-            toast({ title: "모든 그룹 저장 완료", description: "성공적으로 저장되었습니다." });
+            toast({ title: "저장 완료", description: "인쇄용 결과물과 동일한 스타일로 저장이 완료되었습니다." });
 
         } catch (error) {
             console.error('이미지 저장 실패:', error);
