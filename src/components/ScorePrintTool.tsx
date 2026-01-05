@@ -1159,7 +1159,7 @@ export default function ScorePrintTool() {
                                 <table class="score-table">
                                     <thead>
                                         <tr>
-                                            <th style="width: 60px;"><span class="header-korean">순위</span><span class="header-english">Rank</span></th>
+                                            <th style="width: 80px;"><span class="header-korean">순위</span><span class="header-english">Rank</span></th>
                                             <th style="width: 50px;"><span class="header-korean">조</span><span class="header-english">Group</span></th>
                                             <th style="width: auto;"><span class="header-korean">선수명(팀명)</span><span class="header-english">Player Name</span></th>
                                             <th style="width: 120px;"><span class="header-korean">소속</span><span class="header-english">Club</span></th>
