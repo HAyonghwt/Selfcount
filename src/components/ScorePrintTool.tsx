@@ -526,7 +526,7 @@ export default function ScorePrintTool() {
                 left: 0;
                 width: 100%;
                 height: 100%;
-                z-index: -1;
+                z-index: 10; /* 테이블보다 위로 올림 */
                 pointer-events: none;
                 display: flex;
                 align-items: center;
@@ -578,7 +578,8 @@ export default function ScorePrintTool() {
                     opacity: 0.9;
                 }
                 .group-section {
-                    page-break-inside: avoid;
+                    position: relative;
+                    z-index: 5; /* 로고(10)보다 아래로 설정 */
                     margin-bottom: 25px;
                 }
                 .group-title {
@@ -666,7 +667,9 @@ export default function ScorePrintTool() {
                     font-weight: 800;
                     font-size: 22px;
                     color: #1e40af;
-                    background-color: #f8fafc;
+                }
+                .player-tbody:nth-of-type(even) td {
+                    background-color: #f8fafc !important;
                 }
                 /* 코스: 15px */
                 .score-table td.course-cell {
@@ -684,7 +687,7 @@ export default function ScorePrintTool() {
                     font-weight: 800;
                     font-size: 18px;
                     color: #dc2626;
-                    background-color: #fffafb;
+                    background-color: #fffafb !important;
                 }
                 .pm-score {
                     font-size: 10px;
@@ -700,7 +703,7 @@ export default function ScorePrintTool() {
                     font-weight: 800;
                     font-size: 22px;
                     color: #1e40af;
-                    background-color: #f0f7ff;
+                    background-color: #f0f7ff !important;
                 }
                 .forfeit {
                     color: #dc2626;
@@ -1025,7 +1028,7 @@ export default function ScorePrintTool() {
                     position: absolute;
                     top: 0; left: 0; right: 0; bottom: 0;
                     display: flex; align-items: center; justify-content: center;
-                    pointer-events: none; z-index: 0; overflow: hidden;
+                    pointer-events: none; z-index: 10; overflow: hidden; /* 테이블보다 위로 */
                 }
                 .logo-overlay img {
                     width: ${printModal.logoSize * 100}%;
@@ -1109,7 +1112,9 @@ export default function ScorePrintTool() {
                         font-weight: 800;
                         font-size: 22px;
                         color: #1e40af;
-                        background-color: #f8fafc;
+                    }
+                    .stripe-row td {
+                        background-color: #f8fafc !important;
                     }
                     .score-table td.name-cell {
                         font-weight: bold;
@@ -1129,13 +1134,13 @@ export default function ScorePrintTool() {
                         font-weight: 800;
                         font-size: 18px;
                         color: #dc2626;
-                        background-color: #fffafb;
+                        background-color: #fffafb !important;
                     }
                     .score-table td.total-score {
                         font-weight: 800;
                         font-size: 22px;
                         color: #1e40af;
-                        background-color: #f0f7ff;
+                        background-color: #f0f7ff !important;
                     }
                     
                     .pm-score {
@@ -1168,7 +1173,7 @@ export default function ScorePrintTool() {
 
                 const sortedPlayers = [...groupPlayers].sort((a: any, b: any) => (a.rank || 999) - (b.rank || 999));
                 const groupNameEnglish = getGroupNameEnglish(groupName);
-                const playersPerPage = 30; // 이미지용은 페이지당 인원을 약간 줄여 가독성 향상
+                const playersPerPage = 20; // 이미지용은 페이지당 인원을 약간 줄여 가독성 향상
                 const totalPages = Math.ceil(sortedPlayers.length / playersPerPage);
 
                 for (let pageNum = 0; pageNum < totalPages; pageNum++) {
@@ -1215,7 +1220,8 @@ export default function ScorePrintTool() {
                                     <tbody>
                     `;
 
-                    pagePlayers.forEach((player: any) => {
+                    pagePlayers.forEach((player: any, pIdx: number) => {
+                        const isStripe = pIdx % 2 === 1;
                         const allCourses = player.assignedCourses || [];
                         const filteredCourses = printModal.showAllCourses
                             ? allCourses
@@ -1230,7 +1236,7 @@ export default function ScorePrintTool() {
                             const courseData = player.coursesData[course.id];
                             const holeScores = courseData?.holeScores || Array(9).fill(null);
 
-                            htmlContent += `<tr>`;
+                            htmlContent += `<tr class="${isStripe ? 'stripe-row' : ''}">`;
                             if (courseIndex === 0) {
                                 const rankText = player.rank !== null ? `${player.rank}위` : (player.hasForfeited ? (player.forfeitType === 'absent' ? '불참' : player.forfeitType === 'disqualified' ? '실격' : '기권') : '-');
                                 htmlContent += `
@@ -1266,7 +1272,7 @@ export default function ScorePrintTool() {
 
                         if (filteredCourses.length === 0) {
                             htmlContent += `
-                                <tr>
+                                <tr class="${isStripe ? 'stripe-row' : ''}">
                                     <td class="rank-cell">${player.rank ? player.rank + '위' : '-'}</td>
                                     <td>${player.jo}</td>
                                     <td class="name-cell">${player.name}</td>
