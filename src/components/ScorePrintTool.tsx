@@ -1005,6 +1005,275 @@ export default function ScorePrintTool() {
         }));
     };
 
+    // PDF 저장 (A3 고정, 고해상도, 비율 유지)
+    const handlePdfDownload = async () => {
+        setIsSavingImage(true);
+        try {
+            const groupsToPrint = printModal.showAllGroups ? allGroupsList : printModal.selectedGroups;
+            const tournamentName = tournament.name || '골프 대회';
+            const printDate = new Date().toLocaleString('ko-KR');
+
+            if (groupsToPrint.length === 0) {
+                toast({ title: "알림", description: "선택된 그룹이 없습니다." });
+                setIsSavingImage(false);
+                return;
+            }
+
+            toast({ title: "PDF 저장 시작", description: "A3 고화질 PDF를 생성 중입니다. 잠시만 기다려주세요..." });
+
+            const { jsPDF } = await import('jspdf');
+            const html2canvas = (await import('html2canvas')).default;
+
+            const orientation = printModal.orientation === 'portrait' ? 'p' : 'l';
+            const pdf = new jsPDF({
+                orientation: orientation,
+                unit: 'mm',
+                format: 'a3'
+            });
+
+            const pdfWidth = orientation === 'p' ? 297 : 420;
+            const pdfHeight = orientation === 'p' ? 420 : 297;
+
+            let pageCount = 0;
+            // 용지 방향에 따라 페이지당 줄 수 재조정 (헤더 공간 확보를 위해 더 보수적으로 설정)
+            const rowsPerPagePdf = orientation === 'l' ? 20 : 32;
+
+            // PDF 전용 독립 스타일 (다른 기능에 영향 없음)
+            const styles = `
+                <style>
+                    .pdf-capture-container {
+                        font-family: 'Arial', sans-serif;
+                        padding: 40px;
+                        background: white;
+                        width: 1200px;
+                        position: relative;
+                        box-sizing: border-box;
+                    }
+                    .print-header {
+                        background: linear-gradient(135deg, #1e3a8a, #3b82f6);
+                        color: white;
+                        padding: 15px;
+                        text-align: center;
+                        margin-bottom: 20px;
+                        border-radius: 10px;
+                    }
+                    .print-header h1 { margin: 0; font-size: 28px; font-weight: bold; }
+                    .print-header p { margin: 5px 0 0 0; font-size: 16px; opacity: 0.9; }
+                    .group-section { position: relative; z-index: 5; margin-bottom: 30px; }
+                    .group-title {
+                        background: #f8fafc;
+                        color: #1e293b;
+                        padding: 10px 15px;
+                        font-size: 20px;
+                        font-weight: bold;
+                        border-left: 5px solid #3b82f6;
+                        margin-bottom: 15px;
+                        display: flex;
+                        align-items: center;
+                        justify-content: space-between;
+                    }
+                    .score-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 14px; background: white; }
+                    .score-table th {
+                        background: #f1f5f9;
+                        color: #1e293b;
+                        padding: 8px 4px;
+                        border: 1px solid #94a3b8;
+                        text-align: center;
+                        font-weight: bold;
+                    }
+                    .score-table th .header-korean { display: block; font-size: 13px; }
+                    .score-table th .header-english { display: block; font-size: 11px; color: #64748b; }
+                    .score-table td { padding: 6px 4px; border: 1px solid #94a3b8; text-align: center; vertical-align: middle; font-size: 16px; }
+                    .score-table td.rank-cell { font-weight: 800; font-size: 24px; color: #1e40af; }
+                    .player-tbody:nth-of-type(even) td { background-color: #f8fafc !important; }
+                    .score-table td.name-cell { font-weight: bold; font-size: 18px; }
+                    .score-table td.course-cell { font-weight: bold; color: #059669; }
+                    .score-table td.hole-score { font-family: 'Courier New', monospace; font-weight: bold; }
+                    .score-table td.course-total { font-weight: 800; font-size: 18px; color: #dc2626; background-color: #fffafb !important; }
+                    .score-table td.total-score { font-weight: 800; font-size: 24px; color: #1e40af; background-color: #f0f7ff !important; }
+                    .pm-score { font-size: 11px; font-weight: 700; margin-left: 2px; }
+                    .pm-plus { color: #dc2626; }
+                    .pm-minus { color: #2563eb; }
+                    .pm-even { color: #64748b; }
+                    .print-footer { margin-top: 40px; text-align: center; color: #64748b; font-size: 14px; border-top: 1px solid #e2e8f0; padding-top: 15px; }
+                </style>
+            `;
+
+            for (let i = 0; i < groupsToPrint.length; i++) {
+                const groupName = groupsToPrint[i];
+                const groupPlayers = (processedData[groupName] || []).filter((p: any) => p && (p.hasAnyScore || p.coursesData));
+                if (groupPlayers.length === 0) continue;
+
+                // 그룹별 인원 분할 (줄 수 기준)
+                let currentPagePlayers: any[] = [];
+                let currentRows = 0;
+                const pages: any[][] = [];
+
+                groupPlayers.forEach((player: any) => {
+                    const allCourses = player.assignedCourses || [];
+                    const filteredCourses = printModal.showAllCourses ? allCourses : allCourses.filter((c: any) => {
+                        const cName = player.coursesData[c.id]?.courseName || c.name;
+                        return printModal.selectedCourses.includes(cName);
+                    });
+                    const rowCount = filteredCourses.length || 1;
+
+                    if (currentRows + rowCount > rowsPerPagePdf && currentPagePlayers.length > 0) {
+                        pages.push(currentPagePlayers);
+                        currentPagePlayers = [player];
+                        currentRows = rowCount;
+                    } else {
+                        currentPagePlayers.push(player);
+                        currentRows += rowCount;
+                    }
+                });
+                if (currentPagePlayers.length > 0) pages.push(currentPagePlayers);
+
+                for (let pIdx = 0; pIdx < pages.length; pIdx++) {
+                    const pagePlayers = pages[pIdx];
+                    const container = document.createElement('div');
+                    container.style.cssText = `position: fixed; left: -5000px; top: 0; width: 1200px; background: white; overflow: visible;`;
+                    document.body.appendChild(container);
+
+                    const logoHtml = (printModal.logoEnabled && backgroundLogoUrl) ? `
+                        <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; pointer-events: none; display: flex; align-items: center; justify-content: center; overflow: hidden;">
+                            <img src="${backgroundLogoUrl}" style="width: ${printModal.logoSize * 100}%; height: auto; opacity: ${printModal.logoOpacity}; transform: translate(${printModal.logoOffsetX}px, ${printModal.logoOffsetY}px);" />
+                        </div>
+                    ` : '';
+
+                    let htmlContent = `
+                        ${styles}
+                        <div class="pdf-capture-container">
+                            ${logoHtml}
+                            <div class="print-header">
+                                <h1>🏌️‍♂️ ${tournamentName}</h1>
+                                <p>생성일시: ${printDate}</p>
+                            </div>
+                            <div class="group-section">
+                                <div class="group-title">
+                                    <div style="display: flex; align-items: center; gap: 8px;">
+                                        <span>📊</span>
+                                        <span>${groupName} 그룹 점수표</span>
+                                        <span style="font-size: 16px; color: #64748b; margin-left: 12px;">${getGroupNameEnglish(groupName)} (${pIdx + 1}/${pages.length})</span>
+                                    </div>
+                                </div>
+                                <table class="score-table">
+                                    <thead>
+                                        <tr>
+                                            <th style="width: 60px;"><span class="header-korean">순위</span><span class="header-english">Rank</span></th>
+                                            <th style="width: 50px;"><span class="header-korean">조</span><span class="header-english">Group</span></th>
+                                            <th style="width: auto;"><span class="header-korean">선수명(팀명)</span><span class="header-english">Player Name</span></th>
+                                            <th style="width: 120px;"><span class="header-korean">소속</span><span class="header-english">Club</span></th>
+                                            <th style="width: 100px;"><span class="header-korean">코스</span><span class="header-english">Course</span></th>
+                                            ${Array.from({ length: 9 }).map((_, idx) => `<th style="width: 45px;">${idx + 1}</th>`).join('')}
+                                            <th style="width: 60px;"><span class="header-korean">합계</span><span class="header-english">Sum</span></th>
+                                            <th style="width: 70px;"><span class="header-korean">총타수</span><span class="header-english">Total</span></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                    `;
+
+                    pagePlayers.forEach((player: any) => {
+                        const allCourses = player.assignedCourses || [];
+                        const filteredCourses = printModal.showAllCourses ? allCourses : allCourses.filter((c: any) => {
+                            const cName = player.coursesData[c.id]?.courseName || c.name;
+                            return printModal.selectedCourses.includes(cName);
+                        });
+                        const rowSpan = filteredCourses.length || 1;
+
+                        htmlContent += `<tbody class="player-tbody">`;
+                        if (filteredCourses.length > 0) {
+                            filteredCourses.forEach((course: any, courseIndex: number) => {
+                                const courseData = player.coursesData[course.id];
+                                const holeScores = courseData?.holeScores || Array(9).fill(null);
+
+                                htmlContent += `<tr>`;
+                                if (courseIndex === 0) {
+                                    const rankText = player.rank !== null ? `${player.rank}위` : (player.hasForfeited ? (player.forfeitType === 'absent' ? '불참' : player.forfeitType === 'disqualified' ? '실격' : '기권') : '-');
+                                    htmlContent += `
+                                        <td rowspan="${rowSpan}" class="rank-cell">${rankText}</td>
+                                        <td rowspan="${rowSpan}">${player.jo}</td>
+                                        <td rowspan="${rowSpan}" class="name-cell">${player.name}</td>
+                                        <td rowspan="${rowSpan}">${player.affiliation || '-'}</td>
+                                    `;
+                                }
+                                htmlContent += `<td class="course-cell">${courseData?.courseName || (course.name ? (course.name.includes('-') ? course.name.split('-')[1] : course.name) : 'Course')}</td>`;
+                                holeScores.forEach((s: number | null, holeIdx: number) => {
+                                    let sContent = s !== null ? s.toString() : '-';
+                                    const par = (tournament.courses as any)?.[course.id]?.pars?.[holeIdx];
+                                    if (typeof s === 'number' && s > 0 && typeof par === 'number') {
+                                        const pm = s - par;
+                                        const pmText = pm === 0 ? 'E' : (pm > 0 ? `+${pm}` : pm);
+                                        sContent += ` <span class="pm-score ${pm === 0 ? 'pm-even' : (pm > 0 ? 'pm-plus' : 'pm-minus')}">${pmText}</span>`;
+                                    }
+                                    htmlContent += `<td class="hole-score">${sContent}</td>`;
+                                });
+                                htmlContent += `<td class="course-total">${courseData?.courseTotal || 0}</td>`;
+                                if (courseIndex === 0) {
+                                    const totalText = player.hasForfeited ? (player.forfeitType === 'absent' ? '불참' : player.forfeitType === 'disqualified' ? '실격' : '기권') : (player.hasAnyScore ? player.totalScore : '-');
+                                    htmlContent += `<td rowspan="${rowSpan}" class="total-score">${totalText}</td>`;
+                                }
+                                htmlContent += `</tr>`;
+                            });
+                        } else {
+                            htmlContent += `<tr><td colspan="16">코스 정보 없음</td></tr>`;
+                        }
+                        htmlContent += `</tbody>`;
+                    });
+
+                    htmlContent += `</table><div class="print-footer"><p>🏆 ${tournamentName} - 공식 점수표</p></div></div>`;
+                    container.innerHTML = htmlContent;
+
+                    // 렌더링 대기 시간 최적화 (400ms로 단축하여 속도 개선)
+                    await new Promise(resolve => setTimeout(resolve, 400));
+
+                    const canvas = await html2canvas(container, {
+                        scale: 2,
+                        useCORS: true,
+                        backgroundColor: '#ffffff',
+                        width: 1200
+                    });
+
+                    const imgData = canvas.toDataURL("image/jpeg", 0.9);
+
+                    // 이미지 비율 계산 및 페이지 이탈 방지 로직 (짤림 및 유실 방지 핵심)
+                    const imgWidth = canvas.width;
+                    const imgHeight = canvas.height;
+                    const ratio = imgHeight / imgWidth;
+
+                    let finalImgWidth = pdfWidth;
+                    let finalImgHeight = pdfWidth * ratio;
+                    let offsetX = 0;
+                    let offsetY = 0;
+
+                    // 만약 계산된 높이가 용지 높이를 초과할 경우, 높이에 맞춰 축소하고 가로 중앙 정렬
+                    if (finalImgHeight > pdfHeight) {
+                        finalImgHeight = pdfHeight;
+                        finalImgWidth = finalImgHeight / ratio;
+                        offsetX = (pdfWidth - finalImgWidth) / 2;
+                    }
+
+                    if (pageCount > 0) pdf.addPage('a3', orientation);
+
+                    // 찌그러짐 없이(비율 유지), 용지 밖으로 나가지 않게 삽입
+                    pdf.addImage(imgData, 'JPEG', offsetX, offsetY, finalImgWidth, finalImgHeight, undefined, 'FAST');
+
+                    document.body.removeChild(container);
+                    pageCount++;
+                }
+                if (i < groupsToPrint.length - 1) await new Promise(resolve => setTimeout(resolve, 400));
+            }
+
+            pdf.save(`${tournamentName}_전체점수표_A3.pdf`);
+            toast({ title: "저장 완료", description: "PDF 생성이 완료되었습니다." });
+
+        } catch (error) {
+            console.error('PDF 저장 실패:', error);
+            toast({ title: "저장 실패", description: "PDF 생성 중 오류가 발생했습니다.", variant: "destructive" });
+        } finally {
+            setIsSavingImage(false);
+        }
+    };
+
     // 점수표 이미지 저장
     const handleSaveImage = async () => {
         setIsSavingImage(true);
@@ -1820,6 +2089,14 @@ export default function ScorePrintTool() {
                             disabled={!printModal.showAllGroups && printModal.selectedGroups.length === 0}
                         >
                             👁️ 미리보기
+                        </Button>
+                        <Button
+                            onClick={handlePdfDownload}
+                            className="bg-orange-500 hover:bg-orange-600 text-white w-full sm:w-auto h-11 sm:h-10"
+                            disabled={(!printModal.showAllGroups && printModal.selectedGroups.length === 0) || isSavingImage}
+                        >
+                            <Download className="mr-2 h-4 w-4" />
+                            {isSavingImage ? 'PDF 생성 중...' : '📄 PDF 저장 (A3)'}
                         </Button>
                         <Button
                             onClick={isMobile ? executePrint : handleSaveImage}
