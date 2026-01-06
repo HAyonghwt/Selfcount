@@ -420,7 +420,8 @@ const ScoreboardTable = React.memo(({
     t,
     translateGroupName,
     translateCourseName,
-    groupProgressValue
+    groupProgressValue,
+    isMobile
 }: {
     groupName: string;
     groupPlayers: ProcessedPlayer[];
@@ -432,6 +433,7 @@ const ScoreboardTable = React.memo(({
     translateGroupName: any;
     translateCourseName: any;
     groupProgressValue: number;
+    isMobile: boolean;
 }) => {
     // 그룹별 현재 진행중인 코스와 진행률 계산 함수 (컴포넌트 내부 최적화)
     const { courseName, progress } = useMemo(() => {
@@ -568,24 +570,51 @@ const ScoreboardTable = React.memo(({
                                                         }}
                                                     >
                                                         {isModified ? (
-                                                            <Tooltip>
-                                                                <TooltipTrigger asChild>
-                                                                    <div className="w-full h-full flex items-center justify-center">
-                                                                        {cellContent}
-                                                                    </div>
-                                                                </TooltipTrigger>
-                                                                <TooltipContent className="sb-tooltip-content">
-                                                                    <div className="text-xs">
-                                                                        <p className="font-bold border-b border-gray-600 pb-1 mb-1">
-                                                                            {holeLog.modifiedByType === 'admin' ? '관리자 수정' :
-                                                                                holeLog.modifiedByType === 'captain' ? (holeLog.modifiedBy || '조장 수정') :
-                                                                                    (holeLog.modifiedBy || '심판 수정')}
-                                                                        </p>
-                                                                        <p>{new Date(holeLog.modifiedAt).toLocaleString()}</p>
-                                                                        {holeLog.comment && <p className="mt-1 opacity-80 decoration-0">{holeLog.comment}</p>}
-                                                                    </div>
-                                                                </TooltipContent>
-                                                            </Tooltip>
+                                                            isMobile ? (
+                                                                <Popover>
+                                                                    <PopoverTrigger asChild>
+                                                                        <div className="w-full h-full flex items-center justify-center">
+                                                                            {cellContent}
+                                                                        </div>
+                                                                    </PopoverTrigger>
+                                                                    <PopoverContent className="sb-tooltip-content">
+                                                                        <div className="text-xs">
+                                                                            <p className="font-bold border-b border-gray-600 pb-1 mb-1">
+                                                                                {holeLog.modifiedByType === 'admin' ? '관리자 수정' :
+                                                                                    holeLog.modifiedByType === 'captain' ? (holeLog.modifiedBy || '조장 수정') :
+                                                                                        (holeLog.modifiedBy || '심판 수정')}
+                                                                            </p>
+                                                                            <p>{new Date(holeLog.modifiedAt).toLocaleString()}</p>
+                                                                            <p className="mt-1 font-bold text-red-500">
+                                                                                점수: {holeLog.oldValue} ➔ {holeLog.newValue}
+                                                                            </p>
+                                                                            {holeLog.comment && <p className="mt-1 opacity-80 decoration-0">{holeLog.comment}</p>}
+                                                                        </div>
+                                                                    </PopoverContent>
+                                                                </Popover>
+                                                            ) : (
+                                                                <Tooltip>
+                                                                    <TooltipTrigger asChild>
+                                                                        <div className="w-full h-full flex items-center justify-center">
+                                                                            {cellContent}
+                                                                        </div>
+                                                                    </TooltipTrigger>
+                                                                    <TooltipContent className="sb-tooltip-content">
+                                                                        <div className="text-xs">
+                                                                            <p className="font-bold border-b border-gray-600 pb-1 mb-1">
+                                                                                {holeLog.modifiedByType === 'admin' ? '관리자 수정' :
+                                                                                    holeLog.modifiedByType === 'captain' ? (holeLog.modifiedBy || '조장 수정') :
+                                                                                        (holeLog.modifiedBy || '심판 수정')}
+                                                                            </p>
+                                                                            <p>{new Date(holeLog.modifiedAt).toLocaleString()}</p>
+                                                                            <p className="mt-1 font-bold text-red-500">
+                                                                                점수: {holeLog.oldValue} ➔ {holeLog.newValue}
+                                                                            </p>
+                                                                            {holeLog.comment && <p className="mt-1 opacity-80 decoration-0">{holeLog.comment}</p>}
+                                                                        </div>
+                                                                    </TooltipContent>
+                                                                </Tooltip>
+                                                            )
                                                         ) : cellContent}
                                                     </td>
                                                 );
@@ -2830,6 +2859,7 @@ function ExternalScoreboard() {
                             translateGroupName={translateGroupName}
                             translateCourseName={translateCourseName}
                             groupProgressValue={groupProgress[groupName]}
+                            isMobile={isMobile}
                         />
                     ))
                 )}

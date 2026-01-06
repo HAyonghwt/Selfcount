@@ -46,6 +46,10 @@
     "giftEvent": {
       ".read": "auth != null",
       ".write": "auth != null"
+    },
+    "rosterDownload": {
+      ".read": "auth != null",
+      ".write": "auth != null"
     }
   }
 }
