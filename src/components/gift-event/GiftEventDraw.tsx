@@ -23,6 +23,7 @@ interface GiftEventDrawProps {
     offsetX: number;
     offsetY: number;
     saturation?: number;
+    intensity?: number;
     isBlackAndWhite?: boolean;
   };
 }
@@ -189,21 +190,21 @@ export default function GiftEventDraw({ winner, onAnimationEnd, drawStartTime, l
     return koreanRegex.test(name);
   };
 
-  // 폰트 크기 계산 (VH 기반 동적 스케일링)
+  // 폰트 크기 계산 (VH 기반 동적 스케일링) - 모바일/데스크탑 반응형 적용
   const getNameFontSize = (name: string) => {
     if (isSimpleKorean(name)) {
-      if (name.length > 5) return "text-[16vh]";
-      return "text-[21vh]";
+      if (name.length > 5) return "text-[8vh] md:text-[16vh]";
+      return "text-[10vh] md:text-[21vh]";
     }
 
     // 영어/혼용 동적 크기 조절
     const len = name.length;
-    if (len > 30) return "text-[6vh]";
-    if (len > 25) return "text-[8vh]";
-    if (len > 20) return "text-[10vh]";
-    if (len > 15) return "text-[12vh]";
-    if (len > 10) return "text-[14vh]";
-    return "text-[17vh]";
+    if (len > 30) return "text-[3vh] md:text-[6vh]";
+    if (len > 25) return "text-[4vh] md:text-[8vh]";
+    if (len > 20) return "text-[5vh] md:text-[10vh]";
+    if (len > 15) return "text-[6vh] md:text-[12vh]";
+    if (len > 10) return "text-[7vh] md:text-[14vh]";
+    return "text-[8.5vh] md:text-[17vh]";
   };
 
   // 로고 스타일 생성
@@ -213,7 +214,7 @@ export default function GiftEventDraw({ winner, onAnimationEnd, drawStartTime, l
     const saturation = logoSettings.saturation ?? 600;
     const intensity = logoSettings.intensity ?? 200;
     const isBW = logoSettings.isBlackAndWhite;
-    
+
     return {
       position: 'absolute' as const,
       top: '50%',
@@ -222,8 +223,8 @@ export default function GiftEventDraw({ winner, onAnimationEnd, drawStartTime, l
       width: '60%',
       height: '60%',
       // 흑백 모드일 때는 검정색 배경, 아닐 때는 골드 그라데이션
-      background: isBW 
-        ? '#000000' 
+      background: isBW
+        ? '#000000'
         : 'linear-gradient(135deg, #CFB53B 0%, #F9F295 45%, #E6B800 70%, #996515 100%)',
       // 로고를 마스크로 사용하여 그라데이션이 로고 모양대로만 보이게 함
       WebkitMaskImage: `url('${logoUrl.replace(/'/g, "\\'")}')`,
@@ -286,7 +287,7 @@ export default function GiftEventDraw({ winner, onAnimationEnd, drawStartTime, l
 
         {/* 추첨 결과 표시 - 카드와 명단이 절대로 겹치지 않는 황금 너비 설정 */}
         {final ? (
-          <div className="text-center w-full max-w-[62vw] mx-auto relative z-20 flex-1 flex flex-col justify-center my-[0.5vh]">
+          <div className="text-center w-full max-w-[90vw] md:max-w-[62vw] mx-auto relative z-20 flex-1 flex flex-col justify-center my-[0.5vh]">
             <div className="bg-gradient-to-r from-yellow-400 via-orange-500 to-yellow-600 p-[3vh] md:p-[5vh] rounded-[6vh] shadow-[0_5vh_12vh_rgba(0,0,0,0.8)] transform scale-95 md:scale-100 border-[0.6vh] border-yellow-200/50 relative overflow-hidden group min-h-[48vh] max-h-[52vh] flex flex-col justify-center">
               {/* 로고 오버레이 */}
               {(() => {
