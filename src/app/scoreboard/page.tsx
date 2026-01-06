@@ -1180,19 +1180,18 @@ function ExternalScoreboard() {
                     const data = snap.val();
                     if (!playerId || !data) return;
 
+                    // 변경 알림 및 캐시 무효화를 상태 업데이트 외부로 이동하여 항상 실행 보장
+                    setLastUpdateTime(Date.now());
+                    invalidatePlayerLogCache(playerId);
+                    setChangedPlayerIds((prevIds: string[]) =>
+                        prevIds.includes(playerId) ? prevIds : [...prevIds, playerId]
+                    );
+
                     setScores((prev: any) => {
                         // 이미 로드된 데이터와 동일하면 업데이트 방지 (초기 로드 중복 방지)
                         if (prev && prev[playerId] && JSON.stringify(prev[playerId]) === JSON.stringify(data)) {
                             return prev;
                         }
-
-                        // 변경 알림 및 캐시 무효화
-                        setLastUpdateTime(Date.now());
-                        invalidatePlayerLogCache(playerId);
-                        setChangedPlayerIds((prevIds: string[]) =>
-                            prevIds.includes(playerId) ? prevIds : [...prevIds, playerId]
-                        );
-
                         return { ...prev, [playerId]: data };
                     });
                 });
@@ -1203,18 +1202,18 @@ function ExternalScoreboard() {
                     const data = snap.val();
                     if (!playerId || !data) return;
 
+                    // Side effects를 상태 업데이트 외부로 이동
+                    setLastUpdateTime(Date.now());
+                    invalidatePlayerLogCache(playerId);
+                    setChangedPlayerIds((prevIds: string[]) =>
+                        prevIds.includes(playerId) ? prevIds : [...prevIds, playerId]
+                    );
+
                     setScores((prev: any) => {
                         // 참조가 같거나 내용이 같으면 스킵
                         if (prev && prev[playerId] && JSON.stringify(prev[playerId]) === JSON.stringify(data)) {
                             return prev;
                         }
-
-                        setLastUpdateTime(Date.now());
-                        invalidatePlayerLogCache(playerId);
-                        setChangedPlayerIds((prevIds: string[]) =>
-                            prevIds.includes(playerId) ? prevIds : [...prevIds, playerId]
-                        );
-
                         return { ...prev, [playerId]: data };
                     });
                 });
@@ -1224,15 +1223,15 @@ function ExternalScoreboard() {
                     const playerId = snap.key;
                     if (!playerId) return;
 
+                    // Side effects를 상태 업데이트 외부로 이동
+                    setLastUpdateTime(Date.now());
+                    invalidatePlayerLogCache(playerId);
+
                     setScores((prev: any) => {
                         if (!prev || !prev[playerId]) return prev;
 
                         const next = { ...prev };
                         delete next[playerId];
-
-                        setLastUpdateTime(Date.now());
-                        invalidatePlayerLogCache(playerId);
-
                         return next;
                     });
                 });
