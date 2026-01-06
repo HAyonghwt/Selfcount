@@ -18,6 +18,7 @@ type PlayerDb = {
   p2_name?: string;
   group: string;
   jo: number;
+  uploadOrder?: number;
 };
 
 // 일괄 입력 이력 타입
@@ -1391,6 +1392,11 @@ export default function BatchScoringPage() {
         // 일괄 입력 이력 기록 (Firebase)
         try {
           const dbInstance = db as any;
+          if (!selectedGroup || !selectedJo || !activeCourseId) {
+            console.warn('이력 기록 중단: 필수 정보 부족', { selectedGroup, selectedJo, activeCourseId });
+            return;
+          }
+
           const historyPath = `batchScoringHistory/${selectedGroup}/${selectedJo}/${activeCourseId}`;
           const historyRef = ref(dbInstance, historyPath);
 
@@ -1398,7 +1404,21 @@ export default function BatchScoringPage() {
           const captainId = captainData?.id || `조장${selectedJo}`;
 
           // 기존 이력을 가져와서 새 이력 추가
-          const snapshot = await get(historyRef);
+          let snapshot;
+          try {
+            snapshot = await get(historyRef);
+          } catch (readError: any) {
+            console.error('이력 읽기 실패 (권한 문제일 수 있음):', readError);
+            if (readError?.message?.includes('Permission denied')) {
+              toast({
+                title: '권한 오류',
+                description: '이력을 기록할 권한이 없습니다. Firebase DB 규칙이 배포되었는지 확인해주세요.',
+                variant: 'destructive'
+              });
+            }
+            return;
+          }
+
           const existingData = snapshot.val() || {};
           const existingHistory: BatchHistoryEntry[] = Array.isArray(existingData.history) ? existingData.history : [];
 
@@ -1441,7 +1461,6 @@ export default function BatchScoringPage() {
           });
         } catch (error) {
           console.error('이력 기록 실패:', error);
-          // 이력 기록 실패는 치명적이지 않으므로 무시
         }
       } else {
         toast({
@@ -2664,28 +2683,6 @@ export default function BatchScoringPage() {
                                 }, 50);
                               }
                             }}
-                            data-player-index={pi}
-                            data-hole-index={hi}
-                            onDoubleClick={handleDoubleClickUnlock}
-                            className={[
-                              'score-input',
-                              isReadOnlyMode ? 'readonly' : '',
-                              isLocked ? 'locked' : '',
-                              isDisabled ? 'disabled' : '',
-                              typeof val === 'number' ? 'has-value' : ''
-                            ].filter(Boolean).join(' ')}
-                            style={{
-                              width: '100%',
-                              border: 'none',
-                              background: 'transparent',
-                              textAlign: 'center',
-                              fontSize: '32px',
-                              fontWeight: '900',
-                              padding: '0',
-                              margin: '0',
-                              color: '#000000',
-                              lineHeight: '1.1'
-                            }}
                           />
                         </div>
                       </td>
@@ -2706,6 +2703,58 @@ export default function BatchScoringPage() {
               {/* 일괄 입력 모드에서는 서명 행 제거 */}
             </tbody>
           </table>
+        </div>
+
+        {/* 일괄 입력 이력 표시 - 점수표 바로 아래로 이동 */}
+        <div className="batch-history-container">
+          {lastInputInfo && (
+            <div className="last-input-info">
+              <div className="last-input-main">
+                <span className="input-label">최종 {lastInputInfo.action === 'reset' ? '초기화' : '입력'}:</span>
+                <span className="input-captain">{lastInputInfo.lastModifiedBy}</span>
+                <span className="input-time">
+                  {new Date(lastInputInfo.lastModifiedAt).toLocaleString('ko-KR', {
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                  })}
+                </span>
+              </div>
+              {actionHistory.length > 0 && (
+                <button
+                  className="history-expand-button"
+                  onClick={() => setHistoryModalOpen(true)}
+                >
+                  상세 이력 {historyModalOpen ? '접기' : '보기'} ({actionHistory.length})
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* 최근 이력 3개 직접 표시 */}
+          {actionHistory.length > 0 && (
+            <div className="recent-history-list">
+              {actionHistory.slice(0, 3).map((entry, index) => (
+                <div key={index} className="recent-history-item">
+                  <span className="recent-time">
+                    {new Date(entry.modifiedAt).toLocaleString('ko-KR', {
+                      month: '2-digit',
+                      day: '2-digit',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
+                  </span>
+                  <span className="recent-captain">{entry.modifiedBy}</span>
+                  <span className={`recent-action ${entry.action}`}>
+                    {entry.action === 'reset' ? '초기화' : entry.action === 'update' ? '수정' : '저장'}
+                  </span>
+                  <span className="recent-details">{entry.details}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="action-buttons">
@@ -2850,32 +2899,6 @@ export default function BatchScoringPage() {
           </button>
         </div>
 
-        {/* 최종 입력자 정보 표시 */}
-        {lastInputInfo && (
-          <div className="last-input-info">
-            <div className="last-input-main">
-              <span className="input-label">최종 {lastInputInfo.action === 'reset' ? '초기화' : '입력'}:</span>
-              <span className="input-captain">{lastInputInfo.lastModifiedBy}</span>
-              <span className="input-time">
-                {new Date(lastInputInfo.lastModifiedAt).toLocaleString('ko-KR', {
-                  year: 'numeric',
-                  month: '2-digit',
-                  day: '2-digit',
-                  hour: '2-digit',
-                  minute: '2-digit'
-                })}
-              </span>
-            </div>
-            {actionHistory.length > 1 && (
-              <button
-                className="history-button"
-                onClick={() => setHistoryModalOpen(true)}
-              >
-                이력 보기 ({actionHistory.length})
-              </button>
-            )}
-          </div>
-        )}
       </div>
 
       {/* 이력 모달 */}

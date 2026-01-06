@@ -50,6 +50,10 @@
     "rosterDownload": {
       ".read": "auth != null",
       ".write": "auth != null"
+    },
+    "batchScoringHistory": {
+      ".read": "auth != null",
+      ".write": "auth != null"
     }
   }
 }
