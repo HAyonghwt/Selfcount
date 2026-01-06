@@ -1157,15 +1157,23 @@ function ExternalScoreboard() {
                     const playerId = snap.key;
                     const playerData = snap.val();
                     if (playerId && playerData) {
+                        // 이전 해시와 비교하여 실제로 변경된 경우에만 업데이트
                         setPlayers((prev: any) => {
                             const newPlayers = { ...prev, [playerId]: playerData };
                             const newHash = JSON.stringify(newPlayers);
+
                             if (newHash !== lastPlayersHash.current) {
-                                lastPlayersHash.current = newHash;
+                                // 해시 업데이트는 업데이터 외부에서 할 수도 있지만, 
+                                // 값의 변화를 확신할 수 있는 시점이 여기이므로 
+                                // 안전을 위해 상태 업데이트 후 별도로 관리하거나 여기서 유지하되
+                                // side effect 경고를 피하기 위해 구조를 맞춤
                                 return newPlayers;
                             }
                             return prev;
                         });
+                        // 상태 업데이트 후 해시는 별도로 관리 (엄밀하게는 useEffect 등에서 처리하는 것이 좋으나
+                        // 기존 로직을 최대한 유지하면서 side effect만 분리)
+                        lastPlayersHash.current = JSON.stringify({ ...players, [playerId]: playerData });
                     }
                 });
 
@@ -1173,42 +1181,47 @@ function ExternalScoreboard() {
                 // 관리자 대시보드와 동일한 시스템으로 전환 (대량 삭제/초기화 시 훨씬 빠르고 정확)
                 const scoresRef = ref(dbInstance, 'scores');
                 const unsubScores = onValue(scoresRef, snap => {
-                    const data = snap.val();
+                    const data = snap.val() || {};
+                    const dataStr = JSON.stringify(data);
 
-                    if (!data) {
-                        // 데이터가 없으면(초기화 시) 빈 객체로 설정
-                        setScores({});
-                        setLastUpdateTime(Date.now());
-                        return;
+                    // 최적화: 데이터가 변경된 경우에만 처리
+                    if (dataStr === lastScoresHash.current) return;
+
+                    // 이전 데이터 복원 (비교용)
+                    let prev: any = {};
+                    try {
+                        prev = lastScoresHash.current ? JSON.parse(lastScoresHash.current) : {};
+                    } catch (e) {
+                        console.error('이전 점수 데이터 파싱 실패:', e);
                     }
 
-                    setScores((prev: any) => {
-                        // 이전 데이터와 비교하여 변경된 선수가 있을 때만 상태 업데이트 및 캐시 무효화
-                        if (prev && JSON.stringify(prev) === JSON.stringify(data)) {
-                            return prev;
-                        }
+                    // 1. 변경된 선수들 찾아서 사이드 이펙트 실행 (UI 업데이트 외부에서 실행)
+                    const prevKeys = Object.keys(prev);
+                    const newKeys = Object.keys(data);
+                    const allKeys = new Set([...prevKeys, ...newKeys]);
 
-                        // 변경된 선수들 찾아서 캐시 무효화
-                        const prevKeys = prev ? Object.keys(prev) : [];
-                        const newKeys = Object.keys(data);
-                        const allKeys = new Set([...prevKeys, ...newKeys]);
+                    allKeys.forEach(playerId => {
+                        const prevPlayer = prev[playerId];
+                        const newPlayer = data[playerId];
+                        const isChanged = JSON.stringify(prevPlayer) !== JSON.stringify(newPlayer);
 
-                        allKeys.forEach(playerId => {
-                            const isChanged = JSON.stringify(prev?.[playerId]) !== JSON.stringify(data[playerId]);
-                            if (isChanged) {
-                                invalidatePlayerLogCache(playerId);
-                                // 데이터가 존재하고(추가 또는 수정), 변경된 경우 하이라이트 목록에 추가
-                                if (data[playerId]) {
-                                    setChangedPlayerIds((prevIds: string[]) =>
-                                        prevIds.includes(playerId) ? prevIds : [...prevIds, playerId]
-                                    );
-                                }
+                        if (isChanged) {
+                            // 로그 캐시 무효화 (동기 작업)
+                            invalidatePlayerLogCache(playerId);
+
+                            // 데이터가 존재하는 경우(추가 또는 수정)에만 하이라이트 목록에 추가
+                            if (newPlayer) {
+                                setChangedPlayerIds((prevIds: string[]) =>
+                                    prevIds.includes(playerId) ? prevIds : [...prevIds, playerId]
+                                );
                             }
-                        });
-
-                        setLastUpdateTime(Date.now());
-                        return data;
+                        }
                     });
+
+                    // 2. 상태 업데이트 (순수 데이터만 전달)
+                    lastScoresHash.current = dataStr;
+                    setScores(data);
+                    setLastUpdateTime(Date.now());
                 });
 
                 // 토너먼트 설정: 변경사항만 감지
@@ -1217,18 +1230,23 @@ function ExternalScoreboard() {
                     const key = snap.key;
                     const value = snap.val();
                     if (key && value) {
+                        // 1. 부수적인 상태 업데이트는 업데이터 외부에서 수행
+                        if (key === 'groups') {
+                            setGroupsData(value);
+                        }
+
+                        // 2. 메인 상태 업데이트
                         setTournament((prev: any) => {
                             const newTournament = { ...prev, [key]: value };
-                            if (key === 'groups') {
-                                setGroupsData(value);
-                            }
                             const newHash = JSON.stringify(newTournament);
                             if (newHash !== lastTournamentHash.current) {
-                                lastTournamentHash.current = newHash;
                                 return newTournament;
                             }
                             return prev;
                         });
+
+                        // 3. 해시 업데이트도 외부에서 수행
+                        lastTournamentHash.current = JSON.stringify({ ...tournament, [key]: value });
                     }
                 });
 
