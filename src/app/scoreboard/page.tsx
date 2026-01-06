@@ -1169,70 +1169,45 @@ function ExternalScoreboard() {
                     }
                 });
 
-                // 점수 데이터: 최적화된 실시간 업데이트 (전체 scores 경로 리스너 사용)
-                // 관리자 대시보드와 동일한 방식으로 하나의 리스너만 사용하여 성능 최적화
-                // Firebase가 효율적으로 변경사항만 전송하므로 실시간성은 동일하게 유지됨
+                // 점수 데이터: 최적화된 실시간 업데이트 (onValue로 전환하여 초기화 안정성 보장)
+                // 관리자 대시보드와 동일한 시스템으로 전환 (대량 삭제/초기화 시 훨씬 빠르고 정확)
                 const scoresRef = ref(dbInstance, 'scores');
-
-                // 1. 데이터 추가 감지 (새로운 선수 점수 등록)
-                const unsubScoresAdded = onChildAdded(scoresRef, snap => {
-                    const playerId = snap.key;
+                const unsubScores = onValue(scoresRef, snap => {
                     const data = snap.val();
-                    if (!playerId || !data) return;
 
-                    // 변경 알림 및 캐시 무효화를 상태 업데이트 외부로 이동하여 항상 실행 보장
-                    setLastUpdateTime(Date.now());
-                    invalidatePlayerLogCache(playerId);
-                    setChangedPlayerIds((prevIds: string[]) =>
-                        prevIds.includes(playerId) ? prevIds : [...prevIds, playerId]
-                    );
+                    if (!data) {
+                        // 데이터가 없으면(초기화 시) 빈 객체로 설정
+                        setScores({});
+                        setLastUpdateTime(Date.now());
+                        return;
+                    }
 
                     setScores((prev: any) => {
-                        // 이미 로드된 데이터와 동일하면 업데이트 방지 (초기 로드 중복 방지)
-                        if (prev && prev[playerId] && JSON.stringify(prev[playerId]) === JSON.stringify(data)) {
+                        // 이전 데이터와 비교하여 변경된 선수가 있을 때만 상태 업데이트 및 캐시 무효화
+                        if (prev && JSON.stringify(prev) === JSON.stringify(data)) {
                             return prev;
                         }
-                        return { ...prev, [playerId]: data };
-                    });
-                });
 
-                // 2. 데이터 변경 감지 (기존 선수 점수 수정) - 핵심 최적화
-                const unsubScoresChanged = onChildChanged(scoresRef, snap => {
-                    const playerId = snap.key;
-                    const data = snap.val();
-                    if (!playerId || !data) return;
+                        // 변경된 선수들 찾아서 캐시 무효화
+                        const prevKeys = prev ? Object.keys(prev) : [];
+                        const newKeys = Object.keys(data);
+                        const allKeys = new Set([...prevKeys, ...newKeys]);
 
-                    // Side effects를 상태 업데이트 외부로 이동
-                    setLastUpdateTime(Date.now());
-                    invalidatePlayerLogCache(playerId);
-                    setChangedPlayerIds((prevIds: string[]) =>
-                        prevIds.includes(playerId) ? prevIds : [...prevIds, playerId]
-                    );
+                        allKeys.forEach(playerId => {
+                            const isChanged = JSON.stringify(prev?.[playerId]) !== JSON.stringify(data[playerId]);
+                            if (isChanged) {
+                                invalidatePlayerLogCache(playerId);
+                                // 데이터가 존재하고(추가 또는 수정), 변경된 경우 하이라이트 목록에 추가
+                                if (data[playerId]) {
+                                    setChangedPlayerIds((prevIds: string[]) =>
+                                        prevIds.includes(playerId) ? prevIds : [...prevIds, playerId]
+                                    );
+                                }
+                            }
+                        });
 
-                    setScores((prev: any) => {
-                        // 참조가 같거나 내용이 같으면 스킵
-                        if (prev && prev[playerId] && JSON.stringify(prev[playerId]) === JSON.stringify(data)) {
-                            return prev;
-                        }
-                        return { ...prev, [playerId]: data };
-                    });
-                });
-
-                // 3. 데이터 삭제 감지
-                const unsubScoresRemoved = onChildRemoved(scoresRef, snap => {
-                    const playerId = snap.key;
-                    if (!playerId) return;
-
-                    // Side effects를 상태 업데이트 외부로 이동
-                    setLastUpdateTime(Date.now());
-                    invalidatePlayerLogCache(playerId);
-
-                    setScores((prev: any) => {
-                        if (!prev || !prev[playerId]) return prev;
-
-                        const next = { ...prev };
-                        delete next[playerId];
-                        return next;
+                        setLastUpdateTime(Date.now());
+                        return data;
                     });
                 });
 
@@ -1274,9 +1249,7 @@ function ExternalScoreboard() {
 
                 // 언서브 등록
                 activeUnsubsRef.current.push(unsubPlayers);
-                activeUnsubsRef.current.push(unsubScoresAdded);
-                activeUnsubsRef.current.push(unsubScoresChanged);
-                activeUnsubsRef.current.push(unsubScoresRemoved);
+                activeUnsubsRef.current.push(unsubScores);
                 activeUnsubsRef.current.push(unsubTournament);
                 activeUnsubsRef.current.push(unsubCourses);
             }
