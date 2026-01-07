@@ -2858,15 +2858,40 @@ export default function BatchScoringPage() {
 
             toast({ title: '초기화 완료', description: `${activeCourse?.name || '현재 코스'}가 초기화되었습니다.` });
 
-            // 일괄 입력 이력 삭제 (사용자 요청: 초기화 시 이력도 삭제)
+            // 일괄 입력 이력 기록 (Firebase) - 조장 초기화 시에는 이력을 남김
             try {
               if (!db) return;
               const dbInstance = db as any;
               const historyPath = `batchScoringHistory/${selectedGroup}/${selectedJo}/${activeCourseId}`;
               const historyRef = ref(dbInstance, historyPath);
-              await set(historyRef, null);
+
+              const currentTimestamp = Date.now();
+              const captainId = captainData?.id || `조장${selectedJo}`;
+
+              // 기존 이력을 가져와서 새 이력 추가
+              const snapshot = await get(historyRef);
+              const existingData = snapshot.val() || {};
+              const existingHistory: BatchHistoryEntry[] = Array.isArray(existingData.history) ? existingData.history : [];
+
+              const newEntry: BatchHistoryEntry = {
+                modifiedBy: captainId,
+                modifiedAt: currentTimestamp,
+                action: 'reset',
+                details: '점수 초기화'
+              };
+
+              // 이력 배열에 추가 (최신 순)
+              const updatedHistory = [newEntry, ...existingHistory];
+
+              // Firebase에 저장 (이전 이력 유지 및 새 기록 추가)
+              await set(historyRef, {
+                lastModifiedBy: captainId,
+                lastModifiedAt: currentTimestamp,
+                action: 'reset',
+                history: updatedHistory
+              });
             } catch (error) {
-              console.error('이력 삭제 실패:', error);
+              console.error('초기화 이력 기록 실패:', error);
             }
           }} disabled={isReadOnlyMode}>초기화</button>
           <button className="action-button qr-button" onClick={handleBatchSave} disabled={isReadOnlyMode || isSaving}>
