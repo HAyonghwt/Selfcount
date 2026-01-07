@@ -1498,7 +1498,8 @@ export default function AdminDashboard() {
                 // 1. Firebase 데이터 삭제 (전체)
                 await Promise.all([
                     set(ref(db, 'scores'), null),
-                    set(ref(db, 'scoreLogs'), null)
+                    set(ref(db, 'scoreLogs'), null),
+                    set(ref(db, 'batchScoringHistory'), null)
                 ]);
 
                 // 2. Client-side 저장소 정리
@@ -1542,8 +1543,13 @@ export default function AdminDashboard() {
 
                     // 로그 삭제 (해당 그룹 선수들의 로그만)
                     try {
+                        const batchHistoryRef = ref(db, `batchScoringHistory/${filterGroup}`);
                         const logsRef = ref(db, 'scoreLogs');
                         const snapshot = await get(logsRef);
+
+                        // 일괄 입력 이력 삭제 (해당 그룹)
+                        await set(batchHistoryRef, null);
+
                         if (snapshot.exists()) {
                             const logUpdates: any = {};
                             snapshot.forEach((childSnapshot) => {

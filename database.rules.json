@@ -54,6 +54,14 @@
     "batchScoringHistory": {
       ".read": "auth != null",
       ".write": "auth != null"
+    },
+    "systemBackups": {
+      ".read": "auth != null",
+      ".write": "auth != null"
+    },
+    "archives": {
+      ".read": "auth != null",
+      ".write": "auth != null"
     }
   }
 }
