@@ -1498,7 +1498,12 @@ export default function AdminDashboard() {
                 // 1. Firebase 데이터 삭제 (전체)
                 await Promise.all([
                     set(ref(db, 'scores'), null),
-                    set(ref(db, 'scoreLogs'), null)
+                    set(ref(db, 'scoreLogs'), null),
+                    set(ref(db, 'batchScoringHistory'), null),
+                    set(ref(db, 'tournaments/current/suddenDeath'), null),
+                    set(ref(db, 'tournaments/current/backcountApplied'), null),
+                    set(ref(db, 'tournaments/current/nearestToPin'), null),
+                    set(ref(db, 'tournaments/current/ranks'), null)
                 ]);
 
                 // 2. Client-side 저장소 정리
@@ -1558,6 +1563,27 @@ export default function AdminDashboard() {
                         }
                     } catch (error) {
                         console.error('scoreLogs 초기화 실패:', error);
+                    }
+
+                    // 일괄 입력 이력 삭제 (해당 그룹)
+                    try {
+                        await set(ref(db, `batchScoringHistory/${filterGroup}`), null);
+                    } catch (error) {
+                        console.error('batchScoringHistory 초기화 실패:', error);
+                    }
+
+                    // 서든데스/NTP/백카운트 데이터 삭제 (해당 그룹)
+                    try {
+                        await Promise.all([
+                            set(ref(db, `tournaments/current/suddenDeath/individual/${filterGroup}`), null),
+                            set(ref(db, `tournaments/current/suddenDeath/team/${filterGroup}`), null),
+                            set(ref(db, `tournaments/current/backcountApplied/individual/${filterGroup}`), null),
+                            set(ref(db, `tournaments/current/backcountApplied/team/${filterGroup}`), null),
+                            set(ref(db, `tournaments/current/nearestToPin/individual/${filterGroup}`), null),
+                            set(ref(db, `tournaments/current/nearestToPin/team/${filterGroup}`), null)
+                        ]);
+                    } catch (error) {
+                        console.error('플레이오프 설정 초기화 실패:', error);
                     }
                 }
 
