@@ -967,6 +967,9 @@ export default function AdminDashboard() {
         courseName: '' // 성능 최적화: 모달 내부에서 조회하지 않도록 저장
     });
 
+    // 🟢 점수 초기화 동기화 처리를 위한 Ref
+    const lastProcessedResetAt = useRef<number | null>(null);
+
     // 점수 초기화 모달 상태
     const [showResetConfirm, setShowResetConfirm] = useState(false);
 
@@ -1654,12 +1657,22 @@ export default function AdminDashboard() {
 
             // 3. UI 상태 업데이트
             if (filterGroup === 'all') {
+                setScores({}); // 즉시 로컬 점수 상태 비움
                 setPlayerScoreLogs({});
             } else {
                 const groupPlayers = finalDataByGroup[filterGroup] || [];
+                const playerIds = groupPlayers.map((p: any) => p.id);
+
+                // 로컬 점수 상태에서 해당 그룹 선수들만 제거
+                setScores((prev: any) => {
+                    const next = { ...prev };
+                    playerIds.forEach(pid => delete next[pid]);
+                    return next;
+                });
+
                 setPlayerScoreLogs((prev: any) => {
                     const newLogs = { ...prev };
-                    groupPlayers.forEach((player: any) => {
+                    playerIds.forEach((player: any) => {
                         delete newLogs[player.id];
                     });
                     return newLogs;
@@ -2204,6 +2217,25 @@ export default function AdminDashboard() {
                 setTeamBackcountApplied(data || {});
             }
         });
+
+        // 🟢 점수 초기화 동기화 리스너 추가 (lastResetAt 감시)
+        const lastResetAtRef = ref(db, 'tournaments/current/lastResetAt');
+        const unsubLastResetAt = onValue(lastResetAtRef, snap => {
+            const lastResetAt = snap.val();
+            if (lastResetAt) {
+                // 초기 로딩 시점의 값은 무두 무시하고, 이후 변경된 경우에만 동작
+                if (lastProcessedResetAt.current !== null && lastProcessedResetAt.current !== lastResetAt) {
+                    // console.log('점수 초기화 감지:', lastResetAt);
+                    setScores((prev: any) => {
+                        if (Object.keys(prev).length > 0) return {};
+                        return prev;
+                    });
+                    setPlayerScoreLogs({});
+                }
+                lastProcessedResetAt.current = lastResetAt;
+            }
+        });
+
         const unsubIndividualNTP = onValue(individualNTPRef, snap => setIndividualNTPData(snap.val()));
         const unsubTeamNTP = onValue(teamNTPRef, snap => setTeamNTPData(snap.val()));
 

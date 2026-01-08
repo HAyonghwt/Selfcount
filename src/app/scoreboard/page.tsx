@@ -1085,6 +1085,9 @@ function ExternalScoreboard() {
     const activeUnsubsRef = useRef<(() => void)[]>([]);
     const [resumeSeq, setResumeSeq] = useState(0);
 
+    // 🟢 점수 초기화 동기화 처리를 위한 Ref
+    const lastProcessedResetAt = useRef<number | null>(null);
+
     const stopSubscriptions = () => {
         try {
             activeUnsubsRef.current.forEach(u => { try { u(); } catch { } });
@@ -1282,6 +1285,25 @@ function ExternalScoreboard() {
                 activeUnsubsRef.current.push(unsubScoresRemoved);
                 activeUnsubsRef.current.push(unsubTournament);
                 activeUnsubsRef.current.push(unsubCourses);
+
+                // 🟢 점수 초기화 동기화 리스너 추가
+                const lastResetAtRef = ref(dbInstance, 'tournaments/current/lastResetAt');
+                const unsubLastResetAt = onValue(lastResetAtRef, snap => {
+                    const lastResetAt = snap.val();
+                    if (lastResetAt) {
+                        // 초기 로딩 시점의 값은 무조건 무시하고, 이후 변경된 경우에만 동작
+                        if (lastProcessedResetAt.current !== null && lastProcessedResetAt.current !== lastResetAt) {
+                            // console.log('전광판 점수 초기화 동기화:', lastResetAt);
+                            setScores((prev: any) => {
+                                if (Object.keys(prev).length > 0) return {};
+                                return prev;
+                            });
+                            setLastUpdateTime(Date.now());
+                        }
+                        lastProcessedResetAt.current = lastResetAt;
+                    }
+                });
+                activeUnsubsRef.current.push(unsubLastResetAt);
             }
         });
         // 클린업: 이 이펙트가 재실행/언마운트 시 구독 해제
