@@ -1180,48 +1180,50 @@ function ExternalScoreboard() {
                 // 점수 데이터: 최적화된 실시간 업데이트 (onValue로 전환하여 초기화 안정성 보장)
                 // 관리자 대시보드와 동일한 시스템으로 전환 (대량 삭제/초기화 시 훨씬 빠르고 정확)
                 const scoresRef = ref(dbInstance, 'scores');
-                const unsubScores = onValue(scoresRef, snap => {
-                    const data = snap.val() || {};
-                    const dataStr = JSON.stringify(data);
 
-                    // 최적화: 데이터가 변경된 경우에만 처리
-                    if (dataStr === lastScoresHash.current) return;
-
-                    // 이전 데이터 복원 (비교용)
-                    let prev: any = {};
-                    try {
-                        prev = lastScoresHash.current ? JSON.parse(lastScoresHash.current) : {};
-                    } catch (e) {
-                        console.error('이전 점수 데이터 파싱 실패:', e);
-                    }
-
-                    // 1. 변경된 선수들 찾아서 사이드 이펙트 실행 (UI 업데이트 외부에서 실행)
-                    const prevKeys = Object.keys(prev);
-                    const newKeys = Object.keys(data);
-                    const allKeys = new Set([...prevKeys, ...newKeys]);
-
-                    allKeys.forEach(playerId => {
-                        const prevPlayer = prev[playerId];
-                        const newPlayer = data[playerId];
-                        const isChanged = JSON.stringify(prevPlayer) !== JSON.stringify(newPlayer);
-
-                        if (isChanged) {
-                            // 로그 캐시 무효화 (동기 작업)
-                            invalidatePlayerLogCache(playerId);
-
-                            // 데이터가 존재하는 경우(추가 또는 수정)에만 하이라이트 목록에 추가
-                            if (newPlayer) {
-                                setChangedPlayerIds((prevIds: string[]) =>
-                                    prevIds.includes(playerId) ? prevIds : [...prevIds, playerId]
-                                );
+                // 점수 데이터: 실시간 최적화 반영 (변경된 건만 수신하여 성능 극대화)
+                const handleScoreSync = (snap: any) => {
+                    const playerId = snap.key;
+                    const playerData = snap.val();
+                    if (playerId) {
+                        setScores((prev: any) => {
+                            // 이미 있는 데이터라면 중복 처리 방지
+                            if (prev && prev[playerId] && JSON.stringify(prev[playerId]) === JSON.stringify(playerData)) {
+                                return prev;
                             }
-                        }
-                    });
+                            return { ...prev, [playerId]: playerData };
+                        });
 
-                    // 2. 상태 업데이트 (순수 데이터만 전달)
-                    lastScoresHash.current = dataStr;
-                    setScores(data);
-                    setLastUpdateTime(Date.now());
+                        // 사이드 이팩트: 로그 캐시 무효화 및 하이라이트 표시
+                        invalidatePlayerLogCache(playerId);
+                        if (playerData) {
+                            setChangedPlayerIds((prevIds: string[]) =>
+                                prevIds.includes(playerId) ? prevIds : [...prevIds, playerId]
+                            );
+                        }
+                        setLastUpdateTime(Date.now());
+
+                        // 해시 업데이트 (비교용)
+                        try {
+                            const currentScores = lastScoresHash.current ? JSON.parse(lastScoresHash.current) : {};
+                            currentScores[playerId] = playerData;
+                            lastScoresHash.current = JSON.stringify(currentScores);
+                        } catch (e) { }
+                    }
+                };
+
+                const unsubScoresChanged = onChildChanged(scoresRef, handleScoreSync);
+                const unsubScoresAdded = onChildAdded(scoresRef, handleScoreSync);
+                const unsubScoresRemoved = onChildRemoved(scoresRef, snap => {
+                    const playerId = snap.key;
+                    if (playerId) {
+                        setScores((prev: any) => {
+                            const next = { ...prev };
+                            delete next[playerId];
+                            return next;
+                        });
+                        setLastUpdateTime(Date.now());
+                    }
                 });
 
                 // 토너먼트 설정: 변경사항만 감지
@@ -1267,7 +1269,9 @@ function ExternalScoreboard() {
 
                 // 언서브 등록
                 activeUnsubsRef.current.push(unsubPlayers);
-                activeUnsubsRef.current.push(unsubScores);
+                activeUnsubsRef.current.push(unsubScoresChanged);
+                activeUnsubsRef.current.push(unsubScoresAdded);
+                activeUnsubsRef.current.push(unsubScoresRemoved);
                 activeUnsubsRef.current.push(unsubTournament);
                 activeUnsubsRef.current.push(unsubCourses);
             }

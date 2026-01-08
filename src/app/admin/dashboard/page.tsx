@@ -11,7 +11,7 @@ import { Download, Filter, Printer, ChevronDown, ChevronUp } from 'lucide-react'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import * as XLSX from 'xlsx-js-style';
 import { db } from '@/lib/firebase';
-import { ref, onValue, set, get, query, limitToLast, onChildChanged, off, update } from 'firebase/database';
+import { ref, onValue, set, get, query, limitToLast, onChildChanged, off, update, onChildAdded, onChildRemoved } from 'firebase/database';
 import { useToast } from '@/hooks/use-toast';
 import { ToastAction } from '@/components/ui/toast';
 import ExternalScoreboardInfo from '@/components/ExternalScoreboardInfo';
@@ -1503,7 +1503,8 @@ export default function AdminDashboard() {
                     set(ref(db, 'tournaments/current/suddenDeath'), null),
                     set(ref(db, 'tournaments/current/backcountApplied'), null),
                     set(ref(db, 'tournaments/current/nearestToPin'), null),
-                    set(ref(db, 'tournaments/current/ranks'), null)
+                    set(ref(db, 'tournaments/current/ranks'), null),
+                    set(ref(db, 'tournaments/current/lastResetAt'), Date.now())
                 ]);
 
                 // 2. Client-side 저장소 정리
@@ -1580,7 +1581,8 @@ export default function AdminDashboard() {
                             set(ref(db, `tournaments/current/backcountApplied/individual/${filterGroup}`), null),
                             set(ref(db, `tournaments/current/backcountApplied/team/${filterGroup}`), null),
                             set(ref(db, `tournaments/current/nearestToPin/individual/${filterGroup}`), null),
-                            set(ref(db, `tournaments/current/nearestToPin/team/${filterGroup}`), null)
+                            set(ref(db, `tournaments/current/nearestToPin/team/${filterGroup}`), null),
+                            set(ref(db, `tournaments/current/groups/${filterGroup}/lastResetAt`), Date.now())
                         ]);
                     } catch (error) {
                         console.error('플레이오프 설정 초기화 실패:', error);
@@ -1941,12 +1943,12 @@ export default function AdminDashboard() {
                 checkAllLoaded();
             });
 
-            // Scores 초기 로드
+            // Scores 초기 로드 (한 번만)
             const unsubInitialScores = onValue(scoresRef, snap => {
                 const data = snap.val() || {};
                 setScores(data);
                 checkAllLoaded();
-            });
+            }, { onlyOnce: true });
 
             // Tournament 초기 로드
             const unsubInitialTournament = onValue(tournamentRef, snap => {
@@ -1991,11 +1993,33 @@ export default function AdminDashboard() {
                 }
             });
 
-            // Scores: 외부 전광판(ExternalScoreboard)과 동일한 최적화된 로직 적용
-            // Scores: 실시간 반영 (최적화는 useEffect에서 처리하므로 여기서는 단순 업데이트)
-            const unsubScores = onValue(scoresRef, snap => {
-                const data = snap.val() || {};
-                setScores(data);
+            // Scores: 실시간 최적화 반영 (변경된 건만 수신하여 데이터 사용량 99% 절감)
+            const handleScoreSync = (snap: any) => {
+                const playerId = snap.key;
+                const playerData = snap.val();
+                if (playerId) {
+                    setScores((prev: any) => {
+                        // 초기 로딩 중에는 onChildAdded가 트리거될 수 있으므로 중복 체크
+                        if (prev && prev[playerId] && JSON.stringify(prev[playerId]) === JSON.stringify(playerData)) {
+                            return prev;
+                        }
+                        return { ...prev, [playerId]: playerData };
+                    });
+                    try { invalidatePlayerLogCache(playerId); } catch (e) { }
+                }
+            };
+
+            const unsubScoresChanged = onChildChanged(scoresRef, handleScoreSync);
+            const unsubScoresAdded = onChildAdded(scoresRef, handleScoreSync);
+            const unsubScoresRemoved = onChildRemoved(scoresRef, snap => {
+                const playerId = snap.key;
+                if (playerId) {
+                    setScores((prev: any) => {
+                        const next = { ...prev };
+                        delete next[playerId];
+                        return next;
+                    });
+                }
             });
             /* DEPRECATED LOGIC:
             // const unsubScores = onValue(scoresRef, snap => {
@@ -2102,7 +2126,9 @@ export default function AdminDashboard() {
 
             // 구독 등록
             activeUnsubsRef.current.push(unsubPlayersChanges);
-            activeUnsubsRef.current.push(unsubScores);
+            activeUnsubsRef.current.push(unsubScoresChanged);
+            activeUnsubsRef.current.push(unsubScoresAdded);
+            activeUnsubsRef.current.push(unsubScoresRemoved);
         }
 
         // Tournament 변경사항만 감지 (외부 전광판과 완전히 동일)

@@ -764,6 +764,72 @@ export default function BatchScoringPage() {
     return () => unsubHistory();
   }, [db, selectedGroup, selectedJo, activeCourseId]);
 
+  // 관리자 리셋 감지 및 로컬 데이터 정리 (Ghost Data 방지)
+  useEffect(() => {
+    if (!db || !selectedGroup || !selectedJo || isReadOnlyMode) return;
+
+    const globalResetRef = ref(db, 'tournaments/current/lastResetAt');
+    const groupResetRef = ref(db, `tournaments/current/groups/${selectedGroup}/lastResetAt`);
+
+    const handleResetAction = (dbTimestamp: number, isGroupReset: boolean) => {
+      if (!dbTimestamp) return;
+
+      const ackKey = `selfScoringLastAckReset_${selectedGroup}_${selectedJo}`;
+      const lastAck = Number(localStorage.getItem(ackKey) || 0);
+
+      // 이미 승인된 리셋이면 무시
+      if (dbTimestamp <= lastAck) return;
+
+      // 새 리셋 감지!
+      try {
+        if (typeof window !== 'undefined' && window.localStorage) {
+          const keysToRemove: string[] = [];
+          const suffix = `_${selectedGroup}_${selectedJo}`;
+
+          for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && key.includes(suffix) && (
+              key.startsWith('selfScoringDraft_') ||
+              key.startsWith('selfScoringSign_') ||
+              key.startsWith('selfScoringSignTeam_') ||
+              key.startsWith('selfScoringPostSignLock_')
+            )) {
+              keysToRemove.push(key);
+            }
+          }
+
+          keysToRemove.forEach(k => localStorage.removeItem(k));
+          localStorage.setItem(ackKey, dbTimestamp.toString());
+        }
+
+        // 현재 메모리 상태 초기화
+        setDraftScores(Array.from({ length: 4 }, () => Array(9).fill(null)));
+        setBatchInputScores(Array.from({ length: 4 }, () => Array(9).fill(null)));
+        setSignatures(['', '', '', '']);
+        setPostSignLock(false);
+        setGroupStartHole(null);
+        setGroupCurrentHole(null);
+        setLocalCleared({});
+
+        toast({
+          title: isGroupReset ? '그룹 초기화 알림' : '전체 초기화 알림',
+          description: '관리자에 의해 경기 데이터가 초기화되어 로컬 임시 저장 점수가 삭제되었습니다.',
+          duration: 5000
+        });
+      } catch (error) {
+        console.error('로컬 데이터 초기화 중 오류:', error);
+      }
+    };
+
+    const unsubGlobal = onValue(globalResetRef, (snap) => handleResetAction(snap.val(), false));
+    const unsubGroup = onValue(groupResetRef, (snap) => handleResetAction(snap.val(), true));
+
+    return () => {
+      unsubGlobal();
+      unsubGroup();
+    };
+  }, [db, selectedGroup, selectedJo, isReadOnlyMode, toast]);
+
   // 디바운싱된 점수 업데이트 (과도한 리렌더링 방지)
   useEffect(() => {
     const timer = setTimeout(() => {
