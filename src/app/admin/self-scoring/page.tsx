@@ -30,14 +30,26 @@ export default function SelfScoringManagementPage() {
     const [showPasswords, setShowPasswords] = useState<{ [key: string]: boolean }>({});
     const [editingPassword, setEditingPassword] = useState<string | null>(null);
     const [newPassword, setNewPassword] = useState('');
+    const [batchResetPassword, setBatchResetPassword] = useState('');
+    const [showResetPassword, setShowResetPassword] = useState(false);
+    const [savingReset, setSavingReset] = useState(false);
+    const [resetSaveMsg, setResetSaveMsg] = useState<string | null>(null);
     const qrRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         if (!db) return;
-        
+
         // 자율채점 조장은 yongin.com 도메인 사용
         setUserDomain('yongin.com');
+
+        // 초기화 비밀번호 불러오기
+        const pwRef = ref(db, 'config/batchResetPassword');
+        const unsub = onValue(pwRef, (snap) => {
+            setBatchResetPassword(snap.val() || '');
+        });
+
         setLoading(false);
+        return () => unsub();
     }, []);
 
     // 자율채점 로그 불러오기
@@ -121,7 +133,7 @@ export default function SelfScoringManagementPage() {
                 await navigator.clipboard.writeText(text);
                 return true;
             }
-        } catch {}
+        } catch { }
         try {
             const ta = document.createElement('textarea');
             ta.value = text;
@@ -167,6 +179,24 @@ export default function SelfScoringManagementPage() {
                 variant: 'destructive',
             });
         }
+    };
+
+    const handleSaveResetPassword = async () => {
+        if (!db) return;
+        if (batchResetPassword.trim() === '') {
+            setResetSaveMsg('비밀번호를 입력해주세요.');
+            return;
+        }
+        setSavingReset(true);
+        try {
+            const { set } = await import('firebase/database');
+            await set(ref(db, 'config/batchResetPassword'), batchResetPassword);
+            setResetSaveMsg('초기화 비밀번호가 저장되었습니다.');
+            setTimeout(() => setResetSaveMsg(null), 3000);
+        } catch (err: any) {
+            setResetSaveMsg('저장 실패: ' + (err?.message || '오류'));
+        }
+        setSavingReset(false);
     };
 
 
@@ -235,7 +265,7 @@ export default function SelfScoringManagementPage() {
                                 {QRCode ? (
                                     <QRCode value={`${window.location.origin}/`} size={90} level="H" includeMargin={false} />
                                 ) : (
-                                    <div style={{color: 'red', fontSize: 12, width: 90, height: 90, display: 'flex', alignItems: 'center', justifyContent: 'center'}}>QR코드 라이브러리 로드 실패</div>
+                                    <div style={{ color: 'red', fontSize: 12, width: 90, height: 90, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>QR코드 라이브러리 로드 실패</div>
                                 )}
                             </div>
                             <Button variant="outline" onClick={handleDownloadQR} size="sm" style={{ width: 140 }}>
@@ -246,12 +276,54 @@ export default function SelfScoringManagementPage() {
                 </CardContent>
             </Card>
 
+            {/* 일괄입력 초기화 비밀번호 설정 카드 */}
+            <Card>
+                <CardHeader>
+                    <CardTitle>일괄입력 초기화 비밀번호 설정</CardTitle>
+                    <CardDescription>자율채점 일괄 입력 페이지에서 코스 점수를 초기화할 때 사용할 숫자 비밀번호를 설정합니다.</CardDescription>
+                </CardHeader>
+                <CardContent className="flex flex-col sm:flex-row gap-4 items-end">
+                    <div className="space-y-2 flex-1 w-full">
+                        <label htmlFor="batch-reset-password">초기화 비밀번호 (4자리 숫자)</label>
+                        <div className="relative">
+                            <input
+                                id="batch-reset-password"
+                                type={showResetPassword ? 'text' : 'password'}
+                                inputMode="numeric"
+                                pattern="[0-9]*"
+                                value={batchResetPassword}
+                                onChange={e => setBatchResetPassword(e.target.value.replace(/[^0-9]/g, '').slice(0, 4))}
+                                placeholder="숫자 비밀번호 입력"
+                                className="pr-10 border rounded px-3 py-2 w-full"
+                                autoComplete="new-password"
+                            />
+                            <button
+                                type="button"
+                                className="absolute inset-y-0 right-0 h-full w-auto px-3 text-muted-foreground hover:text-foreground"
+                                onClick={() => setShowResetPassword(prev => !prev)}
+                                aria-label={showResetPassword ? "비밀번호 숨기기" : "비밀번호 보기"}
+                            >
+                                {showResetPassword ? '🙈' : '👁️'}
+                            </button>
+                        </div>
+                    </div>
+                    <button
+                        className="bg-primary text-white px-6 py-2 rounded font-medium hover:bg-primary/90 transition-colors"
+                        onClick={handleSaveResetPassword}
+                        disabled={savingReset}
+                    >
+                        {savingReset ? '저장 중...' : '비밀번호 저장'}
+                    </button>
+                    {resetSaveMsg && <div className="text-sm text-muted-foreground ml-2 mb-2">{resetSaveMsg}</div>}
+                </CardContent>
+            </Card>
+
             <Tabs defaultValue="accounts" className="w-full">
                 <TabsList className="grid w-full grid-cols-2">
                     <TabsTrigger value="accounts">조장 계정</TabsTrigger>
                     <TabsTrigger value="logs">점수 입력 내역</TabsTrigger>
                 </TabsList>
-                
+
                 <TabsContent value="accounts">
                     <Card>
                         <CardHeader>
@@ -354,11 +426,10 @@ export default function SelfScoringManagementPage() {
                                                     </Button>
                                                 </TableCell>
                                                 <TableCell>
-                                                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                                        account.isActive 
-                                                            ? 'bg-green-100 text-green-800' 
-                                                            : 'bg-red-100 text-red-800'
-                                                    }`}>
+                                                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${account.isActive
+                                                        ? 'bg-green-100 text-green-800'
+                                                        : 'bg-red-100 text-red-800'
+                                                        }`}>
                                                         {account.isActive ? '활성' : '비활성'}
                                                     </span>
                                                 </TableCell>
@@ -412,8 +483,8 @@ export default function SelfScoringManagementPage() {
                                 조장들이 입력한 점수 내역을 확인할 수 있습니다.
                             </CardDescription>
                             <div className="flex justify-end">
-                                <Button 
-                                    onClick={loadSelfScoringLogs} 
+                                <Button
+                                    onClick={loadSelfScoringLogs}
                                     disabled={logsLoading}
                                     variant="outline"
                                     size="sm"

@@ -213,6 +213,12 @@ export default function BatchScoringPage() {
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
   const [actionHistory, setActionHistory] = useState<BatchHistoryEntry[]>([]);
 
+  // 초기화 비밀번호 보호
+  const [resetPasswordFromDb, setResetPasswordFromDb] = useState<string>('');
+  const [isResetPasswordModalOpen, setIsResetPasswordModalOpen] = useState(false);
+  const [passwordInput, setPasswordInput] = useState('');
+  const [passwordError, setPasswordError] = useState(false);
+
   // 그룹 선수 로그 미리 불러오기 (대시보드/전광판과 동일한 기준 적용을 위해)
   useEffect(() => {
     const loadLogs = async () => {
@@ -244,6 +250,16 @@ export default function BatchScoringPage() {
       console.error('로그 로딩 실패:', error);
     }
   }, [playerScoreLogs]);
+
+  // 초기화 비밀번호 불러오기
+  useEffect(() => {
+    if (!db) return;
+    const pwRef = ref(db, 'config/batchResetPassword');
+    const unsub = onValue(pwRef, (snap) => {
+      setResetPasswordFromDb(snap.val() || '');
+    });
+    return () => unsub();
+  }, []);
 
   // 리스너 참조 관리를 위한 ref
   const listenersRef = useRef<{ players?: () => void; scores?: () => void; tournament?: () => void }>({});
@@ -2394,6 +2410,140 @@ export default function BatchScoringPage() {
     closeSignatureModal();
   };
 
+  const performReset = async () => {
+    // 현재 코스의 점수만 초기화
+    setScoresByCourse(prev => {
+      const next = { ...prev };
+      // 현재 코스만 null로 설정 (삭제하지 않음)
+      next[activeCourseId] = Array.from({ length: 4 }, () => Array(9).fill(null));
+      return next;
+    });
+
+    // 로컬 상태 초기화 (현재 코스만)
+    setDraftScores(Array.from({ length: 4 }, () => Array(9).fill(null)));
+    setBatchInputScores(Array.from({ length: 4 }, () => Array(9).fill(null)));
+    setGroupStartHole(null);
+    setGroupCurrentHole(null);
+
+    // 코스별 상태도 초기화
+    setCourseStartHoles(prev => ({
+      ...prev,
+      [activeCourseId]: null
+    }));
+    setCourseCurrentHoles(prev => ({
+      ...prev,
+      [activeCourseId]: null
+    }));
+
+    // 수정 기록 초기화 (현재 코스만)
+    setModifiedMap(prev => {
+      const next = { ...prev };
+      delete next[activeCourseId];
+      return next;
+    });
+
+    // localStorage 정리 (현재 코스의 초안 데이터만 제거)
+    try {
+      const draftKey = `selfScoringDraft_${activeCourseId}_${selectedGroup || 'g'}_${selectedJo || 'j'}`;
+      localStorage.removeItem(draftKey);
+    } catch { }
+
+    // 수정 로그도 완전히 제거 (Firebase에서) - 현재 그룹/조의 현재 코스만
+    try {
+      if (!db) return;
+      const dbInstance = db as any;
+
+      // 현재 그룹/조의 모든 수정 로그를 찾아서 제거
+      const logsRef = ref(dbInstance, 'scoreLogs');
+      const snapshot = await get(logsRef);
+
+      if (snapshot.exists()) {
+        const deleteTasks: Promise<any>[] = [];
+
+        snapshot.forEach((childSnapshot) => {
+          const logData = childSnapshot.val();
+          if (logData &&
+            logData.comment &&
+            logData.comment.includes(`그룹: ${selectedGroup}`) &&
+            logData.comment.includes(`조: ${selectedJo}`) &&
+            logData.courseId === activeCourseId) {
+            const logRef = ref(dbInstance, `scoreLogs/${childSnapshot.key}`);
+            deleteTasks.push(set(logRef, null));
+          }
+        });
+
+        if (deleteTasks.length > 0) {
+          await Promise.all(deleteTasks);
+        }
+      }
+    } catch { }
+
+    // Firebase DB에서 현재 코스의 점수만 제거
+    try {
+      if (!db) return;
+      const dbInstance = db as any;
+      const tasks: Promise<any>[] = [];
+
+      for (let pi = 0; pi < 4; pi++) {
+        const playerName = playerNames[pi];
+        const playerId = nameToPlayerId[playerName];
+        if (!playerId) continue;
+
+        for (let h = 1; h <= 9; h++) {
+          const scoreRef = ref(dbInstance, `/scores/${playerId}/${activeCourseId}/${h}`);
+          tasks.push(set(scoreRef, null));
+        }
+      }
+      await Promise.all(tasks);
+    } catch { }
+
+    toast({ title: '초기화 완료', description: `${activeCourse?.name || '현재 코스'}가 초기화되었습니다.` });
+
+    // 일괄 입력 이력 기록 (Firebase)
+    try {
+      if (!db) return;
+      const dbInstance = db as any;
+      const historyPath = `batchScoringHistory/${selectedGroup}/${selectedJo}/${activeCourseId}`;
+      const historyRef = ref(dbInstance, historyPath);
+
+      const currentTimestamp = Date.now();
+      const captainId = captainData?.id || `조장${selectedJo}`;
+
+      const snapshot = await get(historyRef);
+      const existingData = snapshot.val() || {};
+      const existingHistory: BatchHistoryEntry[] = Array.isArray(existingData.history) ? existingData.history : [];
+
+      const newEntry: BatchHistoryEntry = {
+        modifiedBy: captainId,
+        modifiedAt: currentTimestamp,
+        action: 'reset',
+        details: '점수 초기화'
+      };
+
+      const updatedHistory = [newEntry, ...existingHistory];
+
+      await set(historyRef, {
+        lastModifiedBy: captainId,
+        lastModifiedAt: currentTimestamp,
+        action: 'reset',
+        history: updatedHistory
+      });
+    } catch (error) {
+      console.error('초기화 이력 기록 실패:', error);
+    }
+  };
+
+  const handleResetClick = async () => {
+    if (resetPasswordFromDb) {
+      setPasswordInput('');
+      setPasswordError(false);
+      setIsResetPasswordModalOpen(true);
+    } else {
+      if (!confirm(`${activeCourse?.name || '현재 코스'}의 점수가 초기화 됩니다. 초기화 하시겠습니까?`)) return;
+      await performReset();
+    }
+  };
+
   return (
     <div className="scoring-page">
       <div className={`container ${themeClass}`} id="mainContainer">
@@ -2758,142 +2908,7 @@ export default function BatchScoringPage() {
         </div>
 
         <div className="action-buttons">
-          <button className="action-button reset-button" onClick={async () => {
-            // 일괄 입력 모드에서는 서명 체크 제거
-            if (!confirm(`${activeCourse?.name || '현재 코스'}의 점수가 초기화 됩니다. 초기화 하시겠습니까?`)) return;
-
-            // 현재 코스의 점수만 초기화
-            setScoresByCourse(prev => {
-              const next = { ...prev };
-              // 현재 코스만 null로 설정 (삭제하지 않음)
-              next[activeCourseId] = Array.from({ length: 4 }, () => Array(9).fill(null));
-              return next;
-            });
-
-            // 로컬 상태 초기화 (현재 코스만)
-            // draftScores는 현재 코스의 초안이므로 초기화해도 다른 코스에 영향 없음
-            setDraftScores(Array.from({ length: 4 }, () => Array(9).fill(null)));
-            // batchInputScores도 초기화
-            setBatchInputScores(Array.from({ length: 4 }, () => Array(9).fill(null)));
-            setGroupStartHole(null);
-            setGroupCurrentHole(null);
-
-            // 코스별 상태도 초기화
-            setCourseStartHoles(prev => ({
-              ...prev,
-              [activeCourseId]: null
-            }));
-            setCourseCurrentHoles(prev => ({
-              ...prev,
-              [activeCourseId]: null
-            }));
-            // 일괄 입력 모드에서는 서명 초기화 제거
-
-            // 수정 기록 초기화 (현재 코스만)
-            setModifiedMap(prev => {
-              const next = { ...prev };
-              delete next[activeCourseId];
-              return next;
-            });
-
-            // localStorage 정리 (현재 코스의 초안 데이터만 제거)
-            try {
-              const draftKey = `selfScoringDraft_${activeCourseId}_${selectedGroup || 'g'}_${selectedJo || 'j'}`;
-              localStorage.removeItem(draftKey);
-
-              // 일괄 입력 모드에서는 서명 데이터 제거 생략
-            } catch { }
-
-            // 수정 로그도 완전히 제거 (Firebase에서) - 현재 그룹/조의 현재 코스만
-            try {
-              if (!db) return;
-              const dbInstance = db as any;
-
-              // 현재 그룹/조의 모든 수정 로그를 찾아서 제거
-              const logsRef = ref(dbInstance, 'scoreLogs');
-              const snapshot = await get(logsRef);
-
-              if (snapshot.exists()) {
-                const deleteTasks: Promise<any>[] = [];
-
-                snapshot.forEach((childSnapshot) => {
-                  const logData = childSnapshot.val();
-                  // 현재 그룹/조의 현재 코스 로그만 삭제
-                  if (logData &&
-                    logData.comment &&
-                    logData.comment.includes(`그룹: ${selectedGroup}`) &&
-                    logData.comment.includes(`조: ${selectedJo}`) &&
-                    logData.courseId === activeCourseId) {
-                    const logRef = ref(dbInstance, `scoreLogs/${childSnapshot.key}`);
-                    deleteTasks.push(set(logRef, null));
-                  }
-                });
-
-                if (deleteTasks.length > 0) {
-                  await Promise.all(deleteTasks);
-                }
-              }
-            } catch { }
-
-            // Firebase DB에서 현재 코스의 점수만 제거
-            try {
-              if (!db) return;
-              const dbInstance = db as any;
-              const tasks: Promise<any>[] = [];
-
-              // 모든 플레이어의 현재 코스 점수만 제거
-              for (let pi = 0; pi < 4; pi++) {
-                const playerName = playerNames[pi];
-                const playerId = nameToPlayerId[playerName];
-                if (!playerId) continue;
-
-                // 현재 코스에 대해서만 점수 제거
-                for (let h = 1; h <= 9; h++) {
-                  const scoreRef = ref(dbInstance, `/scores/${playerId}/${activeCourseId}/${h}`);
-                  tasks.push(set(scoreRef, null));
-                }
-              }
-              await Promise.all(tasks);
-            } catch { }
-
-            toast({ title: '초기화 완료', description: `${activeCourse?.name || '현재 코스'}가 초기화되었습니다.` });
-
-            // 일괄 입력 이력 기록 (Firebase) - 조장 초기화 시에는 이력을 남김
-            try {
-              if (!db) return;
-              const dbInstance = db as any;
-              const historyPath = `batchScoringHistory/${selectedGroup}/${selectedJo}/${activeCourseId}`;
-              const historyRef = ref(dbInstance, historyPath);
-
-              const currentTimestamp = Date.now();
-              const captainId = captainData?.id || `조장${selectedJo}`;
-
-              // 기존 이력을 가져와서 새 이력 추가
-              const snapshot = await get(historyRef);
-              const existingData = snapshot.val() || {};
-              const existingHistory: BatchHistoryEntry[] = Array.isArray(existingData.history) ? existingData.history : [];
-
-              const newEntry: BatchHistoryEntry = {
-                modifiedBy: captainId,
-                modifiedAt: currentTimestamp,
-                action: 'reset',
-                details: '점수 초기화'
-              };
-
-              // 이력 배열에 추가 (최신 순)
-              const updatedHistory = [newEntry, ...existingHistory];
-
-              // Firebase에 저장 (이전 이력 유지 및 새 기록 추가)
-              await set(historyRef, {
-                lastModifiedBy: captainId,
-                lastModifiedAt: currentTimestamp,
-                action: 'reset',
-                history: updatedHistory
-              });
-            } catch (error) {
-              console.error('초기화 이력 기록 실패:', error);
-            }
-          }} disabled={isReadOnlyMode}>초기화</button>
+          <button className="action-button reset-button" onClick={handleResetClick} disabled={isReadOnlyMode}>초기화</button>
           <button className="action-button qr-button" onClick={handleBatchSave} disabled={isReadOnlyMode || isSaving}>
             {isSaving ? '저장 중...' : '일괄 저장'}
           </button>
@@ -2942,6 +2957,53 @@ export default function BatchScoringPage() {
             <AlertDialogAction onClick={() => setHistoryModalOpen(false)}>
               닫기
             </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* 초기화 비밀번호 확인 모달 */}
+      <AlertDialog open={isResetPasswordModalOpen} onOpenChange={setIsResetPasswordModalOpen}>
+        <AlertDialogContent className="password-modal">
+          <AlertDialogHeader>
+            <AlertDialogTitle>초기화 비밀번호 입력</AlertDialogTitle>
+            <AlertDialogDescription>
+              {activeCourse?.name || '현재 코스'}의 점수를 초기화하려면 4자리 숫자 비밀번호를 입력하세요.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="py-4">
+            <input
+              type="password"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              value={passwordInput}
+              onChange={(e) => {
+                const val = e.target.value.replace(/[^0-9]/g, '').slice(0, 4);
+                setPasswordInput(val);
+                setPasswordError(false);
+              }}
+              placeholder="숫자 4자리 입력"
+              className={`w-full text-center text-2xl tracking-widest border rounded px-3 py-3 ${passwordError ? 'border-destructive' : ''}`}
+              autoFocus
+            />
+            {passwordError && (
+              <p className="text-sm text-destructive mt-2 text-center">비밀번호가 올바르지 않습니다.</p>
+            )}
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setIsResetPasswordModalOpen(false)}>취소</AlertDialogCancel>
+            <AlertDialogAction onClick={async (e) => {
+              e.preventDefault();
+              if (passwordInput === resetPasswordFromDb) {
+                setIsResetPasswordModalOpen(false);
+                setTimeout(async () => {
+                  if (!confirm(`${activeCourse?.name || '현재 코스'}의 점수가 초기화 됩니다. 초기화 하시겠습니까?`)) return;
+                  await performReset();
+                }, 100);
+              } else {
+                setPasswordError(true);
+                setPasswordInput('');
+              }
+            }}>확인</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

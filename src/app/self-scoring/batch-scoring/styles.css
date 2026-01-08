@@ -818,8 +818,7 @@ input[data-saved="true"].locked,
 }
 
 .action-button {
-    flex: 1 1 33%;
-    max-width: 33%;
+    flex: 1;
     min-width: 0;
     padding: 12px 8px;
     border: none;
@@ -1011,7 +1010,7 @@ input[data-saved="true"].locked,
     }
 
     .action-button {
-        flex: 1 1 calc(33.333% - 4px);
+        flex: 1;
         min-width: 0;
         font-size: 16px;
         /* 모바일에서도 크게 */
