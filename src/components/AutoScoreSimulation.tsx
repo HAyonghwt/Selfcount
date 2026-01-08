@@ -10,7 +10,9 @@ import { useToast } from '@/hooks/use-toast';
 import { db, ensureAuthenticated } from '@/lib/firebase';
 import { ref, get, set, onValue } from 'firebase/database';
 import { logScoreChange, invalidatePlayerLogCache } from '@/lib/scoreLogs';
-import { Loader2, ChevronDown, ChevronUp, X } from 'lucide-react';
+import { Loader2, ChevronDown, ChevronUp, X, CheckCircle2, LayoutGrid } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 interface SimulationState {
     isRunning: boolean;
@@ -40,7 +42,7 @@ export default function AutoScoreSimulation() {
         type: '',
         day: 1
     });
-    
+
     // 이중 확인 다이얼로그 (첫 번째 확인)
     const [showFirstConfirmDialog, setShowFirstConfirmDialog] = useState<{
         open: boolean;
@@ -54,11 +56,12 @@ export default function AutoScoreSimulation() {
 
     const [courses, setCourses] = useState<any[]>([]);
     const [groupsData, setGroupsData] = useState<any>({});
-    
+
     // 코스 선택 상태 (1차, 2차 각각)
-    const [selectedCourses1, setSelectedCourses1] = useState<number[]>([]);
-    const [selectedCourses2, setSelectedCourses2] = useState<number[]>([]);
-    
+    // 코스 선택 상태 (그룹별로 관리)
+    const [selectedCourses1, setSelectedCourses1] = useState<{ [groupName: string]: number[] }>({});
+    const [selectedCourses2, setSelectedCourses2] = useState<{ [groupName: string]: number[] }>({});
+
     // 카드 열림/닫힘 상태 (기본값: 닫힘)
     const [isCardExpanded, setIsCardExpanded] = useState<boolean>(false);
     const [showActivateDialog, setShowActivateDialog] = useState<boolean>(false);
@@ -66,15 +69,15 @@ export default function AutoScoreSimulation() {
     // Firebase 데이터 로드
     useEffect(() => {
         if (!db) return;
-        
+
         const tournamentRef = ref(db, 'tournaments/current');
-        
+
         const unsubTournament = onValue(tournamentRef, (snapshot) => {
             const data = snapshot.val() || {};
             setGroupsData(data.groups || {});
             setCourses(data.courses ? Object.values(data.courses) : []);
         });
-        
+
         return () => {
             unsubTournament();
         };
@@ -187,7 +190,7 @@ export default function AutoScoreSimulation() {
                 isAuthenticated = await ensureAuthenticated();
                 if (isAuthenticated) break;
             }
-            
+
             if (!isAuthenticated) {
                 throw new Error('Firebase 인증에 실패했습니다.');
             }
@@ -222,7 +225,7 @@ export default function AutoScoreSimulation() {
                     newValue: score,
                     modifiedBy: isBatchMode ? `시뮬레이션_일괄입력${day}차` : `시뮬레이션_조장${day}차`,
                     modifiedByType: "captain",
-                    comment: isBatchMode 
+                    comment: isBatchMode
                         ? `일괄 입력 모드 시뮬레이션 - 코스: ${courseId}, 그룹: ${playerGroup}, 조: ${playerJo}`
                         : `자동 시뮬레이션 - 코스: ${courseId}, 그룹: ${playerGroup}, 조: ${playerJo}`,
                     courseId: String(courseId),
@@ -234,8 +237,8 @@ export default function AutoScoreSimulation() {
                 // 외부 전광판에 갱신 신호 전달 (실제 조장 페이지와 동일)
                 try {
                     if (typeof window !== 'undefined') {
-                        const evt = new CustomEvent('scoreUpdated', { 
-                            detail: { playerId, courseId: String(courseId), hole, by: 'captain' } 
+                        const evt = new CustomEvent('scoreUpdated', {
+                            detail: { playerId, courseId: String(courseId), hole, by: 'captain' }
                         });
                         window.dispatchEvent(evt);
                     }
@@ -261,12 +264,12 @@ export default function AutoScoreSimulation() {
                         continue;
                     }
                 }
-                
+
                 // 네트워크 오류도 재시도 (실제 조장 페이지와 동일)
                 const isNetworkError = e?.code === 'network-request-failed' ||
                     e?.message?.includes('network') ||
                     e?.message?.includes('timeout');
-                
+
                 if (isNetworkError && attempt < maxRetries) {
                     continue;
                 }
@@ -284,34 +287,18 @@ export default function AutoScoreSimulation() {
             return;
         }
 
-        setSimulationState({ 
-            isRunning: true, 
-            currentStep: `심판 ${day}차 점수 입력 시뮬레이션 중...`, 
-            progress: 0 
+        setSimulationState({
+            isRunning: true,
+            currentStep: `심판 ${day}차 점수 입력 시뮬레이션 중...`,
+            progress: 0
         });
 
         try {
-            // 선택된 코스 가져오기
-            const selectedCourseIds = day === 1 ? selectedCourses1 : selectedCourses2;
-            
-            if (selectedCourseIds.length === 0) {
-                toast({ 
-                    title: '오류', 
-                    description: `${day}차에 선택된 코스가 없습니다. 코스를 선택해주세요.`, 
-                    variant: 'destructive' 
-                });
-                setSimulationState({ isRunning: false, currentStep: '', progress: 0 });
-                return;
-            }
-
-            // 선택된 코스 ID로 코스 객체 찾기
-            const targetCourses = courses.filter(c => selectedCourseIds.includes(c.id));
-            
-            if (targetCourses.length === 0) {
-                toast({ 
-                    title: '오류', 
-                    description: '선택된 코스를 찾을 수 없습니다.', 
-                    variant: 'destructive' 
+            if (Object.keys(day === 1 ? selectedCourses1 : selectedCourses2).length === 0) {
+                toast({
+                    title: '알림',
+                    description: `${day}차에 코스가 선택된 그룹이 없습니다.`,
+                    variant: 'default'
                 });
                 setSimulationState({ isRunning: false, currentStep: '', progress: 0 });
                 return;
@@ -321,15 +308,15 @@ export default function AutoScoreSimulation() {
             const playersSnapshot = await get(ref(db, 'players'));
             const latestPlayersData = playersSnapshot.val() || {};
             const latestPlayers = Object.entries(latestPlayersData).map(([id, player]) => ({ id, ...player as any }));
-            
-            // 모든 개인전 선수 필터링 (엑셀 업로드 선수 포함)
+
+            // 모든 개인전 선수 필터링
             const allIndividualPlayers = latestPlayers.filter(p => p.type === 'individual');
-            
+
             if (allIndividualPlayers.length === 0) {
-                toast({ 
-                    title: '오류', 
-                    description: '등록된 선수가 없습니다.', 
-                    variant: 'destructive' 
+                toast({
+                    title: '오류',
+                    description: '등록된 선수가 없습니다.',
+                    variant: 'destructive'
                 });
                 setSimulationState({ isRunning: false, currentStep: '', progress: 0 });
                 return;
@@ -341,10 +328,15 @@ export default function AutoScoreSimulation() {
 
             // 모든 점수 저장 작업을 배열로 수집
             const scoreTasks: Array<() => Promise<void>> = [];
-            const totalPlayers = allIndividualPlayers.length;
-            const totalExpectedScores = totalPlayers * targetCourses.length * 9;
+            const currentSelectedCourses = day === 1 ? selectedCourses1 : selectedCourses2;
 
             for (const player of allIndividualPlayers) {
+                const groupName = player.group || '';
+                const selectedCourseIds = currentSelectedCourses[groupName] || [];
+                if (selectedCourseIds.length === 0) continue;
+
+                const targetCourses = courses.filter(c => selectedCourseIds.includes(c.id));
+
                 for (const course of targetCourses) {
                     // 이미 점수가 있는 경우 스킵
                     const hasScore = latestScores[player.id]?.[course.id]?.['1'];
@@ -355,8 +347,7 @@ export default function AutoScoreSimulation() {
                         const score = Math.max(1, Math.min(9, par + Math.floor(Math.random() * 5) - 2));
                         const prevScore = latestScores[player.id]?.[course.id]?.[String(hole)] ?? null;
 
-                        // 점수 저장 작업을 배열에 추가
-                        scoreTasks.push(() => 
+                        scoreTasks.push(() =>
                             saveScoreAsReferee(
                                 player.id,
                                 String(course.id),
@@ -378,10 +369,11 @@ export default function AutoScoreSimulation() {
             const BATCH_DELAY = 50;
             let processedScores = 0;
             let totalScores = 0;
+            const totalExpectedScores = scoreTasks.length;
 
             for (let i = 0; i < scoreTasks.length; i += BATCH_SIZE) {
                 const batch = scoreTasks.slice(i, i + BATCH_SIZE);
-                
+
                 // 현재 배치를 병렬로 실행
                 const results = await Promise.allSettled(batch.map(task => task()));
                 const successCount = results.filter(r => r.status === 'fulfilled').length;
@@ -389,10 +381,10 @@ export default function AutoScoreSimulation() {
                 processedScores += batch.length;
 
                 // 진행률 업데이트
-                setSimulationState({ 
-                    isRunning: true, 
-                    currentStep: `심판 ${day}차 점수 입력 중... (${processedScores}/${scoreTasks.length}개 완료)`, 
-                    progress: (processedScores / totalExpectedScores) * 100 
+                setSimulationState({
+                    isRunning: true,
+                    currentStep: `심판 ${day}차 점수 입력 중... (${processedScores}/${scoreTasks.length}개 완료)`,
+                    progress: (processedScores / totalExpectedScores) * 100
                 });
 
                 // 마지막 배치가 아니면 지연 (실제 환경 모방)
@@ -400,16 +392,16 @@ export default function AutoScoreSimulation() {
                     await new Promise(resolve => setTimeout(resolve, BATCH_DELAY));
                 }
             }
-            
-            toast({ 
-                title: '완료', 
-                description: `심판 ${day}차 점수 입력이 완료되었습니다. (${totalScores}개 점수 등록)` 
+
+            toast({
+                title: '완료',
+                description: `심판 ${day}차 점수 입력이 완료되었습니다. (${totalScores}개 점수 등록)`
             });
         } catch (error: any) {
-            toast({ 
-                title: '오류', 
-                description: error.message || '알 수 없는 오류', 
-                variant: 'destructive' 
+            toast({
+                title: '오류',
+                description: error.message || '알 수 없는 오류',
+                variant: 'destructive'
             });
         } finally {
             setSimulationState({ isRunning: false, currentStep: '', progress: 0 });
@@ -423,34 +415,21 @@ export default function AutoScoreSimulation() {
             return;
         }
 
-        setSimulationState({ 
-            isRunning: true, 
-            currentStep: `조장 ${day}차 점수 입력 시뮬레이션 중...`, 
-            progress: 0 
+        setSimulationState({
+            isRunning: true,
+            currentStep: `조장 ${day}차 점수 입력 시뮬레이션 중...`,
+            progress: 0
         });
 
         try {
-            // 선택된 코스 가져오기
-            const selectedCourseIds = day === 1 ? selectedCourses1 : selectedCourses2;
-            
-            if (selectedCourseIds.length === 0) {
-                toast({ 
-                    title: '오류', 
-                    description: `${day}차에 선택된 코스가 없습니다. 코스를 선택해주세요.`, 
-                    variant: 'destructive' 
-                });
-                setSimulationState({ isRunning: false, currentStep: '', progress: 0 });
-                return;
-            }
+            // 선택된 코스 가져오기 (그룹별)
+            const currentSelectedCourses = day === 1 ? selectedCourses1 : selectedCourses2;
 
-            // 선택된 코스 ID로 코스 객체 찾기
-            const targetCourses = courses.filter(c => selectedCourseIds.includes(c.id));
-            
-            if (targetCourses.length === 0) {
-                toast({ 
-                    title: '오류', 
-                    description: '선택된 코스를 찾을 수 없습니다.', 
-                    variant: 'destructive' 
+            if (Object.keys(currentSelectedCourses).length === 0) {
+                toast({
+                    title: '알림',
+                    description: `${day}차에 코스가 선택된 그룹이 없습니다.`,
+                    variant: 'default'
                 });
                 setSimulationState({ isRunning: false, currentStep: '', progress: 0 });
                 return;
@@ -460,15 +439,15 @@ export default function AutoScoreSimulation() {
             const playersSnapshot = await get(ref(db, 'players'));
             const latestPlayersData = playersSnapshot.val() || {};
             const latestPlayers = Object.entries(latestPlayersData).map(([id, player]) => ({ id, ...player as any }));
-            
+
             // 모든 개인전 선수 필터링 (엑셀 업로드 선수 포함)
             const allIndividualPlayers = latestPlayers.filter(p => p.type === 'individual');
-            
+
             if (allIndividualPlayers.length === 0) {
-                toast({ 
-                    title: '오류', 
-                    description: '등록된 선수가 없습니다.', 
-                    variant: 'destructive' 
+                toast({
+                    title: '오류',
+                    description: '등록된 선수가 없습니다.',
+                    variant: 'destructive'
                 });
                 setSimulationState({ isRunning: false, currentStep: '', progress: 0 });
                 return;
@@ -480,13 +459,19 @@ export default function AutoScoreSimulation() {
 
             // 모든 점수 저장 작업을 배열로 수집
             const scoreTasks: Array<() => Promise<void>> = [];
-            const totalPlayers = allIndividualPlayers.length;
-            const totalExpectedScores = totalPlayers * targetCourses.length * 9;
+            // const totalPlayers = allIndividualPlayers.length; // Not directly used for totalExpectedScores anymore
+            // const totalExpectedScores = totalPlayers * targetCourses.length * 9; // This was for a single set of targetCourses
 
             for (const player of allIndividualPlayers) {
+                const groupName = player.group || '';
+                const selectedCourseIds = currentSelectedCourses[groupName] || [];
+                if (selectedCourseIds.length === 0) continue; // Skip player if their group has no courses selected
+
+                const targetCourses = courses.filter(c => selectedCourseIds.includes(c.id));
+
                 for (const course of targetCourses) {
                     // 이미 점수가 있는 경우 스킵
-                    const hasScore = latestScores[player.id]?.[course.id]?.['1'];
+                    const hasScore = latestScores[player.id]?.[course.id]?.[String(day)]; // Check score for the specific day
                     if (hasScore) continue;
 
                     for (let hole = 1; hole <= 9; hole++) {
@@ -495,7 +480,7 @@ export default function AutoScoreSimulation() {
                         const prevScore = latestScores[player.id]?.[course.id]?.[String(hole)] ?? null;
 
                         // 점수 저장 작업을 배열에 추가
-                        scoreTasks.push(() => 
+                        scoreTasks.push(() =>
                             saveScoreAsCaptain(
                                 player.id,
                                 String(course.id),
@@ -519,10 +504,11 @@ export default function AutoScoreSimulation() {
             const BATCH_DELAY = 50;
             let processedScores = 0;
             let totalScores = 0;
+            const totalExpectedScores = scoreTasks.length; // Use actual task count for progress
 
             for (let i = 0; i < scoreTasks.length; i += BATCH_SIZE) {
                 const batch = scoreTasks.slice(i, i + BATCH_SIZE);
-                
+
                 // 현재 배치를 병렬로 실행
                 const results = await Promise.allSettled(batch.map(task => task()));
                 const successCount = results.filter(r => r.status === 'fulfilled').length;
@@ -530,10 +516,10 @@ export default function AutoScoreSimulation() {
                 processedScores += batch.length;
 
                 // 진행률 업데이트
-                setSimulationState({ 
-                    isRunning: true, 
-                    currentStep: `조장 ${day}차 점수 입력 중... (${processedScores}/${scoreTasks.length}개 완료)`, 
-                    progress: (processedScores / totalExpectedScores) * 100 
+                setSimulationState({
+                    isRunning: true,
+                    currentStep: `조장 ${day}차 점수 입력 중... (${processedScores}/${scoreTasks.length}개 완료)`,
+                    progress: (processedScores / totalExpectedScores) * 100
                 });
 
                 // 마지막 배치가 아니면 지연 (실제 환경 모방)
@@ -541,16 +527,16 @@ export default function AutoScoreSimulation() {
                     await new Promise(resolve => setTimeout(resolve, BATCH_DELAY));
                 }
             }
-            
-            toast({ 
-                title: '완료', 
-                description: `조장 ${day}차 점수 입력이 완료되었습니다. (${totalScores}개 점수 등록)` 
+
+            toast({
+                title: '완료',
+                description: `조장 ${day}차 점수 입력이 완료되었습니다. (${totalScores}개 점수 등록)`
             });
         } catch (error: any) {
-            toast({ 
-                title: '오류', 
-                description: error.message || '알 수 없는 오류', 
-                variant: 'destructive' 
+            toast({
+                title: '오류',
+                description: error.message || '알 수 없는 오류',
+                variant: 'destructive'
             });
         } finally {
             setSimulationState({ isRunning: false, currentStep: '', progress: 0 });
@@ -564,34 +550,21 @@ export default function AutoScoreSimulation() {
             return;
         }
 
-        setSimulationState({ 
-            isRunning: true, 
-            currentStep: `일괄 입력 모드 ${day}차 점수 입력 시뮬레이션 중...`, 
-            progress: 0 
+        setSimulationState({
+            isRunning: true,
+            currentStep: `일괄 입력 모드 ${day}차 점수 입력 시뮬레이션 중...`,
+            progress: 0
         });
 
         try {
-            // 선택된 코스 가져오기
-            const selectedCourseIds = day === 1 ? selectedCourses1 : selectedCourses2;
-            
-            if (selectedCourseIds.length === 0) {
-                toast({ 
-                    title: '오류', 
-                    description: `${day}차에 선택된 코스가 없습니다. 코스를 선택해주세요.`, 
-                    variant: 'destructive' 
-                });
-                setSimulationState({ isRunning: false, currentStep: '', progress: 0 });
-                return;
-            }
+            // 선택된 코스 가져오기 (그룹별)
+            const currentSelectedCourses = day === 1 ? selectedCourses1 : selectedCourses2;
 
-            // 선택된 코스 ID로 코스 객체 찾기
-            const targetCourses = courses.filter(c => selectedCourseIds.includes(c.id));
-            
-            if (targetCourses.length === 0) {
-                toast({ 
-                    title: '오류', 
-                    description: '선택된 코스를 찾을 수 없습니다.', 
-                    variant: 'destructive' 
+            if (Object.keys(currentSelectedCourses).length === 0) {
+                toast({
+                    title: '알림',
+                    description: `${day}차에 코스가 선택된 그룹이 없습니다.`,
+                    variant: 'default'
                 });
                 setSimulationState({ isRunning: false, currentStep: '', progress: 0 });
                 return;
@@ -601,15 +574,15 @@ export default function AutoScoreSimulation() {
             const playersSnapshot = await get(ref(db, 'players'));
             const latestPlayersData = playersSnapshot.val() || {};
             const latestPlayers = Object.entries(latestPlayersData).map(([id, player]) => ({ id, ...player as any }));
-            
+
             // 모든 개인전 선수 필터링 (엑셀 업로드 선수 포함)
             const allIndividualPlayers = latestPlayers.filter(p => p.type === 'individual');
-            
+
             if (allIndividualPlayers.length === 0) {
-                toast({ 
-                    title: '오류', 
-                    description: '등록된 선수가 없습니다.', 
-                    variant: 'destructive' 
+                toast({
+                    title: '오류',
+                    description: '등록된 선수가 없습니다.',
+                    variant: 'destructive'
                 });
                 setSimulationState({ isRunning: false, currentStep: '', progress: 0 });
                 return;
@@ -621,13 +594,19 @@ export default function AutoScoreSimulation() {
 
             // 모든 점수 저장 작업을 배열로 수집
             const scoreTasks: Array<() => Promise<void>> = [];
-            const totalPlayers = allIndividualPlayers.length;
-            const totalExpectedScores = totalPlayers * targetCourses.length * 9;
+            // const totalPlayers = allIndividualPlayers.length; // Not directly used for totalExpectedScores anymore
+            // const totalExpectedScores = totalPlayers * targetCourses.length * 9; // This was for a single set of targetCourses
 
             for (const player of allIndividualPlayers) {
+                const groupName = player.group || '';
+                const selectedCourseIds = currentSelectedCourses[groupName] || [];
+                if (selectedCourseIds.length === 0) continue; // Skip player if their group has no courses selected
+
+                const targetCourses = courses.filter(c => selectedCourseIds.includes(c.id));
+
                 for (const course of targetCourses) {
                     // 이미 점수가 있는 경우 스킵
-                    const hasScore = latestScores[player.id]?.[course.id]?.['1'];
+                    const hasScore = latestScores[player.id]?.[course.id]?.[String(day)]; // Check score for the specific day
                     if (hasScore) continue;
 
                     for (let hole = 1; hole <= 9; hole++) {
@@ -636,7 +615,7 @@ export default function AutoScoreSimulation() {
                         const prevScore = latestScores[player.id]?.[course.id]?.[String(hole)] ?? null;
 
                         // 점수 저장 작업을 배열에 추가
-                        scoreTasks.push(() => 
+                        scoreTasks.push(() =>
                             saveScoreAsCaptain(
                                 player.id,
                                 String(course.id),
@@ -660,10 +639,11 @@ export default function AutoScoreSimulation() {
             const BATCH_DELAY = 50;
             let processedScores = 0;
             let totalScores = 0;
+            const totalExpectedScores = scoreTasks.length;
 
             for (let i = 0; i < scoreTasks.length; i += BATCH_SIZE) {
                 const batch = scoreTasks.slice(i, i + BATCH_SIZE);
-                
+
                 // 현재 배치를 병렬로 실행
                 const results = await Promise.allSettled(batch.map(task => task()));
                 const successCount = results.filter(r => r.status === 'fulfilled').length;
@@ -671,10 +651,10 @@ export default function AutoScoreSimulation() {
                 processedScores += batch.length;
 
                 // 진행률 업데이트
-                setSimulationState({ 
-                    isRunning: true, 
-                    currentStep: `일괄 입력 모드 ${day}차 점수 입력 중... (${processedScores}/${scoreTasks.length}개 완료)`, 
-                    progress: (processedScores / totalExpectedScores) * 100 
+                setSimulationState({
+                    isRunning: true,
+                    currentStep: `일괄 입력 모드 ${day}차 점수 입력 중... (${processedScores}/${scoreTasks.length}개 완료)`,
+                    progress: (processedScores / totalExpectedScores) * 100
                 });
 
                 // 마지막 배치가 아니면 지연 (실제 환경 모방)
@@ -682,16 +662,16 @@ export default function AutoScoreSimulation() {
                     await new Promise(resolve => setTimeout(resolve, BATCH_DELAY));
                 }
             }
-            
-            toast({ 
-                title: '완료', 
-                description: `일괄 입력 모드 ${day}차 점수 입력이 완료되었습니다. (${totalScores}개 점수 등록)` 
+
+            toast({
+                title: '완료',
+                description: `일괄 입력 모드 ${day}차 점수 입력이 완료되었습니다. (${totalScores}개 점수 등록)`
             });
         } catch (error: any) {
-            toast({ 
-                title: '오류', 
-                description: error.message || '알 수 없는 오류', 
-                variant: 'destructive' 
+            toast({
+                title: '오류',
+                description: error.message || '알 수 없는 오류',
+                variant: 'destructive'
             });
         } finally {
             setSimulationState({ isRunning: false, currentStep: '', progress: 0 });
@@ -704,72 +684,72 @@ export default function AutoScoreSimulation() {
             e.preventDefault();
             e.stopPropagation();
         }
-        
+
         // 🔒 안전장치 1: 이미 실행 중이면 차단
         if (simulationState.isRunning) {
-            toast({ 
-                title: '알림', 
-                description: '이미 시뮬레이션이 실행 중입니다.', 
-                variant: 'default' 
+            toast({
+                title: '알림',
+                description: '이미 시뮬레이션이 실행 중입니다.',
+                variant: 'default'
             });
             return;
         }
-        
+
         // 🔒 안전장치 2: 카드가 닫혀있으면 실행 불가
         if (!isCardExpanded) {
             console.warn('시뮬레이션: 카드가 닫혀있어 실행 불가');
             return;
         }
-        
-        // 🔒 안전장치 3: 코스가 선택되지 않았으면 실행 불가
-        const selectedCourseIds = day === 1 ? selectedCourses1 : selectedCourses2;
-        if (selectedCourseIds.length === 0) {
-            toast({ 
-                title: '알림', 
-                description: `${day}차에 코스를 선택해주세요.`, 
-                variant: 'default' 
+
+        // 🔒 안전장치 3: 코스가 선택된 그룹이 있는지 확인
+        const currentSelectedParams = day === 1 ? selectedCourses1 : selectedCourses2;
+        if (Object.keys(currentSelectedParams).length === 0) {
+            toast({
+                title: '알림',
+                description: `${day}차에 코스가 선택된 그룹이 없습니다.`,
+                variant: 'default'
             });
             return;
         }
-        
+
         // 🔒 안전장치 4: 첫 번째 확인 다이얼로그 표시
         setShowFirstConfirmDialog({ open: true, type, day });
     };
-    
+
     // 첫 번째 확인 다이얼로그에서 확인 클릭 시
     const handleFirstConfirm = () => {
         const { type, day } = showFirstConfirmDialog;
         setShowFirstConfirmDialog({ open: false, type: '', day: 1 });
-        
+
         // 🔒 안전장치 5: 다시 한 번 상태 검증
         if (simulationState.isRunning) {
-            toast({ 
-                title: '오류', 
-                description: '시뮬레이션이 이미 실행 중입니다.', 
-                variant: 'destructive' 
+            toast({
+                title: '오류',
+                description: '시뮬레이션이 이미 실행 중입니다.',
+                variant: 'destructive'
             });
             return;
         }
-        
+
         if (!isCardExpanded) {
-            toast({ 
-                title: '오류', 
-                description: '카드가 닫혀있어 실행할 수 없습니다.', 
-                variant: 'destructive' 
+            toast({
+                title: '오류',
+                description: '카드가 닫혀있어 실행할 수 없습니다.',
+                variant: 'destructive'
             });
             return;
         }
-        
-        const selectedCourseIds = day === 1 ? selectedCourses1 : selectedCourses2;
-        if (selectedCourseIds.length === 0) {
-            toast({ 
-                title: '오류', 
-                description: '코스가 선택되지 않았습니다.', 
-                variant: 'destructive' 
+
+        const currentSelectedParams = day === 1 ? selectedCourses1 : selectedCourses2;
+        if (Object.keys(currentSelectedParams).length === 0) {
+            toast({
+                title: '오류',
+                description: '코스가 선택된 그룹이 없습니다.',
+                variant: 'destructive'
             });
             return;
         }
-        
+
         // 두 번째 확인 다이얼로그 표시
         setShowConfirmDialog({ open: true, type, day });
     };
@@ -777,36 +757,36 @@ export default function AutoScoreSimulation() {
     const handleConfirm = () => {
         const { type, day } = showConfirmDialog;
         setShowConfirmDialog({ open: false, type: '', day: 1 });
-        
+
         // 🔒 안전장치 6: 최종 실행 전 마지막 검증
         if (simulationState.isRunning) {
-            toast({ 
-                title: '오류', 
-                description: '시뮬레이션이 이미 실행 중입니다.', 
-                variant: 'destructive' 
+            toast({
+                title: '오류',
+                description: '시뮬레이션이 이미 실행 중입니다.',
+                variant: 'destructive'
             });
             return;
         }
-        
+
         if (!isCardExpanded) {
-            toast({ 
-                title: '오류', 
-                description: '카드가 닫혀있어 실행할 수 없습니다.', 
-                variant: 'destructive' 
+            toast({
+                title: '오류',
+                description: '카드가 닫혀있어 실행할 수 없습니다.',
+                variant: 'destructive'
             });
             return;
         }
-        
-        const selectedCourseIds = day === 1 ? selectedCourses1 : selectedCourses2;
-        if (selectedCourseIds.length === 0) {
-            toast({ 
-                title: '오류', 
-                description: '코스가 선택되지 않았습니다.', 
-                variant: 'destructive' 
+
+        const currentSelectedParams = day === 1 ? selectedCourses1 : selectedCourses2;
+        if (Object.keys(currentSelectedParams).length === 0) {
+            toast({
+                title: '오류',
+                description: '코스가 선택된 그룹이 없습니다.',
+                variant: 'destructive'
             });
             return;
         }
-        
+
         // 🔒 안전장치 7: 실행 함수 호출 전 상태 설정 (중복 실행 방지)
         setSimulationState(prev => {
             if (prev.isRunning) {
@@ -814,7 +794,7 @@ export default function AutoScoreSimulation() {
             }
             return prev;
         });
-        
+
         // 실행
         if (type === 'referee') {
             simulateRefereeScores(day);
@@ -846,20 +826,31 @@ export default function AutoScoreSimulation() {
         // setSelectedCourses2([]);
     };
 
-    const handleCourseToggle = (courseId: number, day: 1 | 2) => {
-        if (day === 1) {
-            setSelectedCourses1(prev => 
-                prev.includes(courseId) 
-                    ? prev.filter(id => id !== courseId)
-                    : [...prev, courseId]
-            );
-        } else {
-            setSelectedCourses2(prev => 
-                prev.includes(courseId) 
-                    ? prev.filter(id => id !== courseId)
-                    : [...prev, courseId]
-            );
-        }
+    const handleCourseToggle = (groupName: string, courseId: number, day: 1 | 2) => {
+        const setFn = day === 1 ? setSelectedCourses1 : setSelectedCourses2;
+        setFn(prev => {
+            const groupCourses = prev[groupName] || [];
+            const isSelected = groupCourses.includes(courseId);
+            const next = { ...prev };
+            if (isSelected) {
+                next[groupName] = groupCourses.filter(id => id !== courseId);
+                if (next[groupName].length === 0) delete next[groupName];
+            } else {
+                next[groupName] = [...groupCourses, courseId];
+            }
+            return next;
+        });
+    };
+
+    const handleApplyToAllGroups = (day: 1 | 2, courseIds: number[]) => {
+        const setFn = day === 1 ? setSelectedCourses1 : setSelectedCourses2;
+        const allGroups = Object.keys(groupsData);
+        const next: { [key: string]: number[] } = {};
+        allGroups.forEach(g => {
+            if (courseIds.length > 0) next[g] = [...courseIds];
+        });
+        setFn(next);
+        toast({ title: '알림', description: `모든 그룹에 ${courseIds.length}개 코스가 적용되었습니다.` });
     };
 
     return (
@@ -912,7 +903,7 @@ export default function AutoScoreSimulation() {
                                     <span className="text-sm">{simulationState.currentStep}</span>
                                 </div>
                                 <div className="w-full bg-gray-200 rounded-full h-2">
-                                    <div 
+                                    <div
                                         className="bg-primary h-2 rounded-full transition-all"
                                         style={{ width: `${simulationState.progress}%` }}
                                     />
@@ -923,39 +914,70 @@ export default function AutoScoreSimulation() {
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             {/* 1차 */}
                             <div className="space-y-3">
-                                <h3 className="font-semibold text-lg">1차</h3>
-                                <div className="space-y-2 border rounded-lg p-3">
-                                    <Label className="text-sm font-medium">코스 선택</Label>
-                                    <div className="grid grid-cols-2 gap-2">
-                                        {courses.map((course) => (
-                                            <div key={course.id} className="flex items-center space-x-2">
-                                                <Checkbox
-                                                    id={`course-1-${course.id}`}
-                                                    checked={selectedCourses1.includes(course.id)}
-                                                    onCheckedChange={() => handleCourseToggle(course.id, 1)}
-                                                />
-                                                <Label
-                                                    htmlFor={`course-1-${course.id}`}
-                                                    className="text-sm font-normal cursor-pointer"
-                                                >
-                                                    {course.name || `코스 ${course.id}`}
-                                                </Label>
-                                            </div>
-                                        ))}
+                                <div className="flex items-center justify-between">
+                                    <h3 className="font-semibold text-lg">1차</h3>
+                                    <div className="flex gap-1">
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="h-7 text-[10px]"
+                                            onClick={() => handleApplyToAllGroups(1, courses.map(c => c.id))}
+                                        >전체 선택</Button>
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="h-7 text-[10px] text-red-500"
+                                            onClick={() => handleApplyToAllGroups(1, [])}
+                                        >전체 해제</Button>
                                     </div>
-                                    {selectedCourses1.length === 0 && (
-                                        <p className="text-xs text-muted-foreground">코스를 선택해주세요.</p>
-                                    )}
-                                    {selectedCourses1.length > 0 && (
-                                        <p className="text-xs text-muted-foreground">
-                                            선택된 코스: {courses.filter(c => selectedCourses1.includes(c.id)).map(c => c.name).join(', ')}
-                                        </p>
-                                    )}
+                                </div>
+                                <div className="border rounded-lg p-1 bg-muted/30">
+                                    <Tabs defaultValue={Object.keys(groupsData)[0]} className="w-full">
+                                        <ScrollArea className="w-full whitespace-nowrap border-b">
+                                            <TabsList className="w-full justify-start h-9 bg-transparent p-0">
+                                                {Object.keys(groupsData).map(groupName => (
+                                                    <TabsTrigger
+                                                        key={groupName}
+                                                        value={groupName}
+                                                        className="data-[state=active]:bg-background data-[state=active]:shadow-none rounded-none border-b-2 border-transparent data-[state=active]:border-primary h-9 px-3 text-xs"
+                                                    >
+                                                        {groupName}
+                                                        {selectedCourses1[groupName]?.length > 0 && (
+                                                            <span className="ml-1 px-1.5 py-0.5 bg-primary text-primary-foreground rounded-full text-[8px]">
+                                                                {selectedCourses1[groupName].length}
+                                                            </span>
+                                                        )}
+                                                    </TabsTrigger>
+                                                ))}
+                                            </TabsList>
+                                        </ScrollArea>
+                                        {Object.keys(groupsData).map(groupName => (
+                                            <TabsContent key={groupName} value={groupName} className="p-3 mt-0 space-y-3">
+                                                <div className="grid grid-cols-2 gap-2">
+                                                    {courses.map((course) => (
+                                                        <div key={course.id} className="flex items-center space-x-2">
+                                                            <Checkbox
+                                                                id={`course-1-${groupName}-${course.id}`}
+                                                                checked={selectedCourses1[groupName]?.includes(course.id) || false}
+                                                                onCheckedChange={() => handleCourseToggle(groupName, course.id, 1)}
+                                                            />
+                                                            <Label
+                                                                htmlFor={`course-1-${groupName}-${course.id}`}
+                                                                className="text-sm font-normal cursor-pointer"
+                                                            >
+                                                                {course.name || `코스 ${course.id}`}
+                                                            </Label>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </TabsContent>
+                                        ))}
+                                    </Tabs>
                                 </div>
                                 <div className="space-y-2">
                                     <Button
                                         onClick={(e) => handleButtonClick('referee', 1, e)}
-                                        disabled={simulationState.isRunning || selectedCourses1.length === 0 || !isCardExpanded}
+                                        disabled={simulationState.isRunning || Object.keys(selectedCourses1).length === 0 || !isCardExpanded}
                                         className="w-full"
                                         variant="outline"
                                         type="button"
@@ -964,7 +986,7 @@ export default function AutoScoreSimulation() {
                                     </Button>
                                     <Button
                                         onClick={(e) => handleButtonClick('captain', 1, e)}
-                                        disabled={simulationState.isRunning || selectedCourses1.length === 0 || !isCardExpanded}
+                                        disabled={simulationState.isRunning || Object.keys(selectedCourses1).length === 0 || !isCardExpanded}
                                         className="w-full"
                                         variant="outline"
                                         type="button"
@@ -973,7 +995,7 @@ export default function AutoScoreSimulation() {
                                     </Button>
                                     <Button
                                         onClick={(e) => handleButtonClick('batch', 1, e)}
-                                        disabled={simulationState.isRunning || selectedCourses1.length === 0 || !isCardExpanded}
+                                        disabled={simulationState.isRunning || Object.keys(selectedCourses1).length === 0 || !isCardExpanded}
                                         className="w-full"
                                         variant="outline"
                                         type="button"
@@ -985,39 +1007,70 @@ export default function AutoScoreSimulation() {
 
                             {/* 2차 */}
                             <div className="space-y-3">
-                                <h3 className="font-semibold text-lg">2차</h3>
-                                <div className="space-y-2 border rounded-lg p-3">
-                                    <Label className="text-sm font-medium">코스 선택</Label>
-                                    <div className="grid grid-cols-2 gap-2">
-                                        {courses.map((course) => (
-                                            <div key={course.id} className="flex items-center space-x-2">
-                                                <Checkbox
-                                                    id={`course-2-${course.id}`}
-                                                    checked={selectedCourses2.includes(course.id)}
-                                                    onCheckedChange={() => handleCourseToggle(course.id, 2)}
-                                                />
-                                                <Label
-                                                    htmlFor={`course-2-${course.id}`}
-                                                    className="text-sm font-normal cursor-pointer"
-                                                >
-                                                    {course.name || `코스 ${course.id}`}
-                                                </Label>
-                                            </div>
-                                        ))}
+                                <div className="flex items-center justify-between">
+                                    <h3 className="font-semibold text-lg">2차</h3>
+                                    <div className="flex gap-1">
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="h-7 text-[10px]"
+                                            onClick={() => handleApplyToAllGroups(2, courses.map(c => c.id))}
+                                        >전체 선택</Button>
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="h-7 text-[10px] text-red-500"
+                                            onClick={() => handleApplyToAllGroups(2, [])}
+                                        >전체 해제</Button>
                                     </div>
-                                    {selectedCourses2.length === 0 && (
-                                        <p className="text-xs text-muted-foreground">코스를 선택해주세요.</p>
-                                    )}
-                                    {selectedCourses2.length > 0 && (
-                                        <p className="text-xs text-muted-foreground">
-                                            선택된 코스: {courses.filter(c => selectedCourses2.includes(c.id)).map(c => c.name).join(', ')}
-                                        </p>
-                                    )}
+                                </div>
+                                <div className="border rounded-lg p-1 bg-muted/30">
+                                    <Tabs defaultValue={Object.keys(groupsData)[0]} className="w-full">
+                                        <ScrollArea className="w-full whitespace-nowrap border-b">
+                                            <TabsList className="w-full justify-start h-9 bg-transparent p-0">
+                                                {Object.keys(groupsData).map(groupName => (
+                                                    <TabsTrigger
+                                                        key={groupName}
+                                                        value={groupName}
+                                                        className="data-[state=active]:bg-background data-[state=active]:shadow-none rounded-none border-b-2 border-transparent data-[state=active]:border-primary h-9 px-3 text-xs"
+                                                    >
+                                                        {groupName}
+                                                        {selectedCourses2[groupName]?.length > 0 && (
+                                                            <span className="ml-1 px-1.5 py-0.5 bg-primary text-primary-foreground rounded-full text-[8px]">
+                                                                {selectedCourses2[groupName].length}
+                                                            </span>
+                                                        )}
+                                                    </TabsTrigger>
+                                                ))}
+                                            </TabsList>
+                                        </ScrollArea>
+                                        {Object.keys(groupsData).map(groupName => (
+                                            <TabsContent key={groupName} value={groupName} className="p-3 mt-0 space-y-3">
+                                                <div className="grid grid-cols-2 gap-2">
+                                                    {courses.map((course) => (
+                                                        <div key={course.id} className="flex items-center space-x-2">
+                                                            <Checkbox
+                                                                id={`course-2-${groupName}-${course.id}`}
+                                                                checked={selectedCourses2[groupName]?.includes(course.id) || false}
+                                                                onCheckedChange={() => handleCourseToggle(groupName, course.id, 2)}
+                                                            />
+                                                            <Label
+                                                                htmlFor={`course-2-${groupName}-${course.id}`}
+                                                                className="text-sm font-normal cursor-pointer"
+                                                            >
+                                                                {course.name || `코스 ${course.id}`}
+                                                            </Label>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </TabsContent>
+                                        ))}
+                                    </Tabs>
                                 </div>
                                 <div className="space-y-2">
                                     <Button
                                         onClick={(e) => handleButtonClick('referee', 2, e)}
-                                        disabled={simulationState.isRunning || selectedCourses2.length === 0 || !isCardExpanded}
+                                        disabled={simulationState.isRunning || Object.keys(selectedCourses2).length === 0 || !isCardExpanded}
                                         className="w-full"
                                         variant="outline"
                                         type="button"
@@ -1026,7 +1079,7 @@ export default function AutoScoreSimulation() {
                                     </Button>
                                     <Button
                                         onClick={(e) => handleButtonClick('captain', 2, e)}
-                                        disabled={simulationState.isRunning || selectedCourses2.length === 0 || !isCardExpanded}
+                                        disabled={simulationState.isRunning || Object.keys(selectedCourses2).length === 0 || !isCardExpanded}
                                         className="w-full"
                                         variant="outline"
                                         type="button"
@@ -1035,7 +1088,7 @@ export default function AutoScoreSimulation() {
                                     </Button>
                                     <Button
                                         onClick={(e) => handleButtonClick('batch', 2, e)}
-                                        disabled={simulationState.isRunning || selectedCourses2.length === 0 || !isCardExpanded}
+                                        disabled={simulationState.isRunning || Object.keys(selectedCourses2).length === 0 || !isCardExpanded}
                                         className="w-full"
                                         variant="outline"
                                         type="button"
