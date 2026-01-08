@@ -500,15 +500,19 @@ export default function AdminDashboard() {
                 // 코스 순서 정보 가져오기 (기존 호환성: boolean → number 변환)
                 const coursesOrder = playerGroupData?.courses || {};
                 const assignedCourseIds = Object.keys(coursesOrder).filter((cid: string) => {
-                    const order = coursesOrder[cid];
+                    const raw = coursesOrder[cid];
+                    if (typeof raw === 'object' && raw !== null) return raw.order > 0;
                     // boolean이면 true인 것만, number면 0보다 큰 것만
-                    return typeof order === 'boolean' ? order : (typeof order === 'number' && order > 0);
+                    return typeof raw === 'boolean' ? raw : (typeof raw === 'number' && raw > 0);
                 });
                 // courses 객체에서 해당 id만 찾아 배열로 만듦 (id 타입 일치 보장)
                 const coursesForPlayer = assignedCourseIds
                     .map(cid => {
-                        const key = Object.keys(courses).find(k => String(k) === String(cid));
-                        return key ? courses[key] : undefined;
+                        // courses가 배열인 경우와 객체인 경우 모두 대응
+                        if (Array.isArray(courses)) {
+                            return courses.find((c: any) => String(c?.id) === String(cid));
+                        }
+                        return courses[cid];
                     })
                     .filter(Boolean);
                 // 코스 순서대로 정렬 (order가 큰 것이 마지막 = 백카운트 기준)
@@ -518,7 +522,9 @@ export default function AdminDashboard() {
 
                     // 그룹의 courses에서 순서 가져오기, 없으면 코스의 order 사용
                     let numA: number;
-                    if (typeof orderA === 'boolean') {
+                    if (typeof orderA === 'object' && orderA !== null) {
+                        numA = orderA.order || 0;
+                    } else if (typeof orderA === 'boolean') {
                         numA = orderA ? (a.order || 0) : 0;
                     } else if (typeof orderA === 'number' && orderA > 0) {
                         numA = orderA;
@@ -527,7 +533,9 @@ export default function AdminDashboard() {
                     }
 
                     let numB: number;
-                    if (typeof orderB === 'boolean') {
+                    if (typeof orderB === 'object' && orderB !== null) {
+                        numB = orderB.order || 0;
+                    } else if (typeof orderB === 'boolean') {
                         numB = orderB ? (b.order || 0) : 0;
                     } else if (typeof orderB === 'number' && orderB > 0) {
                         numB = orderB;
@@ -639,7 +647,9 @@ export default function AdminDashboard() {
 
                     // 그룹의 courses에서 순서 가져오기, 없으면 코스의 order 사용
                     let numA: number;
-                    if (typeof orderA === 'boolean') {
+                    if (typeof orderA === 'object' && orderA !== null) {
+                        numA = orderA.order || 0;
+                    } else if (typeof orderA === 'boolean') {
                         numA = orderA ? (a.order || 0) : 0;
                     } else if (typeof orderA === 'number' && orderA > 0) {
                         numA = orderA;
@@ -648,7 +658,9 @@ export default function AdminDashboard() {
                     }
 
                     let numB: number;
-                    if (typeof orderB === 'boolean') {
+                    if (typeof orderB === 'object' && orderB !== null) {
+                        numB = orderB.order || 0;
+                    } else if (typeof orderB === 'boolean') {
                         numB = orderB ? (b.order || 0) : 0;
                     } else if (typeof orderB === 'number' && orderB > 0) {
                         numB = orderB;
@@ -802,8 +814,25 @@ export default function AdminDashboard() {
                     const coursesForGroup = [...allCoursesForGroup].sort((a: any, b: any) => {
                         const orderA = coursesOrder[String(a.id)];
                         const orderB = coursesOrder[String(b.id)];
-                        let numA = typeof orderA === 'number' ? orderA : (orderA ? (a.order || 0) : 0);
-                        let numB = typeof orderB === 'number' ? orderB : (orderB ? (b.order || 0) : 0);
+
+                        let numA: number;
+                        if (typeof orderA === 'object' && orderA !== null) {
+                            numA = orderA.order || 0;
+                        } else if (typeof orderA === 'number') {
+                            numA = orderA;
+                        } else {
+                            numA = orderA ? (a.order || 0) : 0;
+                        }
+
+                        let numB: number;
+                        if (typeof orderB === 'object' && orderB !== null) {
+                            numB = orderB.order || 0;
+                        } else if (typeof orderB === 'number') {
+                            numB = orderB;
+                        } else {
+                            numB = orderB ? (b.order || 0) : 0;
+                        }
+
                         return numA - numB;
                     });
                     const sortedCoursesForBackcount = [...coursesForGroup].reverse();

@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Upload, Download, UserPlus, Trash2, Edit, AlertTriangle, RotateCcw, Users, PlusCircle, X, Save, Settings, Check, Columns, Search, FileDown } from "lucide-react";
+import { Upload, Download, UserPlus, Trash2, Edit, AlertTriangle, RotateCcw, Users, PlusCircle, X, Save, Settings, Check, Columns, Search, FileDown, Eye, EyeOff } from "lucide-react";
 import {
     Select,
     SelectContent,
@@ -17,6 +17,8 @@ import {
 } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { db, ensureAuthenticated } from "@/lib/firebase";
 import { ref, onValue, push, remove, update, set, get } from "firebase/database";
@@ -193,7 +195,7 @@ export default function PlayerManagementPage() {
     // Course assignment modal states
     const [isGroupCourseModalOpen, setGroupCourseModalOpen] = useState(false);
     const [currentEditingGroup, setCurrentEditingGroup] = useState<any>(null);
-    const [assignedCourses, setAssignedCourses] = useState<{ [key: string]: number }>({}); // 0 = 선택 안함, 1 = 첫번째, 2 = 두번째, ...
+    const [assignedCourses, setAssignedCourses] = useState<{ [key: string]: { order: number; scoreboardActive: boolean } }>({}); // Structure: { courseId: { order, scoreboardActive } }
 
 
     // Editing states
@@ -1621,74 +1623,64 @@ export default function PlayerManagementPage() {
     const handleOpenCourseModal = (group: any) => {
         setCurrentEditingGroup(group);
         const existingCourses = group.courses || {};
-        const convertedCourses: { [key: string]: number } = {};
+        const convertedCourses: { [key: string]: { order: number; scoreboardActive: boolean } } = {};
 
-        // 기존 설정이 있는 코스와 없는 코스를 구분
-        const coursesWithExistingOrder: Array<{ courseId: string, order: number }> = [];
-        const coursesWithoutOrder: Array<{ courseId: string, courseOrder: number }> = [];
-
-        // 모든 코스를 확인
+        // 모든 코스를 확인하여 초기값 설정
         courses.forEach(course => {
             const courseIdStr = String(course.id);
-            const existingOrder = existingCourses[courseIdStr];
+            const rawValue = existingCourses[courseIdStr];
 
-            // 기존 설정이 있고 number 타입이고 0보다 큰 경우
-            if (typeof existingOrder === 'number' && existingOrder > 0) {
-                coursesWithExistingOrder.push({ courseId: courseIdStr, order: existingOrder });
+            let order = 0;
+            let scoreboardActive = true;
+
+            if (typeof rawValue === 'object' && rawValue !== null) {
+                // 새로운 객체 구조인 경우
+                order = rawValue.order || 0;
+                scoreboardActive = rawValue.scoreboardActive !== false;
+            } else if (typeof rawValue === 'number') {
+                // 기존 숫자 타입인 경우
+                order = rawValue;
+                scoreboardActive = true;
+            } else if (typeof rawValue === 'boolean') {
+                // 아주 오래된 불리언 타입인 경우
+                order = rawValue ? (course.order || course.id || 0) : 0;
+                scoreboardActive = true;
             } else {
-                // 기존 설정이 없거나 boolean true인 경우 → 코스의 order 값을 기본값으로 사용
-                // 코스의 order가 없으면 코스 ID를 기준으로 순서 할당 (대회 및 코스 관리에서 생성된 순서)
-                let courseOrder = course.order;
-                if (!courseOrder || courseOrder <= 0) {
-                    // 코스의 order가 없으면 코스 ID를 기준으로 순서 할당
-                    // 코스 ID가 1, 2, 3, 4... 순서대로 생성되었다고 가정
-                    courseOrder = course.id || 0;
-                }
-                if (courseOrder > 0) {
-                    coursesWithoutOrder.push({ courseId: courseIdStr, courseOrder });
-                } else {
-                    // 코스의 order도 없으면 0 (선택 안함)
-                    convertedCourses[courseIdStr] = 0;
-                }
+                // 설정이 없는 경우 (신규 그룹 또는 신규 코스)
+                // 코스의 order를 기본값으로 제안 (사용자가 수정 가능)
+                order = course.order || course.id || 0;
+                scoreboardActive = true;
             }
+
+            convertedCourses[courseIdStr] = { order, scoreboardActive };
         });
 
-        // 기존 설정이 있는 코스는 기존 순서대로 정렬
-        coursesWithExistingOrder.sort((a, b) => a.order - b.order);
-
-        // 기존 설정이 없는 코스는 코스의 order 기준으로 정렬
-        coursesWithoutOrder.sort((a, b) => a.courseOrder - b.courseOrder);
-
-        // 기존 설정이 있는 코스의 순서를 먼저 할당
+        // 사용 중인 순서(order) 중복 체크 및 재할당 (기존 로직 유지)
         const usedOrders = new Set<number>();
-        coursesWithExistingOrder.forEach((item) => {
-            if (usedOrders.has(item.order)) {
-                // 중복 발견: 다음 사용 가능한 순서로 재할당
-                let nextOrder = item.order;
-                while (usedOrders.has(nextOrder)) {
-                    nextOrder++;
+        const courseIds = Object.keys(convertedCourses).sort((a, b) => {
+            // order가 있는 것 우선, 그 다음 id 순
+            const orderA = convertedCourses[a].order;
+            const orderB = convertedCourses[b].order;
+            if (orderA !== orderB) return (orderA || 999) - (orderB || 999);
+            return parseInt(a) - parseInt(b);
+        });
+
+        const finalCourses: { [key: string]: { order: number; scoreboardActive: boolean } } = {};
+        courseIds.forEach(cid => {
+            let currentData = convertedCourses[cid];
+            if (currentData.order > 0) {
+                let targetOrder = currentData.order;
+                while (usedOrders.has(targetOrder)) {
+                    targetOrder++;
                 }
-                convertedCourses[item.courseId] = nextOrder;
-                usedOrders.add(nextOrder);
+                usedOrders.add(targetOrder);
+                finalCourses[cid] = { ...currentData, order: targetOrder };
             } else {
-                convertedCourses[item.courseId] = item.order;
-                usedOrders.add(item.order);
+                finalCourses[cid] = currentData;
             }
         });
 
-        // 기존 설정이 없는 코스는 코스의 order를 기준으로 순차적으로 할당
-        // 단, 기존 설정과 겹치지 않도록 다음 사용 가능한 순서로 할당
-        coursesWithoutOrder.forEach((item) => {
-            // 코스의 order를 기준으로 시작하되, 이미 사용된 순서는 건너뛰기
-            let targetOrder = item.courseOrder;
-            while (usedOrders.has(targetOrder)) {
-                targetOrder++;
-            }
-            convertedCourses[item.courseId] = targetOrder;
-            usedOrders.add(targetOrder);
-        });
-
-        setAssignedCourses(convertedCourses);
+        setAssignedCourses(finalCourses);
         setGroupCourseModalOpen(true);
     };
 
@@ -2857,25 +2849,44 @@ export default function PlayerManagementPage() {
                                                         <TableCell className="text-muted-foreground text-xs">
                                                             {group.courses ?
                                                                 (() => {
-                                                                    // 코스 순서 정보 가져오기 (기존 호환성: boolean → number 변환)
                                                                     const coursesOrder = group.courses || {};
                                                                     const assignedCourseIds = Object.keys(coursesOrder).filter((cid: string) => {
-                                                                        const order = coursesOrder[cid];
-                                                                        return typeof order === 'boolean' ? order : (typeof order === 'number' && order > 0);
+                                                                        const raw = coursesOrder[cid];
+                                                                        return typeof raw === 'object' ? (raw.order > 0) : (typeof raw === 'number' ? raw > 0 : !!raw);
                                                                     });
-                                                                    // 코스 순서대로 정렬
-                                                                    const sortedCourses = assignedCourseIds
+
+                                                                    const sortedItems = assignedCourseIds
                                                                         .map(cid => {
                                                                             const course = courses.find(c => c.id.toString() === cid);
-                                                                            const order = coursesOrder[cid];
-                                                                            const numOrder = typeof order === 'boolean' ? (order ? 1 : 0) : (typeof order === 'number' ? order : 0);
-                                                                            return { course, order: numOrder };
+                                                                            const raw = coursesOrder[cid];
+                                                                            let order = 0;
+                                                                            let isVisible = true;
+                                                                            if (typeof raw === 'object') {
+                                                                                order = raw.order;
+                                                                                isVisible = raw.scoreboardActive !== false;
+                                                                            } else {
+                                                                                order = typeof raw === 'number' ? raw : 1;
+                                                                                isVisible = true;
+                                                                            }
+                                                                            return { course, order, isVisible };
                                                                         })
                                                                         .filter(item => item.course)
-                                                                        .sort((a, b) => a.order - b.order)
-                                                                        .map(item => item.course?.name)
-                                                                        .filter(Boolean);
-                                                                    return sortedCourses.length > 0 ? sortedCourses.join(', ') : '없음';
+                                                                        .sort((a, b) => a.order - b.order);
+
+                                                                    return sortedItems.length > 0 ? (
+                                                                        <div className="flex flex-wrap gap-1">
+                                                                            {sortedItems.map((item, idx) => (
+                                                                                <div key={idx} className="flex items-center gap-1 bg-slate-100 px-2 py-0.5 rounded border">
+                                                                                    <span>{item.course?.name}</span>
+                                                                                    {item.isVisible ? (
+                                                                                        <Eye className="h-3 w-3 text-blue-500" />
+                                                                                    ) : (
+                                                                                        <EyeOff className="h-3 w-3 text-red-400" />
+                                                                                    )}
+                                                                                </div>
+                                                                            ))}
+                                                                        </div>
+                                                                    ) : '없음';
                                                                 })()
                                                                 : '없음'
                                                             }
@@ -3186,25 +3197,44 @@ export default function PlayerManagementPage() {
                                                         <TableCell className="text-muted-foreground text-xs">
                                                             {group.courses ?
                                                                 (() => {
-                                                                    // 코스 순서 정보 가져오기 (기존 호환성: boolean → number 변환)
                                                                     const coursesOrder = group.courses || {};
                                                                     const assignedCourseIds = Object.keys(coursesOrder).filter((cid: string) => {
-                                                                        const order = coursesOrder[cid];
-                                                                        return typeof order === 'boolean' ? order : (typeof order === 'number' && order > 0);
+                                                                        const raw = coursesOrder[cid];
+                                                                        return typeof raw === 'object' ? (raw.order > 0) : (typeof raw === 'number' ? raw > 0 : !!raw);
                                                                     });
-                                                                    // 코스 순서대로 정렬
-                                                                    const sortedCourses = assignedCourseIds
+
+                                                                    const sortedItems = assignedCourseIds
                                                                         .map(cid => {
                                                                             const course = courses.find(c => c.id.toString() === cid);
-                                                                            const order = coursesOrder[cid];
-                                                                            const numOrder = typeof order === 'boolean' ? (order ? 1 : 0) : (typeof order === 'number' ? order : 0);
-                                                                            return { course, order: numOrder };
+                                                                            const raw = coursesOrder[cid];
+                                                                            let order = 0;
+                                                                            let isVisible = true;
+                                                                            if (typeof raw === 'object') {
+                                                                                order = raw.order;
+                                                                                isVisible = raw.scoreboardActive !== false;
+                                                                            } else {
+                                                                                order = typeof raw === 'number' ? raw : 1;
+                                                                                isVisible = true;
+                                                                            }
+                                                                            return { course, order, isVisible };
                                                                         })
                                                                         .filter(item => item.course)
-                                                                        .sort((a, b) => a.order - b.order)
-                                                                        .map(item => item.course?.name)
-                                                                        .filter(Boolean);
-                                                                    return sortedCourses.length > 0 ? sortedCourses.join(', ') : '없음';
+                                                                        .sort((a, b) => a.order - b.order);
+
+                                                                    return sortedItems.length > 0 ? (
+                                                                        <div className="flex flex-wrap gap-1">
+                                                                            {sortedItems.map((item, idx) => (
+                                                                                <div key={idx} className="flex items-center gap-1 bg-slate-100 px-2 py-0.5 rounded border">
+                                                                                    <span>{item.course?.name}</span>
+                                                                                    {item.isVisible ? (
+                                                                                        <Eye className="h-3 w-3 text-blue-500" />
+                                                                                    ) : (
+                                                                                        <EyeOff className="h-3 w-3 text-red-400" />
+                                                                                    )}
+                                                                                </div>
+                                                                            ))}
+                                                                        </div>
+                                                                    ) : '없음';
                                                                 })()
                                                                 : '없음'
                                                             }
@@ -3482,58 +3512,80 @@ export default function PlayerManagementPage() {
                     <div className="py-4 space-y-4">
                         {courses.length > 0 ? courses.map(course => {
                             const courseIdStr = String(course.id);
-                            const currentOrder = assignedCourses[courseIdStr] || 0;
+                            const currentData = assignedCourses[courseIdStr] || { order: 0, scoreboardActive: true };
+                            const currentOrder = currentData.order;
+                            const isScoreboardActive = currentData.scoreboardActive;
+
                             // 코스 수만큼 순서 선택 옵션 제공 (최대 코스 수만큼)
                             const maxAvailableOrder = courses.length;
                             const availableOrders = Array.from({ length: maxAvailableOrder }, (_, i) => i + 1);
 
                             return (
-                                <div key={course.id} className="flex items-center justify-between space-x-3">
-                                    <div className="flex items-center gap-2 flex-1">
-                                        <Label htmlFor={`course-${course.id}`} className="text-base font-medium">
-                                            {course.name}
-                                        </Label>
-                                        {currentOrder > 0 && (
-                                            <Check className="h-4 w-4 text-primary" />
-                                        )}
+                                <div key={course.id} className="p-4 border rounded-lg bg-slate-50/50 space-y-3">
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                            <Label htmlFor={`course-${course.id}`} className="text-base font-bold text-slate-700">
+                                                {course.name}
+                                            </Label>
+                                            {currentOrder > 0 && (
+                                                <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">배정됨</Badge>
+                                            )}
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <Label htmlFor={`scoreboard-${course.id}`} className="text-xs text-muted-foreground">전광판 표시</Label>
+                                            <Switch
+                                                id={`scoreboard-${course.id}`}
+                                                checked={isScoreboardActive}
+                                                onCheckedChange={(checked) => {
+                                                    setAssignedCourses(prev => ({
+                                                        ...prev,
+                                                        [courseIdStr]: { ...prev[courseIdStr], scoreboardActive: checked }
+                                                    }));
+                                                }}
+                                            />
+                                        </div>
                                     </div>
-                                    <Select
-                                        value={currentOrder.toString()}
-                                        onValueChange={(value) => {
-                                            const newOrder = parseInt(value, 10);
-                                            setAssignedCourses(prev => {
-                                                const updated = { ...prev };
 
-                                                // 같은 순서를 가진 다른 코스가 있으면 0으로 변경
-                                                Object.keys(updated).forEach(cid => {
-                                                    if (cid !== courseIdStr && updated[cid] === newOrder) {
-                                                        updated[cid] = 0;
-                                                    }
+                                    <div className="flex items-center gap-3">
+                                        <Label className="text-sm shrink-0">경기 순서:</Label>
+                                        <Select
+                                            value={currentOrder.toString()}
+                                            onValueChange={(value) => {
+                                                const newOrder = parseInt(value, 10);
+                                                setAssignedCourses(prev => {
+                                                    const updated = { ...prev };
+
+                                                    // 같은 순서를 가진 다른 코스가 있으면 0으로 변경
+                                                    Object.keys(updated).forEach(cid => {
+                                                        if (cid !== courseIdStr && updated[cid].order === newOrder && newOrder !== 0) {
+                                                            updated[cid] = { ...updated[cid], order: 0 };
+                                                        }
+                                                    });
+
+                                                    updated[courseIdStr] = { ...updated[courseIdStr], order: newOrder };
+                                                    return updated;
                                                 });
-
-                                                updated[courseIdStr] = newOrder;
-                                                return updated;
-                                            });
-                                        }}
-                                    >
-                                        <SelectTrigger className="w-[180px]">
-                                            <SelectValue placeholder="순서 선택" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="0">선택 안함</SelectItem>
-                                            {availableOrders.map(order => {
-                                                const isSelected = currentOrder === order;
-                                                return (
-                                                    <SelectItem key={order} value={order.toString()}>
-                                                        <div className="flex items-center gap-2">
-                                                            {isSelected && <Check className="h-4 w-4 text-primary" />}
-                                                            <span>{order === 1 ? '첫번째 코스' : order === 2 ? '두번째 코스' : order === 3 ? '세번째 코스' : `${order}번째 코스`}</span>
-                                                        </div>
-                                                    </SelectItem>
-                                                );
-                                            })}
-                                        </SelectContent>
-                                    </Select>
+                                            }}
+                                        >
+                                            <SelectTrigger className="w-full bg-white">
+                                                <SelectValue placeholder="순서 선택" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="0">배정 안함</SelectItem>
+                                                {availableOrders.map(order => {
+                                                    const isSelected = currentOrder === order;
+                                                    return (
+                                                        <SelectItem key={order} value={order.toString()}>
+                                                            <div className="flex items-center gap-2">
+                                                                {isSelected && <Check className="h-4 w-4 text-primary" />}
+                                                                <span>{order === 1 ? '첫번째' : order === 2 ? '두번째' : order === 3 ? '세번째' : `${order}번째`} 코스</span>
+                                                            </div>
+                                                        </SelectItem>
+                                                    );
+                                                })}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
                                 </div>
                             );
                         }) : (

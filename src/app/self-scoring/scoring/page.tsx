@@ -374,7 +374,7 @@ export default function SelfScoringPage() {
       const list: PlayerDb[] = Object.entries<any>(data)
         .map(([id, v]) => ({ id, ...v }))
         .filter((p) => String(p.jo) === String(selectedJo)); // 그룹은 이미 쿼리로 필터링됨
-      
+
       // 수기 채점표와 동일한 순서로 정렬 (uploadOrder 우선 → 이름 순)
       list.sort((a, b) => {
         // uploadOrder가 있으면 그것으로 정렬
@@ -386,7 +386,7 @@ export default function SelfScoringPage() {
         const nameB = b.type === 'team' ? `${b.p1_name}/${b.p2_name}` : (b.name || '');
         return nameA.localeCompare(nameB);
       });
-      
+
       setPlayersInGroupJo(list as any);
 
       // 관전 모드에서는 플레이어 이름을 실시간으로 설정
@@ -439,7 +439,7 @@ export default function SelfScoringPage() {
 
           const newPlayerNames = filledNames.slice(0, 4);
           setPlayerNames(newPlayerNames);
-          
+
           // sessionStorage 업데이트
           try {
             if (typeof window !== 'undefined') {
@@ -448,12 +448,12 @@ export default function SelfScoringPage() {
           } catch (error) {
             console.error('sessionStorage 업데이트 실패:', error);
           }
-          
+
           // signatures 배열도 동일한 순서로 재정렬
           // 기존 signatures를 playerId 기반으로 매핑한 후 재정렬
           const currentSignatures = [...signatures];
           const reorderedSignatures: string[] = [];
-          
+
           list.forEach((p, idx) => {
             if (p.type === 'team') {
               // 팀전: 각 선수별로 서명 처리
@@ -472,12 +472,12 @@ export default function SelfScoringPage() {
               }
             }
           });
-          
+
           // 항상 4개로 채우기
           while (reorderedSignatures.length < 4) {
             reorderedSignatures.push('');
           }
-          
+
           setSignatures(reorderedSignatures.slice(0, 4));
         }
       }
@@ -591,17 +591,21 @@ export default function SelfScoringPage() {
       // 그룹에 배정된 코스 id 목록 및 순서 정보 가져오기
       const group = groupsObj[selectedGroup] || {};
       const coursesOrder = group.courses || {};
-      
+
       // 그룹에 배정된 코스 목록 (number 타입이고 0보다 큰 값만, 또는 boolean true)
       const assignedCourses: Array<{ cid: string; order: number }> = Object.entries(coursesOrder)
-        .map(([cid, order]: [string, any]) => {
-          // number 타입이고 0보다 큰 경우만
-          if (typeof order === 'number' && order > 0) {
-            return { cid, order };
+        .map(([cid, raw]: [string, any]) => {
+          // New object structure
+          if (typeof raw === 'object' && raw !== null) {
+            if (raw.order > 0) return { cid, order: raw.order };
           }
-          // boolean true인 경우 (레거시 호환성)
-          if (order === true) {
-            return { cid, order: 1 }; // 기본값으로 1 설정
+          // Legacy number format
+          if (typeof raw === 'number' && raw > 0) {
+            return { cid, order: raw };
+          }
+          // Legacy boolean true format
+          if (raw === true) {
+            return { cid, order: 1 };
           }
           return null;
         })
@@ -618,7 +622,7 @@ export default function SelfScoringPage() {
           const key = courseKeys.find((k) => String(k) === String(cid));
           const course = key ? coursesObj[key] : null;
           if (!course) return null;
-          
+
           // 코스의 원본 순서 정보 저장 (색상 테마용)
           // 1. course.order 필드가 있으면 그것을 사용
           // 2. 없으면 courses 객체의 키 순서를 사용 (대회 및 코스 관리에서 설정된 순서)
@@ -630,7 +634,7 @@ export default function SelfScoringPage() {
             const courseIndex = courseKeys.findIndex(k => String(k) === String(cid));
             originalOrder = courseIndex >= 0 ? courseIndex + 1 : 999;
           }
-          
+
           return {
             id: String(course.id ?? cid),
             name: String(course.name ?? cid),
@@ -643,12 +647,12 @@ export default function SelfScoringPage() {
       if (nextTabs.length > 0) {
         const prevTabsLength = courseTabs.length;
         setCourseTabs(nextTabs);
-        
+
         // 코스 탭이 처음 로드되거나 완전히 바뀐 경우 (그룹 변경 등)
         // 또는 현재 활성 코스가 목록에 없는 경우 첫 번째 탭 선택
         const isInitialLoad = prevTabsLength === 0;
         const exists = nextTabs.some((t) => String(t.id) === String(activeCourseId));
-        
+
         if (isInitialLoad || !exists || !activeCourseId) {
           // 처음 로드이거나 현재 활성 코스가 목록에 없으면 첫 번째 탭 선택
           setActiveCourseId(String(nextTabs[0].id));
@@ -1277,12 +1281,12 @@ export default function SelfScoringPage() {
   const themeClass = useMemo(() => {
     const activeCourse = courseTabs.find((c) => String(c.id) === String(activeCourseId));
     if (!activeCourse) return 'theme-red';
-    
+
     // 코스 이름에서 A, B, C, D 등을 추출
     const courseName = activeCourse.name || '';
     // 알파벳 대문자 찾기 (A-Z)
     const alphabetMatch = courseName.match(/[A-Z]/);
-    
+
     if (alphabetMatch) {
       // 알파벳을 숫자로 변환 (A=0, B=1, C=2, D=3, E=4, F=5...)
       const alphabetIndex = alphabetMatch[0].charCodeAt(0) - 'A'.charCodeAt(0);
@@ -2401,7 +2405,7 @@ export default function SelfScoringPage() {
                   // window.close()는 JavaScript에서 직접 열린 창만 닫을 수 있음
                   // 모바일 브라우저에서도 새 창으로 열린 경우 일반적으로 작동함
                   window.close();
-                  
+
                   // 창이 닫히지 않을 수 있는 경우를 대비해 fallback 로직
                   // (예: 직접 URL로 접근한 경우, 브라우저 보안 정책으로 인해 닫히지 않는 경우)
                   setTimeout(() => {

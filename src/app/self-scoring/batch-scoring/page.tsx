@@ -642,14 +642,18 @@ export default function BatchScoringPage() {
 
       // 그룹에 배정된 코스 목록 (number 타입이고 0보다 큰 값만, 또는 boolean true)
       const assignedCourses: Array<{ cid: string; order: number }> = Object.entries(coursesOrder)
-        .map(([cid, order]: [string, any]) => {
-          // number 타입이고 0보다 큰 경우만
-          if (typeof order === 'number' && order > 0) {
-            return { cid, order };
+        .map(([cid, raw]: [string, any]) => {
+          // New object structure
+          if (typeof raw === 'object' && raw !== null) {
+            if (raw.order > 0) return { cid, order: raw.order };
           }
-          // boolean true인 경우 (레거시 호환성)
-          if (order === true) {
-            return { cid, order: 1 }; // 기본값으로 1 설정
+          // Legacy number format
+          if (typeof raw === 'number' && raw > 0) {
+            return { cid, order: raw };
+          }
+          // Legacy boolean true format
+          if (raw === true) {
+            return { cid, order: 1 };
           }
           return null;
         })

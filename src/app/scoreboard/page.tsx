@@ -440,8 +440,16 @@ const ScoreboardTable = React.memo(({
         if (!groupPlayers || groupPlayers.length === 0) return { courseName: null, progress: null };
         const playerGroupData = tournament?.groups?.[groupName];
         const allCourses = Object.values(tournament?.courses || {}).filter(Boolean);
-        const assignedCourseIds = playerGroupData?.courses ? Object.keys(playerGroupData.courses).filter((id: string) => playerGroupData.courses[id]) : [];
-        const coursesForGroup = allCourses.filter((c: any) => assignedCourseIds.includes(c.id.toString()) && c.isActive !== false);
+        const assignedCourseIds = playerGroupData?.courses ? Object.keys(playerGroupData.courses).filter((id: string) => {
+            const raw = playerGroupData.courses[id];
+            return typeof raw === 'object' ? (raw.order > 0) : (!!raw);
+        }) : [];
+        const coursesForGroup = allCourses.filter((c: any) => {
+            if (!assignedCourseIds.includes(c.id.toString()) || c.isActive === false) return false;
+            const raw = playerGroupData.courses[c.id.toString()];
+            if (typeof raw === 'object') return raw.scoreboardActive !== false;
+            return true;
+        });
         if (!coursesForGroup || coursesForGroup.length === 0) return { courseName: null, progress: null };
 
         let currentCourse: any = null;
@@ -1633,12 +1641,12 @@ function ExternalScoreboard() {
 
         const allProcessedPlayers: any[] = playersToProcess.map(([playerId, player]: [string, any]) => {
             const playerGroupData = groupsData[player.group];
-            // 코스 순서 정보 가져오기 (기존 호환성: boolean → number 변환)
+            // 코스 순서 정보 가져오기 (기존 호환성: boolean/number → object 변환)
             const coursesOrder = playerGroupData?.courses || {};
             const assignedCourseIds = Object.keys(coursesOrder).filter((id: string) => {
-                const order = coursesOrder[id];
-                // boolean이면 true인 것만, number면 0보다 큰 것만
-                return typeof order === 'boolean' ? order : (typeof order === 'number' && order > 0);
+                const raw = coursesOrder[id];
+                if (typeof raw === 'object') return raw.order > 0;
+                return typeof raw === 'boolean' ? raw : (typeof raw === 'number' && raw > 0);
             });
 
             const allAssignedCoursesForPlayer = allCourses.filter((c: any) => assignedCourseIds.includes(c.id.toString()));
@@ -1669,7 +1677,12 @@ function ExternalScoreboard() {
                 return numA - numB; // 작은 순서가 먼저 (첫번째 코스가 위)
             });
 
-            const activeCoursesForPlayer = allAssignedCoursesForPlayer.filter((c: any) => c.isActive !== false);
+            const activeCoursesForPlayer = allAssignedCoursesForPlayer.filter((c: any) => {
+                if (c.isActive === false) return false;
+                const raw = coursesOrder[c.id.toString()];
+                if (typeof raw === 'object') return raw.scoreboardActive !== false;
+                return true;
+            });
 
             const playerScoresData = (scores as any)[playerId] || {};
 
@@ -1799,7 +1812,9 @@ function ExternalScoreboard() {
 
                 // 그룹의 courses에서 순서 가져오기, 없으면 코스의 order 사용
                 let numA: number;
-                if (typeof orderA === 'boolean') {
+                if (typeof orderA === 'object') {
+                    numA = orderA.order || 0;
+                } else if (typeof orderA === 'boolean') {
                     numA = orderA ? (a.order || 0) : 0;
                 } else if (typeof orderA === 'number' && orderA > 0) {
                     numA = orderA;
@@ -1808,7 +1823,9 @@ function ExternalScoreboard() {
                 }
 
                 let numB: number;
-                if (typeof orderB === 'boolean') {
+                if (typeof orderB === 'object') {
+                    numB = orderB.order || 0;
+                } else if (typeof orderB === 'boolean') {
                     numB = orderB ? (b.order || 0) : 0;
                 } else if (typeof orderB === 'number' && orderB > 0) {
                     numB = orderB;
@@ -1833,12 +1850,12 @@ function ExternalScoreboard() {
 
             // order가 있는 코스와 없는 코스 분리
             const coursesWithOrder = coursesForGroup.filter(c => {
-                const order = coursesOrder[String(c.id)];
-                return typeof order === 'number' && order > 0;
+                const raw = coursesOrder[String(c.id)];
+                return (typeof raw === 'object' && raw.order > 0) || (typeof raw === 'number' && raw > 0);
             });
             const coursesWithoutOrder = coursesForGroup.filter(c => {
-                const order = coursesOrder[String(c.id)];
-                return !order || (typeof order === 'number' && order <= 0);
+                const raw = coursesOrder[String(c.id)];
+                return !raw || (typeof raw === 'object' && (raw.order === undefined || raw.order <= 0)) || (typeof raw === 'number' && raw <= 0);
             });
 
             // order가 있는 코스는 정렬된 순서대로, 없는 코스는 뒤로
