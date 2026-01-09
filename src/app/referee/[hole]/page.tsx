@@ -1906,7 +1906,7 @@ export default function RefereePage() {
                         <SelectTrigger className="h-12 text-base">
                             <SelectValue placeholder="1. 경기 형태 선택" />
                         </SelectTrigger>
-                        <SelectContent position="item-aligned">
+                        <SelectContent position="popper">
                             {availableTypes.map(type => (
                                 <SelectItem key={type} value={type} className="text-base">
                                     {type === 'individual' ? '개인전' : '2인1팀'}
@@ -1925,7 +1925,7 @@ export default function RefereePage() {
                         <SelectTrigger className="h-12 text-base">
                             <SelectValue placeholder={selectedType === '' ? "경기 형태 먼저 선택" : availableGroups.length === 0 ? "배정된 그룹 없음" : "2. 그룹 선택"} />
                         </SelectTrigger>
-                        <SelectContent position="item-aligned" className="max-h-[60vh]">
+                        <SelectContent position="popper" className="max-h-[60vh]">
                             {availableGroups.map(g => <SelectItem key={g} value={g.toString()} className="text-base">{g}</SelectItem>)}
                         </SelectContent>
                     </Select>
@@ -1951,7 +1951,7 @@ export default function RefereePage() {
                                     : "코스 정보 없음"
                             } />
                         </SelectTrigger>
-                        <SelectContent position="item-aligned" className="max-h-[60vh]">
+                        <SelectContent position="popper" className="max-h-[60vh]">
                             {availableCoursesForGroup.map(c => (
                                 <SelectItem key={c.id} value={c.id.toString()} className="text-base">
                                     {c.name} ({hole}번홀심판)
@@ -1961,7 +1961,7 @@ export default function RefereePage() {
                     </Select>
                     <Select value={selectedJo || ''} onValueChange={v => setSelectedJo((v || '').toString())} disabled={!selectedGroup || availableJos.length === 0}>
                         <SelectTrigger className="h-12 text-base"><SelectValue placeholder={!selectedGroup ? "그룹 먼저 선택" : (availableJos.length === 0 ? "배정된 선수 없음" : "4. 조 선택")} /></SelectTrigger>
-                        <SelectContent position="item-aligned" className="max-h-[60vh]">
+                        <SelectContent position="popper" className="max-h-[60vh]">
                             {availableJos.map(jo => {
                                 const isCompleted = completedJosState.has(jo);
                                 return (
