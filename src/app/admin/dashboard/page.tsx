@@ -796,12 +796,10 @@ export default function AdminDashboard() {
             const shouldApplyNTP = !!(ntpDataForGroup && ntpDataForGroup.isActive && ntpDataForGroup.rankings);
             if (shouldApplyNTP) {
                 const ntpRankings = ntpDataForGroup.rankings;
-                console.log(`[Admin Playoff Debug] Group ${groupName}: Applying NTP Rankings`, { ntpRankings });
 
                 groupPlayers.forEach((player: any) => {
                     const ntpRank = ntpRankings[player.id];
                     if (ntpRank !== undefined && ntpRank !== null) {
-                        console.log(`[Admin Playoff Debug] Updating Player ${player.name} (${player.id}) rank from ${player.rank} to ${ntpRank}`);
                         player.rank = ntpRank;
                     }
                 });

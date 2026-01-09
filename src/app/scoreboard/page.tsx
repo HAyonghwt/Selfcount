@@ -2121,14 +2121,10 @@ function ExternalScoreboard() {
 
             if (shouldApplyNTP) {
                 const ntpRankings = ntpDataForGroup.rankings;
-                console.log(`[Scoreboard Playoff Debug] Group ${groupName}: Applying NTP Rankings`, {
-                    ntpRankings
-                });
 
                 groupPlayers.forEach((player: any) => {
                     const ntpRank = ntpRankings[player.id];
                     if (ntpRank !== undefined && ntpRank !== null) {
-                        console.log(`[Scoreboard Playoff Debug] Updating Player ${player.name} (${player.id}) rank from ${player.rank} to ${ntpRank}`);
                         player.rank = ntpRank;
                     }
                 });
