@@ -1611,7 +1611,17 @@ export default function RefereePage() {
 
                         // 그룹 정보에서 배정된 코스 id 목록 추출
                         const group = groupsData[playerToSave.group];
-                        const assignedCourseIds = group && group.courses ? Object.keys(group.courses).filter((cid: any) => group.courses[cid]) : [];
+                        const assignedCourseIds = group && group.courses ? Object.keys(group.courses).filter((cid: any) => {
+                            const courseValue = group.courses[cid];
+                            if (typeof courseValue === 'object' && courseValue !== null) {
+                                return (courseValue.order || 0) > 0;
+                            } else if (typeof courseValue === 'number') {
+                                return courseValue > 0;
+                            } else if (typeof courseValue === 'boolean') {
+                                return courseValue === true;
+                            }
+                            return false;
+                        }) : [];
                         for (const cid of assignedCourseIds) {
                             const courseObj = courses.find((c: any) => c.id.toString() === cid.toString());
                             const courseName = courseObj ? courseObj.name : cid;

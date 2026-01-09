@@ -778,36 +778,50 @@ export default function AdminDashboard() {
         for (const groupName in finalData) {
             const groupPlayers = finalData[groupName];
             if (!groupPlayers || groupPlayers.length === 0) continue;
+
+            const playerType = groupPlayers[0].type;
+            const isIndividual = playerType === 'individual';
+
+            // 1. NTP 순위 적용 (등수와 관계없이 NTP 데이터가 있으면 적용)
+            const baseNtpData = isIndividual ? individualNTPData : teamNTPData;
+            let ntpDataForGroup: any = null;
+            if (baseNtpData) {
+                if (baseNtpData.isActive && baseNtpData.rankings) ntpDataForGroup = baseNtpData;
+                else if (typeof baseNtpData === 'object' && !baseNtpData.isActive) {
+                    const groupNtp = baseNtpData[groupName];
+                    if (groupNtp?.isActive && groupNtp.rankings) ntpDataForGroup = groupNtp;
+                }
+            }
+
+            const shouldApplyNTP = !!(ntpDataForGroup && ntpDataForGroup.isActive && ntpDataForGroup.rankings);
+            if (shouldApplyNTP) {
+                const ntpRankings = ntpDataForGroup.rankings;
+                console.log(`[Admin Playoff Debug] Group ${groupName}: Applying NTP Rankings`, { ntpRankings });
+
+                groupPlayers.forEach((player: any) => {
+                    const ntpRank = ntpRankings[player.id];
+                    if (ntpRank !== undefined && ntpRank !== null) {
+                        console.log(`[Admin Playoff Debug] Updating Player ${player.name} (${player.id}) rank from ${player.rank} to ${ntpRank}`);
+                        player.rank = ntpRank;
+                    }
+                });
+
+                // NTP 적용 후 재정렬
+                groupPlayers.sort((a: any, b: any) => {
+                    const rankA = a.rank === null ? Infinity : a.rank;
+                    const rankB = b.rank === null ? Infinity : b.rank;
+                    if (rankA !== rankB) return rankA - rankB;
+                    return (a.totalScore || Infinity) - (b.totalScore || Infinity);
+                });
+            }
+
+            // 2. 백카운트 적용 (1위 동점자에 대해서만)
             const firstPlacePlayers = groupPlayers.filter((p: any) => p.rank === 1);
             if (firstPlacePlayers.length > 1) {
-                const playerType = firstPlacePlayers[0].type;
-                const isIndividual = playerType === 'individual';
-                const baseNtpData = isIndividual ? individualNTPData : teamNTPData;
-                let ntpDataForGroup: any = null;
-                if (baseNtpData) {
-                    if (baseNtpData.isActive && baseNtpData.rankings) ntpDataForGroup = baseNtpData;
-                    else if (typeof baseNtpData === 'object' && !baseNtpData.isActive) {
-                        const groupNtp = baseNtpData[groupName];
-                        if (groupNtp?.isActive && groupNtp.rankings) ntpDataForGroup = groupNtp;
-                    }
-                }
-                const shouldApplyNTP = !!(ntpDataForGroup && ntpDataForGroup.isActive && ntpDataForGroup.rankings);
                 const backcountState = isIndividual ? individualBackcountApplied : teamBackcountApplied;
                 const shouldApplyBackcount = !!(backcountState && (backcountState[groupName] || backcountState['*']));
 
-                if (shouldApplyNTP) {
-                    const ntpRankings = ntpDataForGroup.rankings;
-                    firstPlacePlayers.forEach((player: any) => {
-                        const ntpRank = ntpRankings[player.id];
-                        if (ntpRank !== undefined && ntpRank !== null) player.rank = ntpRank;
-                    });
-                    groupPlayers.sort((a: any, b: any) => {
-                        const rankA = a.rank === null ? Infinity : a.rank;
-                        const rankB = b.rank === null ? Infinity : b.rank;
-                        if (rankA !== rankB) return rankA - rankB;
-                        return (a.totalScore || Infinity) - (b.totalScore || Infinity);
-                    });
-                } else if (shouldApplyBackcount) {
+                if (shouldApplyBackcount) {
                     const groupData = groupsData[groupName];
                     const coursesOrder = groupData?.courses || {};
                     const allCoursesForGroup = firstPlacePlayers[0]?.assignedCourses || Object.values(courses);

@@ -2086,10 +2086,9 @@ function ExternalScoreboard() {
     const processedIndividualSuddenDeathData = useMemo(() => processSuddenDeath(individualSuddenDeathData), [individualSuddenDeathData, players]);
     const processedTeamSuddenDeathData = useMemo(() => processSuddenDeath(teamSuddenDeathData), [teamSuddenDeathData, players]);
 
-    // 백카운트/NTP 적용된 1위 동점자들의 순위를 다시 계산하는 함수 (기존 로직 활용)
+    // 백카운트/NTP 적용된 1위 동점자들의 순위를 다시 계산하는 함수
     const applyPlayoffRanking = (data: any) => {
         // 깊은 복사 대신 얕은 복사 사용 (성능 최적화)
-        // 탑 레벨 객체만 복사하고, 내부 배열/객체는 필요할 때 복사
         const finalData = { ...data };
         const allCourses = Object.values(tournament.courses || {}).filter(Boolean);
 
@@ -2097,70 +2096,88 @@ function ExternalScoreboard() {
             const originalGroupPlayers = finalData[groupName];
             if (!originalGroupPlayers || originalGroupPlayers.length === 0) continue;
 
-            // 1위 동점자들 찾기
-            const firstPlacePlayers = originalGroupPlayers.filter((p: any) => p.rank === 1);
+            // 수정이 필요한 그룹만 배열 복사
+            const groupPlayers = [...originalGroupPlayers];
+            finalData[groupName] = groupPlayers;
 
+            const playerType = groupPlayers[0].type;
+            const isIndividual = playerType === 'individual';
+
+            // 1. NTP 순위 적용 (등수와 관계없이 NTP 데이터가 있으면 적용)
+            // 개별/팀 데이터 선택
+            const baseNtpData = isIndividual ? individualNTPData : teamNTPData;
+            let ntpDataForGroup: any = null;
+
+            // 데이터 구조 확인 (레거시 vs 그룹별)
+            if (baseNtpData) {
+                if (baseNtpData.isActive && baseNtpData.rankings) ntpDataForGroup = baseNtpData;
+                else if (typeof baseNtpData === 'object' && !baseNtpData.isActive) {
+                    const groupNtp = baseNtpData[groupName];
+                    if (groupNtp?.isActive && groupNtp.rankings) ntpDataForGroup = groupNtp;
+                }
+            }
+
+            const shouldApplyNTP = !!(ntpDataForGroup && ntpDataForGroup.isActive && ntpDataForGroup.rankings);
+
+            if (shouldApplyNTP) {
+                const ntpRankings = ntpDataForGroup.rankings;
+                console.log(`[Scoreboard Playoff Debug] Group ${groupName}: Applying NTP Rankings`, {
+                    ntpRankings
+                });
+
+                groupPlayers.forEach((player: any) => {
+                    const ntpRank = ntpRankings[player.id];
+                    if (ntpRank !== undefined && ntpRank !== null) {
+                        console.log(`[Scoreboard Playoff Debug] Updating Player ${player.name} (${player.id}) rank from ${player.rank} to ${ntpRank}`);
+                        player.rank = ntpRank;
+                    }
+                });
+
+                // NTP 적용 후 재정렬
+                groupPlayers.sort((a: any, b: any) => {
+                    const rankA = a.rank === null ? Infinity : (a.rank as number);
+                    const rankB = b.rank === null ? Infinity : (b.rank as number);
+                    if (rankA !== rankB) return rankA - rankB;
+                    return (a.totalScore || Infinity) - (b.totalScore || Infinity);
+                });
+            }
+
+            // 2. 백카운트 적용 (1위 동점자에 대해서만)
+            const firstPlacePlayers = groupPlayers.filter((p: any) => p.rank === 1);
             if (firstPlacePlayers.length > 1) {
-                // 수정이 필요한 그룹만 배열 복사
-                const groupPlayers = [...originalGroupPlayers];
-                finalData[groupName] = groupPlayers;
-                const playerType = firstPlacePlayers[0].type;
-                const isIndividual = playerType === 'individual';
-
-                // NTP 순위 적용 확인
-                const ntpData = isIndividual ? individualNTPData : teamNTPData;
-                const shouldApplyNTP = ntpData?.isActive && ntpData?.rankings;
-
-                // 백카운트 적용 확인 (그룹별 구조 지원)
                 const backcountState = isIndividual ? individualBackcountApplied : teamBackcountApplied;
                 const shouldApplyBackcount = typeof backcountState === 'boolean'
                     ? backcountState
                     : (backcountState && (backcountState[groupName] || (filterGroup === 'all' && Object.values(backcountState).some(v => v === true))));
 
-                if (shouldApplyNTP) {
-                    // NTP 순위 적용
-                    const ntpRankings = ntpData.rankings;
-                    firstPlacePlayers.forEach((player: any) => {
-                        if (ntpRankings[player.id]) {
-                            player.rank = ntpRankings[player.id];
-                        }
-                    });
-
-                    // 전체 그룹을 다시 정렬
-                    groupPlayers.sort((a: any, b: any) => {
-                        const rankA = a.rank === null ? Infinity : (a.rank as number);
-                        const rankB = b.rank === null ? Infinity : (b.rank as number);
-                        if (rankA !== rankB) return rankA - rankB;
-
-                        const scoreA = a.hasAnyScore && !a.hasForfeited ? a.totalScore : Infinity;
-                        const scoreB = b.hasAnyScore && !b.hasForfeited ? b.totalScore : Infinity;
-                        return scoreA - scoreB;
-                    });
-                } else if (shouldApplyBackcount) {
+                if (shouldApplyBackcount) {
                     // 플레이오프 백카운트: 코스 순서 기반으로 마지막 코스부터 역순으로 비교
                     const groupName = firstPlacePlayers[0]?.group;
                     const groupData = groupsData[groupName];
                     const coursesOrder = groupData?.courses || {};
-                    const allCoursesForGroup = firstPlacePlayers[0]?.allAssignedCourses || allCourses;
+                    const allCoursesForGroup = firstPlacePlayers[0]?.assignedCourses || allCourses;
                     // 코스 순서대로 정렬 (order가 큰 것이 마지막)
                     const coursesForGroup = [...allCoursesForGroup].sort((a: any, b: any) => {
                         const orderA = coursesOrder[String(a.id)];
                         const orderB = coursesOrder[String(b.id)];
 
-                        // 그룹의 courses에서 순서 가져오기, 없으면 코스의 order 사용
                         let numA: number;
-                        if (typeof orderA === 'boolean') {
+                        if (typeof orderA === 'object' && orderA !== null) {
+                            numA = orderA.order || 0;
+                        } else if (typeof orderA === 'boolean') {
                             numA = orderA ? (a.order || 0) : 0;
-                        } else if (typeof orderA === 'number' && orderA > 0) {
+                        } else if (typeof orderA === 'number') {
                             numA = orderA;
                         } else {
                             numA = a.order || 0;
                         }
 
                         let numB: number;
-                        if (typeof orderB === 'boolean') {
+                        if (typeof orderB === 'object' && orderB !== null) {
+                            numB = orderB.order || 0;
+                        } else if (typeof orderB === 'boolean') {
                             numB = orderB ? (b.order || 0) : 0;
-                        } else if (typeof orderB === 'number' && orderB > 0) {
+                        } else if (typeof orderB === 'number') {
                             numB = orderB;
                         } else {
                             numB = b.order || 0;
@@ -2168,12 +2185,9 @@ function ExternalScoreboard() {
 
                         return numA - numB; // 작은 순서가 먼저
                     });
+
                     // 백카운트는 마지막 코스부터 역순이므로 reverse
                     const sortedCoursesForBackcount = [...coursesForGroup].reverse();
-
-                    // firstPlacePlayers는 이미 groupPlayers의 요소들을 참조하므로
-                    // 여기서 정렬하고 속성을 변경하면 groupPlayers에도 반영됨 (얕은 복사이므로)
-                    // 하지만 안전을 위해 수정된 객체로 교체하는 것이 좋음
 
                     const playersToUpdate = [...firstPlacePlayers];
 
@@ -2211,28 +2225,19 @@ function ExternalScoreboard() {
 
                     // 새로운 순위 부여 및 객체 업데이트
                     let rank = 1;
-
-                    // 정렬된 순서대로 랭킹 부여 및 원본 배열 업데이트 준비
                     const updatedFirstPlaceMap = new Map();
-
-                    // 첫 번째 선수 처리
                     const firstPlayer = playersToUpdate[0];
-                    // 객체 불변성을 위해 복사
                     const updatedFirstPlayer = { ...firstPlayer, rank: rank };
                     updatedFirstPlaceMap.set(firstPlayer.id, updatedFirstPlayer);
 
                     for (let i = 1; i < playersToUpdate.length; i++) {
-                        const prev = playersToUpdate[i - 1]; // 정렬된 배열의 이전 요소
-                        const curr = playersToUpdate[i];     // 정렬된 배열의 현재 요소
+                        const prev = playersToUpdate[i - 1];
+                        const curr = playersToUpdate[i];
 
-                        // 비교를 위해 원본 데이터 사용 (rank는 아직 수정 전)
-
-                        // plusMinus가 다르거나 백카운트 비교 결과가 다르면 순위 증가
                         let isDifferent = false;
                         if (curr.plusMinus !== prev.plusMinus) {
                             isDifferent = true;
                         } else {
-                            // 백카운트 비교
                             for (const course of sortedCoursesForBackcount) {
                                 if (!course || course.id === undefined || course.id === null) continue;
                                 const courseId = course.id;
@@ -2264,12 +2269,11 @@ function ExternalScoreboard() {
                             rank = i + 1;
                         }
 
-                        // 객체 업데이트
                         const updatedPlayer = { ...curr, rank: rank };
                         updatedFirstPlaceMap.set(curr.id, updatedPlayer);
                     }
 
-                    // groupPlayers 배열 업데이트 (변경된 선수만 교체)
+                    // groupPlayers 배열 업데이트
                     for (let i = 0; i < groupPlayers.length; i++) {
                         const p = groupPlayers[i];
                         if (updatedFirstPlaceMap.has(p.id)) {

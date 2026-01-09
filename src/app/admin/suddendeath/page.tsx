@@ -290,7 +290,17 @@ export default function SuddenDeathPage() {
 
         const allProcessedPlayers: any[] = Object.entries(players).map(([playerId, player]: [string, any]) => {
             const playerGroupData = (groupsData as any)[player.group];
-            const assignedCourseIds = playerGroupData?.courses ? Object.keys(playerGroupData.courses).filter(id => playerGroupData.courses[id]) : [];
+            const assignedCourseIds = playerGroupData?.courses ? Object.keys(playerGroupData.courses).filter((id: string) => {
+                const courseValue = playerGroupData.courses[id];
+                if (typeof courseValue === 'object' && courseValue !== null) {
+                    return (courseValue.order || 0) > 0;
+                } else if (typeof courseValue === 'number') {
+                    return courseValue > 0;
+                } else if (typeof courseValue === 'boolean') {
+                    return courseValue === true;
+                }
+                return false;
+            }) : [];
             const coursesForPlayer = allCoursesList.filter((c: any) => assignedCourseIds.includes(c.id.toString()));
             const playerScoresData = (scores as any)[playerId] || {};
             let totalScore = 0;
