@@ -1029,15 +1029,27 @@ export default function PlayerManagementPage() {
                 }
 
                 // 기존 선수 찾기 및 업데이트/추가 구분
-                const playersToUpdate: Array<{ playerId: string; newJo: string }> = [];
+                const playersToUpdate: Array<{ playerId: string; newJo: string; oldJo?: string }> = [];
                 const playersToAdd: any[] = [];
+                const duplicateExcelEntries: string[] = [];
+                const seenKeys = new Set<string>();
 
                 newPlayers.forEach(newPlayer => {
+                    const key = type === 'individual'
+                        ? `${newPlayer.group}|${newPlayer.name}|${newPlayer.affiliation || '무소속'}`
+                        : `${newPlayer.group}|${newPlayer.p1_name}|${newPlayer.p1_affiliation || '무소속'}|${newPlayer.p2_name}|${newPlayer.p2_affiliation || '무소속'}`;
+
+                    if (seenKeys.has(key)) {
+                        duplicateExcelEntries.push(type === 'individual'
+                            ? `${newPlayer.name} (${newPlayer.affiliation || '무소속'})`
+                            : `${newPlayer.p1_name}/${newPlayer.p2_name}`);
+                        return;
+                    }
+                    seenKeys.add(key);
+
                     // 같은 그룹 내에서 기존 선수 찾기
                     let existingPlayer: any = null;
-
                     if (type === 'individual') {
-                        // 개인전: 이름 + 소속 + 그룹으로 식별
                         existingPlayer = allPlayers.find((p: any) =>
                             p.type === 'individual' &&
                             p.group === newPlayer.group &&
@@ -1045,7 +1057,6 @@ export default function PlayerManagementPage() {
                             (p.affiliation || '무소속') === newPlayer.affiliation
                         );
                     } else {
-                        // 팀전: 선수1이름 + 선수1소속 + 선수2이름 + 선수2소속 + 그룹으로 식별
                         existingPlayer = allPlayers.find((p: any) =>
                             p.type === 'team' &&
                             p.group === newPlayer.group &&
@@ -1057,23 +1068,82 @@ export default function PlayerManagementPage() {
                     }
 
                     if (existingPlayer) {
-                        // 기존 선수 발견: 조 번호만 업데이트
                         playersToUpdate.push({
                             playerId: existingPlayer.id,
-                            newJo: newPlayer.jo
+                            newJo: newPlayer.jo,
+                            oldJo: existingPlayer.jo
                         });
                     } else {
-                        // 기존 선수 없음: 새로 추가
                         playersToAdd.push(newPlayer);
                     }
                 });
 
-                // --- 조별 인원(팀) 제한 검증 시작 (조 재편성용: 엑셀 파일의 새 조 편성만 검증) ---
+                // 누락된 선수 찾기 (엑셀에 포함된 그룹 내에서만)
+                const groupsInExcel = [...new Set(newPlayers.map(p => p.group))];
+                const playersMissing = allPlayers.filter(ep => {
+                    if (ep.type !== type || !groupsInExcel.includes(ep.group)) return false;
+
+                    if (type === 'individual') {
+                        return !newPlayers.some(np =>
+                            np.group === ep.group &&
+                            np.name === ep.name &&
+                            (np.affiliation || '무소속') === (ep.affiliation || '무소속')
+                        );
+                    } else {
+                        return !newPlayers.some(np =>
+                            np.group === ep.group &&
+                            np.p1_name === ep.p1_name &&
+                            (np.p1_affiliation || '무소속') === (ep.p1_affiliation || '무소속') &&
+                            np.p2_name === ep.p2_name &&
+                            (np.p2_affiliation || '무소속') === (ep.p2_affiliation || '무소속')
+                        );
+                    }
+                });
+
+                // 조 변경 인원 수 계산
+                const changedJoCount = playersToUpdate.filter(p => p.newJo !== p.oldJo).length;
+
+                // --- 상세 확인 메시지 구성 ---
+                let confirmMsg = `[조 재편성 변경 사항 확인]\n\n`;
+
+                if (playersMissing.length > 0) {
+                    confirmMsg += `⚠️ 기존 명단에서 누락된 선수 (기권/불참 등):\n`;
+                    playersMissing.slice(0, 10).forEach(p => {
+                        confirmMsg += `- ${type === 'individual' ? p.name : p.p1_name + '/' + p.p2_name} (${p.affiliation || p.p1_affiliation || '무소속'})\n`;
+                    });
+                    if (playersMissing.length > 10) confirmMsg += `...외 ${playersMissing.length - 10}명\n`;
+                    confirmMsg += `\n`;
+                }
+
+                if (playersToAdd.length > 0) {
+                    confirmMsg += `✅ 새로 추가된 선수:\n`;
+                    playersToAdd.slice(0, 10).forEach(p => {
+                        confirmMsg += `- [${p.jo}조] ${type === 'individual' ? p.name : p.p1_name + '/' + p.p2_name} (${p.affiliation || p.p1_affiliation || '무소속'})\n`;
+                    });
+                    if (playersToAdd.length > 10) confirmMsg += `...외 ${playersToAdd.length - 10}명\n`;
+                    confirmMsg += `\n`;
+                }
+
+                confirmMsg += `🔄 조 번호가 변경되는 선수: ${changedJoCount}명\n`;
+
+                if (duplicateExcelEntries.length > 0) {
+                    confirmMsg += `\n🚫 엑셀 내 중복 입력된 선수 (1건만 처리됨):\n`;
+                    [...new Set(duplicateExcelEntries)].slice(0, 5).forEach(name => {
+                        confirmMsg += `- ${name}\n`;
+                    });
+                    if (duplicateExcelEntries.length > 5) confirmMsg += `...외 ${duplicateExcelEntries.length - 5}건\n`;
+                }
+
+                confirmMsg += `\n이대로 조 재편성을 진행하시겠습니까?`;
+
+                if (!window.confirm(confirmMsg)) {
+                    return;
+                }
+
+                // --- 조별 인원(팀) 제한 검증 시작 ---
                 const groupJoLimit = type === 'individual' ? 4 : 2;
-                // 엑셀 파일에 있는 선수들의 새 조 편성만 검증 (조 재편성은 엑셀 파일 기준으로 덮어쓰기)
                 const newJoMap: { [key: string]: { [key: string]: number } } = {};
 
-                // 엑셀 파일의 모든 선수들(newPlayers)을 새 조 기준으로 집계
                 newPlayers.forEach((p: any) => {
                     const g = p.group || '';
                     const j = p.jo || '';
@@ -1084,7 +1154,6 @@ export default function PlayerManagementPage() {
                     }
                 });
 
-                // 초과 조 찾기 (엑셀 파일의 새 조 편성만 검증)
                 const overList: string[] = [];
                 Object.entries(newJoMap).forEach(([g, jos]: [string, any]) => {
                     Object.entries(jos).forEach(([j, cnt]: [string, any]) => {
@@ -1100,13 +1169,12 @@ export default function PlayerManagementPage() {
                     });
                     return;
                 }
-                // --- 조별 인원(팀) 제한 검증 끝 ---
 
-                // 최대 인원 제한 검증 (새로 추가되는 선수만 카운트)
-                if (allPlayers.length + playersToAdd.length > maxPlayers) {
+                // 최대 인원 제한 검증
+                if (allPlayers.length + playersToAdd.length - playersMissing.length > maxPlayers) {
                     toast({
                         title: '선수 등록 제한',
-                        description: `엑셀 파일의 새 선수(${playersToAdd.length}명)를 추가하면 최대 인원(${maxPlayers}명)을 초과합니다. 현재 ${allPlayers.length}명 등록됨.`,
+                        description: `최대 인원(${maxPlayers}명)을 초과합니다.`,
                     });
                     return;
                 }

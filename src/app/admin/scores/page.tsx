@@ -8,27 +8,28 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Search, Save, Eye, EyeOff } from 'lucide-react';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
 } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { db } from '@/lib/firebase';
 import { ref, onValue, set } from 'firebase/database';
+import { logScoreChange } from '@/lib/scoreLogs';
 
 interface ScoreEntry {
-  id: string; // Composite key: playerId-courseId-hole
-  playerId: string;
-  courseId: string;
-  group: string;
-  jo: number;
-  name: string;
-  course: string;
-  hole: number;
-  score: number;
+    id: string; // Composite key: playerId-courseId-hole
+    playerId: string;
+    courseId: string;
+    group: string;
+    jo: number;
+    name: string;
+    course: string;
+    hole: number;
+    score: number;
 }
 
 export default function ScoreManagementPage() {
@@ -69,7 +70,7 @@ export default function ScoreManagementPage() {
     useEffect(() => {
         const playersMap = new Map(Object.entries(allPlayers));
         const coursesMap = new Map(Object.values(allCourses).map((c: any) => [c.id, c.name]));
-        
+
         const newFlatScores: ScoreEntry[] = [];
 
         for (const playerId in allScores) {
@@ -95,7 +96,7 @@ export default function ScoreManagementPage() {
                 }
             }
         }
-        setFlatScores(newFlatScores.sort((a,b) => a.jo - b.jo || a.hole - b.hole));
+        setFlatScores(newFlatScores.sort((a, b) => a.jo - b.jo || a.hole - b.hole));
     }, [allScores, allPlayers, allCourses]);
 
     const filteredScores = useMemo(() => {
@@ -118,10 +119,34 @@ export default function ScoreManagementPage() {
 
     const handleConfirmUpdate = () => {
         if (!scoreToUpdate) return;
-        
+
         if (!db) return;
         const scoreRef = ref(db, `scores/${scoreToUpdate.playerId}/${scoreToUpdate.courseId}/${scoreToUpdate.hole}`);
-        set(scoreRef, scoreToUpdate.score).then(() => {
+
+        // 변경 전 점수 찾기 (로그 기록용)
+        const oldValue = allScores[scoreToUpdate.playerId]?.[scoreToUpdate.courseId]?.[scoreToUpdate.hole] ?? 0;
+        const newValue = scoreToUpdate.score;
+
+        set(scoreRef, newValue).then(async () => {
+            // 점수 변경 로그 기록 (실패해도 사용자에게 에러를 띄우지 않음)
+            try {
+                await logScoreChange({
+                    matchId: 'tournaments/current',
+                    playerId: scoreToUpdate.playerId,
+                    courseId: scoreToUpdate.courseId,
+                    holeNumber: scoreToUpdate.hole,
+                    oldValue: oldValue,
+                    newValue: newValue,
+                    modifiedBy: 'Admin', // 관리자
+                    modifiedByType: 'admin',
+                    scoreType: 'holeScore',
+                    comment: `관리자 페이지에서 수동 수정 (${scoreToUpdate.group} ${scoreToUpdate.jo}조)`
+                });
+            } catch (logError) {
+                console.error("점수 변경 로그 기록 실패:", logError);
+                // 로그 실패는 치명적이지 않으므로 토스트를 띄우지 않거나 조용히 처리
+            }
+
             toast({
                 title: "점수 수정 완료",
                 description: `${scoreToUpdate.group} ${scoreToUpdate.jo}조 ${scoreToUpdate.name} 선수의 ${scoreToUpdate.course} ${scoreToUpdate.hole}홀 점수가 ${scoreToUpdate.score}점으로 수정되었습니다.`,
@@ -132,7 +157,7 @@ export default function ScoreManagementPage() {
             toast({ title: "수정 실패", description: err.message });
         });
     };
-    
+
     const handleSaveUnlockPassword = () => {
         if (unlockPassword.trim() === '') {
             toast({ title: '오류', description: '비밀번호를 입력해주세요.', variant: 'destructive' });
@@ -158,13 +183,13 @@ export default function ScoreManagementPage() {
                     <div className="flex flex-col md:flex-row gap-4 p-4 bg-muted/50 rounded-lg">
                         <div className="relative flex-1">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                            <Input 
+                            <Input
                                 id="score-search"
                                 name="score-search"
-                                placeholder="선수명으로 검색..." 
-                                className="pl-10 h-12" 
-                                value={searchTerm} 
-                                onChange={e => setSearchTerm(e.target.value)} 
+                                placeholder="선수명으로 검색..."
+                                className="pl-10 h-12"
+                                value={searchTerm}
+                                onChange={e => setSearchTerm(e.target.value)}
                                 autoComplete="new-password" />
                         </div>
                         <Select value={filterGroup} onValueChange={setFilterGroup}><SelectTrigger className="w-full md:w-[180px] h-12"><SelectValue placeholder="그룹 선택" /></SelectTrigger><SelectContent><SelectItem value="all">모든 그룹</SelectItem>{availableGroups.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}</SelectContent></Select>
@@ -249,7 +274,7 @@ export default function ScoreManagementPage() {
                                                             autoFocus
                                                             onBlur={() => setEditingCell(null)}
                                                         />
-                                                         <Button type="submit" size="sm">저장</Button>
+                                                        <Button type="submit" size="sm">저장</Button>
                                                     </form>
                                                     <AlertDialogContent>
                                                         <AlertDialogHeader>
