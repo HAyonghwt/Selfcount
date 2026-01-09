@@ -124,38 +124,13 @@ export default function GiftEventDisplay() {
   // 이펙트 제거: 부모 컴포넌트에서 별도로 타이머를 돌리면 자식 컴포넌트의 애니메이션(6초)과 충돌함.
   // 당첨자 발표는 오직 GiftEventDraw 컴포넌트의 onAnimationEnd 콜백에 의해서만 실행되어야 함.
 
-  // 당첨자 발표 시 DB에 기록하는 함수 (Hook 규칙 준수를 위해 상단 이동)
+  // 당첨자 발표 시 처리 함수 (전광판은 DB 수정 권한 없음 - 오직 보여주기만 함)
   const handleWinnerAnnounce = React.useCallback(async () => {
-    if (!currentWinner || !db) return;
+    if (!currentWinner) return;
 
-    try {
-      const winnersRef = ref(db, "giftEvent/winners");
-      const winnersSnap = await get(winnersRef);
-      const winnersList: Participant[] = winnersSnap.exists() && Array.isArray(winnersSnap.val())
-        ? winnersSnap.val()
-        : [];
-
-      const alreadyExists = winnersList.some(w => w.id === currentWinner.id);
-      const updatedWinners = alreadyExists ? winnersList : [...winnersList, currentWinner];
-
-      const remainingRef = ref(db, "giftEvent/remaining");
-      const remainingSnap = await get(remainingRef);
-      const remainingList: string[] = remainingSnap.exists() && Array.isArray(remainingSnap.val())
-        ? remainingSnap.val()
-        : [];
-
-      const updatedRemaining = remainingList.filter(id => id !== currentWinner.id);
-
-      await update(ref(db, 'giftEvent'), {
-        status: updatedRemaining.length === 0 ? 'finished' : 'winner',
-        remaining: updatedRemaining,
-        winners: updatedWinners,
-        currentWinner: null,
-      });
-      setShowWinners(true);
-    } catch (error) {
-      console.error("Error updating winner:", error);
-    }
+    // DB 업데이트 로직 제거 (관리자 페이지에서만 수행)
+    // 전광판은 애니메이션이 끝나면 당첨자 명단 표시 UI만 활성화
+    setShowWinners(true);
   }, [currentWinner]);
 
   // 대기 화면 - 더 크고 웅장하게
