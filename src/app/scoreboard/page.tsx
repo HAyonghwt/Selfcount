@@ -1306,6 +1306,22 @@ function ExternalScoreboard() {
                     });
                 });
 
+                // 그룹별 코스 설정 실시간 반영 (scoreboardActive 등 변경 감지)
+                const groupsRef = ref(dbInstance, 'tournaments/current/groups');
+                const unsubGroups = onValue(groupsRef, snap => {
+                    const groupsData = snap.val() || {};
+                    setGroupsData(groupsData);
+                    setTournament((prev: any) => {
+                        const newTournament = { ...prev, groups: groupsData };
+                        const newHash = JSON.stringify(newTournament);
+                        if (newHash !== lastTournamentHash.current) {
+                            lastTournamentHash.current = newHash;
+                            return newTournament;
+                        }
+                        return prev;
+                    });
+                });
+
                 // 언서브 등록
                 activeUnsubsRef.current.push(unsubPlayers);
                 activeUnsubsRef.current.push(unsubScoresChanged);
@@ -1313,6 +1329,7 @@ function ExternalScoreboard() {
                 activeUnsubsRef.current.push(unsubScoresRemoved);
                 activeUnsubsRef.current.push(unsubTournament);
                 activeUnsubsRef.current.push(unsubCourses);
+                activeUnsubsRef.current.push(unsubGroups);
 
                 // 🟢 점수 초기화 동기화 리스너 추가
                 const lastResetAtRef = ref(dbInstance, 'tournaments/current/lastResetAt');
