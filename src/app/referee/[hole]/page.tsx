@@ -1380,6 +1380,13 @@ export default function RefereePage() {
                 if (newScore !== currentScore) {
                     if (newScore === null) {
                         // null로 변경된 경우 (점수 삭제 - 기권 해제)
+
+                        // [중요 수정] DB 데이터가 undefined인 경우 (네트워크 지연 등으로 데이터를 못 가져온 경우)
+                        // 기존에 로컬에 'locked' 상태로 잘 있던 점수는 절대 초기화하지 말고 유지해야 함
+                        if (firebaseScore === undefined) {
+                            return;
+                        }
+
                         setScores(prev => ({
                             ...prev,
                             [player.id]: {
