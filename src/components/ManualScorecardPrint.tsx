@@ -135,10 +135,14 @@ export default function ManualScorecardPrint({
         const coursesWithGroupOrder = courses
             .filter(c => selectedCourses[c.id])
             .map(c => {
-                const groupOrder = groupCourses[c.id]
-                // groupOrder가 number이고 0보다 크면 사용, 아니면 코스의 기본 order 사용
-                const order = (typeof groupOrder === 'number' && groupOrder > 0)
-                    ? groupOrder
+                const groupOrderValue = groupCourses[c.id]
+                // 객체 형태 { order, ... } 인 경우와 프리미티브 대응
+                const orderNum = (typeof groupOrderValue === 'object' && groupOrderValue !== null)
+                    ? groupOrderValue.order
+                    : (typeof groupOrderValue === 'boolean' ? (groupOrderValue ? 1 : 0) : groupOrderValue);
+
+                const order = (typeof orderNum === 'number' && orderNum > 0)
+                    ? orderNum
                     : (c.order || 999)
                 return { ...c, groupOrder: order }
             })

@@ -313,8 +313,12 @@ export default function ScorePrintTool() {
             const playerGroupData = groupsData[groupName];
             const coursesOrder = playerGroupData?.courses || {};
             const assignedCourseIds = Object.keys(coursesOrder).filter((cid: string) => {
-                const order = coursesOrder[cid];
-                return typeof order === 'boolean' ? order : (typeof order === 'number' && order > 0);
+                const orderValue = coursesOrder[cid];
+                // 객체 형태 { order, scoreboardActive } 인 경우와 기존 프리미티브(number, boolean) 대응
+                const order = (typeof orderValue === 'object' && orderValue !== null)
+                    ? orderValue.order
+                    : (typeof orderValue === 'boolean' ? (orderValue ? 1 : 0) : orderValue);
+                return typeof order === 'number' && order > 0;
             });
 
             const coursesForPlayer = assignedCourseIds
@@ -335,6 +339,8 @@ export default function ScorePrintTool() {
                     numA = orderA ? (a.order || 0) : 0;
                 } else if (typeof orderA === 'number' && orderA > 0) {
                     numA = orderA;
+                } else if (typeof orderA === 'object' && orderA !== null && typeof orderA.order === 'number') {
+                    numA = orderA.order;
                 } else {
                     numA = a.order || 0;
                 }
@@ -344,6 +350,8 @@ export default function ScorePrintTool() {
                     numB = orderB ? (b.order || 0) : 0;
                 } else if (typeof orderB === 'number' && orderB > 0) {
                     numB = orderB;
+                } else if (typeof orderB === 'object' && orderB !== null && typeof orderB.order === 'number') {
+                    numB = orderB.order;
                 } else {
                     numB = b.order || 0;
                 }
@@ -447,6 +455,8 @@ export default function ScorePrintTool() {
                     numA = orderA ? (a.order || 0) : 0;
                 } else if (typeof orderA === 'number' && orderA > 0) {
                     numA = orderA;
+                } else if (typeof orderA === 'object' && orderA !== null && typeof orderA.order === 'number') {
+                    numA = orderA.order;
                 } else {
                     numA = a.order || 0;
                 }
@@ -456,6 +466,8 @@ export default function ScorePrintTool() {
                     numB = orderB ? (b.order || 0) : 0;
                 } else if (typeof orderB === 'number' && orderB > 0) {
                     numB = orderB;
+                } else if (typeof orderB === 'object' && orderB !== null && typeof orderB.order === 'number') {
+                    numB = orderB.order;
                 } else {
                     numB = b.order || 0;
                 }
@@ -829,7 +841,10 @@ export default function ScorePrintTool() {
                     const filteredCourses = printModal.showAllCourses
                         ? player.assignedCourses
                         : player.assignedCourses.filter((c: any) => {
-                            const cName = player.coursesData[c.id]?.courseName || c.name;
+                            const courseData = player.coursesData[c.id];
+                            const cName = (typeof courseData === 'object' && courseData !== null && courseData.courseName)
+                                ? courseData.courseName
+                                : c.name;
                             return printModal.selectedCourses.includes(cName);
                         });
 
@@ -987,7 +1002,10 @@ export default function ScorePrintTool() {
         Object.values(processedData).forEach(groupPlayers => {
             groupPlayers.forEach(player => {
                 player.assignedCourses?.forEach((c: any) => {
-                    const cName = player.coursesData[c.id]?.courseName || c.name;
+                    const courseData = player.coursesData[c.id];
+                    const cName = (typeof courseData === 'object' && courseData !== null && courseData.courseName)
+                        ? courseData.courseName
+                        : c.name;
                     if (cName) availableCourses.add(cName);
                 });
             });
