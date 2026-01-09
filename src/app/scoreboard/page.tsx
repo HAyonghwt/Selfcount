@@ -12,6 +12,7 @@ import GiftEventStandby from '@/components/gift-event/GiftEventStandby';
 import { getPlayerScoreLogs, getPlayerScoreLogsOptimized, ScoreLog, invalidatePlayerLogCache } from '@/lib/scoreLogs';
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
+import { Button } from '@/components/ui/button';
 import './scoreboard.css';
 
 // 다국어 번역 객체
@@ -487,6 +488,19 @@ const ScoreboardTable = React.memo(({
         return { courseName: currentCourse?.name || null, progress: currentProgress };
     }, [groupName, groupPlayers, tournament, scores]);
 
+    // 페이지네이션 상태 (성능 최적화: 초기 50명만 렌더링)
+    const [visibleCount, setVisibleCount] = useState(50);
+
+    // 그룹이 변경되면 visibleCount 초기화
+    useEffect(() => {
+        setVisibleCount(50);
+    }, [groupName, scores]); // 점수나 그룹이 바뀌면 초기화
+
+    // 렌더링할 선수 목록 (페이지네이션 적용)
+    const visiblePlayers = useMemo(() => {
+        return groupPlayers.slice(0, visibleCount);
+    }, [groupPlayers, visibleCount]);
+
     return (
         <div className="mb-8">
             <header className="flex justify-between items-baseline sb-group-header">
@@ -520,7 +534,7 @@ const ScoreboardTable = React.memo(({
                             </tr>
                         </thead>
                         <tbody className="text-base">
-                            {groupPlayers.map((player: ProcessedPlayer, playerIndex: number) => (
+                            {visiblePlayers.map((player: ProcessedPlayer, playerIndex: number) => (
                                 <React.Fragment key={player.id}>
                                     {player.assignedCourses.length > 0 ? player.assignedCourses.map((course: any, courseIndex: number) => (
                                         <tr key={`${player.id}-${course.id}`} className={cn("border-b border-[color:var(--sb-cell-border)] last:border-0", playerIndex % 2 === 1 && "sb-tr-alt")}>
@@ -734,7 +748,21 @@ const ScoreboardTable = React.memo(({
                     </table>
                 </TooltipProvider>
             </div>
+            {visibleCount < groupPlayers.length && (
+                <div className="flex justify-center mt-4">
+                    <Button
+                        onClick={() => setVisibleCount(prev => prev + 50)}
+                        variant="secondary"
+                        size="lg"
+                        className="w-full md:w-1/3 bg-gray-800 hover:bg-gray-700 text-white border border-gray-600 shadow-lg"
+                    >
+                        {currentLang === 'ko' ? '더 보기' : 'Load More'} ({Math.min(visibleCount, groupPlayers.length)} / {groupPlayers.length})
+                        <ChevronDown className="ml-2 h-4 w-4" />
+                    </Button>
+                </div>
+            )}
         </div>
+
     );
 });
 ScoreboardTable.displayName = 'ScoreboardTable';

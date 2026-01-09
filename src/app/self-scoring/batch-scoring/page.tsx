@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { db, ensureAuthenticated } from "@/lib/firebase";
-import { ref, set, get, onValue, query, orderByChild, equalTo } from "firebase/database";
+import { ref, set, get, onValue, query, orderByChild, equalTo, update, push } from "firebase/database";
 import { useToast } from "@/hooks/use-toast";
 import { logScoreChange, getPlayerScoreLogs, ScoreLog, invalidatePlayerLogCache } from "@/lib/scoreLogs";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -1232,10 +1232,37 @@ export default function BatchScoringPage() {
       try {
         const dbInstance = db as any;
         const holeNum = holeIndex + 1;
-        const scoreRef = ref(dbInstance, `/scores/${playerId}/${activeCourse.id}/${holeNum}`);
-
         // 팀 모드에서는 원본 매트릭스에서 대표 인덱스의 기존 값을 사용해야 올바른 oldValue가 기록됨
         const prev = (rawTableScores?.[playerIndex]?.[holeIndex] ?? 0) as number;
+
+        // Atomic Update: 점수와 로그를 한 번에 저장 (Ghost Data 방지)
+        const updates: Record<string, any> = {};
+        const timestamp = Date.now();
+
+        // 1. 점수 경로
+        const scorePath = `/scores/${playerId}/${activeCourse.id}/${holeNum}`;
+        updates[scorePath] = score;
+
+        // 2. 로그 경로 (logScoreChange 함수 로직을 직접 구현하여 단일 트랜잭션에 포함)
+        const newLogRef = push(ref(dbInstance, 'scoreLogs')); // 새 키 생성
+        const newLogKey = newLogRef.key;
+
+        if (newLogKey) {
+          updates[`/scoreLogs/${newLogKey}`] = {
+            matchId: "tournaments/current",
+            playerId,
+            scoreType: "holeScore",
+            holeNumber: holeNum,
+            oldValue: typeof prev === "number" ? prev : 0,
+            newValue: score,
+            modifiedBy: captainData?.id || `조장${captainData?.jo || ''}`,
+            modifiedByType: "captain",
+            comment: `자율 채점 - 코스: ${activeCourse.id}, 그룹: ${selectedGroup || ''}, 조: ${selectedJo || ''}`,
+            courseId: String(activeCourse.id),
+            modifiedAt: timestamp,
+            id: newLogKey
+          };
+        }
 
         // 재시도 시 대기 (모바일: 더 긴 대기, PC: 짧은 대기)
         if (attempt > 0) {
@@ -1243,19 +1270,8 @@ export default function BatchScoringPage() {
           await new Promise(resolve => setTimeout(resolve, delay));
         }
 
-        await set(scoreRef, score);
-        await logScoreChange({
-          matchId: "tournaments/current",
-          playerId,
-          scoreType: "holeScore",
-          holeNumber: holeNum,
-          oldValue: typeof prev === "number" ? prev : 0,
-          newValue: score,
-          modifiedBy: captainData?.id || `조장${captainData?.jo || ''}`,
-          modifiedByType: "captain",
-          comment: `자율 채점 - 코스: ${activeCourse.id}, 그룹: ${selectedGroup || ''}, 조: ${selectedJo || ''}`,
-          courseId: String(activeCourse.id),
-        });
+        // 3. 원자적 업데이트 실행
+        await update(ref(dbInstance), updates);
 
         // 실시간 업데이트를 위한 로그 캐시 무효화
         invalidatePlayerLogCache(playerId);
