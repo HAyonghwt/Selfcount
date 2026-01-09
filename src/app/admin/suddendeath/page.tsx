@@ -84,7 +84,7 @@ export default function SuddenDeathPage() {
     // NTP states (separated for individual and team, now group-based)
     const [individualNTPData, setIndividualNTPData] = useState<{ [groupName: string]: Partial<NTPData> }>({});
     const [teamNTPData, setTeamNTPData] = useState<{ [groupName: string]: Partial<NTPData> }>({});
-    
+
     // NTP UI states
     const [selectedIndividualNTPPlayers, setSelectedIndividualNTPPlayers] = useState<{ [key: string]: boolean }>({});
     const [selectedTeamNTPPlayers, setSelectedTeamNTPPlayers] = useState<{ [key: string]: boolean }>({});
@@ -132,21 +132,21 @@ export default function SuddenDeathPage() {
         if (!a.hasAnyScore) return 1;
         if (!b.hasAnyScore) return -1;
         if (a.total !== b.total) return a.total - b.total;
-        
+
         // Backcount: Start from the last course and work backwards
         const sortedCourses = [...coursesForGroup].sort((c1, c2) => {
             const name1 = c1?.name || '';
             const name2 = c2?.name || '';
             return name2.localeCompare(name1);
         });
-        
+
         for (const course of sortedCourses) {
             const courseId = course.id;
             const aCourseScore = a.courseScores[courseId] || 0;
             const bCourseScore = b.courseScores[courseId] || 0;
             if (aCourseScore !== bCourseScore) return aCourseScore - bCourseScore;
         }
-        
+
         // If all courses are tied, compare holes from last hole to first hole
         if (sortedCourses.length > 0) {
             const lastCourseId = sortedCourses[0].id;
@@ -166,7 +166,7 @@ export default function SuddenDeathPage() {
     // Fetch all necessary data
     useEffect(() => {
         if (!db) return;
-        
+
         const playersRef = ref(db, 'players');
         const scoresRef = ref(db, 'scores');
         const tournamentRef = ref(db, 'tournaments/current');
@@ -191,20 +191,20 @@ export default function SuddenDeathPage() {
             // Convert to group-based structure
             const groupData: { [groupName: string]: Partial<SuddenDeathData> } = {};
             const groupScores: { [groupName: string]: { [key: string]: { [key: string]: string } } } = {};
-            
+
             if (typeof data === 'object' && !data.isActive) {
                 // New structure: { groupName: { isActive, players, ... } }
                 Object.entries(data).forEach(([groupName, groupSuddenDeath]: [string, any]) => {
                     if (groupSuddenDeath && typeof groupSuddenDeath === 'object') {
                         groupData[groupName] = groupSuddenDeath;
                         if (groupSuddenDeath.scores) {
-                const stringScores: any = {};
+                            const stringScores: any = {};
                             Object.entries(groupSuddenDeath.scores).forEach(([pId, hScores]: [string, any]) => {
-                    stringScores[pId] = {};
-                    Object.entries(hScores).forEach(([h, s]) => {
-                        stringScores[pId][h] = String(s);
-                    });
-                });
+                                stringScores[pId] = {};
+                                Object.entries(hScores).forEach(([h, s]) => {
+                                    stringScores[pId][h] = String(s);
+                                });
+                            });
                             groupScores[groupName] = stringScores;
                         }
                     }
@@ -213,7 +213,7 @@ export default function SuddenDeathPage() {
                 // Legacy structure: single sudden death for all groups
                 // This will be migrated when saving
             }
-            
+
             setter(groupData);
             scoreSetter(groupScores);
         };
@@ -240,14 +240,14 @@ export default function SuddenDeathPage() {
                 setTeamBackcountApplied(data || {});
             }
         });
-        
+
         // Setup group-based NTP listener
         const setupGroupNTPListener = (setter: Function, rankingSetter: Function) => (snap: any) => {
             const data = snap.val() || {};
             // Convert to group-based structure
             const groupData: { [groupName: string]: Partial<NTPData> } = {};
             const groupRankings: { [groupName: string]: { [key: string]: number } } = {};
-            
+
             if (typeof data === 'object' && !data.isActive) {
                 // New structure: { groupName: { isActive, players, rankings } }
                 Object.entries(data).forEach(([groupName, groupNTP]: [string, any]) => {
@@ -262,11 +262,11 @@ export default function SuddenDeathPage() {
                 // Legacy structure: single NTP for all groups
                 // This will be migrated when saving
             }
-            
+
             setter(groupData);
             rankingSetter(groupRankings);
         };
-        
+
         const unsubIndividualNTP = onValue(individualNTPRef, setupGroupNTPListener(setIndividualNTPData, setIndividualNTPRankings));
         const unsubTeamNTP = onValue(teamNTPRef, setupGroupNTPListener(setTeamNTPData, setTeamNTPRankings));
 
@@ -291,7 +291,7 @@ export default function SuddenDeathPage() {
         const allProcessedPlayers: any[] = Object.entries(players).map(([playerId, player]: [string, any]) => {
             const playerGroupData = (groupsData as any)[player.group];
             const assignedCourseIds = playerGroupData?.courses ? Object.keys(playerGroupData.courses).filter(id => playerGroupData.courses[id]) : [];
-            const coursesForPlayer = allCoursesList.filter((c:any) => assignedCourseIds.includes(c.id.toString()));
+            const coursesForPlayer = allCoursesList.filter((c: any) => assignedCourseIds.includes(c.id.toString()));
             const playerScoresData = (scores as any)[playerId] || {};
             let totalScore = 0;
             const courseScoresForTieBreak: { [courseId: string]: number } = {};
@@ -350,7 +350,7 @@ export default function SuddenDeathPage() {
                 let rank = 1;
                 playersToSort[0].rank = rank;
                 for (let i = 1; i < playersToSort.length; i++) {
-                    const prev = playersToSort[i-1], curr = playersToSort[i];
+                    const prev = playersToSort[i - 1], curr = playersToSort[i];
                     let isTied = false;
                     if (curr.totalScore === prev.totalScore) {
                         if (curr.totalScore === leaderScore) isTied = true;
@@ -371,18 +371,20 @@ export default function SuddenDeathPage() {
 
             // 1위 동점자 확인
             const firstPlacePlayers = playersInGroup.filter(p => p.rank === 1);
-            
+
             if (firstPlacePlayers.length < 2) continue; // 1위 동점자가 2명 미만이면 스킵
 
             // Check if all first-place tied players have completed all assigned courses
             const groupData = (groupsData as any)[groupName];
             if (!groupData) continue; // 그룹 데이터가 없으면 스킵
-            
-            const assignedCourseIds = groupData?.courses 
+
+            const assignedCourseIds = groupData?.courses
                 ? Object.keys(groupData.courses).filter((id: string) => {
                     const courseValue = groupData.courses[id];
-                    // number 타입이면 0보다 큰 값, boolean이면 true, 그 외는 false
-                    if (typeof courseValue === 'number') {
+                    // 객체 타입 처리 (새로운 구조: { order: number, scoreboardActive: boolean })
+                    if (typeof courseValue === 'object' && courseValue !== null) {
+                        return (courseValue.order || 0) > 0;
+                    } else if (typeof courseValue === 'number') {
                         return courseValue > 0;
                     } else if (typeof courseValue === 'boolean') {
                         return courseValue === true;
@@ -390,10 +392,10 @@ export default function SuddenDeathPage() {
                     return false;
                 })
                 : [];
-            
+
             // 배정된 코스가 없으면 스킵
             if (assignedCourseIds.length === 0) continue;
-            
+
             // 1위 동점자들이 모두 모든 코스를 완료했는지 확인
             const allFirstPlaceCompleted = firstPlacePlayers.every((player: any) => {
                 if (!player.hasAnyScore || player.hasForfeited) return false;
@@ -413,14 +415,14 @@ export default function SuddenDeathPage() {
 
             // Only include groups where all first-place tied players have completed all courses
             if (!allFirstPlaceCompleted) continue;
-            
-                if (firstPlacePlayers[0].type === 'individual') {
-                    individualTies.push(...firstPlacePlayers);
-                } else if (firstPlacePlayers[0].type === 'team') {
-                    teamTies.push(...firstPlacePlayers);
+
+            if (firstPlacePlayers[0].type === 'individual') {
+                individualTies.push(...firstPlacePlayers);
+            } else if (firstPlacePlayers[0].type === 'team') {
+                teamTies.push(...firstPlacePlayers);
             }
         }
-        
+
         setTiedIndividualPlayers(individualTies);
         setTiedTeamPlayers(teamTies);
 
@@ -429,15 +431,15 @@ export default function SuddenDeathPage() {
     const handleStartSuddenDeath = (type: 'individual' | 'team', groupName?: string) => {
         const isIndividual = type === 'individual';
         const allSelectedPlayers = isIndividual ? selectedIndividualPlayers : selectedTeamPlayers;
-        
+
         // Filter by group if groupName is provided
         let activePlayers: string[];
         let playersToSave: { [key: string]: boolean };
-        
+
         if (groupName) {
             const tiedPlayers = isIndividual ? tiedIndividualPlayers : tiedTeamPlayers;
             const groupPlayerIds = new Set(tiedPlayers.filter(p => p.group === groupName).map(p => p.id));
-            activePlayers = Object.keys(allSelectedPlayers).filter(id => 
+            activePlayers = Object.keys(allSelectedPlayers).filter(id =>
                 allSelectedPlayers[id] && groupPlayerIds.has(id)
             );
             // Only save players from this group
@@ -449,7 +451,7 @@ export default function SuddenDeathPage() {
             activePlayers = Object.keys(allSelectedPlayers).filter(id => allSelectedPlayers[id]);
             playersToSave = allSelectedPlayers;
         }
-        
+
         const courseId = isIndividual ? selectedIndividualCourseId : selectedTeamCourseId;
         const holes = isIndividual ? selectedIndividualHoles : selectedTeamHoles;
 
@@ -475,7 +477,7 @@ export default function SuddenDeathPage() {
             isActive: true,
             players: playersToSave,
             courseId: courseId,
-            holes: holes.sort((a,b) => a - b),
+            holes: holes.sort((a, b) => a - b),
             scores: {},
         };
 
@@ -483,36 +485,36 @@ export default function SuddenDeathPage() {
             toast({ title: "오류", description: "데이터베이스 연결이 없습니다." });
             return;
         }
-        
+
         // Save group-specific sudden death
         const currentData = isIndividual ? individualSuddenDeathData : teamSuddenDeathData;
         const updatedData = { ...currentData, [groupName]: suddenDeathSetup };
-        
+
         set(ref(db, `tournaments/current/suddenDeath/${type}`), updatedData)
             .then(() => toast({ title: "성공", description: `${groupName} 그룹 ${isIndividual ? '개인전' : '2인 1팀'} 서든데스-플레이오프가 시작되었습니다.` }))
             .catch(err => toast({ title: "오류", description: err.message }));
     };
-    
+
     const handleResetSuddenDeath = (type: 'individual' | 'team', groupName?: string) => {
         if (!db) {
             toast({ title: "오류", description: "데이터베이스 연결이 없습니다." });
             return;
         }
-        
+
         if (!groupName) {
             toast({ title: "오류", description: "그룹명이 필요합니다." });
             return;
         }
-        
+
         // Remove group-specific sudden death
         const currentData = type === 'individual' ? individualSuddenDeathData : teamSuddenDeathData;
         const updatedData = { ...currentData };
         delete updatedData[groupName];
-        
+
         if (Object.keys(updatedData).length === 0) {
-        remove(ref(db, `tournaments/current/suddenDeath/${type}`))
+            remove(ref(db, `tournaments/current/suddenDeath/${type}`))
                 .then(() => toast({ title: "초기화 완료", description: `${groupName} 그룹 서든데스 정보가 초기화되었습니다.` }))
-            .catch(err => toast({ title: "오류", description: err.message }));
+                .catch(err => toast({ title: "오류", description: err.message }));
         } else {
             set(ref(db, `tournaments/current/suddenDeath/${type}`), updatedData)
                 .then(() => toast({ title: "초기화 완료", description: `${groupName} 그룹 서든데스 정보가 초기화되었습니다.` }))
@@ -525,13 +527,13 @@ export default function SuddenDeathPage() {
             toast({ title: "오류", description: "데이터베이스 연결이 없습니다." });
             return;
         }
-        
+
         const backcountState = type === 'individual' ? individualBackcountApplied : teamBackcountApplied;
         const setBackcountState = type === 'individual' ? setIndividualBackcountApplied : setTeamBackcountApplied;
-        
+
         const updated = { ...backcountState, [groupName]: true };
         setBackcountState(updated);
-        
+
         // Firebase에 그룹별 백카운트 적용 상태 저장
         set(ref(db, `tournaments/current/backcountApplied/${type}`), updated)
             .then(() => {
@@ -545,14 +547,14 @@ export default function SuddenDeathPage() {
             toast({ title: "오류", description: "데이터베이스 연결이 없습니다." });
             return;
         }
-        
+
         const backcountState = type === 'individual' ? individualBackcountApplied : teamBackcountApplied;
         const setBackcountState = type === 'individual' ? setIndividualBackcountApplied : setTeamBackcountApplied;
-        
+
         const updated = { ...backcountState };
         delete updated[groupName];
         setBackcountState(updated);
-        
+
         // Firebase에서 그룹별 백카운트 적용 상태 제거
         if (Object.keys(updated).length === 0) {
             remove(ref(db, `tournaments/current/backcountApplied/${type}`))
@@ -572,15 +574,15 @@ export default function SuddenDeathPage() {
     const handleStartNTP = (type: 'individual' | 'team', groupName?: string) => {
         const isIndividual = type === 'individual';
         const allSelectedPlayers = isIndividual ? selectedIndividualNTPPlayers : selectedTeamNTPPlayers;
-        
+
         // Filter by group if groupName is provided
         let activePlayers: string[];
         let playersToSave: { [key: string]: boolean };
-        
+
         if (groupName) {
             const tiedPlayers = isIndividual ? tiedIndividualPlayers : tiedTeamPlayers;
             const groupPlayerIds = new Set(tiedPlayers.filter(p => p.group === groupName).map(p => p.id));
-            activePlayers = Object.keys(allSelectedPlayers).filter(id => 
+            activePlayers = Object.keys(allSelectedPlayers).filter(id =>
                 allSelectedPlayers[id] && groupPlayerIds.has(id)
             );
             // Only save players from this group
@@ -619,11 +621,11 @@ export default function SuddenDeathPage() {
             toast({ title: "오류", description: "데이터베이스 연결이 없습니다." });
             return;
         }
-        
+
         // Save group-specific NTP
         const currentData = isIndividual ? individualNTPData : teamNTPData;
         const updatedData = { ...currentData, [groupName]: ntpSetup };
-        
+
         set(ref(db, `tournaments/current/nearestToPin/${type}`), updatedData)
             .then(() => {
                 toast({ title: "성공", description: `${groupName} 그룹 ${isIndividual ? '개인전' : '2인 1팀'} 니어리스트 투 더 핀이 시작되었습니다.` });
@@ -643,32 +645,32 @@ export default function SuddenDeathPage() {
             toast({ title: "오류", description: "데이터베이스 연결이 없습니다." });
             return;
         }
-        
+
         if (!groupName) {
             toast({ title: "오류", description: "그룹명이 필요합니다." });
             return;
         }
-        
+
         // Remove group-specific NTP
         const currentData = type === 'individual' ? individualNTPData : teamNTPData;
         const updatedData = { ...currentData };
         delete updatedData[groupName];
-        
+
         const currentRankings = type === 'individual' ? individualNTPRankings : teamNTPRankings;
         const updatedRankings = { ...currentRankings };
         delete updatedRankings[groupName];
-        
+
         if (Object.keys(updatedData).length === 0) {
-        remove(ref(db, `tournaments/current/nearestToPin/${type}`))
-            .then(() => {
+            remove(ref(db, `tournaments/current/nearestToPin/${type}`))
+                .then(() => {
                     toast({ title: "초기화 완료", description: `${groupName} 그룹 니어리스트 투 더 핀 정보가 초기화되었습니다.` });
-                if (type === 'individual') {
-                    setIndividualNTPRankings({});
-                } else {
-                    setTeamNTPRankings({});
-                }
-            })
-            .catch(err => toast({ title: "오류", description: err.message }));
+                    if (type === 'individual') {
+                        setIndividualNTPRankings({});
+                    } else {
+                        setTeamNTPRankings({});
+                    }
+                })
+                .catch(err => toast({ title: "오류", description: err.message }));
         } else {
             set(ref(db, `tournaments/current/nearestToPin/${type}`), updatedData)
                 .then(() => {
@@ -688,19 +690,19 @@ export default function SuddenDeathPage() {
         const allRankings = isIndividual ? individualNTPRankings : teamNTPRankings;
         const setRankings = isIndividual ? setIndividualNTPRankings : setTeamNTPRankings;
         const allNTPData = isIndividual ? individualNTPData : teamNTPData;
-        
+
         const currentRankings = allRankings[groupName] || {};
         const ntpData = allNTPData[groupName];
 
         // 같은 순위가 있는지 확인
         const existingPlayerWithRank = Object.entries(currentRankings).find(([pid, rank]) => pid !== playerId && rank === newRank);
-        
+
         let updatedRankings: { [key: string]: number };
         if (existingPlayerWithRank) {
             // 기존 순위를 교환
             const [otherPlayerId, otherRank] = existingPlayerWithRank;
             const currentPlayerRank = currentRankings[playerId] || 0;
-            
+
             updatedRankings = { ...currentRankings };
             updatedRankings[playerId] = newRank;
             updatedRankings[otherPlayerId] = currentPlayerRank;
@@ -708,15 +710,15 @@ export default function SuddenDeathPage() {
             // 단순 순위 변경
             updatedRankings = { ...currentRankings, [playerId]: newRank };
         }
-        
+
         const updatedAllRankings = { ...allRankings, [groupName]: updatedRankings };
         setRankings(updatedAllRankings);
-            
-            // Firebase 업데이트
-            if (db && ntpData?.isActive) {
+
+        // Firebase 업데이트
+        if (db && ntpData?.isActive) {
             const updatedNTPData = { ...allNTPData, [groupName]: { ...ntpData, rankings: updatedRankings } };
             set(ref(db, `tournaments/current/nearestToPin/${type}`), updatedNTPData)
-                    .catch(err => toast({ title: "오류", description: err.message }));
+                .catch(err => toast({ title: "오류", description: err.message }));
         }
     };
 
@@ -725,10 +727,10 @@ export default function SuddenDeathPage() {
         const allRankings = isIndividual ? individualNTPRankings : teamNTPRankings;
         const currentRankings = allRankings[groupName] || {};
         const currentRank = currentRankings[playerId] || 0;
-        
+
         if (direction === 'up' && currentRank <= 1) return;
         if (direction === 'down' && currentRank >= Object.keys(currentRankings).length) return;
-        
+
         const newRank = direction === 'up' ? currentRank - 1 : currentRank + 1;
         handleNTPRankChange(type, playerId, newRank, groupName);
     };
@@ -737,7 +739,7 @@ export default function SuddenDeathPage() {
         const isIndividual = type === 'individual';
         const allScores = isIndividual ? individualSuddenDeathScores : teamSuddenDeathScores;
         const setScores = isIndividual ? setIndividualSuddenDeathScores : setTeamSuddenDeathScores;
-        
+
         const groupScores = allScores[groupName] || {};
         setScores(prevScores => {
             const newScores = { ...prevScores };
@@ -751,7 +753,7 @@ export default function SuddenDeathPage() {
             toast({ title: "오류", description: "데이터베이스 연결이 없습니다." });
             return;
         }
-        
+
         const scoreRef = ref(db, `tournaments/current/suddenDeath/${type}/${groupName}/scores/${playerId}/${hole}`);
         const numericValue = parseInt(value, 10);
         if (!isNaN(numericValue)) {
@@ -772,7 +774,7 @@ export default function SuddenDeathPage() {
             if (!playerInfo) return null;
 
             const name = playerInfo.type === 'team' ? `${playerInfo.p1_name} / ${playerInfo.p2_name}` : playerInfo.name;
-            
+
             const scoresPerHole: { [hole: string]: number | null } = {};
             let totalScore = 0;
             let holesPlayed = 0;
@@ -799,7 +801,7 @@ export default function SuddenDeathPage() {
 
         let rank = 1;
         for (let i = 0; i < results.length; i++) {
-            if (i > 0 && (results[i].totalScore > results[i-1].totalScore || results[i].holesPlayed < results[i-1].holesPlayed)) {
+            if (i > 0 && (results[i].totalScore > results[i - 1].totalScore || results[i].holesPlayed < results[i - 1].holesPlayed)) {
                 rank = i + 1;
             }
             results[i].rank = rank;
@@ -807,7 +809,7 @@ export default function SuddenDeathPage() {
 
         return results;
     }
-    
+
     const processedIndividualSuddenDeathData = useMemo(() => processSuddenDeathData(individualSuddenDeathData), [individualSuddenDeathData, players]);
     const processedTeamSuddenDeathData = useMemo(() => processSuddenDeathData(teamSuddenDeathData), [teamSuddenDeathData, players]);
 
@@ -819,29 +821,29 @@ export default function SuddenDeathPage() {
         const backcountApplied = type === 'individual' ? individualBackcountApplied : teamBackcountApplied;
         const groupBackcountApplied = backcountApplied[groupName] || false;
         const groupPlayers = tiedPlayers.filter(p => p.group === groupName);
-        
+
         if (!groupBackcountApplied || groupPlayers.length < 2) return groupPlayers;
-        
+
         const allCoursesList = Object.values(courses);
         const backcountRankedPlayers = [...groupPlayers];
-        
+
         if (backcountRankedPlayers.length < 2) return backcountRankedPlayers;
-        
+
         const coursesForGroup = (backcountRankedPlayers[0] as any)?.assignedCourses || allCoursesList;
         backcountRankedPlayers.sort((a, b) => backcountBreak(a, b, coursesForGroup));
-        
+
         // Assign ranks
         let rank = 1;
         backcountRankedPlayers[0].rank = rank;
         for (let i = 1; i < backcountRankedPlayers.length; i++) {
-            const prev = backcountRankedPlayers[i-1];
+            const prev = backcountRankedPlayers[i - 1];
             const curr = backcountRankedPlayers[i];
             if (backcountBreak(curr, prev, coursesForGroup) !== 0) {
                 rank = i + 1;
             }
             curr.rank = rank;
         }
-        
+
         return backcountRankedPlayers;
     };
 
@@ -877,8 +879,8 @@ export default function SuddenDeathPage() {
                     <CardHeader>
                         <CardTitle>서든데스 설정</CardTitle>
                         <CardDescription>
-                            {backcountApplied 
-                                ? "1위 동점자가 백카운트로 결정되었습니다. 서든데스는 비활성화됩니다." 
+                            {backcountApplied
+                                ? "1위 동점자가 백카운트로 결정되었습니다. 서든데스는 비활성화됩니다."
                                 : "서든데스를 진행할 선수, 코스, 홀을 선택하고 시작하세요."
                             }
                         </CardDescription>
@@ -890,15 +892,15 @@ export default function SuddenDeathPage() {
                                     <Label className="font-semibold text-base">1. 참가 선수 선택</Label>
                                     <div className="space-y-4 mt-2">
                                         {Object.entries(playersGroupedByGroup).map(([groupName, tiedPlayersInGroup]) => {
-                                            const displayPlayersInGroup = backcountApplied 
+                                            const displayPlayersInGroup = backcountApplied
                                                 ? displayPlayers.filter(p => p.group === groupName)
                                                 : tiedPlayersInGroup;
-                                            
+
                                             return (
                                                 <div key={groupName} className="p-4 border rounded-md">
                                                     <p className="font-bold mb-3">
-                                                        {groupName} 그룹 
-                                                        {backcountApplied 
+                                                        {groupName} 그룹
+                                                        {backcountApplied
                                                             ? ` (백카운트로 결정됨 - ${displayPlayersInGroup.length}명)`
                                                             : ` (${tiedPlayersInGroup.length}명 동점)`
                                                         }
@@ -910,12 +912,12 @@ export default function SuddenDeathPage() {
                                                                     <Checkbox
                                                                         id={`${type}-player-${player.id}`}
                                                                         checked={selectedPlayers[player.id] || false}
-                                                                        onCheckedChange={(checked) => setSelectedPlayers(prev => ({...prev, [player.id]: !!checked}))}
+                                                                        onCheckedChange={(checked) => setSelectedPlayers(prev => ({ ...prev, [player.id]: !!checked }))}
                                                                         disabled={suddenDeathData?.isActive}
                                                                     />
                                                                 )}
-                                                                <Label 
-                                                                    htmlFor={`${type}-player-${player.id}`} 
+                                                                <Label
+                                                                    htmlFor={`${type}-player-${player.id}`}
                                                                     className={`font-medium text-base ${backcountApplied ? 'flex items-center gap-2' : ''}`}
                                                                 >
                                                                     {backcountApplied && (
@@ -933,13 +935,13 @@ export default function SuddenDeathPage() {
                                         })}
                                     </div>
                                 </div>
-                                
+
                                 {!backcountApplied && (
                                     <>
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                             <div className="space-y-2">
                                                 <Label htmlFor={`${type}-course-select`} className="font-semibold">2. 코스 선택</Label>
-                                                <Select 
+                                                <Select
                                                     value={selectedCourseId}
                                                     onValueChange={setSelectedCourseId}
                                                     disabled={suddenDeathData?.isActive || !hasAnySelectedPlayer}
@@ -964,12 +966,12 @@ export default function SuddenDeathPage() {
 
                                         <div className="flex gap-4">
                                             <Button onClick={() => handleStartSuddenDeath(type)} disabled={suddenDeathData?.isActive} size="lg">
-                                                <Play className="mr-2 h-4 w-4"/> 서든데스 시작
+                                                <Play className="mr-2 h-4 w-4" /> 서든데스 시작
                                             </Button>
                                             <AlertDialog>
                                                 <AlertDialogTrigger asChild>
                                                     <Button variant="destructive" size="lg" disabled={!suddenDeathData?.isActive}>
-                                                        <RotateCcw className="mr-2 h-4 w-4"/> 서든데스 초기화
+                                                        <RotateCcw className="mr-2 h-4 w-4" /> 서든데스 초기화
                                                     </Button>
                                                 </AlertDialogTrigger>
                                                 <AlertDialogContent>
@@ -1008,7 +1010,7 @@ export default function SuddenDeathPage() {
                                     <TableHeader>
                                         <TableRow>
                                             <TableHead className="w-48">선수</TableHead>
-                                            {suddenDeathData.holes?.sort((a,b) => a-b).map(hole => <TableHead key={hole} className="text-center">{hole}홀</TableHead>)}
+                                            {suddenDeathData.holes?.sort((a, b) => a - b).map(hole => <TableHead key={hole} className="text-center">{hole}홀</TableHead>)}
                                             <TableHead className="text-center font-bold text-primary">합계</TableHead>
                                             <TableHead className="text-center font-bold text-primary">순위</TableHead>
                                         </TableRow>
@@ -1075,11 +1077,11 @@ export default function SuddenDeathPage() {
                     <CardHeader>
                         <CardTitle>니어리스트 투 더 핀: Nearest-to-the-Pin (NTP) 설정</CardTitle>
                         <CardDescription>
-                            {backcountApplied 
-                                ? "1위 동점자가 백카운트로 결정되었습니다. 니어리스트 투 더 핀은 비활성화됩니다." 
+                            {backcountApplied
+                                ? "1위 동점자가 백카운트로 결정되었습니다. 니어리스트 투 더 핀은 비활성화됩니다."
                                 : ntpData?.isActive
-                                ? "니어리스트 투 더 핀 순위를 관리하세요. 거리 측정 결과에 따라 순위를 설정할 수 있습니다."
-                                : "니어리스트 투 더 핀을 진행할 선수를 선택하고 순위를 설정하세요."
+                                    ? "니어리스트 투 더 핀 순위를 관리하세요. 거리 측정 결과에 따라 순위를 설정할 수 있습니다."
+                                    : "니어리스트 투 더 핀을 진행할 선수를 선택하고 순위를 설정하세요."
                             }
                         </CardDescription>
                     </CardHeader>
@@ -1101,10 +1103,10 @@ export default function SuddenDeathPage() {
                                                                 <Checkbox
                                                                     id={`${type}-ntp-player-${player.id}`}
                                                                     checked={selectedPlayers[player.id] || false}
-                                                                    onCheckedChange={(checked) => setSelectedPlayers(prev => ({...prev, [player.id]: !!checked}))}
+                                                                    onCheckedChange={(checked) => setSelectedPlayers(prev => ({ ...prev, [player.id]: !!checked }))}
                                                                 />
-                                                                <Label 
-                                                                    htmlFor={`${type}-ntp-player-${player.id}`} 
+                                                                <Label
+                                                                    htmlFor={`${type}-ntp-player-${player.id}`}
                                                                     className="font-medium text-base"
                                                                 >
                                                                     {player.name} <span className="text-muted-foreground text-sm">({player.affiliation})</span>
@@ -1122,13 +1124,13 @@ export default function SuddenDeathPage() {
                                     <div className="flex gap-4">
                                         {!ntpData?.isActive ? (
                                             <Button onClick={() => handleStartNTP(type)} disabled={Object.keys(selectedPlayers).filter(id => selectedPlayers[id]).length < 2} size="lg">
-                                                <Target className="mr-2 h-4 w-4"/> 니어리스트 투 더 핀 시작
+                                                <Target className="mr-2 h-4 w-4" /> 니어리스트 투 더 핀 시작
                                             </Button>
                                         ) : (
                                             <AlertDialog>
                                                 <AlertDialogTrigger asChild>
                                                     <Button variant="destructive" size="lg">
-                                                        <RotateCcw className="mr-2 h-4 w-4"/> 니어리스트 투 더 핀 초기화
+                                                        <RotateCcw className="mr-2 h-4 w-4" /> 니어리스트 투 더 핀 초기화
                                                     </Button>
                                                 </AlertDialogTrigger>
                                                 <AlertDialogContent>
@@ -1159,57 +1161,57 @@ export default function SuddenDeathPage() {
                                                         ntpRank: ntpRankings[player.id]
                                                     }))
                                                     .sort((a: any, b: any) => a.ntpRank - b.ntpRank);
-                                                
+
                                                 // 이 그룹에 선택된 선수가 없으면 표시하지 않음
                                                 if (groupRankedPlayers.length === 0) return null;
-                                                
+
                                                 return (
                                                     <div key={groupName} className="space-y-2 border rounded-lg p-4">
                                                         <p className="font-bold text-base mb-3">
                                                             {groupName} 그룹 ({groupRankedPlayers.length}명)
                                                         </p>
                                                         {groupRankedPlayers.map((player: any, index: number) => (
-                                                <div key={player.id} className="flex items-center justify-between p-3 bg-muted/30 rounded-md border">
-                                                    <div className="flex items-center gap-3 flex-1">
-                                                        <span className="font-bold text-lg text-primary w-12 text-center">
-                                                            {player.ntpRank}위
-                                                        </span>
-                                                        <span className="font-medium text-base">{player.name}</span>
-                                                        <span className="text-muted-foreground text-sm">({player.affiliation})</span>
-                                                    </div>
-                                                    <div className="flex gap-2">
-                                                        <Button
-                                                            variant="outline"
-                                                            size="sm"
-                                                            onClick={() => handleMoveNTPRank(type, player.id, 'up', groupName)}
-                                                            disabled={player.ntpRank <= 1}
-                                                        >
-                                                            <ArrowUp className="h-4 w-4" />
-                                                        </Button>
-                                                        <Button
-                                                            variant="outline"
-                                                            size="sm"
-                                                            onClick={() => handleMoveNTPRank(type, player.id, 'down', groupName)}
+                                                            <div key={player.id} className="flex items-center justify-between p-3 bg-muted/30 rounded-md border">
+                                                                <div className="flex items-center gap-3 flex-1">
+                                                                    <span className="font-bold text-lg text-primary w-12 text-center">
+                                                                        {player.ntpRank}위
+                                                                    </span>
+                                                                    <span className="font-medium text-base">{player.name}</span>
+                                                                    <span className="text-muted-foreground text-sm">({player.affiliation})</span>
+                                                                </div>
+                                                                <div className="flex gap-2">
+                                                                    <Button
+                                                                        variant="outline"
+                                                                        size="sm"
+                                                                        onClick={() => handleMoveNTPRank(type, player.id, 'up', groupName)}
+                                                                        disabled={player.ntpRank <= 1}
+                                                                    >
+                                                                        <ArrowUp className="h-4 w-4" />
+                                                                    </Button>
+                                                                    <Button
+                                                                        variant="outline"
+                                                                        size="sm"
+                                                                        onClick={() => handleMoveNTPRank(type, player.id, 'down', groupName)}
                                                                         disabled={player.ntpRank >= groupRankedPlayers.length}
-                                                        >
-                                                            <ArrowDown className="h-4 w-4" />
-                                                        </Button>
-                                                        <Input
-                                                            type="number"
-                                                            min={1}
+                                                                    >
+                                                                        <ArrowDown className="h-4 w-4" />
+                                                                    </Button>
+                                                                    <Input
+                                                                        type="number"
+                                                                        min={1}
                                                                         max={groupRankedPlayers.length}
-                                                            value={player.ntpRank}
-                                                            onChange={(e) => {
-                                                                const newRank = parseInt(e.target.value, 10);
+                                                                        value={player.ntpRank}
+                                                                        onChange={(e) => {
+                                                                            const newRank = parseInt(e.target.value, 10);
                                                                             if (!isNaN(newRank) && newRank >= 1 && newRank <= groupRankedPlayers.length) {
-                                                                    handleNTPRankChange(type, player.id, newRank, groupName);
-                                                                }
-                                                            }}
-                                                            className="w-20 h-9 text-center"
-                                                        />
-                                                    </div>
-                                                </div>
-                                            ))}
+                                                                                handleNTPRankChange(type, player.id, newRank, groupName);
+                                                                            }
+                                                                        }}
+                                                                        className="w-20 h-9 text-center"
+                                                                    />
+                                                                </div>
+                                                            </div>
+                                                        ))}
                                                     </div>
                                                 );
                                             })}
@@ -1237,24 +1239,24 @@ export default function SuddenDeathPage() {
         const isIndividual = type === 'individual';
         const tiedPlayers = isIndividual ? tiedIndividualPlayers : tiedTeamPlayers;
         const groupTiedPlayers = tiedPlayers.filter(p => p.group === groupName);
-        
+
         if (groupTiedPlayers.length < 2) return null;
-        
+
         const backcountApplied = isIndividual ? individualBackcountApplied : teamBackcountApplied;
         const groupBackcountApplied = backcountApplied[groupName] || false;
         const displayPlayers = groupBackcountApplied ? getBackcountRankedPlayers(type, groupName) : groupTiedPlayers;
-        
+
         // Get group-specific sudden death and NTP data
         const allSuddenDeathData = isIndividual ? individualSuddenDeathData : teamSuddenDeathData;
         const allNTPData = isIndividual ? individualNTPData : teamNTPData;
         const allNTPRankings = isIndividual ? individualNTPRankings : teamNTPRankings;
         const allSuddenDeathScores = isIndividual ? individualSuddenDeathScores : teamSuddenDeathScores;
-        
+
         const suddenDeathData = allSuddenDeathData[groupName] || {};
         const ntpData = allNTPData[groupName] || {};
         const ntpRankings = allNTPRankings[groupName] || {};
         const suddenDeathScores = allSuddenDeathScores[groupName] || {};
-        
+
         const selectedNTPPlayers = isIndividual ? selectedIndividualNTPPlayers : selectedTeamNTPPlayers;
         const setSelectedNTPPlayers = isIndividual ? setSelectedIndividualNTPPlayers : setSelectedTeamNTPPlayers;
         const selectedSuddenDeathPlayers = isIndividual ? selectedIndividualPlayers : selectedTeamPlayers;
@@ -1263,7 +1265,7 @@ export default function SuddenDeathPage() {
         const setSelectedCourseId = isIndividual ? setSelectedIndividualCourseId : setSelectedTeamCourseId;
         const selectedHoles = isIndividual ? selectedIndividualHoles : selectedTeamHoles;
         const setSelectedHoles = isIndividual ? setSelectedIndividualHoles : setSelectedTeamHoles;
-        
+
         // Process sudden death players for this group
         const groupSuddenDeathPlayers = suddenDeathData?.isActive && suddenDeathData?.players
             ? Object.keys(suddenDeathData.players)
@@ -1271,11 +1273,11 @@ export default function SuddenDeathPage() {
                 .map(playerId => {
                     const player = groupTiedPlayers.find(p => p.id === playerId);
                     if (!player) return null;
-                    
+
                     const scoresPerHole: { [hole: string]: number | null } = {};
                     let totalScore = 0;
                     let holesPlayed = 0;
-                    
+
                     suddenDeathData.holes?.forEach((hole: number) => {
                         const score = suddenDeathData.scores?.[playerId]?.[hole];
                         if (score !== undefined && score !== null) {
@@ -1286,7 +1288,7 @@ export default function SuddenDeathPage() {
                             scoresPerHole[hole] = null;
                         }
                     });
-                    
+
                     return { id: playerId, name: player.name, scoresPerHole, totalScore, holesPlayed };
                 })
                 .filter(Boolean)
@@ -1297,15 +1299,15 @@ export default function SuddenDeathPage() {
                 })
                 .map((player: any, index: number, arr: any[]) => {
                     let rank = 1;
-                    if (index > 0 && (player.totalScore > arr[index-1].totalScore || player.holesPlayed < arr[index-1].holesPlayed)) {
+                    if (index > 0 && (player.totalScore > arr[index - 1].totalScore || player.holesPlayed < arr[index - 1].holesPlayed)) {
                         rank = index + 1;
                     } else if (index > 0) {
-                        rank = arr[index-1].rank;
+                        rank = arr[index - 1].rank;
                     }
                     return { ...player, rank };
                 })
             : [];
-        
+
         // Filter NTP players for this group
         const groupNTPPlayers = Object.keys(ntpRankings)
             .filter(playerId => groupTiedPlayers.some(p => p.id === playerId))
@@ -1325,7 +1327,7 @@ export default function SuddenDeathPage() {
             .filter(id => selectedSuddenDeathPlayers[id] && groupTiedPlayers.some(p => p.id === id))
             .length;
 
-    return (
+        return (
             <Card key={groupName} className="border-2">
                 <CardHeader>
                     <CardTitle className="text-2xl font-bold">{groupName} 그룹 플레이오프 관리</CardTitle>
@@ -1340,30 +1342,30 @@ export default function SuddenDeathPage() {
                             <div>
                                 <Label className="font-semibold text-base">백카운트 선정</Label>
                                 <p className="text-sm text-muted-foreground mt-1">
-                                    {groupBackcountApplied 
-                                        ? "이 그룹의 1위 동점자가 백카운트로 결정되었습니다." 
+                                    {groupBackcountApplied
+                                        ? "이 그룹의 1위 동점자가 백카운트로 결정되었습니다."
                                         : "1위 동점자를 백카운트로 결정하려면 아래 버튼을 클릭하세요."}
                                 </p>
                             </div>
                             <div className="flex gap-2">
-                        <Button 
-                                    onClick={() => handleApplyBackcount(type, groupName)} 
+                                <Button
+                                    onClick={() => handleApplyBackcount(type, groupName)}
                                     disabled={groupTiedPlayers.length < 2 || groupBackcountApplied}
-                            className="bg-blue-600 hover:bg-blue-700 text-white"
+                                    className="bg-blue-600 hover:bg-blue-700 text-white"
                                     size="sm"
-                        >
-                            백카운트로 선정
-                        </Button>
-                        <Button 
-                                    onClick={() => handleResetBackcount(type, groupName)} 
+                                >
+                                    백카운트로 선정
+                                </Button>
+                                <Button
+                                    onClick={() => handleResetBackcount(type, groupName)}
                                     disabled={!groupBackcountApplied}
-                            variant="outline"
-                            className="border-blue-600 text-blue-600 hover:bg-blue-50"
+                                    variant="outline"
+                                    className="border-blue-600 text-blue-600 hover:bg-blue-50"
                                     size="sm"
-                        >
-                            백카운트 초기화
-                        </Button>
-                    </div>
+                                >
+                                    백카운트 초기화
+                                </Button>
+                            </div>
                         </div>
                         {groupBackcountApplied && (
                             <div className="mt-3 space-y-2">
@@ -1379,7 +1381,7 @@ export default function SuddenDeathPage() {
                             </div>
                         )}
                     </div>
-                    
+
                     {/* 서든데스 설정 */}
                     <div className="p-4 border rounded-lg">
                         <Label className="font-semibold text-base mb-4 block">서든데스 설정</Label>
@@ -1395,10 +1397,10 @@ export default function SuddenDeathPage() {
                                                         <Checkbox
                                                             id={`${type}-sd-${groupName}-${player.id}`}
                                                             checked={selectedSuddenDeathPlayers[player.id] || false}
-                                                            onCheckedChange={(checked) => setSelectedSuddenDeathPlayers(prev => ({...prev, [player.id]: !!checked}))}
+                                                            onCheckedChange={(checked) => setSelectedSuddenDeathPlayers(prev => ({ ...prev, [player.id]: !!checked }))}
                                                         />
-                                                        <Label 
-                                                            htmlFor={`${type}-sd-${groupName}-${player.id}`} 
+                                                        <Label
+                                                            htmlFor={`${type}-sd-${groupName}-${player.id}`}
                                                             className="text-sm font-medium cursor-pointer"
                                                         >
                                                             {player.name} <span className="text-muted-foreground">({player.affiliation})</span>
@@ -1410,7 +1412,7 @@ export default function SuddenDeathPage() {
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                             <div className="space-y-2">
                                                 <Label className="text-sm">코스 선택</Label>
-                                                <Select 
+                                                <Select
                                                     value={selectedCourseId}
                                                     onValueChange={setSelectedCourseId}
                                                     disabled={selectedCountForGroup === 0}
@@ -1432,16 +1434,16 @@ export default function SuddenDeathPage() {
                                                 />
                                             </div>
                                         </div>
-                                        <Button 
-                                            onClick={() => handleStartSuddenDeath(type, groupName)} 
+                                        <Button
+                                            onClick={() => handleStartSuddenDeath(type, groupName)}
                                             disabled={
                                                 Object.keys(selectedSuddenDeathPlayers).filter(id => selectedSuddenDeathPlayers[id] && groupTiedPlayers.some(p => p.id === id)).length < 2 ||
                                                 !selectedCourseId ||
                                                 selectedHoles.length === 0
-                                            } 
+                                            }
                                             size="sm"
                                         >
-                                            <Play className="mr-2 h-4 w-4"/> 서든데스 시작
+                                            <Play className="mr-2 h-4 w-4" /> 서든데스 시작
                                         </Button>
                                     </>
                                 ) : (
@@ -1449,7 +1451,7 @@ export default function SuddenDeathPage() {
                                         <AlertDialog>
                                             <AlertDialogTrigger asChild>
                                                 <Button variant="destructive" size="sm">
-                                                    <RotateCcw className="mr-2 h-4 w-4"/> 서든데스 초기화
+                                                    <RotateCcw className="mr-2 h-4 w-4" /> 서든데스 초기화
                                                 </Button>
                                             </AlertDialogTrigger>
                                             <AlertDialogContent>
@@ -1469,7 +1471,7 @@ export default function SuddenDeathPage() {
                                                     <TableHeader>
                                                         <TableRow>
                                                             <TableHead className="w-48">선수</TableHead>
-                                                            {suddenDeathData.holes?.sort((a,b) => a-b).map(hole => <TableHead key={hole} className="text-center">{hole}홀</TableHead>)}
+                                                            {suddenDeathData.holes?.sort((a, b) => a - b).map(hole => <TableHead key={hole} className="text-center">{hole}홀</TableHead>)}
                                                             <TableHead className="text-center font-bold text-primary">합계</TableHead>
                                                             <TableHead className="text-center font-bold text-primary">순위</TableHead>
                                                         </TableRow>
@@ -1503,7 +1505,7 @@ export default function SuddenDeathPage() {
                             <p className="text-sm text-muted-foreground">백카운트로 결정된 그룹은 서든데스를 진행할 수 없습니다.</p>
                         )}
                     </div>
-                    
+
                     {/* NTP 설정 */}
                     <div className="p-4 border rounded-lg">
                         <Label className="font-semibold text-base mb-4 block">니어리스트 투 더 핀 (NTP) 설정</Label>
@@ -1519,10 +1521,10 @@ export default function SuddenDeathPage() {
                                                         <Checkbox
                                                             id={`${type}-ntp-${groupName}-${player.id}`}
                                                             checked={selectedNTPPlayers[player.id] || false}
-                                                            onCheckedChange={(checked) => setSelectedNTPPlayers(prev => ({...prev, [player.id]: !!checked}))}
+                                                            onCheckedChange={(checked) => setSelectedNTPPlayers(prev => ({ ...prev, [player.id]: !!checked }))}
                                                         />
-                                                        <Label 
-                                                            htmlFor={`${type}-ntp-${groupName}-${player.id}`} 
+                                                        <Label
+                                                            htmlFor={`${type}-ntp-${groupName}-${player.id}`}
                                                             className="text-sm font-medium cursor-pointer"
                                                         >
                                                             {player.name} <span className="text-muted-foreground">({player.affiliation})</span>
@@ -1531,12 +1533,12 @@ export default function SuddenDeathPage() {
                                                 ))}
                                             </div>
                                         </div>
-                                        <Button 
-                                            onClick={() => handleStartNTP(type, groupName)} 
-                                            disabled={Object.keys(selectedNTPPlayers).filter(id => selectedNTPPlayers[id] && groupTiedPlayers.some(p => p.id === id)).length < 2} 
+                                        <Button
+                                            onClick={() => handleStartNTP(type, groupName)}
+                                            disabled={Object.keys(selectedNTPPlayers).filter(id => selectedNTPPlayers[id] && groupTiedPlayers.some(p => p.id === id)).length < 2}
                                             size="sm"
                                         >
-                                            <Target className="mr-2 h-4 w-4"/> 니어리스트 투 더 핀 시작
+                                            <Target className="mr-2 h-4 w-4" /> 니어리스트 투 더 핀 시작
                                         </Button>
                                     </>
                                 ) : (
@@ -1544,7 +1546,7 @@ export default function SuddenDeathPage() {
                                         <AlertDialog>
                                             <AlertDialogTrigger asChild>
                                                 <Button variant="destructive" size="sm">
-                                                    <RotateCcw className="mr-2 h-4 w-4"/> 니어리스트 투 더 핀 초기화
+                                                    <RotateCcw className="mr-2 h-4 w-4" /> 니어리스트 투 더 핀 초기화
                                                 </Button>
                                             </AlertDialogTrigger>
                                             <AlertDialogContent>
@@ -1620,7 +1622,7 @@ export default function SuddenDeathPage() {
         <div className="space-y-6">
             <Card>
                 <CardHeader>
-                    <CardTitle className="text-2xl font-bold font-headline flex items-center gap-2"><Flame className="text-destructive"/>플레이오프 관리</CardTitle>
+                    <CardTitle className="text-2xl font-bold font-headline flex items-center gap-2"><Flame className="text-destructive" />플레이오프 관리</CardTitle>
                     <CardDescription>1위 동점자가 발생한 그룹별로 백카운트, 서든데스, 니어리스트 투 더 핀을 관리할 수 있습니다.</CardDescription>
                 </CardHeader>
             </Card>
@@ -1642,7 +1644,7 @@ export default function SuddenDeathPage() {
                             acc[groupName].push(player);
                             return acc;
                         }, {} as Record<string, Player[]>);
-                        
+
                         return Object.keys(groupsWithTies).length > 0 ? (
                             Object.entries(groupsWithTies).map(([groupName]) => renderGroupPlayoffInterface('individual', groupName))
                         ) : (
@@ -1663,7 +1665,7 @@ export default function SuddenDeathPage() {
                             acc[groupName].push(player);
                             return acc;
                         }, {} as Record<string, Player[]>);
-                        
+
                         return Object.keys(groupsWithTies).length > 0 ? (
                             Object.entries(groupsWithTies).map(([groupName]) => renderGroupPlayoffInterface('team', groupName))
                         ) : (
