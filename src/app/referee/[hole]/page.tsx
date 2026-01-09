@@ -86,9 +86,20 @@ export default function RefereePage() {
     const confirmLeave = () => {
         setShowLeaveConfirm(false);
         setPendingBackType(null);
-        setView('selection');
-        // 그룹과 코스는 유지하여 완료된 조 체크 표시가 보이도록 함
-        setSelectedJo('');
+
+        if (view === 'scoring') {
+            setView('selection');
+            // 그룹과 코스는 유지하여 완료된 조 체크 표시가 보이도록 함
+            setSelectedJo('');
+        } else {
+            // 선택 화면에서 나가기를 확인하면 로그아웃/이탈 처리
+            if (typeof window !== 'undefined') {
+                // 뒤로가기 모달에서 확인을 눌렀으므로 나감
+                // safeLocalStorageClear(); // 선택 사항: 편의를 위해 유지할지? 로그아웃 버튼과 동일하게 하려면 clear
+                // safeSessionStorageClear();
+                router.replace('/referee/login');
+            }
+        }
     };
     const cancelLeave = () => {
         setShowLeaveConfirm(false);
@@ -271,7 +282,6 @@ export default function RefereePage() {
             const data = snapshot.val();
             if (data?.courses) {
                 const selectedCourses = Object.values(data.courses)
-                    .filter((course: any) => course.isActive)
                     .map((course: any) => ({
                         ...course,
                         order: course.order !== undefined ? course.order : 999 // order가 없으면 뒤로
@@ -323,7 +333,6 @@ export default function RefereePage() {
                 // tournamentCourses도 함께 업데이트
                 if (cached.courses) {
                     const selectedCourses = Object.values(cached.courses)
-                        .filter((course: any) => course.isActive)
                         .map((course: any) => ({
                             ...course,
                             order: course.order !== undefined ? course.order : 999
@@ -391,7 +400,6 @@ export default function RefereePage() {
                     // tournamentCourses도 함께 업데이트 (assignedCourse 찾기용)
                     if (tournamentData.courses) {
                         const selectedCourses = Object.values(tournamentData.courses)
-                            .filter((course: any) => course.isActive)
                             .map((course: any) => ({
                                 ...course,
                                 order: course.order !== undefined ? course.order : 999
@@ -623,22 +631,31 @@ export default function RefereePage() {
     // popstate(브라우저 뒤로가기)에서 경고 다이얼로그
     useEffect(() => {
         const onPopState = (e: PopStateEvent) => {
-            if (view === 'scoring') {
-                setPendingBackType('popstate');
-                setShowLeaveConfirm(true);
-                window.history.pushState(null, '', window.location.href);
-            }
+            // 모든 뷰에서 뒤로가기 감지
+            setPendingBackType('popstate');
+            setShowLeaveConfirm(true);
+            window.history.pushState(null, '', window.location.href);
         };
+
         if (typeof window !== 'undefined') {
             window.addEventListener('popstate', onPopState);
-            if (view === 'scoring') window.history.pushState(null, '', window.location.href);
+            // 모든 뷰에서 history push
+            window.history.pushState(null, '', window.location.href);
         }
         return () => {
             if (typeof window !== 'undefined') {
                 window.removeEventListener('popstate', onPopState);
             }
         };
-    }, [view]);
+    }, []); // view 의존성 제거 (마운트 시 한 번만 실행해도 됨, 다만 view 변경 시 history push가 필요할 수도 있음. 하지만 여기서는 모든 뷰 공통이므로 빈 배열도 괜찮음. 단, view 바뀔때마다 pushState하면 stack이 계속 쌓임. 한 번만 하는 게 나을 수 있음. 하지만 view가 바뀌면 '새로운 단계'로 인식될 수 있으니.. 
+    // 기존 코드에서는 view가 scoring일 때만 push했음.
+    // 이제는 항상 push. 
+    // 하지만 view가 바뀔 때마다 listener를 다시 등록할 필요는 없음. 
+    // dependency []로 설정하고, 내부에서 pushState는? 
+    // 마운트 시 한번만 pushState하면, 사용자가 상호작용 후 뒤로가기 누르면 popstate 발생 -> 모달 -> 취소 -> pushState (다시 유지).
+    // 이게 제일 깔끔함.
+
+
 
     // 심판이 담당하는 코스 찾기 (명확하고 확실한 로직)
     const assignedCourse = useMemo(() => {
@@ -803,8 +820,19 @@ export default function RefereePage() {
 
         Object.values(groupsData).forEach((group: any) => {
             // 코스 배정 확인: boolean true 또는 number > 0
+            // 코스 배정 확인: boolean true 또는 number > 0 또는 object { order: >0 }
             const courseAssignment = group.courses && group.courses[courseIdStr];
-            if (courseAssignment === true || (typeof courseAssignment === 'number' && courseAssignment > 0)) {
+            let isAssigned = false;
+
+            if (typeof courseAssignment === 'object' && courseAssignment !== null) {
+                isAssigned = (courseAssignment.order || 0) > 0;
+            } else if (typeof courseAssignment === 'number') {
+                isAssigned = courseAssignment > 0;
+            } else if (courseAssignment === true) {
+                isAssigned = true;
+            }
+
+            if (isAssigned) {
                 types.add(group.type);
             }
         });
@@ -830,9 +858,17 @@ export default function RefereePage() {
             .filter((g: any) => {
                 // 선택된 경기 형태와 일치하고, 해당 코스가 배정된 그룹만
                 const courseAssignment = g.courses && g.courses[courseIdStr];
-                // 코스 배정은 boolean true 또는 number > 0으로 저장됨
-                return g.type === selectedType &&
-                    (courseAssignment === true || (typeof courseAssignment === 'number' && courseAssignment > 0));
+                let isAssigned = false;
+
+                if (typeof courseAssignment === 'object' && courseAssignment !== null) {
+                    isAssigned = (g.courses[courseIdStr].order || 0) > 0;
+                } else if (typeof courseAssignment === 'number') {
+                    isAssigned = courseAssignment > 0;
+                } else if (courseAssignment === true) {
+                    isAssigned = true;
+                }
+
+                return g.type === selectedType && isAssigned;
             })
             .map((g: any) => g.name)
             .filter(Boolean)
@@ -1882,7 +1918,7 @@ export default function RefereePage() {
                         <SelectTrigger className="h-12 text-base">
                             <SelectValue placeholder={selectedType === '' ? "경기 형태 먼저 선택" : availableGroups.length === 0 ? "배정된 그룹 없음" : "2. 그룹 선택"} />
                         </SelectTrigger>
-                        <SelectContent position="item-aligned">
+                        <SelectContent position="item-aligned" className="max-h-[60vh]">
                             {availableGroups.map(g => <SelectItem key={g} value={g.toString()} className="text-base">{g}</SelectItem>)}
                         </SelectContent>
                     </Select>
@@ -1908,7 +1944,7 @@ export default function RefereePage() {
                                     : "코스 정보 없음"
                             } />
                         </SelectTrigger>
-                        <SelectContent position="item-aligned">
+                        <SelectContent position="item-aligned" className="max-h-[60vh]">
                             {availableCoursesForGroup.map(c => (
                                 <SelectItem key={c.id} value={c.id.toString()} className="text-base">
                                     {c.name} ({hole}번홀심판)
@@ -1918,7 +1954,7 @@ export default function RefereePage() {
                     </Select>
                     <Select value={selectedJo || ''} onValueChange={v => setSelectedJo((v || '').toString())} disabled={!selectedGroup || availableJos.length === 0}>
                         <SelectTrigger className="h-12 text-base"><SelectValue placeholder={!selectedGroup ? "그룹 먼저 선택" : (availableJos.length === 0 ? "배정된 선수 없음" : "4. 조 선택")} /></SelectTrigger>
-                        <SelectContent position="item-aligned">
+                        <SelectContent position="item-aligned" className="max-h-[60vh]">
                             {availableJos.map(jo => {
                                 const isCompleted = completedJosState.has(jo);
                                 return (
