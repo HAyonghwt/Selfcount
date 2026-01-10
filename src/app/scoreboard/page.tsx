@@ -318,7 +318,13 @@ export default function ScoreboardPage() {
 
 
     if (isRedirecting) {
-        return <div className="min-h-screen bg-black flex items-center justify-center text-white p-4 font-bold text-lg text-center break-keep">카카오 화면이 작아서<br />구글 크롬으로 안전하게 엽니다</div>;
+        return (
+            <div className="min-h-screen bg-black flex items-center justify-center text-white p-4 font-bold text-lg text-center break-keep">
+                카카오 화면이 작아서<br />
+                구글 크롬으로 안전하게 열었습니다<br /><br />
+                이 화면은 닫아 주세요
+            </div>
+        );
     }
 
     if (giftEventStatus === 'waiting') {

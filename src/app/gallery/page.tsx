@@ -38,6 +38,40 @@ function formatDate(dateStr: string) {
 export default function GalleryListPage() {
     const [archives, setArchives] = useState<ArchiveSummary[]>([]);
     const [loading, setLoading] = useState(true);
+    const [isRedirecting, setIsRedirecting] = useState(false);
+
+    // 인앱 브라우저 강제 탈출 (카카오톡 등에서 외부 브라우저로 열기)
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+
+        const userAgent = navigator.userAgent.toLowerCase();
+        const targetUrl = window.location.href;
+
+        // 1. 카카오톡 인앱 브라우저 감지
+        if (userAgent.match(/kakaotalk/i)) {
+            setIsRedirecting(true);
+            window.location.href = 'kakaotalk://web/openExternal?url=' + encodeURIComponent(targetUrl);
+            return;
+        }
+
+        // 2. 라인 인앱 브라우저 감지
+        if (userAgent.match(/line/i)) {
+            setIsRedirecting(true);
+            const separator = targetUrl.includes('?') ? '&' : '?';
+            window.location.href = `${targetUrl}${separator}openExternalBrowser=1`;
+            return;
+        }
+
+        // 3. 기타 인앱 브라우저 감지
+        if (userAgent.match(/inapp|naver|snapchat|wirtschaftswoche|thunderbird|instagram|everytimeapp|whatsApp|electron|wadiz|aliapp|zumapp|iphone(.*)whale|android(.*)whale|kakaostory|band|twitter|DaumApps|DaumDevice\/mobile|FB_IAB|FB4A|FBAN|FBIOS|FBSS|SamsungBrowser\/[^1]/i)) {
+            if (userAgent.match(/android/i)) {
+                setIsRedirecting(true);
+                const cleanUrl = targetUrl.replace(/https?:\/\//i, '');
+                const scheme = `intent://${cleanUrl}#Intent;scheme=http;package=com.android.chrome;end`;
+                window.location.href = scheme;
+            }
+        }
+    }, []);
 
     useEffect(() => {
         if (!db) return;
@@ -89,6 +123,13 @@ export default function GalleryListPage() {
 
     return (
         <div className="min-h-screen bg-slate-50 p-4 md:p-8">
+            {isRedirecting && (
+                <div className="fixed inset-0 z-[100] bg-black flex items-center justify-center text-white p-4 font-bold text-lg text-center break-keep">
+                    카카오 화면이 작아서<br />
+                    구글 크롬으로 안전하게 열었습니다<br /><br />
+                    이 화면은 닫아 주세요
+                </div>
+            )}
             <div className="max-w-5xl mx-auto">
                 <header className="mb-10 text-center pt-6">
                     <div className="fade-in-up">

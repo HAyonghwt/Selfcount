@@ -67,7 +67,7 @@ function RelativeScore({ score, par, className }: { score: number | null, par: n
     const sign = diff > 0 ? "+" : "";
     return (
         <span className={cn("text-[11px] font-black", colorClass, className)}>
-            {sign}{diff}
+            {diff === 0 ? "E" : `${sign}${diff}`}
         </span>
     );
 }
@@ -84,6 +84,40 @@ export default function GalleryDetailPage() {
     const [expandedPlayerId, setExpandedPlayerId] = useState<string | null>(null);
     const [visibleCount, setVisibleCount] = useState(30);
     const loadMoreRef = React.useRef<HTMLDivElement>(null);
+    const [isRedirecting, setIsRedirecting] = useState(false);
+
+    // 인앱 브라우저 강제 탈출 (카카오톡 등에서 외부 브라우저로 열기)
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+
+        const userAgent = navigator.userAgent.toLowerCase();
+        const targetUrl = window.location.href;
+
+        // 1. 카카오톡 인앱 브라우저 감지
+        if (userAgent.match(/kakaotalk/i)) {
+            setIsRedirecting(true);
+            window.location.href = 'kakaotalk://web/openExternal?url=' + encodeURIComponent(targetUrl);
+            return;
+        }
+
+        // 2. 라인 인앱 브라우저 감지
+        if (userAgent.match(/line/i)) {
+            setIsRedirecting(true);
+            const separator = targetUrl.includes('?') ? '&' : '?';
+            window.location.href = `${targetUrl}${separator}openExternalBrowser=1`;
+            return;
+        }
+
+        // 3. 기타 인앱 브라우저 감지
+        if (userAgent.match(/inapp|naver|snapchat|wirtschaftswoche|thunderbird|instagram|everytimeapp|whatsApp|electron|wadiz|aliapp|zumapp|iphone(.*)whale|android(.*)whale|kakaostory|band|twitter|DaumApps|DaumDevice\/mobile|FB_IAB|FB4A|FBAN|FBIOS|FBSS|SamsungBrowser\/[^1]/i)) {
+            if (userAgent.match(/android/i)) {
+                setIsRedirecting(true);
+                const cleanUrl = targetUrl.replace(/https?:\/\//i, '');
+                const scheme = `intent://${cleanUrl}#Intent;scheme=http;package=com.android.chrome;end`;
+                window.location.href = scheme;
+            }
+        }
+    }, []);
 
     // Reset visible count on filter change
     useEffect(() => {
@@ -289,6 +323,13 @@ export default function GalleryDetailPage() {
 
     return (
         <div className="min-h-screen bg-[#f8fafc] pb-20 font-sans">
+            {isRedirecting && (
+                <div className="fixed inset-0 z-[100] bg-black flex items-center justify-center text-white p-4 font-bold text-lg text-center break-keep">
+                    카카오 화면이 작아서<br />
+                    구글 크롬으로 안전하게 열었습니다<br /><br />
+                    이 화면은 닫아 주세요
+                </div>
+            )}
             {/* Header (Clean & Light) */}
             <div className="fixed top-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200">
                 <div className="max-w-5xl mx-auto px-4 h-16 flex items-center gap-3">
