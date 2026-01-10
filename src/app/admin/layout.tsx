@@ -50,7 +50,8 @@ const mainNavItems = [
 const secondaryNavItems = [
   { href: "/admin/suddendeath", icon: Flame, label: "플레이오프 관리" },
   { href: "/admin/gift-event", icon: Trophy, label: "경품 행사" },
-  { href: "/admin/archive", icon: Trophy, label: "기록 보관함" },
+  { href: "/admin/archive", icon: Database, label: "기록 보관함" },
+  { href: "/admin/gallery", icon: Tv, label: "대회 갤러리" },
   { href: "/admin/backup", icon: Database, label: "시스템 백업" },
 ];
 const refereeNavItem = { href: "/admin/referees", icon: ShieldCheck, label: "심판 관리" };

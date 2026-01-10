@@ -1,7 +1,7 @@
 "use client";
 import React, { useEffect, useState } from "react";
 import { db } from "@/lib/firebase";
-import { ref, onValue, remove } from "firebase/database";
+import { ref, onValue, remove, get } from "firebase/database";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -13,7 +13,9 @@ interface ArchiveData {
   archiveId: string;
   tournamentName: string;
   date: string;
-  tournamentStartDate?: string; // 대회 시작 날짜 (선택적)
+  tournamentStartDate?: string;
+  location?: string;
+  name?: string; // New structure uses 'name'
   playerCount: number;
   players: any;
   scores: any;
@@ -112,7 +114,7 @@ async function getForfeitTypeFromLogs(playerId: string): Promise<'absent' | 'dis
     const forfeitLogs = logs
       .filter(l => l.newValue === 0 && (l.modifiedByType === 'judge' || l.modifiedByType === 'admin') && l.comment)
       .sort((a, b) => b.modifiedAt - a.modifiedAt); // 최신순 정렬
-    
+
     if (forfeitLogs.length > 0) {
       const latestLog = forfeitLogs[0];
       if (latestLog.comment?.includes('불참')) return 'absent';
@@ -128,19 +130,36 @@ async function getForfeitTypeFromLogs(playerId: string): Promise<'absent' | 'dis
 const ArchiveList: React.FC = () => {
   const [archives, setArchives] = useState<ArchiveData[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selected, setSelected] = useState<ArchiveData|null>(null);
+  const [selected, setSelected] = useState<ArchiveData | null>(null);
   const [processedArchiveData, setProcessedArchiveData] = useState<any>(null);
   const { toast } = useToast();
 
   useEffect(() => {
     if (!db) return;
-    const archivesRef = ref(db, "archives");
-    const unsub = onValue(archivesRef, snap => {
-      const val = snap.val() || {};
-      const arr: ArchiveData[] = Object.entries(val).map(([id, v]: any) => ({ archiveId: id, ...v }));
-      arr.sort((a, b) => b.archiveId.localeCompare(a.archiveId));
-      setArchives(arr);
-      setLoading(false);
+    const listRef = ref(db, "archives-list");
+    const legacyRef = ref(db, "archives");
+
+    const unsub = onValue(listRef, snap => {
+      const val = snap.val();
+      if (val) {
+        const arr: ArchiveData[] = Object.entries(val).map(([id, v]: any) => ({
+          archiveId: id,
+          ...v,
+          tournamentName: v.name || v.tournamentName // archives-list uses 'name'
+        }));
+        arr.sort((a, b) => (b.tournamentStartDate || '').localeCompare(a.tournamentStartDate || '') || b.archiveId.localeCompare(a.archiveId));
+        setArchives(arr);
+        setLoading(false);
+      } else {
+        // Fallback to legacy
+        onValue(legacyRef, legacySnap => {
+          const lVal = legacySnap.val() || {};
+          const arr: ArchiveData[] = Object.entries(lVal).map(([id, v]: any) => ({ archiveId: id, ...v }));
+          arr.sort((a, b) => b.archiveId.localeCompare(a.archiveId));
+          setArchives(arr);
+          setLoading(false);
+        }, { onlyOnce: true });
+      }
     });
     return () => unsub();
   }, []);
@@ -152,7 +171,7 @@ const ArchiveList: React.FC = () => {
     const updateForfeitTypes = async () => {
       const updatedData = { ...selected.processedByGroup };
       let hasChanges = false;
-      
+
       for (const groupName in updatedData) {
         for (const player of updatedData[groupName]) {
           if (player.hasForfeited && (!player.forfeitType || player.forfeitType === 'pending')) {
@@ -162,7 +181,7 @@ const ArchiveList: React.FC = () => {
           }
         }
       }
-      
+
       if (hasChanges) {
         setProcessedArchiveData(updatedData);
       } else {
@@ -197,6 +216,44 @@ const ArchiveList: React.FC = () => {
     );
   }
 
+  const handleSelect = async (archive: ArchiveData) => {
+    // 만약 이미 플레이어 데이터가 있다면 (기존 방식) 바로 선택
+    if (archive.players && Object.keys(archive.players).length > 0) {
+      setSelected(archive);
+      return;
+    }
+
+    // 데이터가 없는 경우 (새로운 분할 저장 방식) 상세 데이터를 가져옴
+    try {
+      if (!db) return;
+      setLoading(true);
+
+      // 1. archives-detail 확인
+      let detailSnap = await get(ref(db, `archives-detail/${archive.archiveId}`));
+
+      // 2. 없으면 legacy archives 확인
+      if (!detailSnap.exists()) {
+        detailSnap = await get(ref(db, `archives/${archive.archiveId}`));
+      }
+
+      if (detailSnap.exists()) {
+        const fullData = detailSnap.val();
+        setSelected({
+          ...archive,
+          ...fullData,
+          archiveId: archive.archiveId // ID 유지
+        });
+      } else {
+        toast({ title: "오류", description: "상세 데이터를 찾을 수 없습니다.", variant: "destructive" });
+      }
+    } catch (e) {
+      console.error(e);
+      toast({ title: "오류", description: "데이터를 불러오는 중 오류가 발생했습니다.", variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="max-w-5xl mx-auto py-8">
       <Card>
@@ -208,6 +265,7 @@ const ArchiveList: React.FC = () => {
             <TableHeader>
               <TableRow>
                 <TableHead>대회명</TableHead>
+                <TableHead>장소</TableHead>
                 <TableHead>날짜</TableHead>
                 <TableHead>참가자수</TableHead>
                 <TableHead>자료보기</TableHead>
@@ -216,29 +274,46 @@ const ArchiveList: React.FC = () => {
             <TableBody>
               {archives.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center">보관된 기록이 없습니다.</TableCell>
+                  <TableCell colSpan={5} className="text-center">보관된 기록이 없습니다.</TableCell>
                 </TableRow>
               ) : (
                 archives.map(a => (
                   <TableRow key={a.archiveId}>
                     <TableCell>
-                      <button className="text-blue-700 underline" onClick={() => setSelected(a)}>{a.tournamentName || "-"}</button>
+                      <button
+                        className="text-blue-700 underline text-left"
+                        onClick={() => handleSelect(a)}
+                      >
+                        {a.tournamentName || a.name || "-"}
+                      </button>
                     </TableCell>
+                    <TableCell>{a.location || "-"}</TableCell>
                     <TableCell>
-                      {a.tournamentStartDate 
-                        ? formatDate(a.tournamentStartDate.substring(0, 6)) 
+                      {a.tournamentStartDate
+                        ? (a.tournamentStartDate.includes('-') ? a.tournamentStartDate : formatDate(a.tournamentStartDate.substring(0, 6)))
                         : formatDate(a.archiveId.split("_")[1] || a.archiveId.split("_")[0])}
                     </TableCell>
                     <TableCell>{a.playerCount || (a.players ? Object.keys(a.players).length : "-")}</TableCell>
                     <TableCell>
                       <div className="flex gap-2 items-center">
-                        <Button variant="outline" onClick={() => setSelected(a)} className="text-blue-700 border-blue-400 hover:bg-blue-50">자료보기</Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleSelect(a)}
+                          className="text-blue-700 border-blue-400 hover:bg-blue-50"
+                        >
+                          자료보기
+                        </Button>
                         <Button variant="destructive" size="sm" onClick={async (e) => {
                           e.stopPropagation();
-                          if (window.confirm('정말 이 기록을 삭제하시겠습니까?')) {
+                          if (window.confirm('정말 이 기록을 삭제하시겠습니까?\n(archives-list, archives-detail, archives 모두에서 삭제됩니다)')) {
                             try {
                               if (!db) return;
-                              await remove(ref(db, `archives/${a.archiveId}`));
+                              await Promise.all([
+                                remove(ref(db, `archives/${a.archiveId}`)),
+                                remove(ref(db, `archives-list/${a.archiveId}`)),
+                                remove(ref(db, `archives-detail/${a.archiveId}`))
+                              ]);
                               toast({ title: '삭제 완료', description: '기록이 삭제되었습니다.' });
                             } catch (e) {
                               toast({ title: '오류', description: '삭제 중 오류가 발생했습니다.', variant: 'destructive' });
@@ -315,7 +390,7 @@ const ArchiveDetail: React.FC<{ archive: ArchiveData }> = ({ archive }) => {
         }
       });
 
-      const assignedCourses = Object.keys(courses).filter(courseId => 
+      const assignedCourses = Object.keys(courses).filter(courseId =>
         groups[player.group]?.courses?.[courseId]
       ).map(courseId => ({ id: courseId, ...courses[courseId] }));
 
@@ -349,7 +424,7 @@ const ArchiveDetail: React.FC<{ archive: ArchiveData }> = ({ archive }) => {
     const groupData: { [key: string]: ProcessedPlayer[] } = {};
     Object.keys(groups).forEach(groupName => {
       const groupPlayers = processedPlayers.filter(p => p.group === groupName);
-      
+
       // 완료된 선수들만 순위 계산
       const completedPlayers = groupPlayers.filter(p => p.hasAnyScore && !p.hasForfeited);
       completedPlayers.sort((a, b) => {
@@ -375,7 +450,7 @@ const ArchiveDetail: React.FC<{ archive: ArchiveData }> = ({ archive }) => {
     const updateForfeitTypes = async () => {
       const updatedData = { ...finalDataByGroup };
       let hasChanges = false;
-      
+
       for (const groupName in updatedData) {
         for (const player of updatedData[groupName]) {
           if (player.hasForfeited) {
@@ -390,7 +465,7 @@ const ArchiveDetail: React.FC<{ archive: ArchiveData }> = ({ archive }) => {
           }
         }
       }
-      
+
       if (hasChanges) {
         setFinalDataByGroup(updatedData);
       }
@@ -405,9 +480,9 @@ const ArchiveDetail: React.FC<{ archive: ArchiveData }> = ({ archive }) => {
   const handleExportToExcel = async () => {
     const XLSX = await import('xlsx-js-style');
     const wb = XLSX.utils.book_new();
-    
+
     const dataToExport = filterGroup === 'all' ? finalDataByGroup : { [filterGroup]: finalDataByGroup[filterGroup] };
-    
+
     for (const groupName in dataToExport) {
       // 1위부터 순위대로 정렬 (rank 오름차순, null/기권/미출전은 맨 뒤)
       const groupPlayers = [...(dataToExport[groupName] || [])].sort((a, b) => {
@@ -461,9 +536,9 @@ const ArchiveDetail: React.FC<{ archive: ArchiveData }> = ({ archive }) => {
         assignedCourses.forEach((course, courseIndex) => {
           const courseData = player.coursesData[course.id];
           const holeScores = courseData?.holeScores || Array(9).fill(null);
-          
+
           const row: any[] = [];
-          
+
           if (courseIndex === 0) {
             row.push(player.rank !== null ? player.rank : (player.hasForfeited ? (player.forfeitType === 'absent' ? '불참' : player.forfeitType === 'disqualified' ? '실격' : '기권') : ''));
             row.push(player.jo);
@@ -472,15 +547,15 @@ const ArchiveDetail: React.FC<{ archive: ArchiveData }> = ({ archive }) => {
           } else {
             row.push('', '', '', '');
           }
-          
+
           row.push(courseData?.courseName || course.name);
-          
+
           // 홀 점수들
           holeScores.forEach(score => row.push(score !== null ? score : '-'));
-          
+
           // 코스 합계
           row.push(typeof courseData?.courseTotal === 'number' ? courseData.courseTotal : '');
-          
+
           if (courseIndex === 0) {
             row.push(player.hasForfeited ? (player.forfeitType === 'absent' ? '불참' : player.forfeitType === 'disqualified' ? '실격' : '기권') : (player.hasAnyScore ? player.totalScore : '-'));
             row.push(player.hasForfeited ? (player.forfeitType === 'absent' ? '불참' : player.forfeitType === 'disqualified' ? '실격' : '기권') : (player.plusMinus !== null ? (player.plusMinus === 0 ? 'E' : (player.plusMinus > 0 ? `+${player.plusMinus}` : player.plusMinus)) : ''));
@@ -518,10 +593,10 @@ const ArchiveDetail: React.FC<{ archive: ArchiveData }> = ({ archive }) => {
       ws['!merges'] = merges;
       ws['!cols'] = colWidths.map(width => ({ width }));
       ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: rowIndex - 1, c: headers.length - 1 } });
-      
+
       XLSX.utils.book_append_sheet(wb, ws, groupName);
     }
-    
+
     XLSX.writeFile(wb, `archive_${archive.tournamentName || '대회'}.xlsx`);
   };
 
@@ -584,7 +659,7 @@ const ArchiveDetail: React.FC<{ archive: ArchiveData }> = ({ archive }) => {
                             <th className="border px-2 py-1 bg-blue-600 text-white">이름</th>
                             <th className="border px-2 py-1 bg-blue-600 text-white">소속</th>
                             <th className="border px-2 py-1 bg-blue-600 text-white">코스</th>
-                            {[...Array(9)].map((_, i) => <th key={i} className="border px-2 py-1 bg-blue-600 text-white">{i+1}</th>)}
+                            {[...Array(9)].map((_, i) => <th key={i} className="border px-2 py-1 bg-blue-600 text-white">{i + 1}</th>)}
                             <th className="border px-2 py-1 bg-blue-600 text-white">코스 합계</th>
                             <th className="border px-2 py-1 bg-blue-600 text-white">총타수</th>
                             <th className="border px-2 py-1 bg-blue-600 text-white">±타수</th>

@@ -60,7 +60,15 @@
       ".write": "auth != null"
     },
     "archives": {
-      ".read": "auth != null",
+      ".read": true,
+      ".write": "auth != null"
+    },
+    "archives-list": {
+      ".read": true,
+      ".write": "auth != null"
+    },
+    "archives-detail": {
+      ".read": true,
       ".write": "auth != null"
     }
   }

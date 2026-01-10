@@ -377,6 +377,86 @@ const ScoreEditModalComponent = React.memo(({
     );
 });
 
+// 🏆 Archive Modal Component (Memoized for Performance)
+const ArchiveModalComponent = React.memo(({
+    open,
+    onOpenChange,
+    tournamentName,
+    initialDate,
+    onConfirm
+}: {
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+    tournamentName: string;
+    initialDate: string;
+    onConfirm: (location: string, date: string) => Promise<void>;
+}) => {
+    const [location, setLocation] = useState('');
+    const [date, setDate] = useState(initialDate);
+
+    useEffect(() => {
+        if (open) {
+            setDate(initialDate);
+            setLocation('');
+        }
+    }, [open, initialDate]);
+
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="sm:max-w-[425px]">
+                <DialogHeader>
+                    <DialogTitle>대회 기록 보관</DialogTitle>
+                    <DialogDescription>
+                        현재 대회의 모든 데이터를 보관함에 저장합니다.<br />
+                        보관된 데이터는 갤러리에서 확인할 수 있습니다.
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="grid gap-4 py-4">
+                    <div className="grid grid-cols-4 items-center gap-4">
+                        <label htmlFor="name" className="text-right text-sm font-bold">
+                            대회명
+                        </label>
+                        <input
+                            id="name"
+                            value={tournamentName}
+                            disabled
+                            className="col-span-3 flex h-10 w-full rounded-md border border-input bg-muted px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                        />
+                    </div>
+                    <div className="grid grid-cols-4 items-center gap-4">
+                        <label htmlFor="location" className="text-right text-sm font-bold text-blue-600">
+                            장소
+                        </label>
+                        <input
+                            id="location"
+                            value={location}
+                            onChange={(e) => setLocation(e.target.value)}
+                            placeholder="예: 잠실 파크골프장 A/B 코스"
+                            className="col-span-3 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                        />
+                    </div>
+                    <div className="grid grid-cols-4 items-center gap-4">
+                        <label htmlFor="date" className="text-right text-sm font-bold text-blue-600">
+                            날짜
+                        </label>
+                        <input
+                            id="date"
+                            value={date}
+                            onChange={(e) => setDate(e.target.value)}
+                            placeholder="예: 2024.10.25 (또는 기간/회차)"
+                            className="col-span-3 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                        />
+                    </div>
+                </div>
+                <DialogFooter>
+                    <Button variant="outline" onClick={() => onOpenChange(false)}>취소</Button>
+                    <Button onClick={() => onConfirm(location, date)} className="bg-blue-600 hover:bg-blue-700 text-white font-bold">보관하기</Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+});
+
 // 외부 전광판과 완전히 동일한 ± 및 총타수 계산 함수
 function getPlayerTotalAndPlusMinus(courses: any, player: any) {
     let total = 0;
@@ -440,6 +520,11 @@ export default function AdminDashboard() {
     const [searchPlayer, setSearchPlayer] = useState('');
     const [highlightedPlayerId, setHighlightedPlayerId] = useState<number | null>(null);
     const playerRowRefs = useRef<Record<string, (HTMLTableRowElement | null)[]>>({});
+
+    // 🏆 Archive Modal States
+    const [archiveModalOpen, setArchiveModalOpen] = useState(false);
+    const [archiveLocation, setArchiveLocation] = useState('');
+    const [archiveDate, setArchiveDate] = useState('');
 
     // 🚀 모든 그룹 목록 추출 (스코프 문제 해결)
     const allGroupsList = useMemo(() => {
@@ -2791,6 +2876,107 @@ export default function AdminDashboard() {
         return translations[groupName] || groupName;
     };
 
+    // 🏆 Archive Handler
+    const handleArchiveClick = () => {
+        const today = new Date();
+        const yyyy = today.getFullYear();
+        const mm = String(today.getMonth() + 1).padStart(2, '0');
+        const dd = String(today.getDate()).padStart(2, '0');
+        setArchiveDate(`${yyyy}-${mm}-${dd}`);
+        setArchiveModalOpen(true);
+    };
+
+    const handleConfirmArchive = async (location: string, date: string) => {
+        if (!db) {
+            toast({ title: '오류', description: '데이터베이스 연결이 없습니다.', variant: 'destructive' });
+            return;
+        }
+        if (!location.trim()) {
+            toast({ title: '정보 부족', description: '대회 장소를 입력해주세요.', variant: 'destructive' });
+            return;
+        }
+        if (!date.trim()) {
+            toast({ title: '정보 부족', description: '대회 날짜를 입력해주세요.', variant: 'destructive' });
+            return;
+        }
+
+        try {
+            const timestamp = Date.now();
+            const archiveId = `archive_${timestamp}`;
+
+            // 1. Create Summary for List View (Lightweight)
+            const summaryData = {
+                id: archiveId,
+                tournamentName: tournamentName,
+                date: new Date().toISOString(),
+                location: location,
+                tournamentStartDate: date, // New field for display
+                groupCount: Object.keys(groupsData).length,
+                playerCount: Object.keys(players).length,
+                status: 'completed'
+            };
+
+            // 2. Create Full Detail Data (Heavy)
+            const finalRanks: { [playerId: string]: any } = {};
+            if (finalDataByGroup) {
+                Object.values(finalDataByGroup).flat().forEach((p: any) => {
+                    finalRanks[p.id] = {
+                        rank: p.rank,
+                        totalScore: p.totalScore,
+                        total: p.total,
+                        courseScores: p.courseScores,
+                        detailedScores: p.detailedScores
+                    };
+                });
+            }
+
+            const detailData = {
+                id: archiveId,
+                tournamentName: tournamentName,
+                location: location,
+                tournamentStartDate: date,
+                date: new Date().toISOString(),
+                players: players,
+                scores: scores,
+                groups: groupsData,
+                courses: courses,
+                finalRanks: finalRanks,
+                settings: {
+                    individualSuddenDeath: individualSuddenDeathData,
+                    teamSuddenDeath: teamSuddenDeathData,
+                    individualBackcount: individualBackcountApplied,
+                    teamBackcount: teamBackcountApplied,
+                    individualNTP: individualNTPData,
+                    teamNTP: teamNTPData
+                }
+            };
+
+            // 3. Save to Firebase (Dual path: Legacy + Gallery)
+            await Promise.all([
+                set(ref(db, `archives-list/${archiveId}`), summaryData),
+                set(ref(db, `archives-detail/${archiveId}`), detailData),
+                set(ref(db, `archives/${archiveId}`), {
+                    ...detailData,
+                    ...summaryData // Combine for compatibility
+                })
+            ]);
+
+            toast({
+                title: "기록 보관 완료",
+                description: `${tournamentName} 대회가 성공적으로 보관되었습니다.`,
+            });
+            setArchiveModalOpen(false);
+
+        } catch (error) {
+            console.error("Archive Failed:", error);
+            toast({
+                title: "보관 실패",
+                description: "대회 기록 보관 중 오류가 발생했습니다.",
+                variant: 'destructive'
+            });
+        }
+    };
+
     const handleSaveImage = async () => {
         setIsSavingImage(true);
         try {
@@ -3721,7 +3907,7 @@ export default function AdminDashboard() {
                                     <Download className="mr-2 h-4 w-4" />
                                     엑셀로 다운로드
                                 </Button>
-                                <Button className="ml-2 bg-blue-600 hover:bg-blue-700 text-white min-w-[120px] px-4 py-2 font-bold" onClick={handleArchiveScores}>
+                                <Button className="ml-2 bg-blue-600 hover:bg-blue-700 text-white min-w-[120px] px-4 py-2 font-bold" onClick={handleArchiveClick}>
                                     기록 보관하기
                                 </Button>
                                 <Button className="ml-2 bg-gray-600 hover:bg-gray-700 text-white min-w-[120px] px-4 py-2 font-bold" onClick={handlePrint}>
@@ -4411,6 +4597,15 @@ export default function AdminDashboard() {
                 finalDataByGroup={finalDataByGroup}
                 playerScoreLogs={playerScoreLogs}
                 scores={scores}
+            />
+
+            {/* 🏆 Archive Modal (Memoized for Performance) */}
+            <ArchiveModalComponent
+                open={archiveModalOpen}
+                onOpenChange={setArchiveModalOpen}
+                tournamentName={tournamentName}
+                initialDate={archiveDate}
+                onConfirm={handleConfirmArchive}
             />
 
             {/* 기권 확인 모달 */}
