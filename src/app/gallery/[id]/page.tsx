@@ -27,6 +27,7 @@ interface PlayerCourseData {
     holeScores: (number | null)[];
     courseTotal: number;
     coursePlusMinus: number | null;
+    courseRank?: number;
 }
 
 interface ProcessedPlayer {
@@ -128,7 +129,7 @@ export default function GalleryDetailPage() {
         const finalRanks = archiveData.finalRanks || {};
         const groupsObj = archiveData.groups || {};
 
-        return Object.keys(playersObj).map(pid => {
+        const results = Object.keys(playersObj).map(pid => {
             const player = playersObj[pid];
             const pGroup = player.group || '미지정';
             const groupData = groupsObj[pGroup] || {};
@@ -189,6 +190,42 @@ export default function GalleryDetailPage() {
                 courses: playerCourses
             };
         });
+
+        // --- 각 코스별 그룹 내 순위 계산 로직 추가 ---
+        const uniqueGroups = Array.from(new Set(results.map(p => p.group)));
+        uniqueGroups.forEach(groupName => {
+            const groupPlayers = results.filter(p => p.group === groupName);
+            // 해당 그룹이 참여하는 모든 코스 ID 수집
+            const courseIds = Array.from(new Set(groupPlayers.flatMap(p => p.courses.map(c => c.id))));
+
+            courseIds.forEach(cid => {
+                // 해당 코스를 완주한(점수가 있는) 선수들만 필터링하여 정렬
+                const rankingList = groupPlayers
+                    .filter(p => {
+                        const c = p.courses.find(rc => rc.id === cid);
+                        return c && c.courseTotal > 0 && !p.hasForfeited;
+                    })
+                    .map(p => ({
+                        pid: p.id,
+                        total: p.courses.find(rc => rc.id === cid)!.courseTotal
+                    }))
+                    .sort((a, b) => a.total - b.total);
+
+                // 순위 부여 (동점자 처리 포함)
+                let currentRank = 1;
+                rankingList.forEach((item, index) => {
+                    if (index > 0 && item.total > rankingList[index - 1].total) {
+                        currentRank = index + 1;
+                    }
+                    // 결과를 원본 객체에 할당
+                    const pObj = results.find(r => r.id === item.pid);
+                    const cObj = pObj?.courses.find(rc => rc.id === cid);
+                    if (cObj) cObj.courseRank = currentRank;
+                });
+            });
+        });
+
+        return results;
     }, [archiveData]);
 
     const groups = useMemo(() => {
@@ -293,13 +330,19 @@ export default function GalleryDetailPage() {
                                 key={group}
                                 onClick={() => setActiveGroup(group)}
                                 className={cn(
-                                    "px-4 py-1.5 rounded-md text-[13px] font-black whitespace-nowrap transition-all border shrink-0",
+                                    "px-4 py-2 rounded-md transition-all border shrink-0 flex flex-col items-center min-w-[80px]",
                                     activeGroup === group
-                                        ? "bg-[#3b82f6] text-white border-[#3b82f6] shadow-sm"
+                                        ? "bg-[#3b82f6] text-white border-[#3b82f6] shadow-md scale-[1.02]"
                                         : "bg-white text-slate-500 border-slate-200 hover:border-[#3b82f6]/30 hover:bg-slate-50"
                                 )}
                             >
-                                {group}
+                                <span className="text-[13px] font-black whitespace-nowrap leading-none mb-1">{group}</span>
+                                <span className={cn(
+                                    "text-[9px] font-bold uppercase tracking-tighter opacity-70",
+                                    activeGroup === group ? "text-blue-100" : "text-slate-400"
+                                )}>
+                                    {group.includes('남자') ? "Men's" : group.includes('여자') ? "Women's" : "Division"}
+                                </span>
                             </button>
                         ))}
                     </div>
@@ -308,18 +351,30 @@ export default function GalleryDetailPage() {
                 {/* Scoreboard Table (Sharp & Professional) */}
                 <div className="bg-white rounded-md shadow-lg overflow-hidden border border-slate-200">
                     {/* Blue Table Header (User Palette) */}
-                    <div className="bg-[#3b82f6] text-white flex items-center h-12 text-[12px] sm:text-[13px] font-black uppercase text-center border-b border-blue-600">
-                        <div className="w-[12%] border-r border-white/20 h-full flex items-center justify-center">조</div>
-                        <div className="w-[20%] border-r border-white/20 h-full flex items-center justify-center">이름</div>
+                    <div className="bg-[#3b82f6] text-white flex items-center h-14 text-[11px] sm:text-[12px] font-black uppercase text-center border-b border-blue-600">
+                        <div className="w-[14%] border-r border-white/20 h-full flex flex-col items-center justify-center leading-none">
+                            <span>조</span>
+                            <span className="text-[8px] text-blue-100 mt-0.5 opacity-80">GROUP</span>
+                        </div>
+                        <div className="w-[20%] border-r border-white/20 h-full flex flex-col items-center justify-center leading-none">
+                            <span>이름</span>
+                            <span className="text-[8px] text-blue-100 mt-0.5 opacity-80">NAME</span>
+                        </div>
                         {courseLabels.map(label => (
                             <div key={label} className="flex-1 border-r border-white/20 h-full flex items-center justify-center">{label}</div>
                         ))}
-                        <div className="w-[14%] border-r border-white/20 h-full flex items-center justify-center">합계</div>
-                        <div className="w-[12%] h-full flex items-center justify-center">순위</div>
+                        <div className="w-[14%] border-r border-white/20 h-full flex flex-col items-center justify-center leading-none">
+                            <span>합계</span>
+                            <span className="text-[8px] text-blue-100 mt-0.5 opacity-80">TOTAL</span>
+                        </div>
+                        <div className="w-[14%] h-full flex flex-col items-center justify-center leading-none">
+                            <span>순위</span>
+                            <span className="text-[8px] text-blue-100 mt-0.5 opacity-80">RANK</span>
+                        </div>
                     </div>
 
                     {/* Table Body */}
-                    <div className="divide-y divide-slate-100">
+                    <div className="divide-y divide-slate-200">
                         {displayedPlayers.length === 0 ? (
                             <div className="py-20 text-center text-slate-400 font-bold italic">검색 결과가 없습니다.</div>
                         ) : (
@@ -332,15 +387,13 @@ export default function GalleryDetailPage() {
                                             expandedPlayerId === player.id ? "bg-blue-50/50" : "hover:bg-slate-50"
                                         )}
                                     >
-                                        {/* Jo Cell */}
-                                        <div className="w-[12%] border-r border-slate-100 h-full flex flex-col items-center justify-center leading-tight">
-                                            <span className="text-[10px] text-slate-400 font-black mb-0.5">{player.group}</span>
-                                            <span className="text-base font-black text-slate-900">{player.jo}</span>
+                                        <div className="w-[14%] border-r border-slate-100 h-full flex flex-col items-center justify-center leading-tight py-2">
+                                            <span className="text-[9px] text-slate-400 font-bold mb-0.5 tracking-tighter truncate w-full px-1">{player.group}</span>
+                                            <span className="text-base font-black text-slate-700">{player.jo}</span>
                                         </div>
 
-                                        {/* Name & Affiliation Cell */}
                                         <div className="w-[20%] border-r border-slate-100 text-left pl-3 flex flex-col justify-center overflow-hidden">
-                                            <div className="text-base font-black text-slate-900 leading-none mb-1 truncate">{player.name}</div>
+                                            <div className="text-base font-black text-slate-700 leading-none mb-1.5 truncate">{player.name}</div>
                                             <div className="text-[10px] text-slate-400 font-bold truncate pr-1">{player.affiliation}</div>
                                         </div>
 
@@ -359,14 +412,13 @@ export default function GalleryDetailPage() {
                                             {player.hasForfeited ? <span className="text-red-500 text-sm">기권</span> : player.totalScore}
                                         </div>
 
-                                        {/* Rank Cell */}
-                                        <div className="w-[12%] h-full flex items-center justify-center">
+                                        <div className="w-[14%] h-full flex items-center justify-center">
                                             {player.rank ? (
                                                 player.rank <= 3 ? (
                                                     <div className={cn(
                                                         "w-7 h-7 rounded-sm flex items-center justify-center font-black text-sm border shadow-sm",
-                                                        player.rank === 1 ? "bg-amber-100 text-amber-600 border-amber-200" :
-                                                            player.rank === 2 ? "bg-slate-100 text-slate-600 border-slate-200" : "bg-orange-50 text-orange-700 border-orange-100"
+                                                        player.rank === 1 ? "bg-amber-50 text-amber-600 border-amber-200" :
+                                                            player.rank === 2 ? "bg-slate-50 text-slate-500 border-slate-200" : "bg-orange-50 text-orange-700 border-orange-100"
                                                     )}>
                                                         {player.rank}
                                                     </div>
@@ -399,9 +451,9 @@ export default function GalleryDetailPage() {
                                                                 </div>
                                                                 <div className="w-px h-8 bg-slate-200"></div>
                                                                 <div className="text-right">
-                                                                    <div className="text-[10px] font-black text-slate-400 uppercase leading-none mb-1">To Par</div>
-                                                                    <div className="leading-none">
-                                                                        <RelativeScore score={course.courseTotal} par={courseParTotal} className="text-lg" />
+                                                                    <div className="text-[10px] font-black text-slate-400 uppercase leading-none mb-1">코스별 순위 (Rank)</div>
+                                                                    <div className="text-xl font-black text-[#3b82f6] leading-none">
+                                                                        {course.courseRank ? `${course.courseRank}위` : '-'}
                                                                     </div>
                                                                 </div>
                                                             </div>

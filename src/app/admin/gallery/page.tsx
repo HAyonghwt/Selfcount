@@ -164,7 +164,10 @@ export default function AdminGalleryPage() {
                             {archives.map((archive) => (
                                 <div key={archive.id} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between hover:bg-slate-50 transition-colors gap-4">
                                     <div className="min-w-0">
-                                        <h3 className="font-black text-slate-800 truncate">
+                                        <h3
+                                            className="font-black text-slate-800 truncate cursor-pointer hover:text-blue-600 hover:underline decoration-2 underline-offset-4 decoration-blue-200"
+                                            onClick={() => window.open(`/gallery/${archive.id}`, '_blank')}
+                                        >
                                             {archive.tournamentName || archive.name}
                                         </h3>
                                         <div className="flex items-center gap-3 mt-1.5 text-[11px] font-bold text-slate-400 uppercase tracking-tight">

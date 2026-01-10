@@ -92,12 +92,12 @@ export default function GalleryListPage() {
             <div className="max-w-5xl mx-auto">
                 <header className="mb-10 text-center pt-6">
                     <div className="fade-in-up">
-                        <span className="inline-block py-1.5 px-4 rounded-md bg-[#3b82f6]/10 text-[#3b82f6] text-[11px] font-black tracking-[0.15em] mb-4 uppercase border border-[#3b82f6]/20">
-                            Hall of Fame
-                        </span>
                         <h1 className="text-3xl md:text-4xl font-black text-slate-900 tracking-tight">
                             파크골프 대회 기록
                         </h1>
+                        <p className="text-[11px] md:text-xs font-bold text-slate-400 mt-2 uppercase tracking-[0.2em]">
+                            Park Golf Tournament Records
+                        </p>
                     </div>
                 </header>
 
