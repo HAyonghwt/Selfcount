@@ -205,11 +205,7 @@ const tieBreak = (a: any, b: any, sortedCourses: any[]) => {
 
             // 이 코스의 모든 홀 점수가 0이면 다음 코스로 넘어감
             // hasNonZeroScore가 false면 모두 0이므로 다음 코스 확인
-            if (hasNonZeroScore) {
-                // 이 코스에 점수가 있었는데 모두 같으면 다음 코스로
-                // (이미 위에서 차이를 확인했으므로 여기 도달하면 모두 같음)
-                break;
-            }
+            // (차이를 확인하지 못하고 여기 도달한 경우 다음 코스 계속 비교)
         }
     }
 

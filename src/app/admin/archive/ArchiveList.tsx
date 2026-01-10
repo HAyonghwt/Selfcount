@@ -74,11 +74,39 @@ function formatDate(dateStr: string) {
 }
 
 const tieBreak = (a: any, b: any, sortedCourses: any[]) => {
+  if (a.hasForfeited && !b.hasForfeited) return 1;
+  if (!a.hasForfeited && b.hasForfeited) return -1;
+  if (!a.hasAnyScore && !b.hasAnyScore) return 0;
+  if (!a.hasAnyScore) return 1;
+  if (!b.hasAnyScore) return -1;
+
+  if (a.totalScore !== b.totalScore) {
+    return a.totalScore - b.totalScore;
+  }
+
+  // 코스 합계별 백카운트 (역순 정렬된 코스 리스트 사용)
   for (const course of sortedCourses) {
+    if (!course || course.id === undefined) continue;
     const aScore = a.courseScores[course.id] || 0;
     const bScore = b.courseScores[course.id] || 0;
-    if (aScore !== bScore) return bScore - aScore;
+    if (aScore !== bScore) return aScore - bScore;
   }
+
+  // 홀별 백카운트: 마지막 코스부터 역순으로 홀 점수 비교
+  for (const course of sortedCourses) {
+    if (!course || course.id === undefined) continue;
+    const aHoleScores = a.detailedScores[course.id] || {};
+    const bHoleScores = b.detailedScores[course.id] || {};
+    let hasNonZeroScore = false;
+
+    for (let i = 9; i >= 1; i--) {
+      const hA = aHoleScores[i.toString()] || 0;
+      const hB = bHoleScores[i.toString()] || 0;
+      if (hA > 0 || hB > 0) hasNonZeroScore = true;
+      if (hA !== hB) return hA - hB;
+    }
+  }
+
   return 0;
 };
 
@@ -424,17 +452,40 @@ const ArchiveDetail: React.FC<{ archive: ArchiveData }> = ({ archive }) => {
     const groupData: { [key: string]: ProcessedPlayer[] } = {};
     Object.keys(groups).forEach(groupName => {
       const groupPlayers = processedPlayers.filter(p => p.group === groupName);
+      const groupInfo = groups[groupName] || {};
+      const coursesOrder = groupInfo.courses || {};
+
+      // 해당 그룹에 배정된 코스들을 순서(order)대로 정렬
+      const assignedCoursesForGroup = Object.keys(coursesOrder)
+        .filter(cid => {
+          const cVal = coursesOrder[cid];
+          return typeof cVal === 'boolean' ? cVal : (typeof cVal === 'object' ? cVal.order > 0 : cVal > 0);
+        })
+        .map(cid => ({ id: cid, ...courses[cid] }))
+        .sort((a, b) => {
+          const orderA = typeof coursesOrder[a.id] === 'object' ? coursesOrder[a.id].order : coursesOrder[a.id];
+          const orderB = typeof coursesOrder[b.id] === 'object' ? coursesOrder[b.id].order : coursesOrder[b.id];
+          return (orderA || 0) - (orderB || 0);
+        });
+
+      // 백카운트는 마지막 코스부터 역순 비교이므로 reverse
+      const sortedCoursesForBackcount = [...assignedCoursesForGroup].reverse();
 
       // 완료된 선수들만 순위 계산
       const completedPlayers = groupPlayers.filter(p => p.hasAnyScore && !p.hasForfeited);
       completedPlayers.sort((a, b) => {
-        if (a.totalScore !== b.totalScore) return a.totalScore - b.totalScore;
-        return tieBreak(a, b, Object.values(courses).sort((c1: any, c2: any) => c1.name.localeCompare(c2.name)));
+        return tieBreak(a, b, sortedCoursesForBackcount);
       });
 
-      // 순위 할당
+      // 순위 할당 (백카운트 적용 순위 부여)
+      let currentRank = 1;
       completedPlayers.forEach((player, index) => {
-        player.rank = index + 1;
+        if (index > 0) {
+          if (tieBreak(player, completedPlayers[index - 1], sortedCoursesForBackcount) !== 0) {
+            currentRank = index + 1;
+          }
+        }
+        player.rank = currentRank;
       });
 
       groupData[groupName] = groupPlayers;

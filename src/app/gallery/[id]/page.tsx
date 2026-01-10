@@ -46,6 +46,40 @@ interface ProcessedPlayer {
 }
 
 // --- Dynamic Color Theme based on User Palette ---
+// --- Helpers ---
+const tieBreak = (a: ProcessedPlayer, b: ProcessedPlayer) => {
+    if (a.hasForfeited && !b.hasForfeited) return 1;
+    if (!a.hasForfeited && b.hasForfeited) return -1;
+    if (!a.hasAnyScore && !b.hasAnyScore) return 0;
+    if (!a.hasAnyScore) return 1;
+    if (!b.hasAnyScore) return -1;
+
+    if (a.totalScore !== b.totalScore) return a.totalScore - b.totalScore;
+
+    // 코스들을 역순으로 정렬하여 비교 (마지막 코스부터)
+    const aCourses = [...a.courses].sort((x, y) => (y.order || 0) - (x.order || 0));
+    const bCourses = [...b.courses].sort((x, y) => (y.order || 0) - (x.order || 0));
+
+    const maxLen = Math.max(aCourses.length, bCourses.length);
+    for (let i = 0; i < maxLen; i++) {
+        const cA = aCourses[i];
+        const cB = bCourses[i];
+        if (!cA && cB) return 1;
+        if (cA && !cB) return -1;
+        if (!cA && !cB) continue;
+
+        if (cA.courseTotal !== cB.courseTotal) return cA.courseTotal - cB.courseTotal;
+
+        // 홀별 백카운트 (9번 홀부터 1번 홀까지)
+        for (let h = 8; h >= 0; h--) {
+            const sA = cA.holeScores[h] || 0;
+            const sB = cB.holeScores[h] || 0;
+            if (sA !== sB) return sA - sB;
+        }
+    }
+    return 0;
+};
+
 const getCourseTheme = (name: string) => {
     const uppercaseName = name.toUpperCase();
     if (uppercaseName.includes('A')) return { bg: "bg-red-50", text: "text-red-600", border: "border-red-100", accent: "bg-red-500", label: "A" };
@@ -275,10 +309,13 @@ export default function GalleryDetailPage() {
                 p.affiliation.toLowerCase().includes(searchTerm.toLowerCase());
             return matchesGroup && matchesSearch;
         }).sort((a, b) => {
-            if (a.rank === null && b.rank === null) return 0;
-            if (a.rank === null) return 1;
-            if (b.rank === null) return -1;
-            return a.rank - b.rank;
+            if (a.rank !== b.rank) {
+                if (a.rank === null) return 1;
+                if (b.rank === null) return -1;
+                return a.rank - b.rank;
+            }
+            // 순위가 같으면 백카운트로 2차 정렬
+            return tieBreak(a, b);
         });
     }, [processedPlayers, activeGroup, searchTerm]);
 

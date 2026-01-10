@@ -7,7 +7,6 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { Download, Filter, Printer, ChevronDown, ChevronUp } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import * as XLSX from 'xlsx-js-style';
 import { db } from '@/lib/firebase';
@@ -16,6 +15,13 @@ import { useToast } from '@/hooks/use-toast';
 import { ToastAction } from '@/components/ui/toast';
 import ExternalScoreboardInfo from '@/components/ExternalScoreboardInfo';
 import { safeLocalStorageGetItem, safeLocalStorageSetItem, safeLocalStorageRemoveItem, cn } from '@/lib/utils';
+import {
+    Download, Filter, Printer, ChevronDown, ChevronUp, ChevronLeft, ChevronRight,
+    Calendar as CalendarIcon, MapPin, Trophy, Search, Settings, Save, RefreshCw,
+    Trash2, Share2, Copy, Check, AlertCircle, Info, ExternalLink, Menu, X, Plus,
+    Minus, List, LayoutGrid, Clock, MoreVertical, Eye, EyeOff, Lock, Unlock,
+    Gavel, Play, Square, Award, Target, Hash, Users, User
+} from 'lucide-react';
 
 interface ProcessedPlayer {
     id: string;
@@ -101,11 +107,7 @@ const tieBreak = (a: any, b: any, sortedCourses: any[]) => {
 
             // 이 코스의 모든 홀 점수가 0이면 다음 코스로 넘어감
             // hasNonZeroScore가 false면 모두 0이므로 다음 코스 확인
-            if (hasNonZeroScore) {
-                // 이 코스에 점수가 있었는데 모두 같으면 다음 코스로
-                // (이미 위에서 차이를 확인했으므로 여기 도달하면 모두 같음)
-                break;
-            }
+            // (차이를 확인하지 못하고 여기 도달한 경우 다음 코스 계속 비교)
         }
     }
 
@@ -439,13 +441,37 @@ const ArchiveModalComponent = React.memo(({
                         <label htmlFor="date" className="text-right text-sm font-bold text-blue-600">
                             날짜
                         </label>
-                        <input
-                            id="date"
-                            value={date}
-                            onChange={(e) => setDate(e.target.value)}
-                            placeholder="예: 2024.10.25 (또는 기간/회차)"
-                            className="col-span-3 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                        />
+                        <div className="col-span-3 flex gap-2 relative">
+                            <input
+                                id="date"
+                                value={date}
+                                onChange={(e) => setDate(e.target.value)}
+                                placeholder="예: 2024.10.25 (또는 기간/회차)"
+                                className="flex-1 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                            />
+                            <div className="relative">
+                                <Button
+                                    variant="outline"
+                                    size="icon"
+                                    className="h-10 w-10 shrink-0 border-slate-200"
+                                    onClick={() => (document.getElementById('native-date-picker') as HTMLInputElement)?.showPicker()}
+                                >
+                                    <CalendarIcon className="h-4 w-4 text-slate-500" />
+                                </Button>
+                                <input
+                                    type="date"
+                                    id="native-date-picker"
+                                    className="absolute opacity-0 pointer-events-none p-0 w-0 h-0"
+                                    onChange={(e) => {
+                                        const selectedDate = e.target.value;
+                                        if (selectedDate) {
+                                            const existingSuffix = date.includes(' ') ? date.substring(date.indexOf(' ')) : '';
+                                            setDate(selectedDate + existingSuffix);
+                                        }
+                                    }}
+                                />
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <DialogFooter>
