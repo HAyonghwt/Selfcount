@@ -45,6 +45,7 @@ const BACKGROUND_IMAGES = [
   '/badges/009.jpg',
   '/badges/010.jpg',
   '/badges/011.jpg',
+  '/badges/012.jpg',
 ];
 
 // 배경 이미지별 기본 이름 색상
@@ -60,6 +61,7 @@ const BACKGROUND_COLORS: { [key: string]: string } = {
   '/badges/009.jpg': '#6301A4',
   '/badges/010.jpg': '#005D40',
   '/badges/011.jpg': '#EDB901',
+  '/badges/012.jpg': '#fd8443',
 };
 
 export default function BadgePage() {
