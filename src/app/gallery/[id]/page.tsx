@@ -378,13 +378,15 @@ export default function GalleryDetailPage() {
                         {displayedPlayers.length === 0 ? (
                             <div className="py-20 text-center text-slate-400 font-bold italic">검색 결과가 없습니다.</div>
                         ) : (
-                            displayedPlayers.map((player) => (
+                            displayedPlayers.map((player, index) => (
                                 <React.Fragment key={player.id}>
                                     <div
                                         onClick={() => toggleExpand(player.id)}
                                         className={cn(
                                             "flex items-center text-center py-3.5 cursor-pointer relative transition-colors active:bg-blue-50",
-                                            expandedPlayerId === player.id ? "bg-blue-50/50" : "hover:bg-slate-50"
+                                            expandedPlayerId === player.id
+                                                ? "bg-blue-50/50"
+                                                : index % 2 === 1 ? "bg-slate-50/50 hover:bg-slate-100/80" : "bg-white hover:bg-slate-100/50"
                                         )}
                                     >
                                         <div className="w-[14%] border-r border-slate-100 h-full flex flex-col items-center justify-center leading-tight py-2">
@@ -474,12 +476,11 @@ export default function GalleryDetailPage() {
                                                                                 <span className={cn("text-2xl font-black leading-none", theme.text)}>
                                                                                     {score ?? '-'}
                                                                                 </span>
-                                                                                <div className="mt-1.5 pt-1.5 border-t border-slate-100 w-10 flex flex-col items-center">
-                                                                                    {score !== null && (
-                                                                                        <RelativeScore score={score} par={par} className="leading-none mb-0.5" />
-                                                                                    )}
-                                                                                    <span className="text-[8px] font-bold text-slate-300 uppercase">Par {par}</span>
-                                                                                </div>
+                                                                                {score !== null && (
+                                                                                    <div className="mt-1.5 pt-1.5 border-t border-slate-100 w-10 flex flex-col items-center">
+                                                                                        <RelativeScore score={score} par={par} className="leading-none" />
+                                                                                    </div>
+                                                                                )}
                                                                             </div>
                                                                         </div>
                                                                     );
@@ -542,6 +543,6 @@ export default function GalleryDetailPage() {
                 }
                 .animate-in { animation: sharpFade 0.3s ease-out forwards; }
             `}</style>
-        </div>
+        </div >
     );
 }
