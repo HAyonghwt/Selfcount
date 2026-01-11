@@ -12,6 +12,10 @@ import { db, ensureAuthenticated } from "@/lib/firebase"
 import { ref, get, onValue, set } from "firebase/database"
 import { Printer } from "lucide-react"
 import ManualScorecardPrint from "@/components/ManualScorecardPrint"
+import html2canvas from "html2canvas"
+import jsPDF from "jspdf"
+import { createRoot } from "react-dom/client"
+import { Download, Loader2 } from "lucide-react"
 
 export default function ManualScorecardPage() {
     const { toast } = useToast()
@@ -26,6 +30,8 @@ export default function ManualScorecardPage() {
     const [selectedGroup, setSelectedGroup] = useState("")
     const [selectedCourses, setSelectedCourses] = useState<{ [key: string]: boolean }>({})
     const [showPrintView, setShowPrintView] = useState(false)
+    const [isGeneratingPdf, setIsGeneratingPdf] = useState(false)
+    const [isSavingImage, setIsSavingImage] = useState(false)
 
     // 로고 설정 state
     const [logoEnabled, setLogoEnabled] = useState(false)
@@ -53,21 +59,21 @@ export default function ManualScorecardPage() {
                 setLoading(true)
 
                 // 대회 정보 로드
-                const tournamentRef = ref(db, 'tournaments/current')
+                const tournamentRef = ref(db!, 'tournaments/current')
                 const tournamentSnap = await get(tournamentRef)
                 if (tournamentSnap.exists()) {
                     setTournament(tournamentSnap.val())
                 }
 
                 // 그룹 정보 로드
-                const groupsRef = ref(db, 'tournaments/current/groups')
+                const groupsRef = ref(db!, 'tournaments/current/groups')
                 const groupsSnap = await get(groupsRef)
                 if (groupsSnap.exists()) {
                     setGroups(groupsSnap.val())
                 }
 
                 // 코스 정보 로드
-                const coursesRef = ref(db, 'tournaments/current/courses')
+                const coursesRef = ref(db!, 'tournaments/current/courses')
                 const coursesSnap = await get(coursesRef)
                 if (coursesSnap.exists()) {
                     const coursesData = coursesSnap.val()
@@ -89,7 +95,7 @@ export default function ManualScorecardPage() {
                 }
 
                 // 선수 정보 로드
-                const playersRef = ref(db, 'players')
+                const playersRef = ref(db!, 'players')
                 const playersSnap = await get(playersRef)
                 if (playersSnap.exists()) {
                     const playersData = playersSnap.val()
@@ -122,7 +128,7 @@ export default function ManualScorecardPage() {
             if (!db) return;
             try {
                 await ensureAuthenticated();
-                const logosRef = ref(db, 'logos');
+                const logosRef = ref(db!, 'logos');
                 const snapshot = await get(logosRef);
                 if (snapshot.exists()) {
                     const logosData = snapshot.val();
@@ -145,7 +151,7 @@ export default function ManualScorecardPage() {
         const loadInitialData = async () => {
             try {
                 await ensureAuthenticated();
-                const settingsSnapshot = await get(ref(db, 'manualScorecard/settings'));
+                const settingsSnapshot = await get(ref(db!, 'manualScorecard/settings'));
                 if (settingsSnapshot.exists()) {
                     const settings = settingsSnapshot.val();
                     setLogoEnabled(settings.logoEnabled ?? false);
@@ -162,7 +168,7 @@ export default function ManualScorecardPage() {
         loadInitialData();
 
         // 실시간 구독으로 설정 변경 감지
-        const unsubSettings = onValue(ref(db, 'manualScorecard/settings'), (snapshot) => {
+        const unsubSettings = onValue(ref(db!, 'manualScorecard/settings'), (snapshot) => {
             if (snapshot.exists()) {
                 const settings = snapshot.val();
                 setLogoEnabled(settings.logoEnabled ?? false);
@@ -184,7 +190,7 @@ export default function ManualScorecardPage() {
 
         try {
             // Firebase에서 현재 설정을 불러와서 병합
-            const currentSettingsSnapshot = await get(ref(db, 'manualScorecard/settings'));
+            const currentSettingsSnapshot = await get(ref(db!, 'manualScorecard/settings'));
             let finalSettings;
 
             if (currentSettingsSnapshot.exists()) {
@@ -217,7 +223,7 @@ export default function ManualScorecardPage() {
             };
 
             // Firebase에 먼저 저장
-            await set(ref(db, 'manualScorecard/settings'), settingsToSave);
+            await set(ref(db!, 'manualScorecard/settings'), settingsToSave);
 
             // 그 다음 state 업데이트
             setLogoEnabled(settingsToSave.logoEnabled);
@@ -279,7 +285,222 @@ export default function ManualScorecardPage() {
         setShowPrintView(false)
     }
 
-    // 미리보기용: 빈 슬롯 찾기 (로고가 들어갈 위치)
+    const handlePdfDownload = async () => {
+        if (!selectedDate || !selectedGroup || Object.keys(selectedCourses).filter(id => selectedCourses[id]).length === 0) {
+            toast({
+                title: '입력 오류',
+                description: '날짜, 그룹, 코스를 모두 선택해주세요.',
+                variant: 'destructive'
+            })
+            return
+        }
+
+        try {
+            setIsGeneratingPdf(true)
+            toast({
+                title: "PDF 생성 시작",
+                description: "고화질 인쇄 데이터를 준비하고 있습니다..."
+            })
+
+            // 1. 임시 컨테이너 생성 (화면 밖)
+            const container = document.createElement('div')
+            container.style.position = 'fixed'
+            container.style.left = '-9999px'
+            container.style.top = '0'
+            container.style.zIndex = '-9999'
+            // A4 가로 크기보다 약간 크게 설정하여 짤림 방지
+            container.style.width = '300mm'
+            document.body.appendChild(container)
+
+            // 2. ManualScorecardPrint 컴포넌트 렌더링
+            const root = createRoot(container)
+
+            // Promise를 사용하여 렌더링 및 이미지 로드 대기
+            await new Promise<void>((resolve) => {
+                root.render(
+                    <ManualScorecardPrint
+                        tournament={tournament}
+                        selectedDate={selectedDate}
+                        selectedGroup={selectedGroup}
+                        selectedCourses={selectedCourses}
+                        groups={groups}
+                        courses={courses}
+                        players={players}
+                        onClose={() => { }} // 다운로드용이라 동작 안함
+                        logoEnabled={logoEnabled}
+                        logoSize={logoSize}
+                        logoOpacity={logoOpacity}
+                        logoOffsetX={logoOffsetX}
+                        logoOffsetY={logoOffsetY}
+                        backgroundLogoUrl={backgroundLogoUrl}
+                    />
+                )
+                // 렌더링 및 로고 이미지 로딩 시간 대기 (넉넉하게)
+                setTimeout(resolve, 2000)
+            })
+
+            // 3. 페이지별로 캡처하여 PDF 생성
+            const pages = container.querySelectorAll('.print-page')
+            if (pages.length === 0) {
+                throw new Error('인쇄할 페이지가 없습니다.')
+            }
+
+            // A4 가로: 297mm x 210mm
+            const pdf = new jsPDF('l', 'mm', 'a4')
+            const pdfWidth = pdf.internal.pageSize.getWidth() // 297
+            const pdfHeight = pdf.internal.pageSize.getHeight() // 210
+
+            for (let i = 0; i < pages.length; i++) {
+                const page = pages[i] as HTMLElement
+
+                toast({
+                    description: `${i + 1}/${pages.length} 페이지 변환 중...`
+                })
+
+                // html2canvas로 캡처
+                const canvas = await html2canvas(page, {
+                    scale: 2, // 고해상도
+                    logging: false,
+                    useCORS: true,
+                    allowTaint: true,
+                    backgroundColor: '#ffffff'
+                })
+
+                const imgData = canvas.toDataURL('image/png')
+
+                if (i > 0) {
+                    pdf.addPage()
+                }
+
+                // PDF에 이미지 추가 (여백 없이 꽉 차게)
+                pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight)
+            }
+
+            // 4. 저장
+            const fileName = `${selectedGroup}_${selectedDate}_수기채점표.pdf`
+            pdf.save(fileName)
+
+            toast({
+                title: "PDF 저장 완료",
+                description: "성공적으로 다운로드되었습니다."
+            })
+
+            // 정리
+            setTimeout(() => {
+                root.unmount()
+                document.body.removeChild(container)
+            }, 100)
+
+        } catch (error) {
+            console.error('PDF 생성 실패:', error)
+            toast({
+                title: 'PDF 생성 실패',
+                description: '오류가 발생했습니다.',
+                variant: 'destructive'
+            })
+        } finally {
+            setIsGeneratingPdf(false)
+        }
+    }
+
+    const handleSaveImage = async () => {
+        if (!selectedDate || !selectedGroup || Object.keys(selectedCourses).filter(id => selectedCourses[id]).length === 0) {
+            toast({
+                title: '입력 오류',
+                description: '날짜, 그룹, 코스를 모두 선택해주세요.',
+                variant: 'destructive'
+            })
+            return
+        }
+
+        try {
+            setIsSavingImage(true)
+            toast({
+                title: "이미지 변환 시작",
+                description: "채점표를 이미지로 변환하고 있습니다..."
+            })
+
+            const container = document.createElement('div')
+            container.style.position = 'fixed'
+            container.style.left = '-9999px'
+            container.style.top = '0'
+            container.style.zIndex = '-9999'
+            container.style.width = '300mm'
+            document.body.appendChild(container)
+
+            const root = createRoot(container)
+
+            await new Promise<void>((resolve) => {
+                root.render(
+                    <ManualScorecardPrint
+                        tournament={tournament}
+                        selectedDate={selectedDate}
+                        selectedGroup={selectedGroup}
+                        selectedCourses={selectedCourses}
+                        groups={groups}
+                        courses={courses}
+                        players={players}
+                        onClose={() => { }}
+                        logoEnabled={logoEnabled}
+                        logoSize={logoSize}
+                        logoOpacity={logoOpacity}
+                        logoOffsetX={logoOffsetX}
+                        logoOffsetY={logoOffsetY}
+                        backgroundLogoUrl={backgroundLogoUrl}
+                    />
+                )
+                setTimeout(resolve, 2000)
+            })
+
+            const pages = container.querySelectorAll('.print-page')
+            if (pages.length === 0) throw new Error('페이지 없음')
+
+            for (let i = 0; i < pages.length; i++) {
+                toast({ description: `${i + 1}/${pages.length}장 저장 중...` })
+
+                const page = pages[i] as HTMLElement
+                const canvas = await html2canvas(page, {
+                    scale: 2,
+                    logging: false,
+                    useCORS: true,
+                    allowTaint: true,
+                    backgroundColor: '#ffffff'
+                })
+
+                const link = document.createElement('a')
+                link.download = `${selectedGroup}_${selectedDate}_수기채점표_${i + 1}.png`
+                link.href = canvas.toDataURL('image/png')
+                document.body.appendChild(link)
+                link.click()
+                document.body.removeChild(link)
+
+                // 브라우저 부하 방지용 딜레이
+                if (i < pages.length - 1) {
+                    await new Promise(r => setTimeout(r, 500))
+                }
+            }
+
+            toast({
+                title: "이미지 저장 완료",
+                description: "모든 페이지가 저장되었습니다."
+            })
+
+            setTimeout(() => {
+                root.unmount()
+                document.body.removeChild(container)
+            }, 100)
+
+        } catch (error) {
+            console.error('이미지 저장 실패:', error)
+            toast({
+                title: '저장 실패',
+                description: '오류가 발생했습니다.',
+                variant: 'destructive'
+            })
+        } finally {
+            setIsSavingImage(false)
+        }
+    }
     const getEmptySlotForPreview = () => {
         if (!selectedGroup) return null;
 
@@ -775,6 +996,24 @@ export default function ManualScorecardPage() {
                         <Button onClick={handlePrint}>
                             <Printer className="mr-2 h-4 w-4" />
                             인쇄
+                        </Button>
+                        <Button
+                            variant="secondary"
+                            onClick={handlePdfDownload}
+                            disabled={isGeneratingPdf || isSavingImage}
+                            className="bg-orange-500 hover:bg-orange-600 text-white"
+                        >
+                            {isGeneratingPdf ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
+                            PDF 저장 (A4)
+                        </Button>
+                        <Button
+                            variant="secondary"
+                            onClick={handleSaveImage}
+                            disabled={isGeneratingPdf || isSavingImage}
+                            className="bg-purple-600 hover:bg-purple-700 text-white"
+                        >
+                            {isSavingImage ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
+                            이미지 저장
                         </Button>
                     </DialogFooter>
                 </DialogContent>
