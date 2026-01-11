@@ -495,6 +495,9 @@ export default function PlayerManagementPage() {
                 // 해당 그룹에 배정된 코스들 찾기 및 정렬 (백카운트 정렬 기준 확보용)
                 const assignedCourseIds = Object.keys(coursesOrder).filter((id: string) => {
                     const order = coursesOrder[id];
+                    if (typeof order === 'object' && order !== null) {
+                        return order.order > 0;
+                    }
                     return typeof order === 'boolean' ? order : (typeof order === 'number' && order > 0);
                 });
 
@@ -503,23 +506,16 @@ export default function PlayerManagementPage() {
                     const orderA = coursesOrder[String(a.id)];
                     const orderB = coursesOrder[String(b.id)];
 
-                    let numA: number;
-                    if (typeof orderA === 'boolean') {
-                        numA = orderA ? (a.order || 0) : 0;
-                    } else if (typeof orderA === 'number' && orderA > 0) {
-                        numA = orderA;
-                    } else {
-                        numA = a.order || 0;
-                    }
+                    const getOrderValue = (val: any, defaultVal: number) => {
+                        if (typeof val === 'object' && val !== null) {
+                            return val.order > 0 ? val.order : 0;
+                        }
+                        return typeof val === 'boolean' ? (val ? defaultVal : 0) : (typeof val === 'number' && val > 0 ? val : defaultVal);
+                    };
 
-                    let numB: number;
-                    if (typeof orderB === 'boolean') {
-                        numB = orderB ? (b.order || 0) : 0;
-                    } else if (typeof orderB === 'number' && orderB > 0) {
-                        numB = orderB;
-                    } else {
-                        numB = b.order || 0;
-                    }
+                    const numA = getOrderValue(orderA, a.order || 0);
+                    const numB = getOrderValue(orderB, b.order || 0);
+
                     return numA - numB;
                 });
 
