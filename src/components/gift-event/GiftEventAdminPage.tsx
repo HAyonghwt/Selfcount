@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { db, ensureAuthenticated } from '@/lib/firebase';
-import { ref, onValue, set, get, remove, update } from 'firebase/database';
+import { ref, onValue, set, get, remove, update, runTransaction } from 'firebase/database';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
@@ -23,6 +23,7 @@ export default function GiftEventAdminPage() {
   const [currentWinner, setCurrentWinner] = useState<Participant | null>(null);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [drawStartTime, setDrawStartTime] = useState<number | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [logoUrl, setLogoUrl] = useState<string>('');
   const [logoSettings, setLogoSettings] = useState({
     enabled: false,
@@ -212,40 +213,77 @@ export default function GiftEventAdminPage() {
   const handleDrawNext = async () => {
     if (!db) return;
     if (remaining.length === 0) return;
+    if (isProcessing) return; // 중복 클릭 방지
 
-    setCurrentWinner(null);
+    try {
+      setIsProcessing(true);
+      setCurrentWinner(null);
 
-    // 기존 방식: 완전 랜덤
-    let winnerData;
-    const winnerId = remaining[Math.floor(Math.random() * remaining.length)];
-    winnerData = participants.find(p => p.id === winnerId);
+      // 트랜잭션으로 안전하게 상태 변경
+      const giftEventRef = ref(db, 'giftEvent');
+      await runTransaction(giftEventRef, (currentData) => {
+        if (!currentData) return currentData;
 
-    if (winnerData) {
-      setCurrentWinner(winnerData);
-      const startTime = Date.now();
-      update(ref(db, 'giftEvent'), {
-        status: 'drawing',
-        currentWinner: winnerData,
-        drawStartTime: startTime
+        // 이미 추첨 중이거나 완료된 상태라면 중단 (동시성 제어)
+        if (currentData.status === 'drawing') {
+          return; // Abort transaction
+        }
+
+        // 안전한 랜덤 추첨을 위해 참가자 목록 재확인
+        const currentRemaining = currentData.remaining || [];
+        if (currentRemaining.length === 0) return currentData;
+
+        const winnerId = currentRemaining[Math.floor(Math.random() * currentRemaining.length)];
+        const winnerData = participants.find(p => p.id === winnerId);
+
+        if (winnerData) {
+          currentData.status = 'drawing';
+          currentData.currentWinner = winnerData;
+          currentData.drawStartTime = Date.now();
+        }
+
+        return currentData;
       });
+
+    } catch (error) {
+      console.error("Error starting draw:", error);
+    } finally {
+      setIsProcessing(false);
     }
   };
 
   const handleWinnerAnnounce = async () => {
     if (!db || !currentWinner) return;
-    const updatedRemaining = remaining.filter(id => id !== currentWinner.id);
-    const winnersRef = ref(db, 'giftEvent/winners');
-    let winnersSnapshot = await get(winnersRef);
-    let winnersList = winnersSnapshot.exists() ? winnersSnapshot.val() : [];
-    if (!Array.isArray(winnersList)) winnersList = [];
-    const alreadyExists = winnersList.some((w: any) => w.id === currentWinner.id);
-    const updatedWinners = alreadyExists ? winnersList : [...winnersList, currentWinner];
-    await update(ref(db, 'giftEvent'), {
-      status: updatedRemaining.length === 0 ? 'finished' : 'winner',
-      remaining: updatedRemaining,
-      winners: updatedWinners,
-      currentWinner: null,
-    });
+
+    // 자동 실행되는 함수이므로 isProcessing 체크 제거 (UI 잠금과 무관하게 동작해야 함)
+
+    try {
+      const giftEventRef = ref(db, 'giftEvent');
+
+      await runTransaction(giftEventRef, (currentData) => {
+        if (!currentData || !currentData.currentWinner) return; // 당첨자가 없으면 중단
+
+        // 이미 처리된 경우(당첨자 명단에 이미 있는 경우) 방지
+        const currentWinners = currentData.winners || [];
+        if (currentWinners.some((w: any) => w.id === currentData.currentWinner.id)) {
+          return; // 이미 당첨 처리됨
+        }
+
+        const winner = currentData.currentWinner;
+        const updatedRemaining = (currentData.remaining || []).filter((id: string) => id !== winner.id);
+        const updatedWinners = [...currentWinners, winner];
+
+        currentData.remaining = updatedRemaining;
+        currentData.winners = updatedWinners;
+        currentData.status = updatedRemaining.length === 0 ? 'finished' : 'winner';
+        currentData.currentWinner = null; // 당첨자 확정 후 초기화
+
+        return currentData;
+      });
+
+    } catch (error) {
+      console.error("Error announcing winner:", error);
+    }
   };
 
   const handleResetEvent = async () => {
@@ -348,10 +386,10 @@ export default function GiftEventAdminPage() {
 
                   <Button
                     onClick={handleDrawNext}
-                    disabled={remaining.length === 0 || !(status === 'winner' || status === 'drawing' || status === 'waiting')}
-                    className="bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-medium h-11 md:h-12 text-sm md:text-base touch-manipulation"
+                    disabled={remaining.length === 0 || status === 'drawing' || !(status === 'winner' || status === 'drawing' || status === 'waiting') || isProcessing}
+                    className="bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-medium h-11 md:h-12 text-sm md:text-base touch-manipulation disabled:opacity-50"
                   >
-                    추첨 시작
+                    {isProcessing ? '처리 중...' : '추첨 시작'}
                   </Button>
                 </div>
 
