@@ -128,6 +128,7 @@ export default function BadgePage() {
   // 로고 관리 상태
   const [uploadedLogos, setUploadedLogos] = useState<Array<{ name: string; url: string; thumbnail?: string }>>([]);
   const [isUploading, setIsUploading] = useState(false);
+  const [isBackupPrinting, setIsBackupPrinting] = useState(false);
 
   // Firebase 데이터 로드
   useEffect(() => {
@@ -773,6 +774,200 @@ export default function BadgePage() {
     }
   };
 
+  // 백업용 PDF 다운로드 (브라우저 인쇄 엔진 사용)
+  const handlePrintBackup = async () => {
+    if (!selectedGroup || filteredPlayers.length === 0) {
+      toast({
+        title: "오류",
+        description: "그룹을 선택하고 선수가 있어야 합니다.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      setIsBackupPrinting(true);
+      toast({
+        title: "인쇄용 데이터 생성 중",
+        description: "안전 모드로 명찰을 준비하고 있습니다...",
+      });
+
+      // 1. 이미지 미리 로딩
+      const bgImage = new Image();
+      await new Promise((resolve, reject) => {
+        bgImage.onload = resolve;
+        bgImage.onerror = reject;
+        bgImage.src = selectedBackground;
+      });
+
+      let logoImage: HTMLImageElement | undefined = undefined;
+      const logoUrl = uploadedLogos.length > 0 ? uploadedLogos[0].url : undefined;
+      if (logoUrl) {
+        logoImage = new Image();
+        logoImage.crossOrigin = 'anonymous';
+        await new Promise((resolve, reject) => {
+          if (!logoImage) return reject();
+          logoImage.onload = resolve;
+          logoImage.onerror = reject;
+          logoImage.src = logoUrl;
+        });
+      }
+
+      // 2. 인쇄용 컨테이너 생성 (기존 컨테이너가 있으면 제거 후 새로 생성)
+      const existingContainer = document.getElementById('badge-print-backup-container');
+      if (existingContainer) {
+        document.body.removeChild(existingContainer);
+      }
+
+      const printContainer = document.createElement('div');
+      printContainer.id = 'badge-print-backup-container';
+      document.body.appendChild(printContainer);
+
+      // 3. 인쇄 전용 스타일 주입
+      const style = document.createElement('style');
+      style.innerHTML = `
+        /* 화면에서는 숨김 (공간도 차지하지 않도록) */
+        @media screen {
+            #badge-print-backup-container {
+                position: fixed;
+                left: -9999px;
+                top: 0;
+                width: 1px;
+                height: 1px;
+                overflow: hidden;
+                opacity: 0;
+                z-index: -9999;
+            }
+        }
+
+        /* 인쇄 시에는 보이게 설정 */
+        @media print {
+            body * {
+                visibility: hidden; 
+            }
+            #badge-print-backup-container, #badge-print-backup-container * {
+                visibility: visible;
+            }
+            #badge-print-backup-container {
+                position: absolute;
+                left: 0 !important;
+                top: 0 !important;
+                width: 100% !important;
+                height: auto !important;
+                overflow: visible !important;
+                opacity: 1 !important;
+                z-index: 9999;
+            }
+            .badge-page {
+                width: 210mm;
+                height: 297mm;
+                page-break-after: always;
+                position: relative;
+                background-color: white;
+                margin: 0;
+                padding: 0;
+            }
+            .badge-item {
+                position: absolute;
+            }
+        }
+      `;
+      printContainer.appendChild(style);
+
+      // 4. 명찰 데이터 생성
+      const A4_WIDTH = 210;
+      const A4_HEIGHT = 297;
+      const MARGIN = 5;
+      const SPACING = 5;
+      const badgesPerRow = Math.floor((A4_WIDTH - MARGIN * 2) / (badgeWidth + SPACING));
+      const badgesPerCol = Math.floor((A4_HEIGHT - MARGIN * 2) / (badgeHeight + SPACING));
+      const badgesPerPage = badgesPerRow * badgesPerCol;
+
+      let currentPageDiv: HTMLDivElement | null = null;
+      let badgeIndex = 0;
+
+      const sortedJos = Object.keys(playersByJo).sort((a, b) => parseInt(a) - parseInt(b));
+
+      for (const jo of sortedJos) {
+        const players = playersByJo[jo];
+        for (const player of players) {
+          // 새 페이지 시작 필요 여부 확인
+          if (badgeIndex % badgesPerPage === 0) {
+            currentPageDiv = document.createElement('div');
+            currentPageDiv.className = 'badge-page';
+            printContainer.appendChild(currentPageDiv);
+          }
+
+          if (!currentPageDiv) continue;
+
+          const pageIndex = badgeIndex % badgesPerPage;
+          const row = Math.floor(pageIndex / badgesPerRow);
+          const col = pageIndex % badgesPerRow;
+
+          // 위치 계산 (mm)
+          const xMM = MARGIN + col * (badgeWidth + SPACING);
+          const yMM = MARGIN + row * (badgeHeight + SPACING);
+
+          // 캔버스 생성 및 그리기
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            await drawBadge(
+              ctx,
+              player,
+              selectedGroup,
+              tournament.name || '대회명',
+              badgeWidth,
+              badgeHeight,
+              logoSettings.showLogo ? logoUrl : undefined,
+              logoSettings.size,
+              logoSettings.offsetX,
+              logoSettings.offsetY,
+              logoSettings.opacity,
+              bgImage,
+              logoImage
+            );
+
+            // 캔버스를 이미지로 변환하여 페이지에 추가
+            const img = document.createElement('img');
+            img.src = canvas.toDataURL('image/png');
+            img.className = 'badge-item';
+            img.style.left = `${xMM}mm`;
+            img.style.top = `${yMM}mm`;
+            img.style.width = `${badgeWidth}mm`;
+            img.style.height = `${badgeHeight}mm`;
+
+            currentPageDiv.appendChild(img);
+          }
+
+          badgeIndex++;
+        }
+      }
+
+      // 5. 인쇄 실행
+      // 이미지 렌더링을 위해 약간 대기
+      await new Promise(resolve => setTimeout(resolve, 500));
+      window.print();
+
+      // 인쇄 대화상자가 닫힌 후라고 가정하고(정확히는 알 수 없지만) 컨테이너 제거
+      // 대화상자가 떠있는 동안 DOM을 제거하면 하얗게 나올 수 있으므로, 충분히 늦게 제거하거나 
+      // 사용자가 직접 닫았을 때 제거되어야 함. 
+      // 여기서는 타임아웃을 길게 주어 처리 (1초 후는 너무 빠를 수 있음. window.print는 블로킹일 수도 아닐 수도 브라우저마다 다름)
+      // *중요*: 모바일/일부 브라우저에서 window.print는 비동기일 수 있음.
+      // 안전을 위해 컨테이너는 남겨두되 숨김 처리하거나, 다음 인쇄 시 제거하도록 로직 구성 (위 2번에서 처리됨)
+
+    } catch (error) {
+      console.error('백업 인쇄 실패:', error);
+      toast({
+        title: "오류",
+        description: "인쇄 준비 중 오류가 발생했습니다.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsBackupPrinting(false);
+    }
+  };
+
   // 미리보기 업데이트
   useEffect(() => {
     let isMounted = true;
@@ -1233,15 +1428,30 @@ export default function BadgePage() {
                   <div className="text-sm text-muted-foreground">
                     조 수: <span className="font-semibold">{Object.keys(playersByJo).length}개</span>
                   </div>
-                  <Button
-                    onClick={generatePDF}
-                    className="w-full"
-                    size="lg"
-                    disabled={!selectedGroup || filteredPlayers.length === 0}
-                  >
-                    <Download className="mr-2 h-4 w-4" />
-                    PDF 다운로드
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={generatePDF}
+                      className="flex-1"
+                      size="lg"
+                      disabled={!selectedGroup || filteredPlayers.length === 0}
+                    >
+                      <Download className="mr-2 h-4 w-4" />
+                      PDF 다운로드
+                    </Button>
+                    <Button
+                      onClick={handlePrintBackup}
+                      className="flex-1 bg-orange-600 hover:bg-orange-700 text-white"
+                      size="lg"
+                      disabled={!selectedGroup || filteredPlayers.length === 0 || isBackupPrinting}
+                    >
+                      {isBackupPrinting ? (
+                        <Settings className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <Download className="mr-2 h-4 w-4" />
+                      )}
+                      PDF 다운로드 2 (백업용)
+                    </Button>
+                  </div>
                 </div>
               </CardContent>
             </Card>
