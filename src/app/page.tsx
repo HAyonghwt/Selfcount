@@ -39,31 +39,48 @@ export default function LoginPage() {
     setYear(new Date().getFullYear());
 
     if (isConfigMissing) {
-        setError("Firebase 연결 설정이 필요합니다. .env.local 파일 또는 호스팅 서비스의 환경 변수 설정을 확인해주세요.");
-        setConfig({ appName: 'ParkScore', userDomain: 'parkgolf.com' });
-        setLoading(false);
-        return;
+      setError("Firebase 연결 설정이 필요합니다. .env.local 파일 또는 호스팅 서비스의 환경 변수 설정을 확인해주세요.");
+      setConfig({ appName: 'ParkScore', userDomain: 'parkgolf.com' });
+      setLoading(false);
+      return;
     }
 
     const load = async () => {
       try {
-        // 규칙 강화에 따라 읽기 전에도 인증 필요
-        await ensureAuthenticated();
+        // config가 public으로 변경되어 인증 없이도 읽기 권한이 있음
+        // 만약 읽기에 실패하면 (예: 규칙 미반영 등) 그때 인증 시도
         if (!db) {
           throw new Error('Firebase DB가 초기화되지 않았습니다.');
         }
         const configRef = ref(db as any, 'config');
         const snapshot = await get(configRef);
+
         if (snapshot.exists()) {
           const data = snapshot.val();
           setConfig(data);
         } else {
           setConfig({ appName: 'ParkScore', userDomain: 'parkgolf.com' });
         }
+
+        // 인증은 백그라운드에서 조용히 수행 (관리자 세션 복구 등)
+        ensureAuthenticated().catch(err => console.error("Background auth error:", err));
+
       } catch (err) {
-        console.error("Firebase config fetch error:", err);
-        setError("Firebase 연결에 실패했습니다. 설정을 확인해주세요.");
-        setConfig({ appName: 'ParkScore', userDomain: 'parkgolf.com' });
+        console.warn("Public config fetch failed, retrying with auth...", err);
+        try {
+          await ensureAuthenticated();
+          const configRef = ref(db as any, 'config');
+          const snapshot = await get(configRef);
+          if (snapshot.exists()) {
+            setConfig(snapshot.val());
+          } else {
+            setConfig({ appName: 'ParkScore', userDomain: 'parkgolf.com' });
+          }
+        } catch (retryErr) {
+          console.error("Firebase config fetch error after retry:", retryErr);
+          setError("Firebase 연결에 실패했습니다. 설정을 확인해주세요.");
+          setConfig({ appName: 'ParkScore', userDomain: 'parkgolf.com' });
+        }
       } finally {
         setLoading(false);
       }
@@ -143,8 +160,8 @@ export default function LoginPage() {
     setError('');
 
     if (!auth || !config || !firestore) {
-        setError("설정이 로드되지 않았거나 Firebase 인증이 준비되지 않았습니다. 잠시 후 다시 시도해주세요.");
-        return;
+      setError("설정이 로드되지 않았거나 Firebase 인증이 준비되지 않았습니다. 잠시 후 다시 시도해주세요.");
+      return;
     }
 
     setLoading(true);
@@ -188,7 +205,7 @@ export default function LoginPage() {
           // Firestore 초기화 대기
           await new Promise(resolve => setTimeout(resolve, 100));
           const refereeData = await loginRefereeWithKoreanId(email, password);
-          
+
           // 로그인 성공 시 세션에 저장 (여러 번 시도)
           let saved = false;
           for (let i = 0; i < 5; i++) {
@@ -203,7 +220,7 @@ export default function LoginPage() {
             // 저장 실패 시 잠시 대기 후 재시도
             await new Promise(resolve => setTimeout(resolve, 100));
           }
-          
+
           if (!saved) {
             // sessionStorage 저장 실패 시 URL 파라미터로 데이터 전달
             console.warn('sessionStorage 저장 실패, URL 파라미터로 데이터 전달');
@@ -212,7 +229,7 @@ export default function LoginPage() {
             window.location.href = targetUrl;
             return;
           }
-          
+
           toast({
             title: '로그인 성공',
             description: '심판 페이지로 이동합니다.',
@@ -221,7 +238,7 @@ export default function LoginPage() {
 
           // 해당 홀의 심판 페이지로 즉시 이동 (window.location.href 사용)
           const targetUrl = `/referee/${refereeData.hole}`;
-          
+
           // sessionStorage 저장 확인 후 이동
           setTimeout(() => {
             window.location.href = targetUrl;
@@ -257,7 +274,7 @@ export default function LoginPage() {
           // Firestore 초기화 대기
           await new Promise(resolve => setTimeout(resolve, 100));
           const hostData = await loginHostWithKoreanId(email, password);
-          
+
           // 로그인 성공 시 세션에 저장 (여러 번 시도)
           let saved = false;
           for (let i = 0; i < 5; i++) {
@@ -272,7 +289,7 @@ export default function LoginPage() {
             // 저장 실패 시 잠시 대기 후 재시도
             await new Promise(resolve => setTimeout(resolve, 100));
           }
-          
+
           if (!saved) {
             // sessionStorage 저장 실패 시 URL 파라미터로 데이터 전달
             console.warn('sessionStorage 저장 실패, URL 파라미터로 데이터 전달');
@@ -281,7 +298,7 @@ export default function LoginPage() {
             window.location.href = targetUrl;
             return;
           }
-          
+
           toast({
             title: '로그인 성공',
             description: '경품 행사 페이지로 이동합니다.',
@@ -290,7 +307,7 @@ export default function LoginPage() {
 
           // 경품 행사 페이지로 즉시 이동
           const targetUrl = `/admin/gift-event`;
-          
+
           // sessionStorage 저장 확인 후 이동
           setTimeout(() => {
             window.location.href = targetUrl;
@@ -323,28 +340,28 @@ export default function LoginPage() {
       // 기존 이메일 로그인
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
-      
+
       if (user) {
         const userEmail = user.email || '';
         const userDomain = config.userDomain.trim();
 
         if (userEmail === `admin@${userDomain}`) {
-            router.push('/admin');
+          router.push('/admin');
         } else if (userEmail.startsWith('referee') && userEmail.endsWith(`@${userDomain}`)) {
-             const holeNumber = userEmail.match(/referee(\d+)/)?.[1];
-             if (holeNumber) {
-                router.push(`/referee/${holeNumber}`);
-             } else {
-                setError('심판 번호를 식별할 수 없습니다.');
-                auth.signOut();
-             }
-        } else if (userEmail.startsWith('player') && userEmail.endsWith('@yongin.com')) {
-            router.push('/self-scoring');
-        } else if (email === 'hayonghwy@gmail.com') {
-            router.push('/super-admin');
-        } else {
-            setError(`'${userEmail}' 계정은 이 앱에 대한 접근 권한이 없습니다.`);
+          const holeNumber = userEmail.match(/referee(\d+)/)?.[1];
+          if (holeNumber) {
+            router.push(`/referee/${holeNumber}`);
+          } else {
+            setError('심판 번호를 식별할 수 없습니다.');
             auth.signOut();
+          }
+        } else if (userEmail.startsWith('player') && userEmail.endsWith('@yongin.com')) {
+          router.push('/self-scoring');
+        } else if (email === 'hayonghwy@gmail.com') {
+          router.push('/super-admin');
+        } else {
+          setError(`'${userEmail}' 계정은 이 앱에 대한 접근 권한이 없습니다.`);
+          auth.signOut();
         }
       }
     } catch (authError: any) {
@@ -371,7 +388,7 @@ export default function LoginPage() {
         description: errorMessage,
       });
     } finally {
-        setLoading(false);
+      setLoading(false);
     }
   };
 
@@ -380,20 +397,20 @@ export default function LoginPage() {
       <Card className="w-full max-w-md shadow-2xl border-blue-200">
         <CardHeader className="text-center">
           <Button variant="secondary" className="w-full h-12 text-base font-bold mb-6 bg-blue-100 text-blue-700 hover:bg-blue-200 border-none" asChild>
-              <Link href="/scoreboard" target="_blank" rel="noopener noreferrer">
-                  <Tv className="mr-2 h-5 w-5 text-blue-600" />
-                  실시간 전광판
-              </Link>
+            <Link href="/scoreboard" target="_blank" rel="noopener noreferrer">
+              <Tv className="mr-2 h-5 w-5 text-blue-600" />
+              실시간 전광판
+            </Link>
           </Button>
 
           <div className="mx-auto w-fit mb-4">
-            <Image 
-                src="/logo.png"
-                alt={`${config?.appName || 'ParkScore'} 로고`}
-                width={80}
-                height={80}
-                className="h-20 w-20"
-                priority
+            <Image
+              src="/logo.png"
+              alt={`${config?.appName || 'ParkScore'} 로고`}
+              width={80}
+              height={80}
+              className="h-20 w-20"
+              priority
             />
           </div>
           <CardTitle className="text-3xl font-bold font-headline text-blue-800">
@@ -433,9 +450,9 @@ export default function LoginPage() {
               />
             </div>
             {error && (
-                <div className="text-center text-sm font-medium text-destructive bg-red-50 border border-red-200 p-3 rounded-lg">
-                    <p>{error}</p>
-                </div>
+              <div className="text-center text-sm font-medium text-destructive bg-red-50 border border-red-200 p-3 rounded-lg">
+                <p>{error}</p>
+              </div>
             )}
             <Button type="submit" className="w-full h-12 text-lg font-bold bg-blue-600 hover:bg-blue-700 text-white transition-colors duration-200" disabled={loading || isConfigMissing}>
               {loading && !isConfigMissing ? (

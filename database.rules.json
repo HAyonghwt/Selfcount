@@ -24,11 +24,11 @@
       ".write": "auth != null"
     },
     "config": {
-      ".read": "auth != null",
+      ".read": true,
       ".write": "auth != null"
     },
     "logos": {
-      ".read": "auth != null",
+      ".read": true,
       ".write": "auth != null"
     },
     "scorePrint": {
@@ -36,7 +36,7 @@
       ".write": "auth != null"
     },
     "badges": {
-      ".read": "auth != null",
+      ".read": true,
       ".write": "auth != null"
     },
     "manualScorecard": {

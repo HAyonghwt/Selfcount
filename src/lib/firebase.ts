@@ -18,8 +18,8 @@ export const firebaseConfig: FirebaseOptions = {
 
 // Initialize Firebase only if the config is not a placeholder
 const app = firebaseConfig.apiKey
-  ? getApps().length === 0 
-    ? initializeApp(firebaseConfig) 
+  ? getApps().length === 0
+    ? initializeApp(firebaseConfig)
     : getApp()
   : null;
 
@@ -35,55 +35,71 @@ export const ensureAuthenticated = async (maxRetries: number = 3, retryDelay: nu
     return false;
   }
 
+  // 1. 이미 인증된 사용자가 있는지 먼저 즉시 확인
+  if (auth.currentUser) {
+    console.log('이미 인증된 사용자:', auth.currentUser.uid);
+    return true;
+  }
+
+  // 2. 인증 상태가 초기회될 때까지 잠시 대기 (Firebase v10+의 경우 authStateReady 사용 가능)
+  // 여기서는 호환성을 위해 직접 구현하거나 세션 복구를 기다림
+  try {
+    // 0.5초 정도 대기하며 세션 복구 확인
+    await new Promise((resolve) => {
+      const unsubscribe = onAuthStateChanged(auth, (user) => {
+        unsubscribe();
+        resolve(user);
+      });
+      // 최대 1초만 기다림
+      setTimeout(() => {
+        unsubscribe();
+        resolve(null);
+      }, 1000);
+    });
+
+    const currentUser = auth.currentUser;
+    if (currentUser) {
+      console.log('세션 복구 성공:', currentUser.uid);
+      return true;
+    }
+  } catch (e) {
+    console.warn('인증 상태 대기 중 오류:', e);
+  }
+
+  // 3. 여전히 없으면 익명 인증 시도
   let attempt = 0;
-  
   while (attempt < maxRetries) {
     try {
-      const currentUser = auth.currentUser;
-      
-      if (currentUser) {
-        console.log('이미 인증된 사용자:', currentUser.uid);
-        return true;
-      }
-
       console.log(`익명 인증 시도 중... (${attempt + 1}/${maxRetries})`);
       const userCredential = await signInAnonymously(auth);
       console.log('익명 인증 성공:', userCredential.user.uid);
       return true;
-      
     } catch (error: any) {
       attempt++;
       console.error(`Firebase 인증 실패 (${attempt}/${maxRetries}):`, error);
-      
-      // 재시도 가능한 오류인지 확인
-      const isRetryableError = 
+
+      const isRetryableError =
         error?.code === 'auth/network-request-failed' ||
         error?.code === 'auth/too-many-requests' ||
         error?.message?.includes('network') ||
         error?.message?.includes('timeout');
-      
+
       if (isRetryableError && attempt < maxRetries) {
-        // 지수 백오프: 1초, 2초, 4초...
         const delay = retryDelay * Math.pow(2, attempt - 1);
         console.log(`${delay}ms 후 재시도...`);
         await new Promise(resolve => setTimeout(resolve, delay));
         continue;
       }
-      
-      // 재시도 불가능한 오류 또는 최대 재시도 횟수 초과
-      if (attempt >= maxRetries) {
-        console.error('Firebase 인증 최종 실패: 최대 재시도 횟수 초과');
-      }
       return false;
     }
   }
-  
+
   return false;
 };
 
 // 인증 상태 변경 리스너
 export const onAuthStateChange = (callback: (user: User | null) => void) => {
-  if (!auth) return () => {};
+  if (!auth) return () => { };
   return onAuthStateChanged(auth, callback);
 };
 
