@@ -1,0 +1,12 @@
+src/app/referee/[hole]/page.tsx(6,87): error TS2307: Cannot find module '@/components/ui/card' or its corresponding type declarations.
+src/app/referee/[hole]/page.tsx(7,24): error TS2307: Cannot find module '@/components/ui/button' or its corresponding type declarations.
+src/app/referee/[hole]/page.tsx(8,23): error TS2307: Cannot find module '@/components/ui/input' or its corresponding type declarations.
+src/app/referee/[hole]/page.tsx(9,23): error TS2307: Cannot find module '@/components/ui/label' or its corresponding type declarations.
+src/app/referee/[hole]/page.tsx(10,79): error TS2307: Cannot find module '@/components/ui/select' or its corresponding type declarations.
+src/app/referee/[hole]/page.tsx(12,41): error TS2307: Cannot find module '@/lib/firebase' or its corresponding type declarations.
+src/app/referee/[hole]/page.tsx(14,26): error TS2307: Cannot find module '@/components/ui/skeleton' or its corresponding type declarations.
+src/app/referee/[hole]/page.tsx(15,167): error TS2307: Cannot find module '@/components/ui/alert-dialog' or its corresponding type declarations.
+src/app/referee/[hole]/page.tsx(16,26): error TS2307: Cannot find module '@/hooks/use-toast' or its corresponding type declarations.
+src/app/referee/[hole]/page.tsx(17,200): error TS2307: Cannot find module '@/lib/utils' or its corresponding type declarations.
+src/app/referee/[hole]/page.tsx(18,52): error TS2307: Cannot find module '@/lib/scoreLogs' or its corresponding type declarations.
+src/app/referee/[hole]/page.tsx(19,26): error TS2307: Cannot find module '@/components/QRCodeViewer' or its corresponding type declarations.

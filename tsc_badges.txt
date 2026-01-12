@@ -1,0 +1,8 @@
+src/app/admin/badges/page.tsx(4,75): error TS2307: Cannot find module '@/components/ui/card' or its corresponding type declarations.
+src/app/admin/badges/page.tsx(5,24): error TS2307: Cannot find module '@/components/ui/button' or its corresponding type declarations.
+src/app/admin/badges/page.tsx(6,23): error TS2307: Cannot find module '@/components/ui/input' or its corresponding type declarations.
+src/app/admin/badges/page.tsx(7,23): error TS2307: Cannot find module '@/components/ui/label' or its corresponding type declarations.
+src/app/admin/badges/page.tsx(14,8): error TS2307: Cannot find module '@/components/ui/select' or its corresponding type declarations.
+src/app/admin/badges/page.tsx(15,24): error TS2307: Cannot find module '@/components/ui/switch' or its corresponding type declarations.
+src/app/admin/badges/page.tsx(16,26): error TS2307: Cannot find module '@/hooks/use-toast' or its corresponding type declarations.
+src/app/admin/badges/page.tsx(17,41): error TS2307: Cannot find module '@/lib/firebase' or its corresponding type declarations.

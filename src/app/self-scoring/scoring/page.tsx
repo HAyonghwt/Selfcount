@@ -18,6 +18,7 @@ type PlayerDb = {
   p2_name?: string;
   group: string;
   jo: number;
+  uploadOrder?: number;
 };
 
 export default function SelfScoringPage() {

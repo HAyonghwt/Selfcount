@@ -15,7 +15,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription } from "@/components/ui/alert-dialog";
 import { useToast } from '@/hooks/use-toast';
 import { cn, safeSessionStorageGetItem, safeSessionStorageSetItem, safeSessionStorageClear, safeLocalStorageGetItem, safeLocalStorageSetItem, safeLocalStorageRemoveItem, safeLocalStorageClear } from '@/lib/utils';
-import { logScoreChange } from '@/lib/scoreLogs';
+import { logScoreChange, getPlayerScoreLogs } from '@/lib/scoreLogs';
 import QRCodeViewer from '@/components/QRCodeViewer';
 
 interface Player {
@@ -327,7 +327,7 @@ export default function RefereePage() {
             // 캐시가 30분 이내면 캐시 사용 (토너먼트 설정은 거의 바뀌지 않음)
             if (dataCache.current.tournament && cacheAge < 30 * 60 * 1000) {
                 const cached = dataCache.current.tournament;
-                const coursesArray = cached.courses ? Object.values(cached.courses) : [];
+                const coursesArray = (cached.courses ? Object.values(cached.courses) : []) as Course[];
                 setCourses(coursesArray);
 
                 // tournamentCourses도 함께 업데이트
@@ -356,7 +356,7 @@ export default function RefereePage() {
             const loadTournamentOnce = async () => {
                 try {
                     // 각 요청을 개별적으로 처리하여 하나가 실패해도 다른 것은 계속 진행
-                    let tournamentData = {};
+                    let tournamentData: any = {};
                     let password = '';
 
                     // 토너먼트 데이터 로드
@@ -394,7 +394,7 @@ export default function RefereePage() {
                     dataCache.current.lastUpdated[cacheKey] = Date.now();
 
                     // courses 설정
-                    const coursesArray = tournamentData.courses ? Object.values(tournamentData.courses) : [];
+                    const coursesArray = (tournamentData.courses ? Object.values(tournamentData.courses) : []) as Course[];
                     setCourses(coursesArray);
 
                     // tournamentCourses도 함께 업데이트 (assignedCourse 찾기용)
@@ -531,7 +531,7 @@ export default function RefereePage() {
                 const playerCourseScores = snapshot.val();
 
                 // 함수형 업데이트로 최신 상태 보장 (다른 선수의 점수가 덮어쓰이지 않도록)
-                setAllScores(prev => {
+                setAllScores((prev: any) => {
                     const updated = { ...prev };
                     if (playerCourseScores) {
                         if (!updated[player.id]) {
@@ -1518,12 +1518,12 @@ export default function RefereePage() {
                 newForfeitType = null;
             }
 
-            const updated = {
+            const updated: { [key: string]: ScoreData } = {
                 ...prev,
                 [id]: {
                     ...prev[id],
                     score: newScore,
-                    forfeitType: newForfeitType,
+                    forfeitType: newForfeitType as 'absent' | 'disqualified' | 'forfeit' | null,
                     status: 'editing', // 상태 유지
                     wasLocked: currentScoreData.wasLocked // wasLocked 유지
                 }
@@ -1844,7 +1844,6 @@ export default function RefereePage() {
     // 로그에서 기권 타입을 추출하는 함수
     const getForfeitTypeFromLogs = async (playerId: string, courseId: string, holeNumber: string) => {
         try {
-            const { getPlayerScoreLogs } = await import('@/lib/scoreLogs');
             const logs = await getPlayerScoreLogs(playerId);
 
             // 해당 홀의 기권 처리 로그 찾기

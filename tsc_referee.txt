@@ -1,0 +1,39 @@
+src/app/referee/[hole]/page.tsx(6,87): error TS2307: Cannot find module '@/components/ui/card' or its corresponding type declarations.
+src/app/referee/[hole]/page.tsx(7,24): error TS2307: Cannot find module '@/components/ui/button' or its corresponding type declarations.
+src/app/referee/[hole]/page.tsx(8,23): error TS2307: Cannot find module '@/components/ui/input' or its corresponding type declarations.
+src/app/referee/[hole]/page.tsx(9,23): error TS2307: Cannot find module '@/components/ui/label' or its corresponding type declarations.
+src/app/referee/[hole]/page.tsx(10,79): error TS2307: Cannot find module '@/components/ui/select' or its corresponding type declarations.
+src/app/referee/[hole]/page.tsx(12,41): error TS2307: Cannot find module '@/lib/firebase' or its corresponding type declarations.
+src/app/referee/[hole]/page.tsx(14,26): error TS2307: Cannot find module '@/components/ui/skeleton' or its corresponding type declarations.
+src/app/referee/[hole]/page.tsx(15,167): error TS2307: Cannot find module '@/components/ui/alert-dialog' or its corresponding type declarations.
+src/app/referee/[hole]/page.tsx(16,26): error TS2307: Cannot find module '@/hooks/use-toast' or its corresponding type declarations.
+src/app/referee/[hole]/page.tsx(17,200): error TS2307: Cannot find module '@/lib/utils' or its corresponding type declarations.
+src/app/referee/[hole]/page.tsx(18,32): error TS2307: Cannot find module '@/lib/scoreLogs' or its corresponding type declarations.
+src/app/referee/[hole]/page.tsx(19,26): error TS2307: Cannot find module '@/components/QRCodeViewer' or its corresponding type declarations.
+src/app/referee/[hole]/page.tsx(331,28): error TS2345: Argument of type 'unknown[]' is not assignable to parameter of type 'SetStateAction<Course[]>'.
+  Type 'unknown[]' is not assignable to type 'Course[]'.
+    Type '{}' is missing the following properties from type 'Course': id, name, isActive
+src/app/referee/[hole]/page.tsx(397,57): error TS2339: Property 'courses' does not exist on type '{}'.
+src/app/referee/[hole]/page.tsx(397,96): error TS2339: Property 'courses' does not exist on type '{}'.
+src/app/referee/[hole]/page.tsx(398,32): error TS2345: Argument of type 'unknown[]' is not assignable to parameter of type 'SetStateAction<Course[]>'.
+  Type 'unknown[]' is not assignable to type 'Course[]'.
+    Type '{}' is missing the following properties from type 'Course': id, name, isActive
+src/app/referee/[hole]/page.tsx(401,40): error TS2339: Property 'courses' does not exist on type '{}'.
+src/app/referee/[hole]/page.tsx(402,78): error TS2339: Property 'courses' does not exist on type '{}'.
+src/app/referee/[hole]/page.tsx(413,50): error TS2339: Property 'groups' does not exist on type '{}'.
+src/app/referee/[hole]/page.tsx(1468,19): error TS2345: Argument of type '(prev: { [key: string]: ScoreData; }) => { [x: string]: ScoreData | { score: number; forfeitType: "absent" | "disqualified" | "forfeit"; status: string; wasLocked: boolean; }; }' is not assignable to parameter of type 'SetStateAction<{ [key: string]: ScoreData; }>'.
+  Type '(prev: { [key: string]: ScoreData; }) => { [x: string]: ScoreData | { score: number; forfeitType: "absent" | "disqualified" | "forfeit"; status: string; wasLocked: boolean; }; }' is not assignable to type '(prevState: { [key: string]: ScoreData; }) => { [key: string]: ScoreData; }'.
+    Type '{ [x: string]: ScoreData | { score: number; forfeitType: "absent" | "disqualified" | "forfeit"; status: string; wasLocked: boolean; }; }' is not assignable to type '{ [key: string]: ScoreData; }'.
+      'string' index signatures are incompatible.
+        Type 'ScoreData | { score: number; forfeitType: "absent" | "disqualified" | "forfeit"; status: string; wasLocked: boolean; }' is not assignable to type 'ScoreData'.
+          Type '{ score: number; forfeitType: "absent" | "disqualified" | "forfeit"; status: string; wasLocked: boolean; }' is not assignable to type 'ScoreData'.
+            Types of property 'status' are incompatible.
+              Type 'string' is not assignable to type '"editing" | "locked"'.
+src/app/referee/[hole]/page.tsx(1532,13): error TS2322: Type '{ [x: string]: ScoreData | { score: number; forfeitType: "absent" | "disqualified" | "forfeit"; status: string; wasLocked: boolean; }; }' is not assignable to type '{ [key: string]: ScoreData; }'.
+  'string' index signatures are incompatible.
+    Type 'ScoreData | { score: number; forfeitType: "absent" | "disqualified" | "forfeit"; status: string; wasLocked: boolean; }' is not assignable to type 'ScoreData'.
+      Type '{ score: number; forfeitType: "absent" | "disqualified" | "forfeit"; status: string; wasLocked: boolean; }' is not assignable to type 'ScoreData'.
+        Types of property 'status' are incompatible.
+          Type 'string' is not assignable to type '"editing" | "locked"'.
+src/app/referee/[hole]/page.tsx(1847,50): error TS1323: Dynamic imports are only supported when the '--module' flag is set to 'es2020', 'es2022', 'esnext', 'commonjs', 'amd', 'system', 'umd', 'node16', 'node18', or 'nodenext'.
+src/app/referee/[hole]/page.tsx(1847,57): error TS2307: Cannot find module '@/lib/scoreLogs' or its corresponding type declarations.

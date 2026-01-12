@@ -1,0 +1,1 @@
+src/app/admin/gift-event/page.tsx(2,32): error TS2307: Cannot find module '@/components/gift-event/GiftEventAdminPage' or its corresponding type declarations.

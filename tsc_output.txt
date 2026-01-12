@@ -1,0 +1,18 @@
+src/app/admin/suddendeath/page.tsx(4,75): error TS2307: Cannot find module '@/components/ui/card' or its corresponding type declarations.
+src/app/admin/suddendeath/page.tsx(5,24): error TS2307: Cannot find module '@/components/ui/button' or its corresponding type declarations.
+src/app/admin/suddendeath/page.tsx(6,26): error TS2307: Cannot find module '@/components/ui/checkbox' or its corresponding type declarations.
+src/app/admin/suddendeath/page.tsx(7,23): error TS2307: Cannot find module '@/components/ui/label' or its corresponding type declarations.
+src/app/admin/suddendeath/page.tsx(8,79): error TS2307: Cannot find module '@/components/ui/table' or its corresponding type declarations.
+src/app/admin/suddendeath/page.tsx(9,79): error TS2307: Cannot find module '@/components/ui/select' or its corresponding type declarations.
+src/app/admin/suddendeath/page.tsx(10,29): error TS2307: Cannot find module '@/components/ui/multi-select' or its corresponding type declarations.
+src/app/admin/suddendeath/page.tsx(11,23): error TS2307: Cannot find module '@/components/ui/input' or its corresponding type declarations.
+src/app/admin/suddendeath/page.tsx(13,26): error TS2307: Cannot find module '@/hooks/use-toast' or its corresponding type declarations.
+src/app/admin/suddendeath/page.tsx(14,20): error TS2307: Cannot find module '@/lib/firebase' or its corresponding type declarations.
+src/app/admin/suddendeath/page.tsx(16,187): error TS2307: Cannot find module '@/components/ui/alert-dialog' or its corresponding type declarations.
+src/app/admin/suddendeath/page.tsx(17,58): error TS2307: Cannot find module '@/components/ui/tabs' or its corresponding type declarations.
+src/app/admin/suddendeath/page.tsx(906,51): error TS2304: Cannot find name 'displayPlayers'.
+src/app/admin/suddendeath/page.tsx(994,120): error TS2304: Cannot find name 'groupName'.
+src/app/admin/suddendeath/page.tsx(1023,69): error TS2339: Property 'sort' does not exist on type 'Partial<SuddenDeathData>'.
+src/app/admin/suddendeath/page.tsx(1032,73): error TS2339: Property 'map' does not exist on type 'Partial<SuddenDeathData>'.
+src/app/admin/suddendeath/page.tsx(1038,78): error TS2554: Expected 5 arguments, but got 4.
+src/app/admin/suddendeath/page.tsx(1153,112): error TS2304: Cannot find name 'groupName'.

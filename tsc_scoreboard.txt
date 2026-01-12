@@ -1,0 +1,11 @@
+src/app/scoreboard/page.tsx(3,41): error TS2307: Cannot find module '@/lib/firebase' or its corresponding type declarations.
+src/app/scoreboard/page.tsx(6,70): error TS2307: Cannot find module '@/lib/utils' or its corresponding type declarations.
+src/app/scoreboard/page.tsx(7,79): error TS2307: Cannot find module '@/components/ui/select' or its corresponding type declarations.
+src/app/scoreboard/page.tsx(8,23): error TS2307: Cannot find module '@/components/ui/label' or its corresponding type declarations.
+src/app/scoreboard/page.tsx(9,26): error TS2307: Cannot find module '@/components/ui/checkbox' or its corresponding type declarations.
+src/app/scoreboard/page.tsx(10,30): error TS2307: Cannot find module '@/components/gift-event/GiftEventDisplay' or its corresponding type declarations.
+src/app/scoreboard/page.tsx(11,30): error TS2307: Cannot find module '@/components/gift-event/GiftEventStandby' or its corresponding type declarations.
+src/app/scoreboard/page.tsx(12,101): error TS2307: Cannot find module '@/lib/scoreLogs' or its corresponding type declarations.
+src/app/scoreboard/page.tsx(13,74): error TS2307: Cannot find module '@/components/ui/tooltip' or its corresponding type declarations.
+src/app/scoreboard/page.tsx(14,57): error TS2307: Cannot find module '@/components/ui/popover' or its corresponding type declarations.
+src/app/scoreboard/page.tsx(15,24): error TS2307: Cannot find module '@/components/ui/button' or its corresponding type declarations.
