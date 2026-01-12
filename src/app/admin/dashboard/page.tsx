@@ -174,7 +174,10 @@ export default function AdminDashboard() {
 
         try {
             // archiveId: 대회명(공백제거)_YYYYMMDD 형식
-            const archiveId = `${(tournamentName || '대회').replace(/\s/g, '')}_${date}`;
+            // Firebase 경로는 '.', '#', '$', '[', ']' 를 포함할 수 없음
+            const sanitizedTournamentName = (tournamentName || '대회').replace(/[\s.#$\[\]]/g, '');
+            const sanitizedDate = date.replace(/[.#$\[\]]/g, '-').replace(/\s/g, '_');
+            const archiveId = `${sanitizedTournamentName}_${sanitizedDate}`;
 
             // 참가자 수
             const playerCount = Object.keys(players).length;

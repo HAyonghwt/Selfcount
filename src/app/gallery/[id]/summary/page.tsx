@@ -43,7 +43,7 @@ export default function GallerySummaryPage() {
     const [searchTerm, setSearchTerm] = useState("");
 
     useEffect(() => {
-        if (!db || !archiveId) return;
+        if (!db || !archiveId || archiveId === '[id]') return;
 
         // Phase 1: Try `archives-detail` first, fallback to `archives`
         const detailRef = ref(db, `archives-detail/${archiveId}`);

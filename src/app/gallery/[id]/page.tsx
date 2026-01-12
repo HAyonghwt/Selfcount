@@ -1,24 +1,27 @@
-"use client";
+'use client';
 
 import React, { useEffect, useState, useMemo } from 'react';
 import { db } from '@/lib/firebase';
-import { ref, onValue } from 'firebase/database';
+import { ref, onValue, get } from 'firebase/database';
 import { useParams, useRouter } from 'next/navigation';
 import {
     ChevronLeft,
     Search,
-    MapPin,
     Calendar,
+    MapPin,
+    Trophy,
+    User,
     ChevronDown,
     ChevronUp,
-    Trophy,
-    Info
+    Info,
+    LayoutGrid,
+    Users,
+    Activity,
+    Target
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
 
-// --- Types ---
+// --- Interface Types ---
 interface PlayerCourseData {
     id: string;
     name: string;
@@ -46,14 +49,18 @@ interface ProcessedPlayer {
 }
 
 // --- Dynamic Color Theme based on User Palette ---
-// --- Helpers ---
-const tieBreak = (a: ProcessedPlayer, b: ProcessedPlayer) => {
-    if (a.hasForfeited && !b.hasForfeited) return 1;
-    if (!a.hasForfeited && b.hasForfeited) return -1;
-    if (!a.hasAnyScore && !b.hasAnyScore) return 0;
-    if (!a.hasAnyScore) return 1;
-    if (!b.hasAnyScore) return -1;
+const getCourseTheme = (courseName: string) => {
+    const name = courseName.toLowerCase();
+    if (name.includes('a') || name.includes('코스1')) return { accent: 'bg-[#ef4444]', text: 'text-[#ef4444]', border: 'border-[#ef4444]', label: 'A' };
+    if (name.includes('b') || name.includes('코스2')) return { accent: 'bg-[#3b82f6]', text: 'text-[#3b82f6]', border: 'border-[#3b82f6]', label: 'B' };
+    if (name.includes('c') || name.includes('코스3')) return { accent: 'bg-[#facc15]', text: 'text-[#facc15]', border: 'border-[#facc15]', label: 'C' };
+    if (name.includes('d') || name.includes('코스4')) return { accent: 'bg-white', text: 'text-slate-600', border: 'border-slate-300', label: 'D' };
+    return { accent: 'bg-[#8c1aff]', text: 'text-[#8c1aff]', border: 'border-[#8c1aff]', label: 'C' };
+};
 
+// --- Sorting Tie-break Logic (Backcount) ---
+const tieBreak = (a: ProcessedPlayer, b: ProcessedPlayer): number => {
+    // 1단계: 합계 점수 (이미 정렬되어 들어옴)
     if (a.totalScore !== b.totalScore) return a.totalScore - b.totalScore;
 
     // 코스들을 역순으로 정렬하여 비교 (마지막 코스부터)
@@ -64,6 +71,7 @@ const tieBreak = (a: ProcessedPlayer, b: ProcessedPlayer) => {
     for (let i = 0; i < maxLen; i++) {
         const cA = aCourses[i];
         const cB = bCourses[i];
+
         if (!cA && cB) return 1;
         if (cA && !cB) return -1;
         if (!cA && !cB) continue;
@@ -80,69 +88,60 @@ const tieBreak = (a: ProcessedPlayer, b: ProcessedPlayer) => {
     return 0;
 };
 
-const getCourseTheme = (name: string) => {
-    const uppercaseName = name.toUpperCase();
-    if (uppercaseName.includes('A')) return { bg: "bg-red-50", text: "text-red-600", border: "border-red-100", accent: "bg-red-500", label: "A" };
-    if (uppercaseName.includes('B')) return { bg: "bg-blue-50", text: "text-blue-600", border: "border-blue-100", accent: "bg-[#3b82f6]", label: "B" };
-    if (uppercaseName.includes('C')) return { bg: "bg-yellow-50", text: "text-amber-700", border: "border-amber-100", accent: "bg-[#facc15]", label: "C" };
-    if (uppercaseName.includes('D')) return { bg: "bg-slate-50", text: "text-slate-600", border: "border-slate-200", accent: "bg-slate-400", label: "D" };
-
-    const order = name.charCodeAt(0) % 4;
-    if (order === 0) return { bg: "bg-red-50", text: "text-red-600", border: "border-red-100", accent: "bg-red-500", label: "E" };
-    if (order === 1) return { bg: "bg-blue-50", text: "text-blue-600", border: "border-blue-100", accent: "bg-[#3b82f6]", label: "F" };
-    return { bg: "bg-slate-50", text: "text-slate-600", border: "border-slate-100", accent: "bg-slate-500", label: "?" };
-};
-
-// --- Scoring UI Component ---
-function RelativeScore({ score, par, className }: { score: number | null, par: number, className?: string }) {
-    if (score === null) return null;
+// --- Sub-components for better isolation ---
+const RelativeScore = ({ score, par, className }: { score: number | null, par: number, className?: string }) => {
+    if (score === null || score === 0) return null;
     const diff = score - par;
-    const colorClass = diff > 0 ? "text-red-600" : diff < 0 ? "text-blue-600" : "text-slate-400";
-    const sign = diff > 0 ? "+" : "";
-    return (
-        <span className={cn("text-[11px] font-black", colorClass, className)}>
-            {diff === 0 ? "E" : `${sign}${diff}`}
-        </span>
-    );
-}
+
+    let text = "-";
+    let color = "text-slate-400";
+
+    if (diff === 0) {
+        text = "E";
+        color = "text-slate-500 font-bold";
+    } else if (diff < 0) {
+        text = diff.toString();
+        color = "text-blue-500 font-bold";
+    } else {
+        text = `+${diff}`;
+        color = "text-red-500 font-bold";
+    }
+
+    return <span className={cn("text-[11px]", color, className)}>{text}</span>;
+};
 
 export default function GalleryDetailPage() {
     const params = useParams();
     const router = useRouter();
-    const archiveId = params?.id as string;
+    const archiveIdRaw = params?.id as string;
+    // URL 디코딩 적용 (한글 대회명 대응)
+    const archiveId = useMemo(() => archiveIdRaw ? decodeURIComponent(archiveIdRaw) : '', [archiveIdRaw]);
 
     const [archiveData, setArchiveData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState("");
-    const [activeGroup, setActiveGroup] = useState<string>("all");
+    const [activeGroup, setActiveGroup] = useState<string>("");
     const [expandedPlayerId, setExpandedPlayerId] = useState<string | null>(null);
     const [visibleCount, setVisibleCount] = useState(30);
     const loadMoreRef = React.useRef<HTMLDivElement>(null);
     const [isRedirecting, setIsRedirecting] = useState(false);
 
-    // 인앱 브라우저 강제 탈출 (카카오톡 등에서 외부 브라우저로 열기)
+    // 인앱 브라우저 강제 탈출 로직은 유지
     useEffect(() => {
         if (typeof window === 'undefined') return;
-
         const userAgent = navigator.userAgent.toLowerCase();
         const targetUrl = window.location.href;
-
-        // 1. 카카오톡 인앱 브라우저 감지
         if (userAgent.match(/kakaotalk/i)) {
             setIsRedirecting(true);
             window.location.href = 'kakaotalk://web/openExternal?url=' + encodeURIComponent(targetUrl);
             return;
         }
-
-        // 2. 라인 인앱 브라우저 감지
         if (userAgent.match(/line/i)) {
             setIsRedirecting(true);
             const separator = targetUrl.includes('?') ? '&' : '?';
             window.location.href = `${targetUrl}${separator}openExternalBrowser=1`;
             return;
         }
-
-        // 3. 기타 인앱 브라우저 감지
         if (userAgent.match(/inapp|naver|snapchat|wirtschaftswoche|thunderbird|instagram|everytimeapp|whatsApp|electron|wadiz|aliapp|zumapp|iphone(.*)whale|android(.*)whale|kakaostory|band|twitter|DaumApps|DaumDevice\/mobile|FB_IAB|FB4A|FBAN|FBIOS|FBSS|SamsungBrowser\/[^1]/i)) {
             if (userAgent.match(/android/i)) {
                 setIsRedirecting(true);
@@ -153,176 +152,206 @@ export default function GalleryDetailPage() {
         }
     }, []);
 
-    // Reset visible count on filter change
     useEffect(() => {
         setVisibleCount(30);
     }, [activeGroup, searchTerm]);
 
+    // 데이터 로드: 원본 구조를 유지하되 get 방식으로 안정성 확보
     useEffect(() => {
-        if (!db || !archiveId) return;
-        const detailRef = ref(db, `archives-detail/${archiveId}`);
-        const legacyRef = ref(db, `archives/${archiveId}`);
+        if (!db || !archiveId || archiveId === '[id]') return;
 
-        const unsubscribe = onValue(detailRef, (snap) => {
-            if (snap.exists()) {
-                const data = snap.val();
-                console.log('Gallery - Loaded from archives-detail:', {
-                    hasPlayers: !!data.players,
-                    playersCount: data.players ? Object.keys(data.players).length : 0,
-                    hasScores: !!data.scores,
-                    scoresCount: data.scores ? Object.keys(data.scores).length : 0,
-                    hasCourses: !!data.courses,
-                    coursesCount: data.courses ? Object.keys(data.courses).length : 0,
-                    hasGroups: !!data.groups,
-                    groupsCount: data.groups ? Object.keys(data.groups).length : 0,
-                    groupNames: data.groups ? Object.keys(data.groups) : []
-                });
-                setArchiveData(data);
-                if (data?.groups) {
-                    const groupNames = Object.keys(data.groups).sort();
-                    if (groupNames.length > 0) setActiveGroup(groupNames[0]);
-                }
-                setLoading(false);
-            } else {
-                console.log('Gallery - archives-detail not found, trying legacy...');
-                onValue(legacyRef, (legacySnap) => {
+        const fetchData = async () => {
+            setLoading(true);
+            try {
+                const detailRef = ref(db!, `archives-detail/${archiveId}`);
+                const legacyRef = ref(db!, `archives/${archiveId}`);
+
+                const detailSnap = await get(detailRef);
+                if (detailSnap.exists()) {
+                    const data = detailSnap.val();
+                    setArchiveData(data);
+                    // 초기 그룹 설정 (전체 탭이 없으므로 첫 번째 그룹으로 자동 설정)
+                    if (data?.groups) {
+                        const groupNames = Object.keys(data.groups).sort();
+                        if (groupNames.length > 0 && !activeGroup) setActiveGroup(groupNames[0]);
+                    }
+                } else {
+                    const legacySnap = await get(legacyRef);
                     if (legacySnap.exists()) {
                         const data = legacySnap.val();
-                        console.log('Gallery - Loaded from archives (legacy):', {
-                            hasPlayers: !!data.players,
-                            playersCount: data.players ? Object.keys(data.players).length : 0
-                        });
                         setArchiveData(data);
-                        const players = data.players || {};
-                        const groupNames = Array.from(new Set(Object.values(players).map((p: any) => p.group))).sort() as string[];
-                        if (groupNames.length > 0) setActiveGroup(groupNames[0]);
+                        if (data.players) {
+                            const players = data.players || {};
+                            const groupNames = Array.from(new Set(Object.values(players).map((p: any) => p.group))).sort() as string[];
+                            if (groupNames.length > 0 && !activeGroup) setActiveGroup(groupNames[0]);
+                        }
                     } else {
-                        console.error('Gallery - No data found in archives-detail or archives');
+                        setArchiveData(null);
                     }
-                    setLoading(false);
-                }, { onlyOnce: true });
+                }
+            } catch (err) {
+                console.error('Gallery Error:', err);
+                setArchiveData(null);
+            } finally {
+                setLoading(false);
             }
-        });
-        return () => unsubscribe();
+        };
+
+        fetchData();
     }, [archiveId]);
 
-    // Data Processing
+    // 기존의 검증된 Data Processing 로직 복구
     const processedPlayers = useMemo(() => {
-        if (!archiveData) {
-            console.log('Gallery - processedPlayers: No archiveData');
-            return [];
-        }
-        const playersObj = archiveData.players || {};
-        const scoresObj = archiveData.scores || {};
-        const coursesObj = archiveData.courses || {};
-        const finalRanks = archiveData.finalRanks || {};
-        const groupsObj = archiveData.groups || {};
+        if (!archiveData) return [];
 
-        console.log('Gallery - Processing players:', {
-            playersCount: Object.keys(playersObj).length,
-            scoresCount: Object.keys(scoresObj).length,
-            coursesCount: Object.keys(coursesObj).length,
-            groupsCount: Object.keys(groupsObj).length,
-            samplePlayer: Object.values(playersObj)[0]
-        });
+        let results: any[] = [];
 
-        const results = Object.keys(playersObj).map(pid => {
-            const player = playersObj[pid];
-            const pGroup = player.group || '미지정';
-            const groupData = groupsObj[pGroup] || {};
-            const assignedCourseIds = Object.keys(groupData.courses || {}).filter(cid => {
-                const cVal = groupData.courses[cid];
-                return typeof cVal === 'boolean' ? cVal : (typeof cVal === 'object' ? cVal.order > 0 : cVal > 0);
+        // 1. 만약 보관 시점의 가공 데이터(processedByGroup)가 있다면 이를 최우선으로 사용 (서든데스, 순위 보정 등 100% 반영)
+        if (archiveData.processedByGroup) {
+            Object.values(archiveData.processedByGroup).forEach((groupPlayers: any) => {
+                const mappedPlayers = groupPlayers.map((p: any) => {
+                    // UI 호환성을 위해 courses 배열 생성
+                    const uiCourses = (p.assignedCourses || []).map((c: any) => {
+                        const scoreInfo = p.coursesData?.[c.id] || {};
+                        return {
+                            id: c.id,
+                            name: c.name || c.id,
+                            order: c.order || 0,
+                            pars: c.pars || Array(9).fill(4),
+                            holeScores: scoreInfo.holeScores || Array(9).fill(null),
+                            courseTotal: scoreInfo.courseTotal || 0,
+                            courseRank: scoreInfo.courseRank
+                        };
+                    });
+                    return {
+                        ...p,
+                        totalScore: p.totalScore || 0,
+                        rank: p.rank || null,
+                        courses: uiCourses
+                    };
+                });
+                results = [...results, ...mappedPlayers];
             });
+        } else {
+            // 2. 만약 가공 데이터가 없는 옛날 데이터라면 기존 방식대로 계산
+            const playersObj = archiveData.players || {};
+            const scoresObj = archiveData.scores || {};
+            const coursesObj = archiveData.courses || {};
+            const finalRanks = archiveData.finalRanks || {};
+            const groupsObj = archiveData.groups || {};
 
-            const rankInfo = finalRanks[pid] || {};
-            const playerCourses: PlayerCourseData[] = assignedCourseIds.map(cid => {
-                const course = coursesObj[cid] || { name: cid, pars: Array(9).fill(4) };
-                const pHoleScores = scoresObj[pid]?.[cid] || {};
-                const holeScoresArr = Array.from({ length: 9 }, (_, i) => {
-                    const s = pHoleScores[i + 1];
-                    return (s !== undefined && s !== null) ? Number(s) : null;
+            results = Object.keys(playersObj).map(pid => {
+                const player = playersObj[pid] || {};
+                const pGroup = player.group || '미지정';
+                const groupData = groupsObj[pGroup] || {};
+                const assignedCourseIds = Object.keys(groupData.courses || {}).filter(cid => {
+                    const cVal = groupData.courses[cid];
+                    return typeof cVal === 'boolean' ? cVal : (typeof cVal === 'object' ? cVal.order > 0 : cVal > 0);
                 });
 
-                let cTotal = 0;
-                let cParTotal = 0;
-                let hasScore = false;
-                holeScoresArr.forEach((s, idx) => {
-                    if (s !== null) {
-                        cTotal += s;
-                        cParTotal += (course.pars?.[idx] || 0);
-                        hasScore = true;
-                    }
-                });
+                const rankInfo = finalRanks[pid] || {};
+                const playerCourses: PlayerCourseData[] = assignedCourseIds.map(cid => {
+                    const course = coursesObj[cid] || { name: cid, pars: Array(9).fill(4) };
+                    const pHoleScores = scoresObj[pid]?.[cid] || {};
+                    const holeScoresArr = Array.from({ length: 9 }, (_, i) => {
+                        const s = pHoleScores[i + 1];
+                        return (s !== undefined && s !== null) ? Number(s) : null;
+                    });
+
+                    let cTotal = 0;
+                    let cParTotal = 0;
+                    let hasScore = false;
+                    holeScoresArr.forEach((s, idx) => {
+                        if (s !== null) {
+                            cTotal += s;
+                            cParTotal += (course.pars?.[idx] || 0);
+                            hasScore = true;
+                        }
+                    });
+
+                    return {
+                        id: cid,
+                        name: course.name || cid,
+                        order: course.order || 0,
+                        pars: course.pars || Array(9).fill(4),
+                        holeScores: holeScoresArr,
+                        courseTotal: cTotal,
+                        coursePlusMinus: hasScore ? cTotal - cParTotal : null
+                    };
+                }).sort((a, b) => a.order - b.order);
+
+                const totalScore = rankInfo.totalScore ?? playerCourses.reduce((sum, c) => sum + (c.courseTotal || 0), 0);
+                const plusMinus = rankInfo.plusMinus ?? (playerCourses.some(c => c.coursePlusMinus !== null)
+                    ? playerCourses.reduce((sum, c) => sum + (c.coursePlusMinus || 0), 0)
+                    : null
+                );
 
                 return {
-                    id: cid,
-                    name: course.name,
-                    order: course.order || 0,
-                    pars: course.pars || Array(9).fill(0),
-                    holeScores: holeScoresArr,
-                    courseTotal: cTotal,
-                    coursePlusMinus: hasScore ? cTotal - cParTotal : null
+                    id: pid,
+                    name: player.name || '무명',
+                    jo: player.jo || '-',
+                    affiliation: player.affiliation || '-',
+                    group: pGroup,
+                    totalScore,
+                    plusMinus,
+                    rank: (rankInfo.rank !== undefined && rankInfo.rank !== null) ? Number(rankInfo.rank) : null,
+                    hasAnyScore: playerCourses.some(c => c.courseTotal > 0),
+                    hasForfeited: playerCourses.some(c => c.holeScores.some(s => s === 0)),
+                    forfeitType: player.forfeitType || null,
+                    courses: playerCourses
                 };
-            }).sort((a, b) => a.order - b.order);
-
-            const totalScore = rankInfo.totalScore ?? playerCourses.reduce((sum, c) => sum + (c.courseTotal || 0), 0);
-            const plusMinus = rankInfo.plusMinus ?? (playerCourses.some(c => c.coursePlusMinus !== null)
-                ? playerCourses.reduce((sum, c) => sum + (c.coursePlusMinus || 0), 0)
-                : null
-            );
-
-            return {
-                id: pid,
-                name: player.name,
-                jo: player.jo || '-',
-                affiliation: player.affiliation || '-',
-                group: pGroup,
-                totalScore,
-                plusMinus,
-                rank: rankInfo.rank ?? null,
-                hasAnyScore: playerCourses.some(c => c.courseTotal > 0),
-                hasForfeited: playerCourses.some(c => c.holeScores.some(s => s === 0)),
-                forfeitType: player.forfeitType || null,
-                courses: playerCourses
-            };
-        });
-
-        console.log('Gallery - Processed players:', {
-            totalPlayers: results.length,
-            playersWithScores: results.filter(p => p.hasAnyScore).length,
-            groups: Array.from(new Set(results.map(p => p.group)))
-        });
-
-        // --- 각 코스별 그룹 내 순위 계산 로직 추가 ---
+            });
+        }
+        // --- 전체 순위 및 코스별 그룹 내 순위 계산 ---
         const uniqueGroups = Array.from(new Set(results.map(p => p.group)));
         uniqueGroups.forEach(groupName => {
             const groupPlayers = results.filter(p => p.group === groupName);
-            // 해당 그룹이 참여하는 모든 코스 ID 수집
-            const courseIds = Array.from(new Set(groupPlayers.flatMap(p => p.courses.map(c => c.id))));
 
+            // 1. 전체 순위 계산 (기존 rank가 없을 경우)
+            const rankingListTotal = groupPlayers
+                .filter(p => p.hasAnyScore && !p.hasForfeited)
+                .sort((a, b) => {
+                    if (a.totalScore !== b.totalScore) return a.totalScore - b.totalScore;
+                    return tieBreak(a, b);
+                });
+
+            let currentRankTotal = 1;
+            rankingListTotal.forEach((item, index) => {
+                if (index > 0) {
+                    const prev = rankingListTotal[index - 1];
+                    // 점수와 백카운트가 모두 같을 때만 동순위, 아니면 순서대로
+                    if (item.totalScore > prev.totalScore || tieBreak(prev, item) !== 0) {
+                        currentRankTotal = index + 1;
+                    }
+                }
+                const pObj = results.find(r => r.id === item.id);
+                // 중요: 전광판에서 저장된 rank 정보를 최우선으로 사용, 없을 때만 자동 계산
+                if (pObj && (pObj.rank === null || pObj.rank === undefined)) {
+                    pObj.rank = currentRankTotal;
+                }
+            });
+
+            // 2. 코스별 순위 계산
+            const courseIds = Array.from(new Set(groupPlayers.flatMap((p: any) => p.courses.map((c: any) => c.id))));
             courseIds.forEach(cid => {
-                // 해당 코스를 완주한(점수가 있는) 선수들만 필터링하여 정렬
                 const rankingList = groupPlayers
-                    .filter(p => {
-                        const c = p.courses.find(rc => rc.id === cid);
+                    .filter((p: any) => {
+                        const c = p.courses.find((rc: PlayerCourseData) => rc.id === cid);
                         return c && c.courseTotal > 0 && !p.hasForfeited;
                     })
-                    .map(p => ({
+                    .map((p: any) => ({
                         pid: p.id,
-                        total: p.courses.find(rc => rc.id === cid)!.courseTotal
+                        total: p.courses.find((rc: PlayerCourseData) => rc.id === cid)!.courseTotal
                     }))
                     .sort((a, b) => a.total - b.total);
 
-                // 순위 부여 (동점자 처리 포함)
                 let currentRank = 1;
                 rankingList.forEach((item, index) => {
                     if (index > 0 && item.total > rankingList[index - 1].total) {
                         currentRank = index + 1;
                     }
-                    // 결과를 원본 객체에 할당
-                    const pObj = results.find(r => r.id === item.pid);
-                    const cObj = pObj?.courses.find(rc => rc.id === cid);
+                    const pObj = results.find((r: any) => r.id === item.pid);
+                    const cObj = pObj?.courses.find((rc: PlayerCourseData) => rc.id === cid);
                     if (cObj) cObj.courseRank = currentRank;
                 });
             });
@@ -336,12 +365,11 @@ export default function GalleryDetailPage() {
         return Array.from(set).sort();
     }, [processedPlayers]);
 
-    // Filtered Players
     const filteredPlayers = useMemo(() => {
         return processedPlayers.filter(p => {
-            const matchesGroup = p.group === activeGroup;
-            const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                p.affiliation.toLowerCase().includes(searchTerm.toLowerCase());
+            const matchesGroup = activeGroup === 'all' || p.group === activeGroup;
+            const matchesSearch = (p.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                (p.affiliation || '').toLowerCase().includes(searchTerm.toLowerCase());
             return matchesGroup && matchesSearch;
         }).sort((a, b) => {
             if (a.rank !== b.rank) {
@@ -349,7 +377,6 @@ export default function GalleryDetailPage() {
                 if (b.rank === null) return -1;
                 return a.rank - b.rank;
             }
-            // 순위가 같으면 백카운트로 2차 정렬
             return tieBreak(a, b);
         });
     }, [processedPlayers, activeGroup, searchTerm]);
@@ -358,28 +385,21 @@ export default function GalleryDetailPage() {
         return filteredPlayers.slice(0, visibleCount);
     }, [filteredPlayers, visibleCount]);
 
-    // Auto-load on scroll
     useEffect(() => {
         if (visibleCount >= filteredPlayers.length) return;
-
         const observer = new IntersectionObserver((entries) => {
             if (entries[0].isIntersecting) {
                 setVisibleCount(prev => Math.min(prev + 30, filteredPlayers.length));
             }
         }, { threshold: 0.1 });
-
-        if (loadMoreRef.current) {
-            observer.observe(loadMoreRef.current);
-        }
-
+        if (loadMoreRef.current) observer.observe(loadMoreRef.current);
         return () => observer.disconnect();
     }, [visibleCount, filteredPlayers.length]);
 
-    // Dynamic Course Column Headers (Simplified to A, B, C...)
     const courseLabels = useMemo(() => {
         const labels = new Set<string>();
-        filteredPlayers.forEach(p => {
-            p.courses.forEach(c => {
+        filteredPlayers.forEach((p: ProcessedPlayer) => {
+            p.courses.forEach((c: PlayerCourseData) => {
                 const theme = getCourseTheme(c.name);
                 labels.add(theme.label);
             });
@@ -391,48 +411,97 @@ export default function GalleryDetailPage() {
         setExpandedPlayerId(expandedPlayerId === pid ? null : pid);
     };
 
-    if (loading) return <div className="min-h-screen flex items-center justify-center bg-slate-50"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#3b82f6]"></div></div>;
+    // UI Rendering
+    if (loading) {
+        return (
+            <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4">
+                <div className="w-16 h-16 border-4 border-[#3b82f6]/20 border-t-[#3b82f6] rounded-full animate-spin mb-4"></div>
+                <p className="text-slate-500 font-bold animate-pulse text-sm">데이터를 불러오고 있습니다...</p>
+            </div>
+        );
+    }
+
+    if (!archiveData) {
+        return (
+            <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 text-center">
+                <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center shadow-lg mb-6 border border-slate-100">
+                    <Info className="w-10 h-10 text-[#3b82f6]" />
+                </div>
+                <h2 className="text-2xl font-black text-slate-800 mb-3 tracking-tight">대회 정보를 찾을 수 없습니다.</h2>
+                <p className="text-slate-500 max-w-xs mx-auto mb-8 font-medium leading-relaxed">
+                    요청하신 번호에 해당하는 대회 결과가 보관함에 존재하지 않거나, 아직 업데이트되지 않았을 수 있습니다.
+                </p>
+                <button
+                    onClick={() => router.push('/gallery')}
+                    className="flex items-center gap-2 bg-[#3b82f6] text-white px-8 py-4 rounded-xl font-black shadow-lg shadow-blue-200 transition-all hover:scale-105 active:scale-95"
+                >
+                    갤러리 목록으로 돌아가기
+                </button>
+            </div>
+        );
+    }
 
     return (
-        <div className="min-h-screen bg-[#f8fafc] pb-20 font-sans">
-            {isRedirecting && (
-                <div className="fixed inset-0 z-[100] bg-black flex items-center justify-center text-white p-4 font-bold text-lg text-center break-keep">
-                    카카오 화면이 작아서<br />
-                    구글 크롬으로 안전하게 열었습니다<br /><br />
-                    이 화면은 닫아 주세요
-                </div>
-            )}
-            {/* Header (Clean & Light) */}
-            <div className="fixed top-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200">
-                <div className="max-w-5xl mx-auto px-4 h-16 flex items-center gap-3">
-                    <button onClick={() => router.push('/gallery')} className="p-2 hover:bg-slate-100 rounded-md transition-colors active:scale-95">
-                        <ChevronLeft className="w-6 h-6 text-slate-700" />
+        <div className="min-h-screen bg-[#f8fafc]">
+            {/* Header */}
+            <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-slate-100 px-4 py-4 safe-top shadow-sm">
+                <div className="max-w-4xl mx-auto flex items-center justify-between">
+                    <button
+                        onClick={() => router.back()}
+                        className="p-2 -ml-2 text-slate-400 hover:text-slate-800 transition-colors"
+                    >
+                        <ChevronLeft className="w-6 h-6" />
                     </button>
-                    <div className="flex-1 min-w-0">
-                        <h1 className="text-lg font-black text-slate-900 truncate tracking-tight">
-                            {archiveData?.tournamentName || archiveData?.name || '대회 결과'}
+                    <div className="flex-1 text-center truncate px-4">
+                        <h1 className="text-lg font-black text-slate-900 tracking-tight leading-none mb-1.5 truncate">
+                            {archiveData.tournamentName || '대회 결과'}
                         </h1>
-                        <div className="flex items-center gap-3 text-[10px] sm:text-xs text-slate-500 font-bold uppercase tracking-tight">
-                            <span className="flex items-center"><Calendar className="w-3.5 h-3.5 mr-1 text-[#3b82f6]" />{archiveData?.tournamentStartDate || '-'}</span>
-                            <span className="flex items-center"><MapPin className="w-3.5 h-3.5 mr-1 text-[#3b82f6]" />{archiveData?.location || '-'}</span>
+                        <div className="flex items-center justify-center gap-3 text-[11px] font-bold text-slate-400">
+                            <span className="flex items-center gap-1"><Calendar className="w-3 h-3" /> {archiveData.tournamentStartDate || '-'}</span>
+                            <span className="flex items-center gap-1"><MapPin className="w-3 h-3" /> {archiveData.location || '-'}</span>
+                        </div>
+                    </div>
+                    <div className="w-10"></div>
+                </div>
+            </header>
+
+            <main className="max-w-4xl mx-auto px-4 py-3 space-y-3">
+                {/* Tournament Overview Stats */}
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 flex items-center gap-4">
+                        <div className="w-10 h-10 rounded-xl bg-orange-50 flex items-center justify-center border border-orange-100">
+                            <Users className="w-5 h-5 text-orange-500" />
+                        </div>
+                        <div>
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-0.5">참가 선수</p>
+                            <p className="text-lg font-black text-slate-900 leading-none">{archiveData.playerCount || 0}<span className="text-[11px] ml-0.5 opacity-40">명</span></p>
+                        </div>
+                    </div>
+                    <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 flex items-center gap-4">
+                        <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center border border-blue-100">
+                            <Activity className="w-5 h-5 text-blue-500" />
+                        </div>
+                        <div>
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-0.5">기록 보관일</p>
+                            <p className="text-lg font-black text-slate-900 leading-none">
+                                {archiveData.savedAt ? new Date(archiveData.savedAt).toLocaleDateString() : '-'}
+                            </p>
                         </div>
                     </div>
                 </div>
-            </div>
 
-            {/* Table Header Section */}
-            <div className="max-w-5xl mx-auto px-2 pt-[72px]">
-
-                {/* Search Bar & Tabs Grouped for Minimal Spacing */}
-                <div className="space-y-3 px-2 mb-4">
-                    {/* Search Bar */}
+                {/* Filter & Search Section */}
+                <div className="space-y-3">
                     <div className="relative group">
-                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-[#3b82f6] transition-colors" />
-                        <Input
+                        <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
+                            <Search className="w-4 h-4 text-slate-300 group-focus-within:text-[#3b82f6] transition-colors" />
+                        </div>
+                        <input
+                            type="text"
+                            placeholder="선수명 또는 소속 클럽 검색"
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
-                            placeholder="선수명 또는 소속 클럽 검색"
-                            className="pl-11 h-10 bg-white border-slate-200 rounded-md shadow-sm focus:ring-[#3b82f6] focus:border-[#3b82f6] text-sm font-bold"
+                            className="w-full bg-white border border-slate-200 rounded-2xl py-4 pl-11 pr-4 text-sm font-bold text-slate-800 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#3b82f6]/10 focus:border-[#3b82f6] shadow-sm transition-all"
                         />
                     </div>
 
@@ -461,60 +530,40 @@ export default function GalleryDetailPage() {
                     </div>
                 </div>
 
-                {/* Scoreboard Table (Sharp & Professional) */}
-                <div className="bg-white rounded-md shadow-lg overflow-hidden border border-slate-200">
-                    {/* Blue Table Header (User Palette) */}
-                    <div className="bg-[#3b82f6] text-white flex items-center h-14 text-[11px] sm:text-[12px] font-black uppercase text-center border-b border-blue-600">
-                        <div className="w-[14%] border-r border-white/20 h-full flex flex-col items-center justify-center leading-none">
-                            <span>조</span>
-                            <span className="text-[8px] text-blue-100 mt-0.5 opacity-80">GROUP</span>
-                        </div>
-                        <div className="w-[20%] border-r border-white/20 h-full flex flex-col items-center justify-center leading-none">
-                            <span>이름</span>
-                            <span className="text-[8px] text-blue-100 mt-0.5 opacity-80">NAME</span>
-                        </div>
+                {/* Results Table */}
+                <div className="!mt-[6px] bg-white rounded-t-md rounded-b-none shadow-sm border border-slate-100 overflow-hidden">
+                    <div className="flex items-center h-12 bg-[#3b82f6] text-white text-[11px] font-black uppercase tracking-tight divide-x divide-white/10 text-center">
+                        <div className="w-[12%]">조</div>
+                        <div className="w-[20%]">이름</div>
                         {courseLabels.map(label => (
-                            <div key={label} className="flex-1 border-r border-white/20 h-full flex items-center justify-center">{label}</div>
+                            <div key={label} className="flex-1">{label}</div>
                         ))}
-                        <div className="w-[14%] border-r border-white/20 h-full flex flex-col items-center justify-center leading-none">
-                            <span>합계</span>
-                            <span className="text-[8px] text-blue-100 mt-0.5 opacity-80">TOTAL</span>
-                        </div>
-                        <div className="w-[14%] h-full flex flex-col items-center justify-center leading-none">
-                            <span>순위</span>
-                            <span className="text-[8px] text-blue-100 mt-0.5 opacity-80">RANK</span>
-                        </div>
+                        <div className="w-[14%]">합계</div>
+                        <div className="w-[14%]">순위</div>
                     </div>
 
-                    {/* Table Body */}
-                    <div className="divide-y divide-slate-200">
-                        {displayedPlayers.length === 0 ? (
-                            <div className="py-20 text-center text-slate-400 font-bold italic">검색 결과가 없습니다.</div>
-                        ) : (
+                    <div className="divide-y divide-slate-100">
+                        {filteredPlayers.length > 0 ? (
                             displayedPlayers.map((player, index) => (
-                                <React.Fragment key={player.id}>
+                                <div key={player.id} className="group">
                                     <div
                                         onClick={() => toggleExpand(player.id)}
                                         className={cn(
-                                            "flex items-center text-center py-3.5 cursor-pointer relative transition-colors active:bg-blue-50",
-                                            expandedPlayerId === player.id
-                                                ? "bg-blue-50/50"
-                                                : index % 2 === 1 ? "bg-slate-50/50 hover:bg-slate-100/80" : "bg-white hover:bg-slate-100/50"
+                                            "flex items-center h-14 transition-colors active:bg-slate-50 cursor-pointer",
+                                            expandedPlayerId === player.id ? "bg-blue-50/30" : (index % 2 === 1 ? "bg-slate-100/50" : "bg-white")
                                         )}
                                     >
-                                        <div className="w-[14%] border-r border-slate-100 h-full flex flex-col items-center justify-center leading-tight py-2">
-                                            <span className="text-[9px] text-slate-400 font-bold mb-0.5 tracking-tighter truncate w-full px-1">{player.group}</span>
-                                            <span className="text-base font-black text-slate-700">{player.jo}</span>
+                                        <div className="w-[12%] border-r border-slate-100 text-sm font-black text-slate-400 flex items-center justify-center">
+                                            {player.jo}
                                         </div>
-
                                         <div className="w-[20%] border-r border-slate-100 text-left pl-3 flex flex-col justify-center overflow-hidden">
                                             <div className="text-base font-black text-slate-700 leading-none mb-1.5 truncate">{player.name}</div>
                                             <div className="text-[10px] text-slate-400 font-bold truncate pr-1">{player.affiliation}</div>
                                         </div>
 
                                         {/* Dynamic Course Cells */}
-                                        {courseLabels.map(label => {
-                                            const course = player.courses.find(c => getCourseTheme(c.name).label === label);
+                                        {courseLabels.map((label: string) => {
+                                            const course = player.courses.find((c: PlayerCourseData) => getCourseTheme(c.name).label === label);
                                             return (
                                                 <div key={label} className="flex-1 border-r border-slate-100 text-lg font-black text-slate-700 h-full flex items-center justify-center">
                                                     {course ? course.courseTotal : ''}
@@ -528,31 +577,37 @@ export default function GalleryDetailPage() {
                                         </div>
 
                                         <div className="w-[14%] h-full flex items-center justify-center">
-                                            {player.rank ? (
-                                                player.rank <= 3 ? (
+                                            {player.hasForfeited ? (
+                                                <div className="bg-slate-100 text-slate-400 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-tighter">WD</div>
+                                            ) : (
+                                                <div className="flex flex-col items-center gap-0.5">
                                                     <div className={cn(
-                                                        "w-7 h-7 rounded-sm flex items-center justify-center font-black text-sm border shadow-sm",
-                                                        player.rank === 1 ? "bg-amber-50 text-amber-600 border-amber-200" :
-                                                            player.rank === 2 ? "bg-slate-50 text-slate-500 border-slate-200" : "bg-orange-50 text-orange-700 border-orange-100"
+                                                        "min-w-[28px] h-6 px-1.5 rounded flex items-center justify-center text-[14px] font-black border transition-all",
+                                                        player.rank === 1 ? "bg-amber-100 text-amber-600 border-amber-200 shadow-sm" :
+                                                            player.rank === 2 ? "bg-slate-100 text-slate-500 border-slate-200 shadow-sm" :
+                                                                player.rank === 3 ? "bg-orange-50 text-orange-600 border-orange-200 shadow-sm" :
+                                                                    (player.rank || 0) <= 5 ? "bg-blue-50 text-blue-500 border-blue-100" :
+                                                                        (player.rank || 0) <= 10 ? "bg-indigo-50 text-indigo-500 border-indigo-100" :
+                                                                            "bg-white text-slate-400 border-slate-100"
                                                     )}>
-                                                        {player.rank}
+                                                        {player.rank || '-'}
                                                     </div>
-                                                ) : <span className="font-black text-slate-600 text-base">{player.rank}</span>
-                                            ) : '-'}
+                                                    <span className="text-[8px] font-bold text-slate-300 uppercase tracking-tighter">RANK</span>
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
 
                                     {/* Expanded Detail Grid (Relative Scoring) */}
                                     {expandedPlayerId === player.id && (
-                                        <div className="bg-slate-50 border-y border-blue-100 p-6 space-y-8 animate-in slide-in-from-top-2 duration-300">
+                                        <div className="bg-slate-50 border-y border-blue-100 p-4 space-y-1 animate-in slide-in-from-top-2 duration-300">
                                             {player.courses.length === 0 ? (
                                                 <div className="text-center py-4 text-slate-400 font-bold text-xs uppercase tracking-widest leading-loose">기록된 데이터가 없습니다.</div>
-                                            ) : player.courses.map((course) => {
+                                            ) : player.courses.map((course: PlayerCourseData) => {
                                                 const theme = getCourseTheme(course.name);
-                                                const courseParTotal = course.pars.reduce((a, b) => a + b, 0);
                                                 return (
-                                                    <div key={course.id} className="space-y-4">
-                                                        <div className="flex items-center justify-between border-b border-slate-300 pb-2">
+                                                    <div key={course.id} className="space-y-2">
+                                                        <div className="flex items-center justify-between border-b border-slate-300 pb-1">
                                                             <div className="flex items-center gap-2.5">
                                                                 <div className={cn("w-9 h-9 rounded-sm flex items-center justify-center font-black text-white text-lg", theme.accent)}>
                                                                     {theme.label}
@@ -560,15 +615,17 @@ export default function GalleryDetailPage() {
                                                                 <h4 className="font-black text-base text-slate-900 tracking-tight uppercase">{course.name}</h4>
                                                             </div>
                                                             <div className="flex items-center gap-4">
-                                                                <div className="text-right">
-                                                                    <div className="text-[10px] font-black text-slate-400 uppercase leading-none mb-1">Total Score</div>
-                                                                    <div className="text-xl font-black text-slate-800 leading-none">{course.courseTotal}</div>
-                                                                </div>
-                                                                <div className="w-px h-8 bg-slate-200"></div>
-                                                                <div className="text-right">
-                                                                    <div className="text-[10px] font-black text-slate-400 uppercase leading-none mb-1">코스별 순위 (Rank)</div>
-                                                                    <div className="text-xl font-black text-[#3b82f6] leading-none">
-                                                                        {course.courseRank ? `${course.courseRank}위` : '-'}
+                                                                <div className="flex items-center gap-4 bg-slate-100/50 px-3 py-1.5 rounded-lg border border-slate-200/50">
+                                                                    <div className="text-right">
+                                                                        <div className="text-[9px] font-black text-slate-400 uppercase leading-none mb-1">Total</div>
+                                                                        <div className="text-lg font-black text-slate-800 leading-none">{course.courseTotal}</div>
+                                                                    </div>
+                                                                    <div className="w-px h-6 bg-slate-300/50"></div>
+                                                                    <div className="text-right">
+                                                                        <div className="text-[9px] font-black text-slate-400 uppercase leading-none mb-1">Rank</div>
+                                                                        <div className="text-lg font-black text-[#3b82f6] leading-none">
+                                                                            {course.courseRank ? `${course.courseRank}위` : '-'}
+                                                                        </div>
                                                                     </div>
                                                                 </div>
                                                             </div>
@@ -576,22 +633,22 @@ export default function GalleryDetailPage() {
 
                                                         {/* Sharp Hole Grid with Relative Scoring */}
                                                         <div className="overflow-x-auto no-scrollbar -mx-2 px-2">
-                                                            <div className="flex gap-2 min-w-max pb-2">
-                                                                {course.holeScores.map((score, idx) => {
+                                                            <div className="flex gap-1 min-w-max pb-2">
+                                                                {course.holeScores.map((score: number | null, idx: number) => {
                                                                     const par = course.pars[idx] || 4;
                                                                     return (
-                                                                        <div key={idx} className="flex flex-col items-center gap-1.5 w-[56px]">
-                                                                            <div className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">Hole {idx + 1}</div>
+                                                                        <div key={idx} className="flex flex-col items-center gap-0.5 w-[38px]">
+                                                                            <div className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">Hole {idx + 1}</div>
                                                                             <div className={cn(
-                                                                                "w-full h-20 rounded-sm border-2 flex flex-col items-center justify-center bg-white shadow-sm",
+                                                                                "w-full h-11 rounded-sm border-2 flex flex-col items-center justify-center bg-white shadow-sm",
                                                                                 theme.border
                                                                             )}>
-                                                                                <span className={cn("text-2xl font-black leading-none", theme.text)}>
+                                                                                <span className={cn("text-base font-black leading-none", theme.text)}>
                                                                                     {score ?? '-'}
                                                                                 </span>
                                                                                 {score !== null && (
-                                                                                    <div className="mt-1.5 pt-1.5 border-t border-slate-100 w-10 flex flex-col items-center">
-                                                                                        <RelativeScore score={score} par={par} className="leading-none" />
+                                                                                    <div className="mt-0.5 pt-0.5 border-t border-slate-100 w-6 flex flex-col items-center">
+                                                                                        <RelativeScore score={score} par={par} className="leading-none text-[9px]" />
                                                                                     </div>
                                                                                 )}
                                                                             </div>
@@ -603,59 +660,44 @@ export default function GalleryDetailPage() {
                                                     </div>
                                                 );
                                             })}
-
-                                            <div className="pt-4 border-t border-slate-200 flex items-center justify-between">
-                                                <div className="flex items-center gap-2 text-[11px] font-bold text-slate-400">
-                                                    <Info className="w-3.5 h-3.5 text-[#3b82f6]" />
-                                                    <span className="uppercase tracking-tight text-red-500/80">Red(+): Over Par</span>
-                                                    <span className="mx-1 opacity-20">|</span>
-                                                    <span className="uppercase tracking-tight text-blue-500/80">Blue(-): Under Par</span>
-                                                </div>
-                                                <div className="text-[9px] font-black text-slate-300 uppercase tracking-[0.2em]">
-                                                    Official Tournament Record System
-                                                </div>
-                                            </div>
                                         </div>
                                     )}
-                                </React.Fragment>
+                                </div>
                             ))
-                        )}
-
-                        {/* Pagination: Load More Trigger */}
-                        {visibleCount < filteredPlayers.length && (
-                            <div ref={loadMoreRef} className="p-4 bg-slate-50 flex justify-center border-t border-slate-100">
-                                <Button
-                                    variant="outline"
-                                    onClick={() => setVisibleCount(prev => prev + 30)}
-                                    className="w-full max-w-xs font-black text-slate-600 border-slate-200 bg-white"
-                                >
-                                    {filteredPlayers.length - visibleCount}명 더보기
-                                </Button>
+                        ) : (
+                            <div className="py-24 text-center">
+                                <Search className="w-12 h-12 text-slate-200 mx-auto mb-4" />
+                                <p className="text-slate-400 font-bold italic">검색 결과가 없습니다.</p>
                             </div>
                         )}
                     </div>
                 </div>
-            </div>
 
-            {/* Quick Actions (Sharp) */}
-            <div className="fixed bottom-6 right-6">
-                <button
-                    onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-                    className="w-14 h-14 bg-[#3b82f6] text-white rounded-md shadow-xl flex items-center justify-center hover:bg-blue-600 active:scale-95 transition-all"
-                >
-                    <Trophy className="w-7 h-7" />
-                </button>
-            </div>
+                {/* Infinite Scroll Trigger */}
+                <div ref={loadMoreRef} className="h-20 flex items-center justify-center">
+                    {visibleCount < filteredPlayers.length && (
+                        <div className="w-6 h-6 border-2 border-slate-200 border-t-[#3b82f6] rounded-full animate-spin"></div>
+                    )}
+                </div>
+            </main>
 
-            <style jsx global>{`
-                .no-scrollbar::-webkit-scrollbar { display: none; }
-                .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-                @keyframes sharpFade {
-                    from { opacity: 0; transform: translateY(8px); }
-                    to { opacity: 1; transform: translateY(0); }
-                }
-                .animate-in { animation: sharpFade 0.3s ease-out forwards; }
-            `}</style>
-        </div >
+            {/* In-app Browser Escape Overlay */}
+            {isRedirecting && (
+                <div className="fixed inset-0 z-[100] bg-white flex flex-col items-center justify-center p-8 text-center">
+                    <div className="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center mb-6">
+                        <LayoutGrid className="w-10 h-10 text-[#3b82f6] animate-pulse" />
+                    </div>
+                    <h2 className="text-2xl font-black text-slate-900 mb-4 tracking-tight">외부 브라우저로 실행합니다</h2>
+                    <p className="text-slate-500 font-medium leading-relaxed">
+                        최적의 환경을 위해 크롬이나 사파리 등<br />기기의 기본 브라우저로 연결 중입니다.
+                    </p>
+                    <div className="mt-10 flex gap-2">
+                        <div className="w-2 h-2 rounded-full bg-blue-200 animate-bounce"></div>
+                        <div className="w-2 h-2 rounded-full bg-blue-400 animate-bounce delay-100"></div>
+                        <div className="w-2 h-2 rounded-full bg-blue-600 animate-bounce delay-200"></div>
+                    </div>
+                </div>
+            )}
+        </div>
     );
 }

@@ -74,24 +74,36 @@ const ArchiveModal = React.memo(({
                                 placeholder="예: 2024.10.25 (또는 기간/회차)"
                                 className="flex-1 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                             />
-                            <div className="relative">
+                            <div className="relative group">
                                 <Button
+                                    type="button"
                                     variant="outline"
                                     size="icon"
-                                    className="h-10 w-10 shrink-0 border-slate-200"
-                                    onClick={() => (document.getElementById('native-date-picker') as HTMLInputElement)?.showPicker()}
+                                    className="h-10 w-10 shrink-0 border-slate-200 group-hover:border-blue-400 group-hover:bg-blue-50 transition-colors"
                                 >
-                                    <CalendarIcon className="h-4 w-4 text-slate-500" />
+                                    <CalendarIcon className="h-4 w-4 text-slate-500 group-hover:text-blue-600" />
                                 </Button>
                                 <input
                                     type="date"
                                     id="native-date-picker"
-                                    className="absolute opacity-0 pointer-events-none p-0 w-0 h-0"
+                                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
                                     onChange={(e) => {
-                                        const selectedDate = e.target.value;
+                                        const selectedDate = e.target.value; // YYYY-MM-DD
                                         if (selectedDate) {
+                                            // YYYY-MM-DD -> YYYY.MM.DD 변환 (선택 사항이나 가독성 위해)
+                                            const formatted = selectedDate.replace(/-/g, '.');
                                             const existingSuffix = date.includes(' ') ? date.substring(date.indexOf(' ')) : '';
-                                            setDate(selectedDate + existingSuffix);
+                                            setDate(formatted + existingSuffix);
+                                        }
+                                    }}
+                                    onClick={(e) => {
+                                        // 일부 브라우저에서 showPicker 지원 확인
+                                        if ('showPicker' in e.currentTarget) {
+                                            try {
+                                                (e.currentTarget as any).showPicker();
+                                            } catch (err) {
+                                                console.error('showPicker error:', err);
+                                            }
                                         }
                                     }}
                                 />
