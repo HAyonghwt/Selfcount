@@ -1004,7 +1004,7 @@ export default function ManualScorecardPage() {
                             className="bg-orange-500 hover:bg-orange-600 text-white"
                         >
                             {isGeneratingPdf ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
-                            PDF 저장 (A4)
+                            PDF 저장(백업용)
                         </Button>
                         <Button
                             variant="secondary"
