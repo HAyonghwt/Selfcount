@@ -2908,8 +2908,8 @@ export default function PlayerManagementPage() {
                                         <TableBody>
                                             {groupList.filter((g: any) => g.type === 'individual').length > 0 ? (
                                                 groupList.filter((group: any) => group.type === 'individual').map((group: any) => (
-                                                    <TableRow key={group.name}>
-                                                        <TableCell className="font-medium">{group.name}</TableCell>
+                                                    <TableRow key={group.name} className="h-16">
+                                                        <TableCell className="font-semibold break-all min-w-[100px]">{group.name}</TableCell>
                                                         <TableCell className="text-muted-foreground text-xs">
                                                             {group.courses ?
                                                                 (() => {
@@ -2955,17 +2955,25 @@ export default function PlayerManagementPage() {
                                                                 : '없음'
                                                             }
                                                         </TableCell>
-                                                        <TableCell className="text-right space-x-2">
-                                                            <Button variant="outline" size="sm" onClick={() => handleOpenCourseModal(group)}><Settings className="mr-2 h-4 w-4" />코스 설정</Button>
-                                                            <AlertDialog>
-                                                                <AlertDialogTrigger asChild>
-                                                                    <Button variant="destructive" size="sm"><Trash2 className="mr-2 h-4 w-4" />삭제</Button>
-                                                                </AlertDialogTrigger>
-                                                                <AlertDialogContent>
-                                                                    <AlertDialogHeader><AlertDialogTitle>그룹을 삭제하시겠습니까?</AlertDialogTitle><AlertDialogDescription>'{group.name}' 그룹을 삭제합니다. 이 그룹에 속한 선수는 그대로 유지되지만, 그룹 필터링 등에 영향을 줄 수 있습니다.</AlertDialogDescription></AlertDialogHeader>
-                                                                    <AlertDialogFooter><AlertDialogCancel>취소</AlertDialogCancel><AlertDialogAction onClick={() => handleDeleteGroup(group.name)}>삭제</AlertDialogAction></AlertDialogFooter>
-                                                                </AlertDialogContent>
-                                                            </AlertDialog>
+                                                        <TableCell className="text-right px-1 sm:px-4">
+                                                            <div className="flex flex-row items-center justify-end gap-1 flex-nowrap">
+                                                                <Button variant="outline" size="sm" onClick={() => handleOpenCourseModal(group)} className="h-8 w-8 sm:h-9 sm:w-auto px-0 sm:px-3 text-xs whitespace-nowrap" title="코스 설정">
+                                                                    <Settings className="h-4 w-4 sm:mr-2" />
+                                                                    <span className="hidden sm:inline">코스 설정</span>
+                                                                </Button>
+                                                                <AlertDialog>
+                                                                    <AlertDialogTrigger asChild>
+                                                                        <Button variant="destructive" size="sm" className="h-8 w-8 sm:h-9 sm:w-auto px-0 sm:px-3 text-xs whitespace-nowrap" title="삭제">
+                                                                            <Trash2 className="h-4 w-4 sm:mr-2" />
+                                                                            <span className="hidden sm:inline">삭제</span>
+                                                                        </Button>
+                                                                    </AlertDialogTrigger>
+                                                                    <AlertDialogContent>
+                                                                        <AlertDialogHeader><AlertDialogTitle>그룹을 삭제하시겠습니까?</AlertDialogTitle><AlertDialogDescription>'{group.name}' 그룹을 삭제합니다. 이 그룹에 속한 선수는 그대로 유지되지만, 그룹 필터링 등에 영향을 줄 수 있습니다.</AlertDialogDescription></AlertDialogHeader>
+                                                                        <AlertDialogFooter><AlertDialogCancel>취소</AlertDialogCancel><AlertDialogAction onClick={() => handleDeleteGroup(group.name)}>삭제</AlertDialogAction></AlertDialogFooter>
+                                                                    </AlertDialogContent>
+                                                                </AlertDialog>
+                                                            </div>
                                                         </TableCell>
                                                     </TableRow>
                                                 ))
@@ -3069,7 +3077,7 @@ export default function PlayerManagementPage() {
                             </Card>
                             <Card>
                                 <CardHeader>
-                                    <div className="flex items-center justify-between">
+                                    <div className="flex flex-col items-start gap-4">
                                         <div>
                                             <CardTitle>등록된 개인전 선수 목록</CardTitle>
                                             <CardDescription>
@@ -3079,7 +3087,7 @@ export default function PlayerManagementPage() {
                                         </div>
                                         <Button
                                             onClick={() => handleCheckAllJos('individual')}
-                                            className="bg-blue-600 hover:bg-blue-700 text-white"
+                                            className="bg-blue-600 hover:bg-blue-700 text-white w-full sm:w-auto"
                                         >
                                             <Check className="mr-2 h-4 w-4" />
                                             필수: 조 이동 후 최대 인원확인
@@ -3130,66 +3138,71 @@ export default function PlayerManagementPage() {
                                     </div>
                                     <Table>
                                         <TableHeader>
-                                            <TableRow>
-                                                <TableHead className="px-4 py-2 w-[60px] text-center">번호</TableHead>
-                                                <TableHead className="px-4 py-2">그룹</TableHead>
-                                                <TableHead className="px-4 py-2">조</TableHead>
-                                                <TableHead className="px-4 py-2">선수명</TableHead>
-                                                <TableHead className="px-4 py-2">소속</TableHead>
-                                                <TableHead className="text-right px-4 py-2">관리</TableHead>
+                                            <TableRow className="bg-slate-50">
+                                                <TableHead className="px-2 py-2 w-[40px] text-center text-xs font-bold">No</TableHead>
+                                                <TableHead className="px-2 py-2 text-xs font-bold">그룹</TableHead>
+                                                <TableHead className="px-2 py-2 text-xs font-bold">조</TableHead>
+                                                <TableHead className="px-1 py-2 text-xs font-bold max-w-[75px]">선수명</TableHead>
+                                                <TableHead className="px-2 py-2 text-xs font-bold hidden sm:table-cell">소속</TableHead>
+                                                <TableHead className="text-right px-2 py-2 text-xs font-bold">관리</TableHead>
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
                                             {Object.keys(filteredGroupedIndividualPlayers).sort().map((groupName: string) =>
                                                 filteredGroupedIndividualPlayers[groupName].map((p: any, index: number) => (
                                                     editingPlayerId === p.id ? (
-                                                        <TableRow key={p.id} className="bg-muted/30">
-                                                            <TableCell className="px-4 py-2 text-center font-medium">{index + 1}</TableCell>
-                                                            <TableCell className="px-4 py-2">
+                                                        <TableRow key={p.id} className="bg-muted/30 h-16">
+                                                            <TableCell className="px-1 py-1 text-center font-medium text-xs">{index + 1}</TableCell>
+                                                            <TableCell className="px-1 py-1">
                                                                 <Select value={editingPlayerData.group} onValueChange={(value) => handleEditingFormChange('group', value)}>
-                                                                    <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                                                                    <SelectTrigger className="h-8 text-xs px-1"><SelectValue /></SelectTrigger>
                                                                     <SelectContent>{groupNameList.map((g: string) => <SelectItem key={g} value={g}>{g}</SelectItem>)}</SelectContent>
                                                                 </Select>
                                                             </TableCell>
-                                                            <TableCell className="px-4 py-2"><Input value={editingPlayerData.jo} type="text" onChange={(e) => handleEditingFormChange('jo', e.target.value)} className="h-9 w-20" /></TableCell>
-                                                            <TableCell className="px-4 py-2"><Input value={editingPlayerData.name} onChange={(e) => handleEditingFormChange('name', e.target.value)} className="h-9" /></TableCell>
-                                                            <TableCell className="px-4 py-2"><Input value={editingPlayerData.affiliation} onChange={(e) => handleEditingFormChange('affiliation', e.target.value)} className="h-9" /></TableCell>
-                                                            <TableCell className="text-right space-x-1 px-4 py-2">
-                                                                <Button variant="ghost" size="icon" onClick={handleUpdatePlayer}><Save className="h-4 w-4 text-primary" /></Button>
-                                                                <Button variant="ghost" size="icon" onClick={handleCancelEdit}><X className="h-4 w-4 text-muted-foreground" /></Button>
+                                                            <TableCell className="px-1 py-1"><Input value={editingPlayerData.jo} type="text" onChange={(e) => handleEditingFormChange('jo', e.target.value)} className="h-8 w-12 text-xs px-1" /></TableCell>
+                                                            <TableCell className="px-1 py-1"><Input value={editingPlayerData.name} onChange={(e) => handleEditingFormChange('name', e.target.value)} className="h-8 text-xs px-1" /></TableCell>
+                                                            <TableCell className="px-1 py-1 hidden sm:table-cell"><Input value={editingPlayerData.affiliation} onChange={(e) => handleEditingFormChange('affiliation', e.target.value)} className="h-8 text-xs px-1" /></TableCell>
+                                                            <TableCell className="text-right px-1 py-1">
+                                                                <div className="flex flex-row items-center justify-end gap-1 flex-nowrap">
+                                                                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleUpdatePlayer}><Save className="h-4 w-4 text-primary" /></Button>
+                                                                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleCancelEdit}><X className="h-4 w-4 text-muted-foreground" /></Button>
+                                                                </div>
                                                             </TableCell>
                                                         </TableRow>
                                                     ) : (
-                                                        <TableRow key={p.id}>
-                                                            <TableCell className="px-4 py-2 text-center font-medium">{index + 1}</TableCell>
-                                                            <TableCell className="px-4 py-2">{p.group}</TableCell>
-                                                            <TableCell className="px-4 py-2">{p.jo}</TableCell>
-                                                            <TableCell className="px-4 py-2">{p.name}</TableCell>
-                                                            <TableCell className="px-4 py-2">{p.affiliation}</TableCell>
-                                                            <TableCell className="text-right space-x-2 px-4 py-2">
-                                                                <Button variant="outline" size="icon" onClick={() => handleEditClick(p)}><Edit className="h-4 w-4" /></Button>
-                                                                <Button
-                                                                    variant="outline"
-                                                                    size="icon"
-                                                                    onClick={() => setJoMoveModal({
-                                                                        open: true,
-                                                                        playerId: p.id,
-                                                                        currentJo: p.jo?.toString() || '',
-                                                                        currentGroup: p.group || '',
-                                                                        isNewJo: false
-                                                                    })}
-                                                                >
-                                                                    <Users className="h-4 w-4" />
-                                                                </Button>
-                                                                <AlertDialog>
-                                                                    <AlertDialogTrigger asChild>
-                                                                        <Button variant="destructive" size="icon"><Trash2 className="h-4 w-4" /></Button>
-                                                                    </AlertDialogTrigger>
-                                                                    <AlertDialogContent>
-                                                                        <AlertDialogHeader><AlertDialogTitle>정말 삭제하시겠습니까?</AlertDialogTitle><AlertDialogDescription>{p.name} 선수의 정보를 삭제합니다.</AlertDialogDescription></AlertDialogHeader>
-                                                                        <AlertDialogFooter><AlertDialogCancel>취소</AlertDialogCancel><AlertDialogAction onClick={() => handleDeletePlayer(p.id)}>삭제</AlertDialogAction></AlertDialogFooter>
-                                                                    </AlertDialogContent>
-                                                                </AlertDialog>
+                                                        <TableRow key={p.id} className="h-14">
+                                                            <TableCell className="px-1 py-2 text-center text-xs font-medium">{index + 1}</TableCell>
+                                                            <TableCell className="px-1 py-2 text-xs whitespace-nowrap">{p.group}</TableCell>
+                                                            <TableCell className="px-1 py-2 text-xs whitespace-nowrap">{p.jo}</TableCell>
+                                                            <TableCell className="pl-1 pr-0.5 py-2 text-xs font-semibold break-all max-w-[75px]">{p.name}</TableCell>
+                                                            <TableCell className="px-2 py-2 text-xs text-muted-foreground hidden sm:table-cell">{p.affiliation}</TableCell>
+                                                            <TableCell className="text-right px-2 py-2">
+                                                                <div className="flex flex-row items-center justify-end gap-1 flex-nowrap">
+                                                                    <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handleEditClick(p)}><Edit className="h-4 w-4" /></Button>
+                                                                    <Button
+                                                                        variant="outline"
+                                                                        size="icon"
+                                                                        className="h-8 w-8"
+                                                                        onClick={() => setJoMoveModal({
+                                                                            open: true,
+                                                                            playerId: p.id,
+                                                                            currentJo: p.jo?.toString() || '',
+                                                                            currentGroup: p.group || '',
+                                                                            isNewJo: false
+                                                                        })}
+                                                                    >
+                                                                        <Users className="h-4 w-4" />
+                                                                    </Button>
+                                                                    <AlertDialog>
+                                                                        <AlertDialogTrigger asChild>
+                                                                            <Button variant="destructive" size="icon" className="h-8 w-8"><Trash2 className="h-4 w-4" /></Button>
+                                                                        </AlertDialogTrigger>
+                                                                        <AlertDialogContent>
+                                                                            <AlertDialogHeader><AlertDialogTitle>정말 삭제하시겠습니까?</AlertDialogTitle><AlertDialogDescription>{p.name} 선수의 정보를 삭제합니다.</AlertDialogDescription></AlertDialogHeader>
+                                                                            <AlertDialogFooter><AlertDialogCancel>취소</AlertDialogCancel><AlertDialogAction onClick={() => handleDeletePlayer(p.id)}>삭제</AlertDialogAction></AlertDialogFooter>
+                                                                        </AlertDialogContent>
+                                                                    </AlertDialog>
+                                                                </div>
                                                             </TableCell>
                                                         </TableRow>
                                                     )
@@ -3256,8 +3269,8 @@ export default function PlayerManagementPage() {
                                         <TableBody>
                                             {groupList.filter((g: any) => g.type === 'team').length > 0 ? (
                                                 groupList.filter((group: any) => group.type === 'team').map((group: any) => (
-                                                    <TableRow key={group.name}>
-                                                        <TableCell className="font-medium">{group.name}</TableCell>
+                                                    <TableRow key={group.name} className="h-16">
+                                                        <TableCell className="font-semibold break-all min-w-[100px]">{group.name}</TableCell>
                                                         <TableCell className="text-muted-foreground text-xs">
                                                             {group.courses ?
                                                                 (() => {
@@ -3303,17 +3316,25 @@ export default function PlayerManagementPage() {
                                                                 : '없음'
                                                             }
                                                         </TableCell>
-                                                        <TableCell className="text-right space-x-2">
-                                                            <Button variant="outline" size="sm" onClick={() => handleOpenCourseModal(group)}><Settings className="mr-2 h-4 w-4" />코스 설정</Button>
-                                                            <AlertDialog>
-                                                                <AlertDialogTrigger asChild>
-                                                                    <Button variant="destructive" size="sm"><Trash2 className="mr-2 h-4 w-4" />삭제</Button>
-                                                                </AlertDialogTrigger>
-                                                                <AlertDialogContent>
-                                                                    <AlertDialogHeader><AlertDialogTitle>그룹을 삭제하시겠습니까?</AlertDialogTitle><AlertDialogDescription>'{group.name}' 그룹을 삭제합니다. 이 그룹에 속한 선수는 그대로 유지되지만, 그룹 필터링 등에 영향을 줄 수 있습니다.</AlertDialogDescription></AlertDialogHeader>
-                                                                    <AlertDialogFooter><AlertDialogCancel>취소</AlertDialogCancel><AlertDialogAction onClick={() => handleDeleteGroup(group.name)}>삭제</AlertDialogAction></AlertDialogFooter>
-                                                                </AlertDialogContent>
-                                                            </AlertDialog>
+                                                        <TableCell className="text-right px-1 sm:px-4">
+                                                            <div className="flex flex-row items-center justify-end gap-1 flex-nowrap">
+                                                                <Button variant="outline" size="sm" onClick={() => handleOpenCourseModal(group)} className="h-8 w-8 sm:h-9 sm:w-auto px-0 sm:px-3 text-xs whitespace-nowrap" title="코스 설정">
+                                                                    <Settings className="h-4 w-4 sm:mr-2" />
+                                                                    <span className="hidden sm:inline">코스 설정</span>
+                                                                </Button>
+                                                                <AlertDialog>
+                                                                    <AlertDialogTrigger asChild>
+                                                                        <Button variant="destructive" size="sm" className="h-8 w-8 sm:h-9 sm:w-auto px-0 sm:px-3 text-xs whitespace-nowrap" title="삭제">
+                                                                            <Trash2 className="h-4 w-4 sm:mr-2" />
+                                                                            <span className="hidden sm:inline">삭제</span>
+                                                                        </Button>
+                                                                    </AlertDialogTrigger>
+                                                                    <AlertDialogContent>
+                                                                        <AlertDialogHeader><AlertDialogTitle>그룹을 삭제하시겠습니까?</AlertDialogTitle><AlertDialogDescription>'{group.name}' 그룹을 삭제합니다. 이 그룹에 속한 선수는 그대로 유지되지만, 그룹 필터링 등에 영향을 줄 수 있습니다.</AlertDialogDescription></AlertDialogHeader>
+                                                                        <AlertDialogFooter><AlertDialogCancel>취소</AlertDialogCancel><AlertDialogAction onClick={() => handleDeleteGroup(group.name)}>삭제</AlertDialogAction></AlertDialogFooter>
+                                                                    </AlertDialogContent>
+                                                                </AlertDialog>
+                                                            </div>
                                                         </TableCell>
                                                     </TableRow>
                                                 ))
@@ -3406,7 +3427,7 @@ export default function PlayerManagementPage() {
                             </Card>
                             <Card>
                                 <CardHeader>
-                                    <div className="flex items-center justify-between">
+                                    <div className="flex flex-col items-start gap-4">
                                         <div>
                                             <CardTitle>등록된 2인 1팀 목록</CardTitle>
                                             <CardDescription>
@@ -3416,7 +3437,7 @@ export default function PlayerManagementPage() {
                                         </div>
                                         <Button
                                             onClick={() => handleCheckAllJos('team')}
-                                            className="bg-blue-600 hover:bg-blue-700 text-white"
+                                            className="bg-blue-600 hover:bg-blue-700 text-white w-full sm:w-auto"
                                         >
                                             <Check className="mr-2 h-4 w-4" />
                                             필수: 조 이동 후 최대 인원확인
@@ -3467,52 +3488,71 @@ export default function PlayerManagementPage() {
                                     </div>
                                     <Table>
                                         <TableHeader>
-                                            <TableRow>
-                                                <TableHead className="px-4 py-2 w-[60px] text-center">번호</TableHead>
-                                                <TableHead className="px-4 py-2">그룹</TableHead>
-                                                <TableHead className="px-4 py-2">조</TableHead>
-                                                <TableHead className="px-4 py-2">팀원</TableHead>
-                                                <TableHead className="px-4 py-2">소속</TableHead>
-                                                <TableHead className="text-right px-4 py-2">관리</TableHead>
+                                            <TableRow className="bg-slate-50">
+                                                <TableHead className="px-2 py-2 w-[40px] text-center text-xs font-bold">No</TableHead>
+                                                <TableHead className="px-2 py-2 text-xs font-bold">그룹</TableHead>
+                                                <TableHead className="px-2 py-2 text-xs font-bold">조</TableHead>
+                                                <TableHead className="px-1 py-2 text-xs font-bold max-w-[75px]">팀원</TableHead>
+                                                <TableHead className="px-2 py-2 text-xs font-bold hidden sm:table-cell">소속</TableHead>
+                                                <TableHead className="text-right px-2 py-2 text-xs font-bold">관리</TableHead>
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
                                             {Object.keys(filteredGroupedTeamPlayers).sort().map((groupName: string) =>
                                                 filteredGroupedTeamPlayers[groupName].map((t: any, index: number) => (
                                                     editingPlayerId === t.id ? (
-                                                        <TableRow key={t.id} className="bg-muted/30">
-                                                            <TableCell className="px-4 py-2 text-center font-medium">{index + 1}</TableCell>
-                                                            <TableCell className="px-4 py-2 align-top">
+                                                        <TableRow key={t.id} className="bg-muted/30 h-16">
+                                                            <TableCell className="px-1 py-1 text-center font-medium text-xs align-middle">{index + 1}</TableCell>
+                                                            <TableCell className="px-1 py-1 align-middle">
                                                                 <Select value={editingPlayerData.group} onValueChange={(value) => handleEditingFormChange('group', value)}>
-                                                                    <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                                                                    <SelectTrigger className="h-8 text-xs px-1"><SelectValue /></SelectTrigger>
                                                                     <SelectContent>{groupNameList.map((g: string) => <SelectItem key={g} value={g}>{g}</SelectItem>)}</SelectContent>
                                                                 </Select>
                                                             </TableCell>
-                                                            <TableCell className="px-4 py-2 align-top"><Input value={editingPlayerData.jo} type="text" onChange={(e) => handleEditingFormChange('jo', e.target.value)} className="h-9 w-20" /></TableCell>
-                                                            <TableCell className="px-4 py-2 align-top"><Input value={editingPlayerData.p1_name} onChange={(e) => handleEditingFormChange('p1_name', e.target.value)} className="h-9" /></TableCell>
-                                                            <TableCell className="px-4 py-2 align-top"><Input value={editingPlayerData.p1_affiliation} onChange={(e) => handleEditingFormChange('p1_affiliation', e.target.value)} className="h-9" /></TableCell>
-                                                            <TableCell className="px-4 py-2 align-top"><Input value={editingPlayerData.p2_name} onChange={(e) => handleEditingFormChange('p2_name', e.target.value)} className="h-9" /></TableCell>
-                                                            <TableCell className="px-4 py-2 align-top"><Input value={editingPlayerData.p2_affiliation} onChange={(e) => handleEditingFormChange('p2_affiliation', e.target.value)} className="h-9" /></TableCell>
-                                                            <TableCell className="px-4 py-2 text-right align-top">
-                                                                <Button variant="outline" size="sm" onClick={handleUpdatePlayer}><Check className="w-4 h-4" /></Button>
-                                                                <Button variant="ghost" size="sm" onClick={handleCancelEdit}><X className="w-4 h-4" /></Button>
+                                                            <TableCell className="px-1 py-1 align-middle"><Input value={editingPlayerData.jo} type="text" onChange={(e) => handleEditingFormChange('jo', e.target.value)} className="h-8 w-12 text-xs px-1" /></TableCell>
+                                                            <TableCell className="px-1 py-1 align-middle">
+                                                                <div className="flex flex-col gap-1">
+                                                                    <Input value={editingPlayerData.p1_name} onChange={(e) => handleEditingFormChange('p1_name', e.target.value)} className="h-8 text-xs px-1" placeholder="선수1" />
+                                                                    <Input value={editingPlayerData.p2_name} onChange={(e) => handleEditingFormChange('p2_name', e.target.value)} className="h-8 text-xs px-1" placeholder="선수2" />
+                                                                </div>
+                                                            </TableCell>
+                                                            <TableCell className="px-1 py-1 hidden sm:table-cell align-middle">
+                                                                <div className="flex flex-col gap-1">
+                                                                    <Input value={editingPlayerData.p1_affiliation} onChange={(e) => handleEditingFormChange('p1_affiliation', e.target.value)} className="h-8 text-xs px-1" placeholder="소속1" />
+                                                                    <Input value={editingPlayerData.p2_affiliation} onChange={(e) => handleEditingFormChange('p2_affiliation', e.target.value)} className="h-8 text-xs px-1" placeholder="소속2" />
+                                                                </div>
+                                                            </TableCell>
+                                                            <TableCell className="text-right px-1 py-1 align-middle">
+                                                                <div className="flex flex-row items-center justify-end gap-1 flex-nowrap">
+                                                                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleUpdatePlayer}><Check className="w-4 h-4 text-primary" /></Button>
+                                                                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleCancelEdit}><X className="w-4 h-4 text-muted-foreground" /></Button>
+                                                                </div>
                                                             </TableCell>
                                                         </TableRow>
                                                     ) : (
-                                                        <TableRow key={t.id}>
-                                                            <TableCell className="px-4 py-2 text-center font-medium">{index + 1}</TableCell>
-                                                            <TableCell className="px-4 py-2 align-top">{t.group}</TableCell>
-                                                            <TableCell className="px-4 py-2 align-top">{t.jo}</TableCell>
-                                                            <TableCell className="px-4 py-2 align-top">{t.p1_name}</TableCell>
-                                                            <TableCell className="px-4 py-2 align-top">{t.p1_affiliation}</TableCell>
-                                                            <TableCell className="px-4 py-2 align-top">{t.p2_name}</TableCell>
-                                                            <TableCell className="px-4 py-2 align-top">{t.p2_affiliation}</TableCell>
-                                                            <TableCell className="px-4 py-2 text-right align-top">
-                                                                <div className="flex items-center justify-end gap-1">
-                                                                    <Button variant="ghost" size="sm" onClick={() => handleEditClick(t)}><Edit className="w-4 h-4" /></Button>
+                                                        <TableRow key={t.id} className="h-auto py-2">
+                                                            <TableCell className="px-1 py-2 text-center text-xs font-medium align-middle">{index + 1}</TableCell>
+                                                            <TableCell className="px-1 py-2 text-xs whitespace-nowrap align-middle">{t.group}</TableCell>
+                                                            <TableCell className="px-1 py-2 text-xs whitespace-nowrap align-middle">{t.jo}</TableCell>
+                                                            <TableCell className="pl-1 pr-0.5 py-2 text-xs align-middle max-w-[75px] break-all">
+                                                                <div className="flex flex-col gap-0.5">
+                                                                    <span className="font-semibold">{t.p1_name}</span>
+                                                                    <span className="font-semibold text-slate-500">{t.p2_name}</span>
+                                                                </div>
+                                                            </TableCell>
+                                                            <TableCell className="px-2 py-2 text-xs text-muted-foreground hidden sm:table-cell align-middle">
+                                                                <div className="flex flex-col gap-0.5">
+                                                                    <span>{t.p1_affiliation}</span>
+                                                                    <span>{t.p2_affiliation}</span>
+                                                                </div>
+                                                            </TableCell>
+                                                            <TableCell className="px-2 py-2 text-right align-middle">
+                                                                <div className="flex flex-row items-center justify-end gap-1 flex-nowrap">
+                                                                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEditClick(t)}><Edit className="w-4 h-4" /></Button>
                                                                     <Button
                                                                         variant="ghost"
-                                                                        size="sm"
+                                                                        size="icon"
+                                                                        className="h-8 w-8"
                                                                         onClick={() => setJoMoveModal({
                                                                             open: true,
                                                                             playerId: t.id,
@@ -3523,7 +3563,7 @@ export default function PlayerManagementPage() {
                                                                     >
                                                                         <Users className="w-4 h-4" />
                                                                     </Button>
-                                                                    <Button variant="ghost" size="sm" onClick={() => handleDeletePlayer(t.id)}><Trash2 className="w-4 h-4 text-destructive" /></Button>
+                                                                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDeletePlayer(t.id)}><Trash2 className="w-4 h-4 text-destructive" /></Button>
                                                                 </div>
                                                             </TableCell>
                                                         </TableRow>
