@@ -209,6 +209,7 @@ export default function GiftEventAdminPage() {
       status: 'waiting',
       remaining: allParticipantIds,
       winners: [],
+      currentWinner: null,
       drawStartTime: null
     });
   };

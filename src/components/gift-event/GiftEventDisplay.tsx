@@ -34,25 +34,27 @@ export default function GiftEventDisplay() {
 
   useEffect(() => {
     if (!db) return;
-    const statusRef = ref(db, "giftEvent/status");
-    const winnersRef = ref(db, "giftEvent/winners");
-    const currentWinnerRef = ref(db, "giftEvent/currentWinner");
-    const drawStartTimeRef = ref(db, "giftEvent/drawStartTime");
+    // 실시간 데이터 구독
+    let unsubGiftEvent: (() => void) | null = null;
+    let unsubSettings: (() => void) | null = null;
 
-    const unsubStatus = onValue(statusRef, snap => setStatus(snap.val() || "waiting"));
-    const unsubWinners = onValue(winnersRef, snap => setWinners(snap.val() || []));
-    const unsubCurrentWinner = onValue(currentWinnerRef, snap => setCurrentWinner(snap.val() || null));
-    const unsubDrawStartTime = onValue(drawStartTimeRef, snap => setDrawStartTime(snap.val() || null));
-
-    // 초기 로드 시 설정과 로고 URL을 함께 불러오기
-    const loadInitialData = async () => {
+    const startSubscriptions = () => {
       if (!db) return;
-      try {
-        await ensureAuthenticated();
-        // 로고 설정 불러오기
-        const settingsSnapshot = await get(ref(db, "giftEvent/settings"));
-        if (settingsSnapshot.exists()) {
-          const settings = settingsSnapshot.val();
+
+      // 개별 리스너들을 하나의 루트 리스너로 통합하여 원자적 업데이트 보장
+      const giftEventRef = ref(db, "giftEvent");
+      unsubGiftEvent = onValue(giftEventRef, snap => {
+        const data = snap.val() || {};
+        setStatus(data.status || "waiting");
+        setWinners(data.winners || []);
+        setCurrentWinner(data.currentWinner || null);
+        setDrawStartTime(data.drawStartTime || null);
+      });
+
+      // 로고 설정 구독
+      unsubSettings = onValue(ref(db, "giftEvent/settings"), snap => {
+        if (snap.exists()) {
+          const settings = snap.val();
           setLogoSettings({
             enabled: settings.enabled ?? false,
             size: settings.size ?? 1,
@@ -64,8 +66,19 @@ export default function GiftEventDisplay() {
             isBlackAndWhite: settings.isBlackAndWhite ?? false
           });
         }
+      });
+    };
 
-        // 로고 URL 불러오기
+    // 로고 URL 및 초기 설정 로드
+    const loadInitialData = async () => {
+      if (!db) return;
+      try {
+        await ensureAuthenticated();
+
+        // 인증 후 구독 시작
+        startSubscriptions();
+
+        // 초기 로고 URL 로드
         const logosSnapshot = await get(ref(db, 'logos'));
         if (logosSnapshot.exists()) {
           const data = logosSnapshot.val();
@@ -73,41 +86,17 @@ export default function GiftEventDisplay() {
           if (firstLogo?.url) {
             setLogoUrl(firstLogo.url);
           }
-        } else {
-          console.log('[GiftEventDisplay] No logos found in Firebase (initial load)');
         }
       } catch (error) {
-        console.error('[GiftEventDisplay] Error loading initial data:', error);
+        console.error('[GiftEventDisplay] Error during initialization:', error);
       }
     };
 
     loadInitialData();
 
-    // 실시간 구독으로 설정 변경 감지 (초기 로드 후에도 작동)
-    const unsubSettings = onValue(ref(db, "giftEvent/settings"), snap => {
-      if (snap.exists()) {
-        const settings = snap.val();
-        // Merge with defaults to ensure all properties exist
-        const updatedSettings = {
-          enabled: settings.enabled ?? false,
-          size: settings.size ?? 1,
-          opacity: settings.opacity ?? 0.3,
-          offsetX: settings.offsetX ?? 0,
-          offsetY: settings.offsetY ?? 0,
-          saturation: settings.saturation ?? 600,
-          intensity: settings.intensity ?? 200,
-          isBlackAndWhite: settings.isBlackAndWhite ?? false
-        };
-        setLogoSettings(updatedSettings);
-      }
-    });
-
     return () => {
-      unsubStatus();
-      unsubWinners();
-      unsubCurrentWinner();
-      unsubDrawStartTime();
-      unsubSettings();
+      if (unsubGiftEvent) unsubGiftEvent();
+      if (unsubSettings) unsubSettings();
     };
   }, []);
 

@@ -302,13 +302,23 @@ export default function ScoreboardPage() {
     useEffect(() => {
         if (!db) return;
 
-        const giftEventRef = ref(db, 'giftEvent');
-        const unsub = onValue(giftEventRef, snap => {
-            const data = snap.val() || {};
-            setGiftEventStatus(data.status || '');
-            setGiftEventData(data);
+        let unsub: (() => void) | null = null;
+
+        ensureAuthenticated().then((isAuthenticated) => {
+            const dbInstance = db;
+            if (!isAuthenticated || !dbInstance) return;
+
+            const giftEventRef = ref(dbInstance, 'giftEvent');
+            unsub = onValue(giftEventRef, snap => {
+                const data = snap.val() || {};
+                setGiftEventStatus(data.status || '');
+                setGiftEventData(data);
+            });
         });
-        return () => unsub();
+
+        return () => {
+            if (unsub) unsub();
+        };
     }, []);
 
 
