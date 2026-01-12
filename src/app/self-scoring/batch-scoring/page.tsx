@@ -7,6 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import { logScoreChange, getPlayerScoreLogs, ScoreLog, invalidatePlayerLogCache } from "@/lib/scoreLogs";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import html2canvas from "html2canvas";
+import { cn } from "@/lib/utils";
 import "./styles.css";
 
 type CourseTab = { id: string; name: string; pars: number[]; originalOrder?: number };
@@ -208,16 +209,23 @@ export default function BatchScoringPage() {
   // 저장 직후 하이라이트 표시용 맵 (코스별 [4][9])
   const [savedFlashMap, setSavedFlashMap] = useState<Record<string, boolean[][]>>({});
 
-  // 일괄 입력 이력 추적
-  const [lastInputInfo, setLastInputInfo] = useState<LastInputInfo | null>(null);
-  const [historyModalOpen, setHistoryModalOpen] = useState(false);
-  const [actionHistory, setActionHistory] = useState<BatchHistoryEntry[]>([]);
-
   // 초기화 비밀번호 보호
   const [resetPasswordFromDb, setResetPasswordFromDb] = useState<string>('');
   const [isResetPasswordModalOpen, setIsResetPasswordModalOpen] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
   const [passwordError, setPasswordError] = useState(false);
+
+  // 실시간 연결 상태 감지 (/.info/connected 활용)
+  const [isConnected, setIsConnected] = useState<boolean>(true);
+  useEffect(() => {
+    if (!db) return;
+    const connectedRef = ref(db, ".info/connected");
+    const unsub = onValue(connectedRef, (snap) => {
+      setIsConnected(!!snap.val());
+    });
+    return () => unsub();
+  }, []);
+
 
   // 그룹 선수 로그 미리 불러오기 (대시보드/전광판과 동일한 기준 적용을 위해)
   useEffect(() => {
@@ -238,6 +246,11 @@ export default function BatchScoringPage() {
     };
     loadLogs();
   }, [playerNames, nameToPlayerId]);
+
+  // 일괄 입력 이력 추적 (이전 위치에서 이동)
+  const [lastInputInfo, setLastInputInfo] = useState<LastInputInfo | null>(null);
+  const [historyModalOpen, setHistoryModalOpen] = useState(false);
+  const [actionHistory, setActionHistory] = useState<BatchHistoryEntry[]>([]);
 
   // 로그 데이터 lazy loading을 위한 함수 - 필요할 때만 로드
   const loadPlayerLogs = useCallback(async (playerId: string) => {
@@ -2631,8 +2644,20 @@ export default function BatchScoringPage() {
   };
 
   return (
-    <div className="scoring-page">
-      <div className={`container ${themeClass}`} id="mainContainer">
+    <div className={`scoring-page ${themeClass}`} style={{ paddingTop: '40px' }}>
+      {/* 실시간 연결 상태바 */}
+      <div className={cn(
+        "fixed top-0 left-0 right-0 h-10 flex items-center justify-center z-[10001] transition-colors duration-300 font-bold text-sm",
+        isConnected ? "bg-emerald-500 text-white" : "bg-rose-500 text-white animate-pulse"
+      )}>
+        {isConnected ? (
+          <><span className="w-2 h-2 rounded-full bg-white mr-2 shadow-[0_0_8px_rgba(255,255,255,0.8)]"></span> 실시간 데이터 연결 안정</>
+        ) : (
+          <><span className="w-2 h-2 rounded-full bg-white mr-2 animate-ping"></span> 데이터 연결 끊김 (내 폰에 임시 저장 중)</>
+        )}
+      </div>
+
+      <div className={`container ${themeClass}`}>
         <div className="tabs">
           {courseTabs.map((c) => (
             <button
@@ -2858,12 +2883,29 @@ export default function BatchScoringPage() {
                                 next[pi][hi] = newVal;
                                 return next;
                               });
-                              // draftScores에도 동시에 반영
+                              // draftScores에도 동시에 반영하고 로컬메모리에 즉시 저장
                               setDraftScores(prev => {
                                 const next = prev.map(row => [...row]);
                                 next[pi][hi] = newVal;
                                 return next;
                               });
+
+                              // [추가] 로컬 메모리 즉시 저장 (전화 수신, 브라우저 종료 대비)
+                              try {
+                                if (typeof window !== 'undefined') {
+                                  const key = `selfScoringDraft_${activeCourseId}_${selectedGroup || 'g'}_${selectedJo || 'j'}`;
+                                  const saved = localStorage.getItem(key);
+                                  const parsed = saved ? JSON.parse(saved) : {
+                                    draft: Array.from({ length: 4 }, () => Array(9).fill(null)),
+                                    start: groupStartHole,
+                                    current: groupCurrentHole
+                                  };
+                                  parsed.draft[pi][hi] = newVal;
+                                  localStorage.setItem(key, JSON.stringify(parsed));
+                                }
+                              } catch (e) {
+                                console.error("로컬 저장 실패:", e);
+                              }
 
                               // 수정 중인 셀이면 자동 커서 이동하지 않음
                               if (isEditing) {
