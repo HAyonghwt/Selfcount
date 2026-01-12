@@ -1,0 +1,7 @@
+src/app/admin/players/page.tsx(102,56): error TS2345: Argument of type 'Database | null' is not assignable to parameter of type 'Database'.
+  Type 'null' is not assignable to type 'Database'.
+src/app/admin/players/page.tsx(3729,119): error TS2339: Property 'name' does not exist on type '{}'.
+src/app/admin/players/page.tsx(3886,131): error TS2339: Property 'name' does not exist on type '{}'.
+src/app/admin/referees/page.tsx(346,78): error TS2345: Argument of type 'Database | null' is not assignable to parameter of type 'Database'.
+  Type 'null' is not assignable to type 'Database'.
+src/app/referee/[hole]/page.tsx(1728,26): error TS7006: Parameter 'prev' implicitly has an 'any' type.

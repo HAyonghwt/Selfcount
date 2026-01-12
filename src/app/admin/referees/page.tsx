@@ -55,7 +55,7 @@ export default function RefereeManagementPage() {
     useEffect(() => {
         if (!db) return;
         const tournamentRef = ref(db, 'tournaments/current');
-        
+
         const unsubTournament = onValue(tournamentRef, (snapshot) => {
             const data = snapshot.val();
             if (data?.courses) {
@@ -70,7 +70,7 @@ export default function RefereeManagementPage() {
             } else {
                 setTournamentCourses([]);
             }
-            
+
             // 그룹 데이터도 함께 로드
             if (data?.groups) {
                 setGroupsData(data.groups);
@@ -88,7 +88,7 @@ export default function RefereeManagementPage() {
     useEffect(() => {
         const fs = getFirestoreDb();
         const refereesRef = collection(fs, 'referees');
-        
+
         // Firestore 실시간 리스너 설정
         const unsubscribe = onSnapshot(refereesRef, (querySnapshot) => {
             const accounts: any[] = [];
@@ -105,21 +105,21 @@ export default function RefereeManagementPage() {
                 } else {
                     isActiveValue = Boolean(data.isActive);
                 }
-                
+
                 accounts.push({
                     ...data,
                     id: data.id || doc.id,
                     isActive: isActiveValue
                 });
             });
-            
+
             // hole 순서로 정렬
             const sortedAccounts = accounts.sort((a, b) => a.hole - b.hole);
             setRefereeAccounts(sortedAccounts);
         }, (error) => {
             console.error('심판 계정 목록 실시간 업데이트 실패:', error);
         });
-        
+
         return () => unsubscribe();
     }, []);
 
@@ -127,7 +127,7 @@ export default function RefereeManagementPage() {
     const loadRefereeAccounts = async () => {
         const fs = getFirestoreDb();
         const refereesRef = collection(fs, 'referees');
-        
+
         // 일회성 조회 (getDocs 사용)
         try {
             const querySnapshot = await getDocs(refereesRef);
@@ -144,14 +144,14 @@ export default function RefereeManagementPage() {
                 } else {
                     isActiveValue = Boolean(data.isActive);
                 }
-                
+
                 accounts.push({
                     ...data,
                     id: data.id || doc.id,
                     isActive: isActiveValue
                 });
             });
-            
+
             const sortedAccounts = accounts.sort((a, b) => a.hole - b.hole);
             setRefereeAccounts(sortedAccounts);
         } catch (error) {
@@ -200,7 +200,7 @@ export default function RefereeManagementPage() {
     // 코스에 배정된 그룹 목록을 가져오는 함수
     const getAssignedGroupsForCourse = (courseId: string) => {
         const assignedGroups: string[] = [];
-        
+
         Object.entries(groupsData).forEach(([groupName, groupData]: [string, any]) => {
             if (groupData?.courses) {
                 const courseAssignment = groupData.courses[courseId];
@@ -210,28 +210,28 @@ export default function RefereeManagementPage() {
                 }
             }
         });
-        
+
         return assignedGroups.sort(); // 알파벳 순으로 정렬
     };
 
     // 심판 계정을 코스별로 그룹화하는 함수
     const getRefereesByCourse = () => {
         const refereesByCourse: { [courseName: string]: any[] } = {};
-        
+
         tournamentCourses.forEach((course, courseIndex) => {
             const courseReferees: any[] = [];
             // 코스 order를 사용하여 심판 ID 생성 (order가 1이면 첫번째 코스, 2이면 두번째 코스...)
             const courseOrder = course.order || (courseIndex + 1);
-            
+
             for (let hole = 1; hole <= 9; hole++) {
                 // 코스별로 다른 심판 ID 패턴 사용
                 // 첫번째 코스(order === 1): 1번홀심판, 2번홀심판, ...
                 // 두번째 코스(order === 2): 1번홀심판1, 2번홀심판1, ...
                 // 세번째 코스(order === 3): 1번홀심판2, 2번홀심판2, ...
-                const refereeId = courseOrder === 1 
-                    ? `${hole}번홀심판` 
+                const refereeId = courseOrder === 1
+                    ? `${hole}번홀심판`
                     : `${hole}번홀심판${courseOrder - 1}`;
-                
+
                 const referee = refereeAccounts.find(acc => acc.id === refereeId);
                 if (referee) {
                     courseReferees.push({
@@ -254,10 +254,10 @@ export default function RefereeManagementPage() {
                     });
                 }
             }
-            
+
             refereesByCourse[course.name] = courseReferees;
         });
-        
+
         return refereesByCourse;
     };
 
@@ -333,7 +333,7 @@ export default function RefereeManagementPage() {
     }, []);
     const [showPassword, setShowPassword] = useState(false);
     const [saving, setSaving] = useState(false);
-    const [saveMsg, setSaveMsg] = useState<string|null>(null);
+    const [saveMsg, setSaveMsg] = useState<string | null>(null);
 
     const handleSaveUnlockPassword = async () => {
         if (!db) return;
@@ -343,7 +343,7 @@ export default function RefereeManagementPage() {
         }
         setSaving(true);
         try {
-            await import('firebase/database').then(({ ref, set }) => set(ref(db, 'config/scoreUnlockPassword'), unlockPassword));
+            await import('firebase/database').then(({ ref, set }) => set(ref(db as any, 'config/scoreUnlockPassword'), unlockPassword));
             setSaveMsg('잠금 해제 비밀번호가 저장되었습니다.');
         } catch (err: any) {
             setSaveMsg('저장 실패: ' + (err?.message || '오류'));
@@ -404,13 +404,13 @@ export default function RefereeManagementPage() {
                             <label className="text-sm font-medium">아래 주소를 심판들에게 전달하고 담당 홀의 아이디와 비밀번호를 이용해서 로그인 하게 합니다</label>
                             <div className="flex flex-col md:flex-row gap-4 items-start md:items-center">
                                 <div className="flex gap-2 items-center flex-1 w-full">
-                                    <Input 
-                                        value={mainUrl} 
+                                    <Input
+                                        value={mainUrl}
                                         onChange={(e) => setMainUrl(e.target.value)}
                                         placeholder="https://your-domain.com"
                                         className="flex-1"
                                     />
-                                    <Button 
+                                    <Button
                                         onClick={handleCopyUrl}
                                         variant="outline"
                                         className="min-w-[100px]"
@@ -434,7 +434,7 @@ export default function RefereeManagementPage() {
                                         {QRCode ? (
                                             <QRCode value={mainUrl} size={90} level="H" includeMargin={false} />
                                         ) : (
-                                            <div style={{color: 'red', fontSize: 12, width: 90, height: 90, display: 'flex', alignItems: 'center', justifyContent: 'center'}}>QR코드 라이브러리 로드 실패</div>
+                                            <div style={{ color: 'red', fontSize: 12, width: 90, height: 90, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>QR코드 라이브러리 로드 실패</div>
                                         )}
                                     </div>
                                     <Button variant="outline" onClick={handleDownloadQR} size="sm" style={{ width: 140 }}>
@@ -453,7 +453,7 @@ export default function RefereeManagementPage() {
                         <div>
                             <CardTitle>심판 계정 목록</CardTitle>
                             <CardDescription>
-                                대회에서 선택된 코스별로 심판 계정을 표시합니다. 
+                                대회에서 선택된 코스별로 심판 계정을 표시합니다.
                                 {tournamentCourses.length === 0 && " 먼저 대회 및 코스 관리에서 코스를 선택해주세요."}
                             </CardDescription>
                         </div>
@@ -482,135 +482,134 @@ export default function RefereeManagementPage() {
                                 const course = tournamentCourses.find(c => c.name === courseName);
                                 const courseId = course?.id || '';
                                 const assignedGroups = getAssignedGroupsForCourse(courseId);
-                                
+
                                 return (
-                                <div key={courseName} className="space-y-3">
-                                    <div className="flex flex-col items-center gap-2 border-b pb-3">
-                                        <h3 className="text-lg font-semibold text-primary">{courseName}</h3>
-                                        {assignedGroups.length > 0 ? (
-                                            <div className="flex flex-wrap items-center gap-2 justify-center">
-                                                <span className="text-sm font-medium text-muted-foreground">할당 그룹:</span>
-                                                <div className="flex flex-wrap gap-1.5">
-                                                    {assignedGroups.map((groupName) => (
-                                                        <span 
-                                                            key={groupName}
-                                                            className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 border border-blue-200"
-                                                        >
-                                                            {groupName}
-                                                        </span>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        ) : (
-                                            <span className="text-sm text-muted-foreground">할당된 그룹 없음</span>
-                                        )}
-                                    </div>
-                                    <div className="overflow-x-auto">
-                                        <Table>
-                                            <TableHeader>
-                                                <TableRow>
-                                                    <TableHead className="font-bold whitespace-nowrap">홀</TableHead>
-                                                    <TableHead className="font-bold">심판 아이디</TableHead>
-                                                    <TableHead className="font-bold">비밀번호</TableHead>
-                                                    <TableHead className="w-20 font-bold">상태</TableHead>
-                                                </TableRow>
-                                            </TableHeader>
-                                            <TableBody>
-                                                {referees.map(referee => (
-                                                    <TableRow key={referee.id} className={!referee.isActive ? 'bg-gray-50' : ''}>
-                                                        <TableCell className="font-medium whitespace-nowrap">{referee.displayHole}</TableCell>
-                                                        <TableCell>
-                                                            <code className="bg-muted px-2 py-1 rounded-md text-base">{referee.id}</code>
-                                                            {!referee.isActive && !referee.isPlaceholder && <span className="ml-2 text-sm text-gray-500">(비활성화)</span>}
-                                                            {referee.isPlaceholder && <span className="ml-2 text-sm text-gray-500">(미생성)</span>}
-                                                        </TableCell>
-                                                        <TableCell>
-                                                            <div className="flex items-center gap-2">
-                                                                {editingPassword === referee.id ? (
-                                                                    <div className="flex items-center gap-2">
-                                                                        <Input
-                                                                            type="text"
-                                                                            placeholder="새 비밀번호"
-                                                                            value={newPassword}
-                                                                            onChange={(e) => setNewPassword(e.target.value)}
-                                                                            className="w-24 text-xs"
-                                                                            onKeyPress={(e) => e.key === 'Enter' && handleUpdatePassword(referee.id)}
-                                                                            onFocus={(e) => e.target.select()}
-                                                                            autoFocus
-                                                                        />
-                                                                        <Button
-                                                                            size="sm"
-                                                                            onClick={() => handleUpdatePassword(referee.id)}
-                                                                            className="text-xs bg-green-600 hover:bg-green-700"
-                                                                        >
-                                                                            저장
-                                                                        </Button>
-                                                                        <Button
-                                                                            size="sm"
-                                                                            variant="outline"
-                                                                            onClick={() => {
-                                                                                setEditingPassword(null);
-                                                                                setNewPassword('');
-                                                                            }}
-                                                                            className="text-xs"
-                                                                        >
-                                                                            취소
-                                                                        </Button>
-                                                                    </div>
-                                                                ) : (
-                                                                    <>
-                                                                        <span className="font-mono text-base">
-                                                                            {referee.isPlaceholder ? '••••••' : 
-                                                                             showPasswords[referee.id] ? referee.password : referee.password.replace(/./g, '•')}
-                                                                        </span>
-                                                                        {!referee.isPlaceholder && (
-                                                                            <>
-                                                                                <button
-                                                                                    type="button"
-                                                                                    className="text-muted-foreground hover:text-foreground"
-                                                                                    onClick={() => setShowPasswords(prev => ({
-                                                                                        ...prev,
-                                                                                        [referee.id]: !prev[referee.id]
-                                                                                    }))}
-                                                                                    aria-label={showPasswords[referee.id] ? "비밀번호 숨기기" : "비밀번호 보기"}
-                                                                                >
-                                                                                    {showPasswords[referee.id] ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                                                                                </button>
-                                                                                <Button
-                                                                                    variant="outline"
-                                                                                    size="sm"
-                                                                                    onClick={() => {
-                                                                                        setEditingPassword(referee.id);
-                                                                                        setNewPassword(referee.password || '123456');
-                                                                                    }}
-                                                                                    className="text-xs"
-                                                                                    disabled={!referee.isActive || referee.isPlaceholder}
-                                                                                >
-                                                                                    변경
-                                                                                </Button>
-                                                                            </>
-                                                                        )}
-                                                                    </>
-                                                                )}
-                                                            </div>
-                                                        </TableCell>
-                                                        <TableCell>
-                                                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                                                referee.isPlaceholder 
-                                                                    ? 'bg-gray-100 text-gray-800'
-                                                                    : referee.isActive 
-                                                                        ? 'bg-green-100 text-green-800' 
-                                                                        : 'bg-red-100 text-red-800'
-                                                            }`}>
-                                                                {referee.isPlaceholder ? '미생성' : referee.isActive ? '활성' : '비활성'}
+                                    <div key={courseName} className="space-y-3">
+                                        <div className="flex flex-col items-center gap-2 border-b pb-3">
+                                            <h3 className="text-lg font-semibold text-primary">{courseName}</h3>
+                                            {assignedGroups.length > 0 ? (
+                                                <div className="flex flex-wrap items-center gap-2 justify-center">
+                                                    <span className="text-sm font-medium text-muted-foreground">할당 그룹:</span>
+                                                    <div className="flex flex-wrap gap-1.5">
+                                                        {assignedGroups.map((groupName) => (
+                                                            <span
+                                                                key={groupName}
+                                                                className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 border border-blue-200"
+                                                            >
+                                                                {groupName}
                                                             </span>
-                                                        </TableCell>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <span className="text-sm text-muted-foreground">할당된 그룹 없음</span>
+                                            )}
+                                        </div>
+                                        <div className="overflow-x-auto">
+                                            <Table>
+                                                <TableHeader>
+                                                    <TableRow>
+                                                        <TableHead className="font-bold whitespace-nowrap">홀</TableHead>
+                                                        <TableHead className="font-bold">심판 아이디</TableHead>
+                                                        <TableHead className="font-bold">비밀번호</TableHead>
+                                                        <TableHead className="w-20 font-bold">상태</TableHead>
                                                     </TableRow>
-                                                ))}
-                                            </TableBody>
-                                        </Table>
+                                                </TableHeader>
+                                                <TableBody>
+                                                    {referees.map(referee => (
+                                                        <TableRow key={referee.id} className={!referee.isActive ? 'bg-gray-50' : ''}>
+                                                            <TableCell className="font-medium whitespace-nowrap">{referee.displayHole}</TableCell>
+                                                            <TableCell>
+                                                                <code className="bg-muted px-2 py-1 rounded-md text-base">{referee.id}</code>
+                                                                {!referee.isActive && !referee.isPlaceholder && <span className="ml-2 text-sm text-gray-500">(비활성화)</span>}
+                                                                {referee.isPlaceholder && <span className="ml-2 text-sm text-gray-500">(미생성)</span>}
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                <div className="flex items-center gap-2">
+                                                                    {editingPassword === referee.id ? (
+                                                                        <div className="flex items-center gap-2">
+                                                                            <Input
+                                                                                type="text"
+                                                                                placeholder="새 비밀번호"
+                                                                                value={newPassword}
+                                                                                onChange={(e) => setNewPassword(e.target.value)}
+                                                                                className="w-24 text-xs"
+                                                                                onKeyPress={(e) => e.key === 'Enter' && handleUpdatePassword(referee.id)}
+                                                                                onFocus={(e) => e.target.select()}
+                                                                                autoFocus
+                                                                            />
+                                                                            <Button
+                                                                                size="sm"
+                                                                                onClick={() => handleUpdatePassword(referee.id)}
+                                                                                className="text-xs bg-green-600 hover:bg-green-700"
+                                                                            >
+                                                                                저장
+                                                                            </Button>
+                                                                            <Button
+                                                                                size="sm"
+                                                                                variant="outline"
+                                                                                onClick={() => {
+                                                                                    setEditingPassword(null);
+                                                                                    setNewPassword('');
+                                                                                }}
+                                                                                className="text-xs"
+                                                                            >
+                                                                                취소
+                                                                            </Button>
+                                                                        </div>
+                                                                    ) : (
+                                                                        <>
+                                                                            <span className="font-mono text-base">
+                                                                                {referee.isPlaceholder ? '••••••' :
+                                                                                    showPasswords[referee.id] ? referee.password : referee.password.replace(/./g, '•')}
+                                                                            </span>
+                                                                            {!referee.isPlaceholder && (
+                                                                                <>
+                                                                                    <button
+                                                                                        type="button"
+                                                                                        className="text-muted-foreground hover:text-foreground"
+                                                                                        onClick={() => setShowPasswords(prev => ({
+                                                                                            ...prev,
+                                                                                            [referee.id]: !prev[referee.id]
+                                                                                        }))}
+                                                                                        aria-label={showPasswords[referee.id] ? "비밀번호 숨기기" : "비밀번호 보기"}
+                                                                                    >
+                                                                                        {showPasswords[referee.id] ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                                                                                    </button>
+                                                                                    <Button
+                                                                                        variant="outline"
+                                                                                        size="sm"
+                                                                                        onClick={() => {
+                                                                                            setEditingPassword(referee.id);
+                                                                                            setNewPassword(referee.password || '123456');
+                                                                                        }}
+                                                                                        className="text-xs"
+                                                                                        disabled={!referee.isActive || referee.isPlaceholder}
+                                                                                    >
+                                                                                        변경
+                                                                                    </Button>
+                                                                                </>
+                                                                            )}
+                                                                        </>
+                                                                    )}
+                                                                </div>
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                <span className={`px-2 py-1 rounded-full text-xs font-medium ${referee.isPlaceholder
+                                                                        ? 'bg-gray-100 text-gray-800'
+                                                                        : referee.isActive
+                                                                            ? 'bg-green-100 text-green-800'
+                                                                            : 'bg-red-100 text-red-800'
+                                                                    }`}>
+                                                                    {referee.isPlaceholder ? '미생성' : referee.isActive ? '활성' : '비활성'}
+                                                                </span>
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    ))}
+                                                </TableBody>
+                                            </Table>
+                                        </div>
                                     </div>
-                                </div>
                                 );
                             })
                         )}

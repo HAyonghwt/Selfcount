@@ -99,7 +99,7 @@ export default function PlayerManagementPage() {
             try {
                 // 먼저 get으로 즉시 불러오기
                 await ensureAuthenticated();
-                const settingsSnapshot = await get(ref(db, 'rosterDownload/settings'));
+                const settingsSnapshot = await get(ref(db as any, 'rosterDownload/settings'));
                 if (settingsSnapshot.exists()) {
                     const settings = settingsSnapshot.val();
                     setRosterDownloadModal(prev => ({
@@ -3726,7 +3726,7 @@ export default function PlayerManagementPage() {
                                 </div>
                             </div>
 
-                            <Tabs defaultValue={groupList.filter((g: any) => g.type === rosterDownloadModal.type)[0]?.name || ''}>
+                            <Tabs defaultValue={(groupList.filter((g: any) => g.type === rosterDownloadModal.type)[0] as any)?.name || ''}>
                                 <TabsList className="grid w-full grid-cols-auto gap-2 overflow-x-auto mb-4">
                                     {groupList
                                         .filter((g: any) => g.type === rosterDownloadModal.type)
@@ -3883,7 +3883,7 @@ export default function PlayerManagementPage() {
                                                 </div>
                                                 <div className="text-left mb-3 px-2">
                                                     <span className="text-xl font-bold text-slate-700">
-                                                        📋 {groupList.filter((g: any) => g.type === rosterDownloadModal.type)[0]?.name || '그룹명'} 조편성표
+                                                        📋 {(groupList.filter((g: any) => g.type === rosterDownloadModal.type)[0] as any)?.name || '그룹명'} 조편성표
                                                     </span>
                                                 </div>
                                                 <div className="border border-slate-200 mt-3 rounded-sm overflow-hidden">

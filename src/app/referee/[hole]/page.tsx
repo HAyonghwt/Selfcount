@@ -1725,7 +1725,7 @@ export default function RefereePage() {
             // allScores 상태도 즉시 업데이트하여 UI 반영
             // Firebase 구독이 자동으로 업데이트하지만, 즉시 반영을 위해 여기서도 업데이트
             // 단, initializeScores useEffect가 불필요하게 재실행되지 않도록 주의
-            setAllScores(prev => {
+            setAllScores((prev: any) => {
                 const updated = { ...prev };
                 if (!updated[playerToSave.id]) {
                     updated[playerToSave.id] = {};
