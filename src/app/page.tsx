@@ -23,6 +23,37 @@ interface AppConfig {
   userDomain: string;
 }
 
+/**
+ * [추가] 기기 권한 자동 등록 함수
+ */
+async function registerDevicePermission(id: string, role: 'referee' | 'captain' | 'admin') {
+  try {
+    if (!db) return;
+    const user = auth?.currentUser;
+    if (!user) {
+      await ensureAuthenticated();
+    }
+    const finalUser = auth?.currentUser;
+    if (!finalUser) return;
+
+    const { ref, update } = await import('firebase/database');
+    const updates: any = {};
+    const timestamp = Date.now();
+
+    updates[`/authorizedWriters/${finalUser.uid}`] = {
+      id: id,
+      role: role,
+      grantedAt: timestamp,
+      lastActive: timestamp
+    };
+
+    await update(ref(db as any), updates);
+    console.log(`[보안] 기기 권한 등록 완료: ${finalUser.uid} (${id})`);
+  } catch (error) {
+    console.error('[보안] 기기 권한 등록 실패:', error);
+  }
+}
+
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -173,6 +204,9 @@ export default function LoginPage() {
           // Firestore 초기화 대기
           await new Promise(resolve => setTimeout(resolve, 100));
           const captainData = await loginWithKoreanId(email, password);
+          // [추가] 조장 기기 권한 등록
+          await registerDevicePermission(captainData.id, 'captain');
+
           safeSessionStorageSetItem('selfScoringCaptain', JSON.stringify(captainData));
           router.push('/self-scoring/game');
           return;

@@ -10,7 +10,37 @@ import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import { safeSessionStorageGetItem, safeSessionStorageSetItem } from '@/lib/utils';
-import { ensureAuthenticated } from '@/lib/firebase';
+import { db, ensureAuthenticated } from '@/lib/firebase';
+import { ref, update } from 'firebase/database';
+
+/**
+ * [추가] 기기 권한 자동 등록 함수
+ * 로그인 성공 시 해당 기기의 Firebase UID를 '승인된 작성자' 목록에 등록
+ */
+async function registerDevicePermission(id: string, role: 'referee' | 'captain') {
+    try {
+        if (!db) return;
+        const auth = (await import('@/lib/firebase')).auth;
+        const user = auth?.currentUser;
+        if (!user) return;
+
+        const updates: any = {};
+        const timestamp = Date.now();
+
+        // authorizedWriters 경로에 UID 등록
+        updates[`/authorizedWriters/${user.uid}`] = {
+            id: id,
+            role: role,
+            grantedAt: timestamp,
+            lastActive: timestamp
+        };
+
+        await update(ref(db), updates);
+        console.log(`[보안] 기기 권한 등록 완료: ${user.uid} (${id})`);
+    } catch (error) {
+        console.error('[보안] 기기 권한 등록 실패:', error);
+    }
+}
 
 export default function RefereeLoginPage() {
     const { toast } = useToast();
@@ -29,16 +59,16 @@ export default function RefereeLoginPage() {
                 console.warn('Firebase 익명 인증 실패 (계속 진행):', error);
             }
 
-        // 로그인 상태 확인
+            // 로그인 상태 확인
             const loggedInReferee = safeSessionStorageGetItem('refereeData');
-        if (loggedInReferee) {
-            try {
-                const referee = JSON.parse(loggedInReferee);
+            if (loggedInReferee) {
+                try {
+                    const referee = JSON.parse(loggedInReferee);
                     // 이미 로그인된 경우 즉시 이동
                     window.location.href = `/referee/${referee.hole}`;
-                return;
-            } catch (error) {
-                console.error('심판 데이터 파싱 오류:', error);
+                    return;
+                } catch (error) {
+                    console.error('심판 데이터 파싱 오류:', error);
                     setLoading(false);
                 }
             } else {
@@ -86,7 +116,7 @@ export default function RefereeLoginPage() {
 
             // Firestore 기반 한글 아이디 로그인
             const refereeData = await loginRefereeWithKoreanId(koreanId, password);
-            
+
             // 로그인 성공 시 세션에 저장 (여러 번 시도)
             let saved = false;
             for (let i = 0; i < 5; i++) {
@@ -101,16 +131,10 @@ export default function RefereeLoginPage() {
                 // 저장 실패 시 잠시 대기 후 재시도
                 await new Promise(resolve => setTimeout(resolve, 100));
             }
-            
-            if (!saved) {
-                // sessionStorage 저장 실패 시 URL 파라미터로 데이터 전달
-                console.warn('sessionStorage 저장 실패, URL 파라미터로 데이터 전달');
-                const encodedData = encodeURIComponent(JSON.stringify(refereeData));
-                const targetUrl = `/referee/${refereeData.hole}?refereeData=${encodedData}`;
-                window.location.href = targetUrl;
-                return;
-            }
-            
+
+            // [추가] 보안 강화: 실시간 DB 쓰기 권한을 위한 기기 등록
+            await registerDevicePermission(refereeData.id, 'referee');
+
             toast({
                 title: '로그인 성공',
                 description: '심판 페이지로 이동합니다.',
@@ -120,7 +144,7 @@ export default function RefereeLoginPage() {
             // 해당 홀의 심판 페이지로 즉시 이동 (window.location.href 사용)
             // router.replace보다 더 확실하게 작동
             const targetUrl = `/referee/${refereeData.hole}`;
-            
+
             // sessionStorage 저장 확인 후 이동 (토스트 메시지 표시를 위해)
             setTimeout(() => {
                 window.location.href = targetUrl;
@@ -199,8 +223,8 @@ export default function RefereeLoginPage() {
                             onKeyPress={(e) => e.key === 'Enter' && handleLogin()}
                         />
                     </div>
-                    <Button 
-                        onClick={handleLogin} 
+                    <Button
+                        onClick={handleLogin}
                         disabled={loginLoading}
                         className="w-full"
                     >

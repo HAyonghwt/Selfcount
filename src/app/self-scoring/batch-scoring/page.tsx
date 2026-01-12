@@ -1,8 +1,39 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { db, ensureAuthenticated } from "@/lib/firebase";
 import { ref, set, get, onValue, query, orderByChild, equalTo, update, push } from "firebase/database";
+import { db, ensureAuthenticated, auth } from "@/lib/firebase";
+import { safeSessionStorageGetItem, safeSessionStorageSetItem } from "@/lib/utils";
+
+/**
+ * [추가] 기기 권한 자동 등록 함수
+ */
+async function registerDevicePermission(id: string, role: 'referee' | 'captain' | 'admin') {
+  try {
+    if (!db) return;
+    const user = auth?.currentUser;
+    if (!user) {
+      await ensureAuthenticated();
+    }
+    const finalUser = auth?.currentUser;
+    if (!finalUser) return;
+
+    const updates: any = {};
+    const timestamp = Date.now();
+
+    updates[`/authorizedWriters/${finalUser.uid}`] = {
+      id: id,
+      role: role,
+      grantedAt: timestamp,
+      lastActive: timestamp
+    };
+
+    await update(ref(db as any), updates);
+    console.log(`[보안] 기기 권한 등록 완료: ${finalUser.uid} (${id})`);
+  } catch (error) {
+    console.error('[보안] 기기 권한 등록 실패:', error);
+  }
+}
 import { useToast } from "@/hooks/use-toast";
 import { logScoreChange, getPlayerScoreLogs, ScoreLog, invalidatePlayerLogCache } from "@/lib/scoreLogs";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -873,6 +904,17 @@ export default function BatchScoringPage() {
 
   // 일괄 입력 모드: 기존 점수를 batchInputScores에 초기값으로 설정 (코스 변경 시에만)
   const prevCourseIdRef = useRef<string>('');
+
+  // [추가] 조장 권한 자동 등록용 효과
+  useEffect(() => {
+    const captain = safeSessionStorageGetItem('captainData');
+    if (captain) {
+      try {
+        const c = JSON.parse(captain);
+        registerDevicePermission(c.id, 'captain');
+      } catch { }
+    }
+  }, []);
   useEffect(() => {
     // 코스가 변경되었을 때만 초기화
     if (activeCourseId && activeCourseId !== prevCourseIdRef.current) {
