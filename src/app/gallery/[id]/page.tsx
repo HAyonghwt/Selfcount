@@ -51,11 +51,22 @@ interface ProcessedPlayer {
 // --- Dynamic Color Theme based on User Palette ---
 const getCourseTheme = (courseName: string) => {
     const name = courseName.toLowerCase();
-    if (name.includes('a') || name.includes('코스1')) return { accent: 'bg-[#ef4444]', text: 'text-[#ef4444]', border: 'border-[#ef4444]', label: 'A' };
-    if (name.includes('b') || name.includes('코스2')) return { accent: 'bg-[#3b82f6]', text: 'text-[#3b82f6]', border: 'border-[#3b82f6]', label: 'B' };
-    if (name.includes('c') || name.includes('코스3')) return { accent: 'bg-[#facc15]', text: 'text-[#facc15]', border: 'border-[#facc15]', label: 'C' };
-    if (name.includes('d') || name.includes('코스4')) return { accent: 'bg-white', text: 'text-slate-600', border: 'border-slate-300', label: 'D' };
-    return { accent: 'bg-[#8c1aff]', text: 'text-[#8c1aff]', border: 'border-[#8c1aff]', label: 'C' };
+
+    // 1순위: 알파벳 (A, B, C, D)
+    if (name.includes('a')) return { accent: 'bg-[#ef4444]', text: 'text-[#ef4444]', border: 'border-[#ef4444]', label: 'A', labelText: 'text-white' };
+    if (name.includes('b')) return { accent: 'bg-[#3b82f6]', text: 'text-[#3b82f6]', border: 'border-[#3b82f6]', label: 'B', labelText: 'text-white' };
+    if (name.includes('c')) return { accent: 'bg-[#facc15]', text: 'text-[#facc15]', border: 'border-[#facc15]', label: 'C', labelText: 'text-white' };
+    if (name.includes('d')) return { accent: 'bg-white', text: 'text-slate-600', border: 'border-slate-300', label: 'D', labelText: 'text-slate-900' };
+
+    // 2순위: 숫자 또는 한글 (1/가, 2/나, 3/다, 4/라)
+    if (name.includes('1') || name.includes('가')) return { accent: 'bg-[#ef4444]', text: 'text-[#ef4444]', border: 'border-[#ef4444]', label: 'A', labelText: 'text-white' };
+    if (name.includes('2') || name.includes('나')) return { accent: 'bg-[#3b82f6]', text: 'text-[#3b82f6]', border: 'border-[#3b82f6]', label: 'B', labelText: 'text-white' };
+    if (name.includes('3') || name.includes('다')) return { accent: 'bg-[#facc15]', text: 'text-[#facc15]', border: 'border-[#facc15]', label: 'C', labelText: 'text-white' };
+    if (name.includes('4') || name.includes('라')) return { accent: 'bg-white', text: 'text-slate-600', border: 'border-slate-300', label: 'D', labelText: 'text-slate-900' };
+
+    // 기본값: 보라색 테마 + 이름의 첫 글자를 라벨로 사용
+    const firstChar = courseName.trim().charAt(0).toUpperCase();
+    return { accent: 'bg-[#8c1aff]', text: 'text-[#8c1aff]', border: 'border-[#8c1aff]', label: firstChar || '?', labelText: 'text-white' };
 };
 
 // --- Sorting Tie-break Logic (Backcount) ---
@@ -122,7 +133,7 @@ export default function GalleryDetailPage() {
     const [searchTerm, setSearchTerm] = useState("");
     const [activeGroup, setActiveGroup] = useState<string>("");
     const [expandedPlayerId, setExpandedPlayerId] = useState<string | null>(null);
-    const [visibleCount, setVisibleCount] = useState(30);
+    const [visibleCount, setVisibleCount] = useState(50);
     const loadMoreRef = React.useRef<HTMLDivElement>(null);
     const [isRedirecting, setIsRedirecting] = useState(false);
 
@@ -153,7 +164,7 @@ export default function GalleryDetailPage() {
     }, []);
 
     useEffect(() => {
-        setVisibleCount(30);
+        setVisibleCount(50);
     }, [activeGroup, searchTerm]);
 
     // 데이터 로드: 원본 구조를 유지하되 get 방식으로 안정성 확보
@@ -220,6 +231,7 @@ export default function GalleryDetailPage() {
                             pars: c.pars || Array(9).fill(4),
                             holeScores: scoreInfo.holeScores || Array(9).fill(null),
                             courseTotal: scoreInfo.courseTotal || 0,
+                            coursePlusMinus: (scoreInfo.courseTotal && c.pars) ? (scoreInfo.courseTotal - c.pars.reduce((a: number, b: number) => a + b, 0)) : scoreInfo.coursePlusMinus,
                             courseRank: scoreInfo.courseRank
                         };
                     });
@@ -389,7 +401,7 @@ export default function GalleryDetailPage() {
         if (visibleCount >= filteredPlayers.length) return;
         const observer = new IntersectionObserver((entries) => {
             if (entries[0].isIntersecting) {
-                setVisibleCount(prev => Math.min(prev + 30, filteredPlayers.length));
+                setVisibleCount(prev => Math.min(prev + 50, filteredPlayers.length));
             }
         }, { threshold: 0.1 });
         if (loadMoreRef.current) observer.observe(loadMoreRef.current);
@@ -549,31 +561,68 @@ export default function GalleryDetailPage() {
                                     <div
                                         onClick={() => toggleExpand(player.id)}
                                         className={cn(
-                                            "flex items-center h-14 transition-colors active:bg-slate-50 cursor-pointer",
+                                            "flex items-center min-h-[56px] h-auto transition-colors active:bg-slate-50 cursor-pointer",
                                             expandedPlayerId === player.id ? "bg-blue-50/30" : (index % 2 === 1 ? "bg-slate-100/50" : "bg-white")
                                         )}
                                     >
                                         <div className="w-[12%] border-r border-slate-100 text-sm font-black text-slate-400 flex items-center justify-center">
                                             {player.jo}
                                         </div>
-                                        <div className="w-[20%] border-r border-slate-100 text-left pl-3 flex flex-col justify-center overflow-hidden">
-                                            <div className="text-base font-black text-slate-700 leading-none mb-1.5 truncate">{player.name}</div>
-                                            <div className="text-[10px] text-slate-400 font-bold truncate pr-1">{player.affiliation}</div>
+                                        <div className="w-[20%] border-r border-slate-100 text-left pl-2 flex flex-col justify-center overflow-hidden py-1">
+                                            <div className="text-[9px] text-slate-400 font-bold truncate leading-none mb-0.5">{player.affiliation}</div>
+                                            <div className={cn(
+                                                "font-black text-slate-700 leading-tight break-all",
+                                                /[a-zA-Z]/.test(player.name)
+                                                    ? (player.name.length > 15 ? "text-[10px]" : player.name.length > 10 ? "text-xs" : "text-sm")
+                                                    : "text-base"
+                                            )}>
+                                                {/[a-zA-Z]/.test(player.name) ? (
+                                                    <>
+                                                        <span className={cn(
+                                                            "uppercase",
+                                                            player.name.length > 15 ? "text-xs" : player.name.length > 10 ? "text-sm" : "text-base"
+                                                        )}>{player.name.charAt(0)}</span>
+                                                        <span>{player.name.slice(1)}</span>
+                                                    </>
+                                                ) : player.name}
+                                            </div>
                                         </div>
 
                                         {/* Dynamic Course Cells */}
                                         {courseLabels.map((label: string) => {
                                             const course = player.courses.find((c: PlayerCourseData) => getCourseTheme(c.name).label === label);
                                             return (
-                                                <div key={label} className="flex-1 border-r border-slate-100 text-lg font-black text-slate-700 h-full flex items-center justify-center">
-                                                    {course ? course.courseTotal : ''}
+                                                <div key={label} className="flex-1 border-r border-slate-100 h-full flex flex-col items-center justify-center py-1">
+                                                    {course && course.courseTotal > 0 && (
+                                                        <>
+                                                            <div className={cn(
+                                                                "text-[9px] font-black leading-none mb-0.5",
+                                                                (course.coursePlusMinus || 0) > 0 ? "text-red-500" : (course.coursePlusMinus || 0) < 0 ? "text-blue-500" : "text-slate-400"
+                                                            )}>
+                                                                {(course.coursePlusMinus || 0) > 0 ? `+${course.coursePlusMinus}` : course.coursePlusMinus === 0 ? "E" : (course.coursePlusMinus || '')}
+                                                            </div>
+                                                            <div className="text-lg font-black text-slate-700 leading-none">
+                                                                {course.courseTotal}
+                                                            </div>
+                                                        </>
+                                                    )}
                                                 </div>
                                             );
                                         })}
 
                                         {/* Total Cell */}
-                                        <div className="w-[14%] border-r border-slate-100 text-lg font-black text-[#3b82f6] h-full flex items-center justify-center bg-blue-50/20">
-                                            {player.hasForfeited ? <span className="text-red-500 text-sm">기권</span> : player.totalScore}
+                                        <div className="w-[14%] border-r border-slate-100 h-full flex flex-col items-center justify-center bg-blue-50/20 py-1">
+                                            {!player.hasForfeited && player.plusMinus !== null && (
+                                                <div className={cn(
+                                                    "text-[9px] font-black leading-none mb-0.5",
+                                                    player.plusMinus > 0 ? "text-red-500" : player.plusMinus < 0 ? "text-blue-500" : "text-slate-400"
+                                                )}>
+                                                    {player.plusMinus > 0 ? `+${player.plusMinus}` : player.plusMinus === 0 ? "E" : player.plusMinus}
+                                                </div>
+                                            )}
+                                            <div className={cn("text-lg font-black leading-none", player.hasForfeited ? "text-red-500 text-sm" : "text-[#3b82f6]")}>
+                                                {player.hasForfeited ? "기권" : player.totalScore}
+                                            </div>
                                         </div>
 
                                         <div className="w-[14%] h-full flex items-center justify-center">
@@ -609,10 +658,23 @@ export default function GalleryDetailPage() {
                                                     <div key={course.id} className="space-y-2">
                                                         <div className="flex items-center justify-between border-b border-slate-300 pb-1">
                                                             <div className="flex items-center gap-2.5">
-                                                                <div className={cn("w-9 h-9 rounded-sm flex items-center justify-center font-black text-white text-lg", theme.accent)}>
+                                                                <div className={cn("w-9 h-9 rounded-sm flex items-center justify-center font-black text-lg border", theme.accent, theme.labelText, theme.border)}>
                                                                     {theme.label}
                                                                 </div>
-                                                                <h4 className="font-black text-base text-slate-900 tracking-tight uppercase">{course.name}</h4>
+                                                                <div className="flex flex-col justify-center">
+                                                                    {course.name.includes(' ') ? (
+                                                                        <>
+                                                                            <span className="text-[10px] text-slate-400 font-bold leading-none mb-0.5">
+                                                                                {course.name.split(' ').slice(0, -1).join(' ')}
+                                                                            </span>
+                                                                            <h4 className="font-black text-base text-slate-900 tracking-tight uppercase leading-none">
+                                                                                {course.name.split(' ').slice(-1)[0]}
+                                                                            </h4>
+                                                                        </>
+                                                                    ) : (
+                                                                        <h4 className="font-black text-base text-slate-900 tracking-tight uppercase">{course.name}</h4>
+                                                                    )}
+                                                                </div>
                                                             </div>
                                                             <div className="flex items-center gap-4">
                                                                 <div className="flex items-center gap-4 bg-slate-100/50 px-3 py-1.5 rounded-lg border border-slate-200/50">
