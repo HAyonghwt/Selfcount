@@ -220,16 +220,7 @@ const ArchiveList: React.FC = () => {
     updateForfeitTypes();
   }, [selected]);
 
-  const handleDeleteAll = async () => {
-    if (!window.confirm("정말 모든 기록을 삭제하시겠습니까?")) return;
-    try {
-      if (!db) return;
-      await remove(ref(db, "archives"));
-      toast({ title: "전체 삭제 완료", description: "모든 기록이 삭제되었습니다." });
-    } catch (e) {
-      toast({ title: "오류", description: "삭제 중 오류가 발생했습니다.", variant: "destructive" });
-    }
-  };
+
 
   if (loading) return <div className="text-center py-20">불러오는 중...</div>;
 
@@ -355,9 +346,7 @@ const ArchiveList: React.FC = () => {
               )}
             </TableBody>
           </Table>
-          <div className="flex justify-end mt-6">
-            <Button variant="destructive" onClick={handleDeleteAll}>전체 기록 삭제하기</Button>
-          </div>
+
         </CardContent>
       </Card>
     </div>

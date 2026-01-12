@@ -166,6 +166,17 @@ export default function GalleryDetailPage() {
         const unsubscribe = onValue(detailRef, (snap) => {
             if (snap.exists()) {
                 const data = snap.val();
+                console.log('Gallery - Loaded from archives-detail:', {
+                    hasPlayers: !!data.players,
+                    playersCount: data.players ? Object.keys(data.players).length : 0,
+                    hasScores: !!data.scores,
+                    scoresCount: data.scores ? Object.keys(data.scores).length : 0,
+                    hasCourses: !!data.courses,
+                    coursesCount: data.courses ? Object.keys(data.courses).length : 0,
+                    hasGroups: !!data.groups,
+                    groupsCount: data.groups ? Object.keys(data.groups).length : 0,
+                    groupNames: data.groups ? Object.keys(data.groups) : []
+                });
                 setArchiveData(data);
                 if (data?.groups) {
                     const groupNames = Object.keys(data.groups).sort();
@@ -173,13 +184,20 @@ export default function GalleryDetailPage() {
                 }
                 setLoading(false);
             } else {
+                console.log('Gallery - archives-detail not found, trying legacy...');
                 onValue(legacyRef, (legacySnap) => {
                     if (legacySnap.exists()) {
                         const data = legacySnap.val();
+                        console.log('Gallery - Loaded from archives (legacy):', {
+                            hasPlayers: !!data.players,
+                            playersCount: data.players ? Object.keys(data.players).length : 0
+                        });
                         setArchiveData(data);
                         const players = data.players || {};
                         const groupNames = Array.from(new Set(Object.values(players).map((p: any) => p.group))).sort() as string[];
                         if (groupNames.length > 0) setActiveGroup(groupNames[0]);
+                    } else {
+                        console.error('Gallery - No data found in archives-detail or archives');
                     }
                     setLoading(false);
                 }, { onlyOnce: true });
@@ -190,12 +208,23 @@ export default function GalleryDetailPage() {
 
     // Data Processing
     const processedPlayers = useMemo(() => {
-        if (!archiveData) return [];
+        if (!archiveData) {
+            console.log('Gallery - processedPlayers: No archiveData');
+            return [];
+        }
         const playersObj = archiveData.players || {};
         const scoresObj = archiveData.scores || {};
         const coursesObj = archiveData.courses || {};
         const finalRanks = archiveData.finalRanks || {};
         const groupsObj = archiveData.groups || {};
+
+        console.log('Gallery - Processing players:', {
+            playersCount: Object.keys(playersObj).length,
+            scoresCount: Object.keys(scoresObj).length,
+            coursesCount: Object.keys(coursesObj).length,
+            groupsCount: Object.keys(groupsObj).length,
+            samplePlayer: Object.values(playersObj)[0]
+        });
 
         const results = Object.keys(playersObj).map(pid => {
             const player = playersObj[pid];
@@ -257,6 +286,12 @@ export default function GalleryDetailPage() {
                 forfeitType: player.forfeitType || null,
                 courses: playerCourses
             };
+        });
+
+        console.log('Gallery - Processed players:', {
+            totalPlayers: results.length,
+            playersWithScores: results.filter(p => p.hasAnyScore).length,
+            groups: Array.from(new Set(results.map(p => p.group)))
         });
 
         // --- 각 코스별 그룹 내 순위 계산 로직 추가 ---

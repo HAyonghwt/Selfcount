@@ -8,7 +8,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-// import * as XLSX from 'xlsx-js-style'; // Dynamic import used below instead
 import { db } from '@/lib/firebase';
 import { ref, onValue, set, get, query, limitToLast, onChildChanged, off, update, onChildAdded, onChildRemoved } from 'firebase/database';
 import { useToast } from '@/hooks/use-toast';
@@ -16,495 +15,21 @@ import { ToastAction } from '@/components/ui/toast';
 import ExternalScoreboardInfo from '@/components/ExternalScoreboardInfo';
 import { safeLocalStorageGetItem, safeLocalStorageSetItem, safeLocalStorageRemoveItem, cn } from '@/lib/utils';
 import {
-    Download, Filter, Printer, ChevronDown, ChevronUp, ChevronLeft, ChevronRight,
+    Download, Filter, ChevronDown, ChevronUp, ChevronLeft, ChevronRight,
     Calendar as CalendarIcon, MapPin, Trophy, Search, Settings, Save, RefreshCw,
     Trash2, Share2, Copy, Check, AlertCircle, Info, ExternalLink, Menu, X, Plus,
     Minus, List, LayoutGrid, Clock, MoreVertical, Eye, EyeOff, Lock, Unlock,
     Gavel, Play, Square, Award, Target, Hash, Users, User
 } from 'lucide-react';
 
-interface ProcessedPlayer {
-    id: string;
-    jo: number;
-    name: string;
-    affiliation: string;
-    group: string;
-    totalScore: number;
-    rank: number | null;
-    hasAnyScore: boolean;
-    hasForfeited: boolean;
-    forfeitType: 'absent' | 'disqualified' | 'forfeit' | null; // 기권 타입 추가
-    coursesData: {
-        [courseId: string]: {
-            courseName: string;
-            courseTotal: number;
-            holeScores: (number | null)[];
-        }
-    };
-    total: number; // For tie-breaking
-    courseScores: { [courseId: string]: number };
-    detailedScores: { [courseId: string]: { [holeNumber: string]: number } };
-    assignedCourses: any[];
-    totalPar: number; // 파합계
-    plusMinus: number | null; // ±타수
-    type: 'individual' | 'team'; // 선수 타입 추가
-}
+// New specialized components and hooks
+import ScoreEditModal from './components/ScoreEditModal';
+import ArchiveModal from './components/ArchiveModal';
+import { useDashboardData } from './hooks/useDashboardData';
+import { useScoreProcessing } from './hooks/useScoreProcessing';
+import { ProcessedPlayer } from './types';
+import { isValidNumber } from './utils/dashboardUtils';
 
-// Helper function for tie-breaking using back-count method
-const tieBreak = (a: any, b: any, sortedCourses: any[]) => {
-    if (a.hasForfeited && !b.hasForfeited) return 1;
-    if (!a.hasForfeited && b.hasForfeited) return -1;
-
-    if (!a.hasAnyScore && !b.hasAnyScore) return 0;
-    if (!a.hasAnyScore) return 1;
-    if (!b.hasAnyScore) return -1;
-
-    if (a.total !== b.total) {
-        return a.total - b.total;
-    }
-
-    // Compare total scores of each course in reverse alphabetical order
-    for (const course of sortedCourses) {
-        if (!course || course.id === undefined || course.id === null) continue; // 안전장치
-        const courseId = course.id;
-        const aScoreObj = a.courseScores || {};
-        const bScoreObj = b.courseScores || {};
-        const aCourseScore = aScoreObj[courseId] ?? 0;
-        const bCourseScore = bScoreObj[courseId] ?? 0;
-        if (aCourseScore !== bCourseScore) {
-            return aCourseScore - bCourseScore;
-        }
-    }
-
-    // 홀별 백카운트: 마지막 코스부터 역순으로 각 코스의 홀 점수 비교
-    // 모든 홀 점수가 0이면 다음 코스로 넘어감
-    if (sortedCourses.length > 0) {
-        for (const course of sortedCourses) {
-            if (!course || course.id === undefined || course.id === null) continue; // 안전장치
-            const courseId = course.id;
-            const aDetailObj = a.detailedScores || {};
-            const bDetailObj = b.detailedScores || {};
-            const aHoleScores = aDetailObj[courseId] || {};
-            const bHoleScores = bDetailObj[courseId] || {};
-            let hasNonZeroScore = false;
-
-            // 9번 홀부터 1번 홀까지 역순으로 비교
-            for (let i = 9; i >= 1; i--) {
-                const hole = i.toString();
-                const aHole = aHoleScores[hole] || 0;
-                const bHole = bHoleScores[hole] || 0;
-
-                // 0이 아닌 점수가 있으면 이 코스에서 비교 진행
-                if (aHole > 0 || bHole > 0) {
-                    hasNonZeroScore = true;
-                }
-
-                // 점수가 다르면 비교 결과 반환
-                if (aHole !== bHole) {
-                    return aHole - bHole;
-                }
-            }
-
-            // 이 코스의 모든 홀 점수가 0이면 다음 코스로 넘어감
-            // hasNonZeroScore가 false면 모두 0이므로 다음 코스 확인
-            // (차이를 확인하지 못하고 여기 도달한 경우 다음 코스 계속 비교)
-        }
-    }
-
-    return 0;
-};
-
-// 파합계(기본파) 계산 함수
-function getTotalParForPlayer(courses: any, assignedCourses: any[]) {
-    let total = 0;
-    assignedCourses.forEach(course => {
-        const courseData = courses[course.id];
-        if (courseData && Array.isArray(courseData.pars)) {
-            total += courseData.pars.reduce((a: number, b: number) => a + (b || 0), 0);
-        }
-    });
-    return total;
-}
-
-// 점수 수정 모달 컴포넌트 (로컬 상태로 관리하여 부모 리렌더링 방지)
-const ScoreEditModalComponent = React.memo(({
-    open,
-    playerId,
-    courseId,
-    holeIndex,
-    initialScore,
-    initialForfeitType,
-    playerName,
-    courseName,
-    onClose,
-    onSave,
-    finalDataByGroup,
-    playerScoreLogs,
-    scores
-}: {
-    open: boolean;
-    playerId: string;
-    courseId: string;
-    holeIndex: number;
-    initialScore: string;
-    initialForfeitType: 'absent' | 'disqualified' | 'forfeit' | null;
-    playerName: string;
-    courseName: string;
-    onClose: () => void;
-    onSave: (score: string, forfeitType: 'absent' | 'disqualified' | 'forfeit' | null) => Promise<void>;
-    finalDataByGroup: any;
-    playerScoreLogs: { [playerId: string]: ScoreLog[] };
-    scores: any;
-}) => {
-    const [localScore, setLocalScore] = useState(initialScore);
-    const [localForfeitType, setLocalForfeitType] = useState(initialForfeitType);
-    const { toast } = useToast();
-
-    // 모달이 열릴 때 초기값 설정
-    useEffect(() => {
-        if (open) {
-            setLocalScore(initialScore);
-            setLocalForfeitType(initialForfeitType);
-        }
-    }, [open, playerId, courseId, holeIndex, initialScore, initialForfeitType]);
-
-    const handleLocalSave = async () => {
-        await onSave(localScore, localForfeitType);
-    };
-
-    if (!open) return null;
-
-    return (
-        <Dialog open={open} onOpenChange={onClose}>
-            <DialogContent>
-                <DialogHeader>
-                    <DialogTitle>점수 수정</DialogTitle>
-                    <DialogDescription>
-                        선수: <b>{playerName}</b> / 코스: <b>{courseName}</b> / 홀: <b>{holeIndex + 1}번</b>
-                    </DialogDescription>
-                </DialogHeader>
-                <div className="flex items-center justify-center gap-4 py-4">
-                    <Button
-                        variant="outline"
-                        size="icon"
-                        className="h-12 w-12"
-                        onClick={() => {
-                            const currentScore = localScore === '' ? null : Number(localScore);
-                            let newScore: number;
-                            if (currentScore === null) {
-                                newScore = 1;
-                            } else if (currentScore === 0) {
-                                newScore = 1;
-                            } else if (currentScore >= 10) {
-                                newScore = 10;
-                            } else {
-                                newScore = currentScore + 1;
-                            }
-                            setLocalScore(String(newScore));
-                            if (newScore > 0) {
-                                setLocalForfeitType(null);
-                            }
-                        }}
-                    >
-                        <ChevronUp className="h-6 w-6" />
-                    </Button>
-                    <span className={cn(
-                        "font-bold tabular-nums text-center min-w-[80px]",
-                        (localScore === "0" || Number(localScore) === 0) ? "text-xs text-red-600" : "text-4xl"
-                    )}>
-                        {(localScore === "0" || Number(localScore) === 0) ?
-                            (localForfeitType === 'absent' ? '불참' :
-                                localForfeitType === 'disqualified' ? '실격' :
-                                    localForfeitType === 'forfeit' ? '기권' : '기권') :
-                            (localScore === '' ? '-' : localScore)}
-                    </span>
-                    <Button
-                        variant="outline"
-                        size="icon"
-                        className="h-12 w-12"
-                        onClick={() => {
-                            const currentScore = localScore === '' ? null : Number(localScore);
-                            let newScore: number | null;
-                            let newForfeitType: 'absent' | 'disqualified' | 'forfeit' | null = localForfeitType;
-
-                            if (currentScore === null || currentScore === 0) {
-                                if (currentScore === null) {
-                                    newScore = 1;
-                                    newForfeitType = null;
-                                } else {
-                                    newScore = 0;
-                                    if (newForfeitType === null || newForfeitType === 'absent') {
-                                        newForfeitType = 'disqualified';
-                                    } else if (newForfeitType === 'disqualified') {
-                                        newForfeitType = 'forfeit';
-                                    } else if (newForfeitType === 'forfeit') {
-                                        newForfeitType = 'absent';
-                                    }
-                                }
-                            } else if (currentScore === 1) {
-                                newScore = 0;
-                                newForfeitType = 'absent';
-                            } else {
-                                newScore = currentScore - 1;
-                                newForfeitType = null;
-                            }
-
-                            setLocalScore(newScore === null ? '' : String(newScore));
-                            setLocalForfeitType(newForfeitType);
-                        }}
-                    >
-                        <ChevronDown className="h-6 w-6" />
-                    </Button>
-                </div>
-                <DialogFooter>
-                    <Button onClick={handleLocalSave}>저장</Button>
-                    <Button variant="outline" onClick={onClose}>취소</Button>
-                    {(localScore === "0" || Number(localScore) === 0) && (
-                        <Button
-                            className="bg-yellow-500 hover:bg-yellow-600 text-white ml-2"
-                            onClick={async () => {
-                                if (!db) {
-                                    toast({ title: '오류', description: '데이터베이스 연결이 없습니다.', variant: 'destructive' });
-                                    return;
-                                }
-                                const player = Object.values(finalDataByGroup).flat().find((p: any) => p.id === playerId) as any;
-                                if (!player) return;
-                                const logs = playerScoreLogs[player.id] || [];
-                                let restored = false;
-                                try {
-                                    const backupRef = ref(db, `backups/scoresBeforeForfeit/${player.id}`);
-                                    const backupSnap = await get(backupRef);
-                                    if (backupSnap.exists()) {
-                                        const backup = backupSnap.val();
-                                        await set(ref(db, `scores/${player.id}`), backup?.data || {});
-                                        await set(backupRef, null);
-                                        restored = true;
-                                    }
-                                } catch (e) {
-                                    console.warn('백업 복원 실패, 로그 기반 복원으로 폴백합니다:', e);
-                                }
-
-                                if (!restored) {
-                                    let anyRestored = false;
-                                    for (const course of player.assignedCourses) {
-                                        for (let h = 1; h <= 9; h++) {
-                                            if (scores?.[player.id]?.[course.id]?.[h] === 0) {
-                                                const zeroLogIdx = logs.findIndex(l =>
-                                                    l.holeNumber === h &&
-                                                    l.newValue === 0 &&
-                                                    (l.modifiedByType === 'judge' || l.modifiedByType === 'admin' || l.modifiedByType === 'captain')
-                                                );
-                                                let restoreValue = null;
-                                                if (zeroLogIdx !== -1) {
-                                                    for (let j = zeroLogIdx - 1; j >= 0; j--) {
-                                                        const l = logs[j];
-                                                        if (
-                                                            l.holeNumber === h &&
-                                                            l.newValue !== 0 &&
-                                                            l.newValue !== null &&
-                                                            l.newValue !== undefined
-                                                        ) {
-                                                            restoreValue = l.newValue;
-                                                            break;
-                                                        }
-                                                    }
-                                                }
-                                                await set(ref(db, `scores/${player.id}/${course.id}/${h}`), restoreValue);
-                                                await logScoreChange({
-                                                    matchId: 'tournaments/current',
-                                                    playerId: player.id,
-                                                    scoreType: 'holeScore',
-                                                    courseId: course.id,
-                                                    holeNumber: h,
-                                                    oldValue: 0,
-                                                    newValue: restoreValue === null ? 0 : restoreValue,
-                                                    modifiedBy: 'admin',
-                                                    modifiedByType: 'admin',
-                                                    comment: '기권 해제 복구'
-                                                });
-                                                invalidatePlayerLogCache(player.id);
-                                                anyRestored = true;
-                                            }
-                                        }
-                                    }
-                                    restored = anyRestored;
-                                }
-
-                                if (restored) {
-                                    try {
-                                        const playerScoresSnap = await get(ref(db, `scores/${player.id}`));
-                                        if (playerScoresSnap.exists()) {
-                                            const fixed: any = {};
-                                            const data = playerScoresSnap.val() || {};
-                                            Object.keys(data).forEach((courseId: string) => {
-                                                const holes = data[courseId] || {};
-                                                Object.keys(holes).forEach((h: string) => {
-                                                    if (holes[h] === 0) {
-                                                        if (!fixed[courseId]) fixed[courseId] = {};
-                                                        fixed[courseId][h] = null;
-                                                    }
-                                                });
-                                            });
-                                            if (Object.keys(fixed).length > 0) {
-                                                const merged: any = { ...data };
-                                                Object.keys(fixed).forEach((cid: string) => {
-                                                    merged[cid] = { ...(merged[cid] || {}), ...fixed[cid] };
-                                                });
-                                                await set(ref(db, `scores/${player.id}`), merged);
-                                            }
-                                        }
-                                    } catch (e) {
-                                        console.warn('0점 정리 실패(무시):', e);
-                                    }
-                                    toast({ title: '기권 해제 완료', description: '이전 점수로 복구되었습니다.' });
-                                    try {
-                                        const logs = await getPlayerScoreLogsOptimized(player.id);
-                                        // setPlayerScoreLogs는 부모에서 관리하므로 여기서는 호출하지 않음
-                                    } catch { }
-                                } else {
-                                    toast({ title: '복구할 점수가 없습니다.', description: '이미 기권이 해제된 상태입니다.' });
-                                }
-                                onClose();
-                            }}
-                        >
-                            기권/불참/실격 해제
-                        </Button>
-                    )}
-                    {(localScore === "0" || Number(localScore) === 0) && (
-                        <div className="w-full text-center text-sm text-yellow-700 mt-2">기권/불참/실격 처리 이전의 모든 점수를 복구합니다.</div>
-                    )}
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
-    );
-});
-
-// 🏆 Archive Modal Component (Memoized for Performance)
-const ArchiveModalComponent = React.memo(({
-    open,
-    onOpenChange,
-    tournamentName,
-    initialDate,
-    onConfirm
-}: {
-    open: boolean;
-    onOpenChange: (open: boolean) => void;
-    tournamentName: string;
-    initialDate: string;
-    onConfirm: (location: string, date: string) => Promise<void>;
-}) => {
-    const [location, setLocation] = useState('');
-    const [date, setDate] = useState(initialDate);
-
-    useEffect(() => {
-        if (open) {
-            setDate(initialDate);
-            setLocation('');
-        }
-    }, [open, initialDate]);
-
-    return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-[425px]">
-                <DialogHeader>
-                    <DialogTitle>대회 기록 보관</DialogTitle>
-                    <DialogDescription>
-                        현재 대회의 모든 데이터를 보관함에 저장합니다.<br />
-                        보관된 데이터는 갤러리에서 확인할 수 있습니다.
-                    </DialogDescription>
-                </DialogHeader>
-                <div className="grid gap-4 py-4">
-                    <div className="grid grid-cols-4 items-center gap-4">
-                        <label htmlFor="name" className="text-right text-sm font-bold">
-                            대회명
-                        </label>
-                        <input
-                            id="name"
-                            value={tournamentName}
-                            disabled
-                            className="col-span-3 flex h-10 w-full rounded-md border border-input bg-muted px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                        />
-                    </div>
-                    <div className="grid grid-cols-4 items-center gap-4">
-                        <label htmlFor="location" className="text-right text-sm font-bold text-blue-600">
-                            장소
-                        </label>
-                        <input
-                            id="location"
-                            value={location}
-                            onChange={(e) => setLocation(e.target.value)}
-                            placeholder="예: 잠실 파크골프장 A/B 코스"
-                            className="col-span-3 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                        />
-                    </div>
-                    <div className="grid grid-cols-4 items-center gap-4">
-                        <label htmlFor="date" className="text-right text-sm font-bold text-blue-600">
-                            날짜
-                        </label>
-                        <div className="col-span-3 flex gap-2 relative">
-                            <input
-                                id="date"
-                                value={date}
-                                onChange={(e) => setDate(e.target.value)}
-                                placeholder="예: 2024.10.25 (또는 기간/회차)"
-                                className="flex-1 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                            />
-                            <div className="relative">
-                                <Button
-                                    variant="outline"
-                                    size="icon"
-                                    className="h-10 w-10 shrink-0 border-slate-200"
-                                    onClick={() => (document.getElementById('native-date-picker') as HTMLInputElement)?.showPicker()}
-                                >
-                                    <CalendarIcon className="h-4 w-4 text-slate-500" />
-                                </Button>
-                                <input
-                                    type="date"
-                                    id="native-date-picker"
-                                    className="absolute opacity-0 pointer-events-none p-0 w-0 h-0"
-                                    onChange={(e) => {
-                                        const selectedDate = e.target.value;
-                                        if (selectedDate) {
-                                            const existingSuffix = date.includes(' ') ? date.substring(date.indexOf(' ')) : '';
-                                            setDate(selectedDate + existingSuffix);
-                                        }
-                                    }}
-                                />
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <DialogFooter>
-                    <Button variant="outline" onClick={() => onOpenChange(false)}>취소</Button>
-                    <Button onClick={() => onConfirm(location, date)} className="bg-blue-600 hover:bg-blue-700 text-white font-bold">보관하기</Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
-    );
-});
-
-// 외부 전광판과 완전히 동일한 ± 및 총타수 계산 함수
-function getPlayerTotalAndPlusMinus(courses: any, player: any) {
-    let total = 0;
-    let parTotal = 0;
-    let playedHoles = 0;
-    player.assignedCourses.forEach((course: any) => {
-        const courseData = courses[course.id];
-        const holeScores = player.coursesData[course.id]?.holeScores || [];
-        if (courseData && Array.isArray(courseData.pars)) {
-            for (let i = 0; i < 9; i++) {
-                const score = holeScores[i];
-                const par = courseData.pars[i] ?? null;
-                if (typeof score === 'number' && typeof par === 'number') {
-                    total += score;
-                    parTotal += par;
-                    playedHoles++;
-                }
-            }
-        }
-    });
-    return playedHoles > 0 ? { total, plusMinus: total - parTotal } : { total: null, plusMinus: null };
-}
 
 export default function AdminDashboard() {
     // 안전한 number 체크 함수
@@ -513,31 +38,55 @@ export default function AdminDashboard() {
     const { toast } = useToast();
     const router = useRouter();
 
-    // 🚀 핵심 상태 관리 (최상단 통합)
-    const [players, setPlayers] = useState<any>({});
-    const [scores, setScores] = useState<any>({});
-    const [courses, setCourses] = useState<any>({});
-    const [groupsData, setGroupsData] = useState<any>({});
-    const [filterGroup, setFilterGroup] = useState('all');
-    const [tournamentName, setTournamentName] = useState('골프 대회');
+    // 🚀 Use centralized dashboard data hook
+    const {
+        players,
+        scores,
+        setScores,
+        courses,
+        groupsData,
+        tournamentName,
+        initialDataLoaded,
+        individualSuddenDeathData,
+        teamSuddenDeathData,
+        individualBackcountApplied,
+        teamBackcountApplied,
+        individualNTPData,
+        teamNTPData,
+        playerScoreLogs,
+        setPlayerScoreLogs,
+        lastProcessedResetAt,
+        stopSubscriptions
+    } = useDashboardData();
 
+    // 🚀 Use centralized score processing hook
+    const {
+        processedDataByGroup,
+        finalDataByGroup,
+        groupProgress,
+        processedIndividualSuddenDeathData,
+        processedTeamSuddenDeathData
+    } = useScoreProcessing({
+        players,
+        scores,
+        courses,
+        groupsData,
+        individualSuddenDeathData,
+        teamSuddenDeathData,
+        individualBackcountApplied,
+        teamBackcountApplied,
+        individualNTPData,
+        teamNTPData,
+        playerScoreLogs
+    });
+
+    const [filterGroup, setFilterGroup] = useState('all');
     const [isSavingImage, setIsSavingImage] = useState(false);
     const [isExporting, setIsExporting] = useState(false);
-
-    const [initialDataLoaded, setInitialDataLoaded] = useState(false);
     const [resumeSeq, setResumeSeq] = useState(0);
-    const activeUnsubsRef = useRef<(() => void)[]>([]);
-    const [individualSuddenDeathData, setIndividualSuddenDeathData] = useState<any>(null);
-    const [teamSuddenDeathData, setTeamSuddenDeathData] = useState<any>(null);
-    const [individualBackcountApplied, setIndividualBackcountApplied] = useState<{ [groupName: string]: boolean }>({});
-    const [teamBackcountApplied, setTeamBackcountApplied] = useState<{ [groupName: string]: boolean }>({});
-    const [individualNTPData, setIndividualNTPData] = useState<any>(null);
-    const [teamNTPData, setTeamNTPData] = useState<any>(null);
+
     const [notifiedSuddenDeathGroups, setNotifiedSuddenDeathGroups] = useState<string[]>([]);
     const [scoreCheckModal, setScoreCheckModal] = useState<{ open: boolean, groupName: string, missingScores: any[], resultMsg?: string }>({ open: false, groupName: '', missingScores: [] });
-
-    // 선수별 점수 로그 캐시 상태
-    const [playerScoreLogs, setPlayerScoreLogs] = useState<{ [playerId: string]: ScoreLog[] }>({});
 
     // 🚀 데이터 사용량 모니터링
     const [dataUsage, setDataUsage] = useState({
@@ -552,7 +101,6 @@ export default function AdminDashboard() {
 
     // 🏆 Archive Modal States
     const [archiveModalOpen, setArchiveModalOpen] = useState(false);
-    const [archiveLocation, setArchiveLocation] = useState('');
     const [archiveDate, setArchiveDate] = useState('');
 
     // 🟢 점수 수정 모달 상태
@@ -581,534 +129,12 @@ export default function AdminDashboard() {
         showAllCourses: true
     });
 
-    // 🟢 점수 초기화 동기화 처리를 위한 Ref
-    const lastProcessedResetAt = useRef<number | null>(null);
-
     const [autoFilling, setAutoFilling] = useState(false);
 
     // 🚀 모든 그룹 목록 추출 (스코프 문제 해결)
     const allGroupsList = useMemo(() => {
         return Object.keys(groupsData).sort();
     }, [groupsData]);
-
-    // 🚀 성능 최적화: tieBreak 결과 캐싱
-    const tieBreakCacheRef = useRef<Map<string, number>>(new Map());
-    const MAX_CACHE_SIZE = 10000;
-
-    // 🚀 성능 최적화: 캐싱된 tieBreak 함수
-    const cachedTieBreak = useCallback((a: any, b: any, sortedCourses: any[]) => {
-        // 코스 ID만 추출하여 키 생성 (이름 제외 등 불필요한 연산 제거)
-        // sortedCourses가 변하지 않는 한 id들의 조합은 동일하므로 id만 쓰면 됨
-        const courseIds = sortedCourses.map(c => c?.id).join(',');
-        const cacheKey = `${a.id},${b.id},${courseIds}`;
-        const reverseCacheKey = `${b.id},${a.id},${courseIds}`;
-
-        if (tieBreakCacheRef.current.has(cacheKey)) {
-            return tieBreakCacheRef.current.get(cacheKey)!;
-        }
-
-        if (tieBreakCacheRef.current.has(reverseCacheKey)) {
-            const cachedValue = tieBreakCacheRef.current.get(reverseCacheKey)!;
-            const result = -cachedValue;
-            if (tieBreakCacheRef.current.size < MAX_CACHE_SIZE) {
-                tieBreakCacheRef.current.set(cacheKey, result);
-            }
-            return result;
-        }
-
-        const result = tieBreak(a, b, sortedCourses);
-
-        if (tieBreakCacheRef.current.size < MAX_CACHE_SIZE) {
-            tieBreakCacheRef.current.set(cacheKey, result);
-        } else {
-            const firstKey = tieBreakCacheRef.current.keys().next().value;
-            if (firstKey) {
-                tieBreakCacheRef.current.delete(firstKey);
-                tieBreakCacheRef.current.set(cacheKey, result);
-            }
-        }
-
-        return result;
-    }, []);
-
-    // 🟢 메모리 최적화 - 의존성 최소화 및 조건부 계산 (스코프 문제 해결을 위해 상단 이동)
-    const processedDataByGroup = useMemo(() => {
-        try {
-            const allCoursesList = Object.values(courses).filter(Boolean);
-            if (Object.keys(players).length === 0 || allCoursesList.length === 0) return {};
-
-            // 모든 선수 처리 (filterGroup은 표시용 필터이지 데이터 처리 필터가 아님)
-            const playersToProcess = Object.entries(players);
-
-            const allProcessedPlayers: any[] = playersToProcess.map(([playerId, player]: [string, any]) => {
-                const playerGroupData = groupsData[player.group];
-                // 코스 순서 정보 가져오기 (기존 호환성: boolean → number 변환)
-                const coursesOrder = playerGroupData?.courses || {};
-                const assignedCourseIds = Object.keys(coursesOrder).filter((cid: string) => {
-                    const raw = coursesOrder[cid];
-                    if (typeof raw === 'object' && raw !== null) return raw.order > 0;
-                    // boolean이면 true인 것만, number면 0보다 큰 것만
-                    return typeof raw === 'boolean' ? raw : (typeof raw === 'number' && raw > 0);
-                });
-                // courses 객체에서 해당 id만 찾아 배열로 만듦 (id 타입 일치 보장)
-                const coursesForPlayer = assignedCourseIds
-                    .map(cid => {
-                        // courses가 배열인 경우와 객체인 경우 모두 대응
-                        if (Array.isArray(courses)) {
-                            return courses.find((c: any) => String(c?.id) === String(cid));
-                        }
-                        return courses[cid];
-                    })
-                    .filter(Boolean);
-                // 코스 순서대로 정렬 (order가 큰 것이 마지막 = 백카운트 기준)
-                coursesForPlayer.sort((a: any, b: any) => {
-                    const orderA = coursesOrder[String(a.id)];
-                    const orderB = coursesOrder[String(b.id)];
-
-                    // 그룹의 courses에서 순서 가져오기, 없으면 코스의 order 사용
-                    let numA: number;
-                    if (typeof orderA === 'object' && orderA !== null) {
-                        numA = orderA.order || 0;
-                    } else if (typeof orderA === 'boolean') {
-                        numA = orderA ? (a.order || 0) : 0;
-                    } else if (typeof orderA === 'number' && orderA > 0) {
-                        numA = orderA;
-                    } else {
-                        numA = a.order || 0;
-                    }
-
-                    let numB: number;
-                    if (typeof orderB === 'object' && orderB !== null) {
-                        numB = orderB.order || 0;
-                    } else if (typeof orderB === 'boolean') {
-                        numB = orderB ? (b.order || 0) : 0;
-                    } else if (typeof orderB === 'number' && orderB > 0) {
-                        numB = orderB;
-                    } else {
-                        numB = b.order || 0;
-                    }
-
-                    return numA - numB; // 작은 순서가 먼저
-                });
-                // 백카운트를 위한 상세 점수 구성
-                const courseScores: { [key: string]: number } = {};
-                const detailedScores: { [key: string]: { [hole: string]: number } } = {};
-                let total = 0;
-                let playedAnyHole = false;
-
-                coursesForPlayer.forEach((course: any) => {
-                    const pScores = scores[playerId]?.[course.id] || {};
-                    let cTotal = 0;
-                    detailedScores[course.id] = {};
-
-                    for (let h = 1; h <= 9; h++) {
-                        const s = pScores[h];
-                        if (isValidNumber(s)) {
-                            cTotal += s;
-                            total += s;
-                            detailedScores[course.id][h] = s;
-                            playedAnyHole = true;
-                        }
-                    }
-                    courseScores[course.id] = cTotal;
-                });
-
-                // coursesData 필드 구성 (UI 렌더링용)
-                const coursesDataForPlayer: { [key: string]: any } = {};
-                coursesForPlayer.forEach((course: any) => {
-                    const pScores = scores[playerId]?.[course.id] || {};
-                    const holeScores = Array.from({ length: 9 }, (_, i) => {
-                        const s = pScores[i + 1];
-                        return isValidNumber(s) ? s : null;
-                    });
-                    coursesDataForPlayer[course.id] = {
-                        courseName: course.name,
-                        courseTotal: courseScores[course.id] || 0,
-                        holeScores: holeScores
-                    };
-                });
-
-                // 외부 전광판과 동일한 ± 및 총타수 계산
-                const { total: totalScore, plusMinus } = getPlayerTotalAndPlusMinus(courses, {
-                    assignedCourses: coursesForPlayer,
-                    coursesData: coursesDataForPlayer
-                });
-
-                return {
-                    id: playerId,
-                    ...player,
-                    totalScore: totalScore ?? 0,
-                    hasAnyScore: playedAnyHole,
-                    hasForfeited: (() => {
-                        // 모든 배정 코스의 모든 홀이 0점인지 확인
-                        if (coursesForPlayer.length === 0) return false;
-                        let hasZeroScore = false;
-                        for (const course of coursesForPlayer) {
-                            const pScores = scores[playerId]?.[course.id] || {};
-                            for (let h = 1; h <= 9; h++) {
-                                if (pScores[h] === 0) {
-                                    hasZeroScore = true;
-                                    break;
-                                }
-                            }
-                            if (hasZeroScore) break;
-                        }
-
-                        // 0점이 있으면 기권 타입 추출 (나중에 로그에서 가져올 예정)
-                        return hasZeroScore ? 'pending' : null;
-                    })(),
-                    assignedCourses: coursesForPlayer,
-                    plusMinus,
-                    // 백카운트 계산을 위한 데이터 추가
-                    courseScores,
-                    detailedScores,
-                    coursesData: coursesDataForPlayer, // UI 렌더링을 위해 추가
-                    total: total // tieBreak 함수에서 사용
-                };
-            });
-            const groupedData = allProcessedPlayers.reduce((acc, player) => {
-                const groupName = player.group || '미지정';
-                if (!acc[groupName]) {
-                    acc[groupName] = [];
-                }
-                acc[groupName].push(player);
-                return acc;
-            }, {} as Record<string, any[]>);
-
-            // 모든 그룹 순위 계산 (filterGroup은 표시용 필터이지 데이터 처리 필터가 아님)
-            const rankedData: { [key: string]: ProcessedPlayer[] } = {};
-            const groupsToRank = Object.keys(groupedData);
-
-            for (const groupName of groupsToRank) {
-                // 코스 순서 기반으로 정렬 (order가 큰 것이 마지막 = 백카운트 기준)
-                const groupPlayers = groupedData[groupName];
-                const groupData = groupsData[groupName];
-                const coursesOrder = groupData?.courses || {};
-                const allCoursesForGroup = [...(groupPlayers[0]?.assignedCourses || [])].filter(c => c && c.id !== undefined);
-                // 코스 순서대로 정렬 (order가 큰 것이 마지막)
-                const coursesForGroup = [...allCoursesForGroup].sort((a: any, b: any) => {
-                    const orderA = coursesOrder[String(a.id)];
-                    const orderB = coursesOrder[String(b.id)];
-
-                    // 그룹의 courses에서 순서 가져오기, 없으면 코스의 order 사용
-                    let numA: number;
-                    if (typeof orderA === 'object' && orderA !== null) {
-                        numA = orderA.order || 0;
-                    } else if (typeof orderA === 'boolean') {
-                        numA = orderA ? (a.order || 0) : 0;
-                    } else if (typeof orderA === 'number' && orderA > 0) {
-                        numA = orderA;
-                    } else {
-                        numA = a.order || 0;
-                    }
-
-                    let numB: number;
-                    if (typeof orderB === 'object' && orderB !== null) {
-                        numB = orderB.order || 0;
-                    } else if (typeof orderB === 'boolean') {
-                        numB = orderB ? (b.order || 0) : 0;
-                    } else if (typeof orderB === 'number' && orderB > 0) {
-                        numB = orderB;
-                    } else {
-                        numB = b.order || 0;
-                    }
-
-                    return numA - numB; // 작은 순서가 먼저
-                });
-                // 백카운트는 마지막 코스부터 역순이므로 reverse
-                const coursesForBackcount = [...coursesForGroup].reverse();
-
-                const playersToSort = groupedData[groupName].filter((p: any) => p.hasAnyScore && !p.hasForfeited);
-                const otherPlayers = groupedData[groupName].filter((p: any) => !p.hasAnyScore || p.hasForfeited);
-                if (playersToSort.length > 0) {
-                    // 1. plusMinus 오름차순 정렬, tieBreak(백카운트) 적용
-                    playersToSort.sort((a: any, b: any) => {
-                        if (a.plusMinus !== b.plusMinus) return a.plusMinus - b.plusMinus;
-                        return cachedTieBreak(a, b, coursesForBackcount);
-                    });
-                    // 2. 1위 동점자 모두 rank=1, 그 다음 선수부터 등수 건너뛰기
-                    const minPlusMinus = playersToSort[0].plusMinus;
-                    let rank = 1;
-                    let oneRankCount = 0;
-                    // 1위 동점자 처리
-                    for (let i = 0; i < playersToSort.length; i++) {
-                        if (playersToSort[i].plusMinus === minPlusMinus) {
-                            playersToSort[i].rank = 1;
-                            oneRankCount++;
-                        } else {
-                            break;
-                        }
-                    }
-                    // 2위 이하(실제로는 1위 동점자 수+1 등수부터) 백카운트 등수 부여
-                    rank = oneRankCount + 1;
-                    for (let i = oneRankCount; i < playersToSort.length; i++) {
-                        // 바로 앞 선수와 plusMinus, tieBreak 모두 같으면 같은 등수, 아니면 증가
-                        const prev = playersToSort[i - 1];
-                        const curr = playersToSort[i];
-                        if (
-                            curr.plusMinus === prev.plusMinus &&
-                            cachedTieBreak(curr, prev, coursesForBackcount) === 0
-                        ) {
-                            curr.rank = playersToSort[i - 1].rank;
-                        } else {
-                            curr.rank = rank;
-                        }
-                        rank++;
-                    }
-                }
-                const finalPlayers = [...playersToSort, ...otherPlayers.map((p: any) => ({ ...p, rank: null }))];
-                rankedData[groupName] = finalPlayers;
-            }
-            return rankedData;
-        } catch (error) {
-            console.error("Critical Error in processedDataByGroup:", error);
-            return {}; // 오류 발생 시 빈 객체 반환하여 렌더링 충돌 방지
-        }
-    }, [players, scores, courses, groupsData, cachedTieBreak]);
-
-    const processSuddenDeath = (suddenDeathData: any) => {
-        if (!suddenDeathData) return [];
-
-        const processOne = (sd: any) => {
-            if (!sd?.isActive || !sd.players || !sd.holes || !Array.isArray(sd.holes)) return [];
-            const participatingPlayerIds = Object.keys(sd.players).filter(id => sd.players[id]);
-            const results: any[] = participatingPlayerIds.map(id => {
-                const playerInfo: any = players[id];
-                if (!playerInfo) return null;
-                const name = playerInfo.type === 'team' ? `${playerInfo.p1_name} / ${playerInfo.p2_name}` : playerInfo.name;
-                let totalScore = 0;
-                let holesPlayed = 0;
-                sd.holes.forEach((hole: number) => {
-                    const score = sd.scores?.[id]?.[hole];
-                    if (score !== undefined && score !== null) {
-                        totalScore += score;
-                        holesPlayed++;
-                    }
-                });
-                return { id, name, totalScore, holesPlayed };
-            }).filter(Boolean);
-
-            results.sort((a, b) => {
-                if (a.holesPlayed !== b.holesPlayed) return b.holesPlayed - a.holesPlayed;
-                if (a.totalScore !== b.totalScore) return a.totalScore - b.totalScore;
-                return a.name.localeCompare(b.name);
-            });
-
-            let rank = 1;
-            for (let i = 0; i < results.length; i++) {
-                if (i > 0 && (results[i].holesPlayed < results[i - 1].holesPlayed || (results[i].holesPlayed === results[i - 1].holesPlayed && results[i].totalScore > results[i - 1].totalScore))) {
-                    rank = i + 1;
-                }
-                results[i].rank = rank;
-            }
-            return results;
-        };
-
-        if (suddenDeathData.isActive) return processOne(suddenDeathData);
-        if (typeof suddenDeathData === 'object') {
-            let allResults: any[] = [];
-            Object.values(suddenDeathData).forEach((groupSd: any) => {
-                if (groupSd && groupSd.isActive) allResults = allResults.concat(processOne(groupSd));
-            });
-            return allResults;
-        }
-        return [];
-    };
-
-    const processedIndividualSuddenDeathData = useMemo(() => processSuddenDeath(individualSuddenDeathData), [individualSuddenDeathData, players]);
-    const processedTeamSuddenDeathData = useMemo(() => processSuddenDeath(teamSuddenDeathData), [teamSuddenDeathData, players]);
-
-    const applyPlayoffRanking = (data: any) => {
-        const finalData = JSON.parse(JSON.stringify(data));
-        for (const groupName in finalData) {
-            const groupPlayers = finalData[groupName];
-            if (!groupPlayers || groupPlayers.length === 0) continue;
-
-            const playerType = groupPlayers[0].type;
-            const isIndividual = playerType === 'individual';
-
-            // 1. NTP 순위 적용 (등수와 관계없이 NTP 데이터가 있으면 적용)
-            const baseNtpData = isIndividual ? individualNTPData : teamNTPData;
-            let ntpDataForGroup: any = null;
-            if (baseNtpData) {
-                if (baseNtpData.isActive && baseNtpData.rankings) ntpDataForGroup = baseNtpData;
-                else if (typeof baseNtpData === 'object' && !baseNtpData.isActive) {
-                    const groupNtp = baseNtpData[groupName];
-                    if (groupNtp?.isActive && groupNtp.rankings) ntpDataForGroup = groupNtp;
-                }
-            }
-
-            const shouldApplyNTP = !!(ntpDataForGroup && ntpDataForGroup.isActive && ntpDataForGroup.rankings);
-            if (shouldApplyNTP) {
-                const ntpRankings = ntpDataForGroup.rankings;
-
-                groupPlayers.forEach((player: any) => {
-                    const ntpRank = ntpRankings[player.id];
-                    if (ntpRank !== undefined && ntpRank !== null) {
-                        player.rank = ntpRank;
-                    }
-                });
-
-                // NTP 적용 후 재정렬
-                groupPlayers.sort((a: any, b: any) => {
-                    const rankA = a.rank === null ? Infinity : a.rank;
-                    const rankB = b.rank === null ? Infinity : b.rank;
-                    if (rankA !== rankB) return rankA - rankB;
-                    return (a.totalScore || Infinity) - (b.totalScore || Infinity);
-                });
-            }
-
-            // 2. 백카운트 적용 (1위 동점자에 대해서만)
-            const firstPlacePlayers = groupPlayers.filter((p: any) => p.rank === 1);
-            if (firstPlacePlayers.length > 1) {
-                const backcountState = isIndividual ? individualBackcountApplied : teamBackcountApplied;
-                const shouldApplyBackcount = !!(backcountState && (backcountState[groupName] || backcountState['*']));
-
-                if (shouldApplyBackcount) {
-                    const groupData = groupsData[groupName];
-                    const coursesOrder = groupData?.courses || {};
-                    const allCoursesForGroup = firstPlacePlayers[0]?.assignedCourses || Object.values(courses);
-                    const coursesForGroup = [...allCoursesForGroup].sort((a: any, b: any) => {
-                        const orderA = coursesOrder[String(a.id)];
-                        const orderB = coursesOrder[String(b.id)];
-
-                        let numA: number;
-                        if (typeof orderA === 'object' && orderA !== null) {
-                            numA = orderA.order || 0;
-                        } else if (typeof orderA === 'number') {
-                            numA = orderA;
-                        } else {
-                            numA = orderA ? (a.order || 0) : 0;
-                        }
-
-                        let numB: number;
-                        if (typeof orderB === 'object' && orderB !== null) {
-                            numB = orderB.order || 0;
-                        } else if (typeof orderB === 'number') {
-                            numB = orderB;
-                        } else {
-                            numB = orderB ? (b.order || 0) : 0;
-                        }
-
-                        return numA - numB;
-                    });
-                    const sortedCoursesForBackcount = [...coursesForGroup].reverse();
-
-                    firstPlacePlayers.sort((a: any, b: any) => {
-                        if (a.plusMinus !== b.plusMinus) return a.plusMinus - b.plusMinus;
-                        for (const course of sortedCoursesForBackcount) {
-                            if (!course?.id) continue;
-                            const aScore = (a.courseScores || {})[course.id] ?? 0;
-                            const bScore = (b.courseScores || {})[course.id] ?? 0;
-                            if (aScore !== bScore) return aScore - bScore;
-                        }
-                        if (sortedCoursesForBackcount.length > 0) {
-                            const lastCourseId = sortedCoursesForBackcount[0].id;
-                            const aHoleScores = (a.detailedScores || {})[lastCourseId] || {};
-                            const bHoleScores = (b.detailedScores || {})[lastCourseId] || {};
-                            for (let i = 9; i >= 1; i--) {
-                                const aH = aHoleScores[i.toString()] || 0;
-                                const bH = bHoleScores[i.toString()] || 0;
-                                if (aH !== bH) return aH - bH;
-                            }
-                        }
-                        return 0;
-                    });
-
-                    let rank = 1;
-                    firstPlacePlayers[0].rank = rank;
-                    for (let i = 1; i < firstPlacePlayers.length; i++) {
-                        const prev = firstPlacePlayers[i - 1];
-                        const curr = firstPlacePlayers[i];
-                        if (curr.plusMinus !== prev.plusMinus) rank = i + 1;
-                        else {
-                            let isDifferent = false;
-                            for (const course of sortedCoursesForBackcount) {
-                                if (!course?.id) continue;
-                                if (((curr.courseScores || {})[course.id] ?? 0) !== ((prev.courseScores || {})[course.id] ?? 0)) {
-                                    isDifferent = true;
-                                    break;
-                                }
-                            }
-                            if (!isDifferent && sortedCoursesForBackcount.length > 0) {
-                                const lastCourseId = sortedCoursesForBackcount[0].id;
-                                for (let j = 9; j >= 1; j--) {
-                                    if (((curr.detailedScores || {})[lastCourseId]?.[j.toString()] || 0) !== ((prev.detailedScores || {})[lastCourseId]?.[j.toString()] || 0)) {
-                                        isDifferent = true;
-                                        break;
-                                    }
-                                }
-                            }
-                            if (isDifferent) rank = i + 1;
-                        }
-                        curr.rank = rank;
-                    }
-                    groupPlayers.sort((a: any, b: any) => {
-                        const rankA = a.rank === null ? Infinity : a.rank;
-                        const rankB = b.rank === null ? Infinity : b.rank;
-                        if (rankA !== rankB) return rankA - rankB;
-                        return (a.totalScore || Infinity) - (b.totalScore || Infinity);
-                    });
-                }
-            }
-        }
-        return finalData;
-    };
-
-    // 기권 타입을 로그에서 추출하여 설정하는 함수
-    const getForfeitTypeFromLogs = useCallback((playerId: string): 'absent' | 'disqualified' | 'forfeit' | null => {
-        const logs = playerScoreLogs[playerId] || [];
-        const forfeitLogs = logs
-            .filter(l => l.newValue === 0 && (l.modifiedByType === 'judge' || l.modifiedByType === 'admin') && l.comment)
-            .sort((a, b) => b.modifiedAt - a.modifiedAt); // 최신순 정렬
-
-        if (forfeitLogs.length > 0) {
-            const latestLog = forfeitLogs[0];
-            if (latestLog.comment?.includes('불참')) return 'absent';
-            if (latestLog.comment?.includes('실격')) return 'disqualified';
-            if (latestLog.comment?.includes('기권')) return 'forfeit';
-        }
-        return null;
-    }, [playerScoreLogs]);
-
-    const finalDataByGroup = useMemo(() => {
-        const rankMap = new Map();
-        [...processedIndividualSuddenDeathData, ...processedTeamSuddenDeathData].forEach(p => rankMap.set(p.id, p.rank));
-
-        let finalData = processedDataByGroup;
-        if (rankMap.size > 0) {
-            finalData = JSON.parse(JSON.stringify(processedDataByGroup));
-            for (const groupName in finalData) {
-                finalData[groupName].forEach((player: ProcessedPlayer) => {
-                    if (rankMap.has(player.id)) player.rank = rankMap.get(player.id);
-                });
-                finalData[groupName].sort((a, b) => {
-                    const rA = a.rank === null ? Infinity : a.rank;
-                    const rB = b.rank === null ? Infinity : b.rank;
-                    if (rA !== rB) return rA - rB;
-                    return (a.totalScore || Infinity) - (b.totalScore || Infinity);
-                });
-            }
-        }
-
-        // 🟢 기권 타입 업데이트 통합
-        const playoffApplied = applyPlayoffRanking(finalData);
-        if (playerScoreLogs && Object.keys(playerScoreLogs).length > 0) {
-            const finalWithForfeits = { ...playoffApplied };
-            Object.keys(finalWithForfeits).forEach(groupName => {
-                finalWithForfeits[groupName] = finalWithForfeits[groupName].map((player: ProcessedPlayer) => {
-                    if (player.hasForfeited) {
-                        const forfeitType = getForfeitTypeFromLogs(player.id);
-                        return { ...player, forfeitType: forfeitType || 'forfeit' };
-                    }
-                    return player;
-                });
-            });
-            return finalWithForfeits;
-        }
-
-        return playoffApplied;
-    }, [processedDataByGroup, processedIndividualSuddenDeathData, processedTeamSuddenDeathData, individualBackcountApplied, teamBackcountApplied, individualNTPData, teamNTPData, courses, groupsData, playerScoreLogs, getForfeitTypeFromLogs]);
 
 
 
@@ -1118,57 +144,104 @@ export default function AdminDashboard() {
     // 기권 처리 모달 상태 - 구현 유실 방지를 위해 주석 유지
     // const [forfeitModal, setForfeitModal] = useState<{ open: boolean, player: any | null }>({ open: false, player: null });
 
-    // 기록 보관하기(아카이브) - 실제 구현은 추후
-    const handleArchiveScores = async () => {
+    // 기록 보관하기(아카이브) 확인 시 실행
+    const handleConfirmArchive = async (location: string, date: string) => {
         if (!db) {
             toast({ title: '오류', description: '데이터베이스 연결이 없습니다.', variant: 'destructive' });
             return;
         }
+
+        // 데이터 검증
+        if (!players || Object.keys(players).length === 0) {
+            toast({ title: '보관 실패', description: '선수 데이터가 없습니다.', variant: 'destructive' });
+            return;
+        }
+
+        if (!scores || Object.keys(scores).length === 0) {
+            toast({ title: '보관 실패', description: '점수 데이터가 없습니다.', variant: 'destructive' });
+            return;
+        }
+
+        if (!courses || Object.keys(courses).length === 0) {
+            toast({ title: '보관 실패', description: '코스 데이터가 없습니다.', variant: 'destructive' });
+            return;
+        }
+
+        if (!groupsData || Object.keys(groupsData).length === 0) {
+            toast({ title: '보관 실패', description: '그룹 데이터가 없습니다.', variant: 'destructive' });
+            return;
+        }
+
         try {
-            // 대회명 및 시작 날짜 추출 (tournaments/current에서 직접 읽기)
-            const tournamentRef = ref(db, 'tournaments/current');
-            let tournamentName = '';
-            let tournamentStartDate = '';
-            await new Promise<void>((resolve) => {
-                onValue(tournamentRef, (snap) => {
-                    const tournamentData = snap.val() || {};
-                    tournamentName = tournamentData.name || '대회';
-                    // 시작 날짜가 있으면 사용, 없으면 현재 날짜 사용
-                    if (tournamentData.startDate) {
-                        tournamentStartDate = tournamentData.startDate;
-                    } else {
-                        const now = new Date();
-                        const pad = (n: number) => n.toString().padStart(2, '0');
-                        tournamentStartDate = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}`;
-                    }
-                    resolve();
-                }, { onlyOnce: true });
-            });
-            // 날짜+시간
-            const now = new Date();
-            const pad = (n: number) => n.toString().padStart(2, '0');
-            const dateStr = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
-            // archiveId: 대회명(공백제거)_YYYYMM 형식
-            const archiveId = `${(tournamentName || '대회').replace(/\s/g, '')}_${tournamentStartDate.substring(0, 6)}`; // 대회명_YYYYMM 형식
+            // archiveId: 대회명(공백제거)_YYYYMMDD 형식
+            const archiveId = `${(tournamentName || '대회').replace(/\s/g, '')}_${date}`;
+
             // 참가자 수
             const playerCount = Object.keys(players).length;
-            // 저장 데이터
-            const archiveData = {
-                savedAt: now.toISOString(),
+
+            console.log('Archive Save - Data Check:', {
+                archiveId,
+                playerCount,
+                scoresCount: Object.keys(scores).length,
+                coursesCount: Object.keys(courses).length,
+                groupsCount: Object.keys(groupsData).length,
+                finalDataByGroupKeys: Object.keys(finalDataByGroup)
+            });
+
+            // 1. archives-list: 요약 정보 (목록 표시용)
+            const summaryData = {
+                name: tournamentName || '대회',
+                tournamentStartDate: date,
+                location: location,
+                playerCount: playerCount,
+                savedAt: new Date().toISOString()
+            };
+
+            // 2. archives-detail: 전체 데이터 (상세 보기용)
+            const detailData = {
+                savedAt: new Date().toISOString(),
                 tournamentName: tournamentName || '대회',
-                tournamentStartDate: tournamentStartDate, // 대회 시작 날짜 추가
+                tournamentStartDate: date,
+                location: location,
                 playerCount,
                 players,
                 scores,
                 courses,
                 groups: groupsData,
-                processedByGroup: finalDataByGroup // 그룹별 순위/점수 등 가공 데이터 추가 저장 (실격/불참/기권 구분 포함)
+                processedByGroup: finalDataByGroup
             };
-            await set(ref(db, `archives/${archiveId}`), archiveData);
-            toast({ title: '기록 보관 완료', description: `대회명: ${tournamentName || '대회'} / 참가자: ${playerCount}명` });
+
+            // 3. archives: 레거시 호환용 (동일한 데이터)
+            const legacyData = { ...detailData };
+
+            // 병렬로 3곳에 저장
+            await Promise.all([
+                set(ref(db, `archives-list/${archiveId}`), summaryData),
+                set(ref(db, `archives-detail/${archiveId}`), detailData),
+                set(ref(db, `archives/${archiveId}`), legacyData)
+            ]);
+
+            console.log('Archive saved successfully:', archiveId);
+
+            setArchiveModalOpen(false);
+            toast({
+                title: '기록 보관 완료',
+                description: `대회명: ${tournamentName || '대회'} / 참가자: ${playerCount}명\n기록보관함과 대회갤러리에서 확인하실 수 있습니다.`
+            });
         } catch (e: any) {
+            console.error('Archive save error:', e);
             toast({ title: '보관 실패', description: e?.message || '알 수 없는 오류', variant: 'destructive' });
         }
+    };
+
+    // 아카이브 버튼 클릭 시 (날짜 설정 시도)
+    const handleArchiveClick = () => {
+        // 현재 날짜를 YYYYMMDD 형식으로 기본값 설정
+        const now = new Date();
+        const pad = (n: number) => n.toString().padStart(2, '0');
+        const today = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}`;
+        setArchiveDate(today);
+        setArchiveModalOpen(true);
     };
 
     const handlePrint = () => {
@@ -2076,400 +1149,8 @@ export default function AdminDashboard() {
         }
     };
 
-    useEffect(() => {
-        if (!db) return;
-
-        // 🟢 기본 설정 데이터는 항상 구독 (용량이 작음)
-        const tournamentRef = ref(db, 'tournaments/current');
-        const tournamentNameRef = ref(db, 'tournaments/current/name');
-        const individualSuddenDeathRef = ref(db, 'tournaments/current/suddenDeath/individual');
-        const teamSuddenDeathRef = ref(db, 'tournaments/current/suddenDeath/team');
-        const individualBackcountRef = ref(db, 'tournaments/current/backcountApplied/individual');
-        const teamBackcountRef = ref(db, 'tournaments/current/backcountApplied/team');
-        const individualNTPRef = ref(db, 'tournaments/current/nearestToPin/individual');
-        const teamNTPRef = ref(db, 'tournaments/current/nearestToPin/team');
-
-        // 🟢 메인 데이터 구독 - 해시 기반 중복 방지
-        const playersRef = ref(db, 'players');
-        const scoresRef = ref(db, 'scores');
-
-        // 해시 변수들은 각 구독 내부에서 선언
-
-        // 🚀 혁신적 최적화: 변경된 데이터만 다운로드
-
-        // 🛡️ 외부 전광판과 동일한 초기 데이터 로딩 방식
-        if (!initialDataLoaded) {
-            let loadedCount = 0;
-            const checkAllLoaded = () => {
-                loadedCount++;
-                if (loadedCount >= 3) { // Players, Scores, Tournament 모두 로드되면
-                    setInitialDataLoaded(true);
-                }
-            };
-
-            // Players 초기 로드
-            const unsubInitialPlayers = onValue(playersRef, snap => {
-                const data = snap.val() || {};
-                setPlayers(data);
-                checkAllLoaded();
-            });
-
-            // Scores 초기 로드 (한 번만)
-            const unsubInitialScores = onValue(scoresRef, snap => {
-                const data = snap.val() || {};
-                setScores(data);
-                checkAllLoaded();
-            }, { onlyOnce: true });
-
-            // Tournament 초기 로드
-            const unsubInitialTournament = onValue(tournamentRef, snap => {
-                const data = snap.val() || {};
-                setCourses(data.courses || {});
-                setGroupsData(data.groups || {});
-                checkAllLoaded();
-            });
-
-            // 3초 후에도 로딩이 안 되면 강제로 로딩 완료
-            const fallbackTimer = setTimeout(() => {
-                if (!initialDataLoaded) {
-                    setInitialDataLoaded(true);
-                }
-            }, 3000);
-
-            // 구독 등록
-            activeUnsubsRef.current.push(unsubInitialPlayers);
-            activeUnsubsRef.current.push(unsubInitialScores);
-            activeUnsubsRef.current.push(unsubInitialTournament);
-            activeUnsubsRef.current.push(() => clearTimeout(fallbackTimer));
-        }
-
-        // 🛡️ 초기 데이터 로딩 후 실시간 업데이트 (외부 전광판과 동일)
-        if (initialDataLoaded) {
-
-            // Players: 변경된 선수만 감지 (외부 전광판과 완전히 동일)
-            let lastPlayersHash = '';
-            const unsubPlayersChanges = onChildChanged(playersRef, snap => {
-                const playerId = snap.key;
-                const playerData = snap.val();
-                if (playerId && playerData) {
-                    setPlayers((prev: any) => {
-                        const newPlayers = { ...prev, [playerId]: playerData };
-                        const newHash = JSON.stringify(newPlayers);
-                        if (newHash !== lastPlayersHash) {
-                            lastPlayersHash = newHash;
-                            return newPlayers;
-                        }
-                        return prev;
-                    });
-                }
-            });
-
-            // Scores: 실시간 최적화 반영 (변경된 건만 수신하여 데이터 사용량 99% 절감)
-            const handleScoreSync = (snap: any) => {
-                const playerId = snap.key;
-                const playerData = snap.val();
-                if (playerId) {
-                    setScores((prev: any) => {
-                        // 초기 로딩 중에는 onChildAdded가 트리거될 수 있으므로 중복 체크
-                        if (prev && prev[playerId] && JSON.stringify(prev[playerId]) === JSON.stringify(playerData)) {
-                            return prev;
-                        }
-                        return { ...prev, [playerId]: playerData };
-                    });
-                    try { invalidatePlayerLogCache(playerId); } catch (e) { }
-                }
-            };
-
-            const unsubScoresChanged = onChildChanged(scoresRef, handleScoreSync);
-            const unsubScoresAdded = onChildAdded(scoresRef, handleScoreSync);
-            const unsubScoresRemoved = onChildRemoved(scoresRef, snap => {
-                const playerId = snap.key;
-                if (playerId) {
-                    setScores((prev: any) => {
-                        const next = { ...prev };
-                        delete next[playerId];
-                        return next;
-                    });
-                }
-            });
-            /* DEPRECATED LOGIC:
-            // const unsubScores = onValue(scoresRef, snap => {
-            //    const data = snap.val() || {};
-    
-            //    setScores((prev: any) => {
-                    // 최적화: 전체 객체 직렬화 대신 빠른 참조 및 키 비교
-    
-                    // 1. 참조가 같으면 변경 없음
-                    if (prev === data) {
-                        return prev;
-                    }
-    
-                    // 2. 키 개수 비교 (빠른 1차 필터)
-                    const prevKeys = prev ? Object.keys(prev) : [];
-                    const newKeys = Object.keys(data);
-    
-                    if (prevKeys.length !== newKeys.length) {
-                        // 키 개수가 다르면 변경됨 -> 모든 변경된 선수 로그 캐시 무효화
-                        const changedPlayerIds = [...new Set([...prevKeys, ...newKeys])];
-                        changedPlayerIds.forEach(playerId => {
-                            try {
-                                invalidatePlayerLogCache(playerId);
-                            } catch (e) { }
-                        });
-                        return data;
-                    }
-    
-                    // 3. 변경된 선수만 감지 (깊은 비교 최소화)
-                    const changedPlayerIds: string[] = [];
-                    for (const playerId of newKeys) {
-                        const prevScores = prev[playerId];
-                        const newScores = data[playerId];
-    
-                        // 참조가 같으면 변경 없음
-                        if (prevScores === newScores) continue;
-    
-                        // null/undefined 체크
-                        if (!prevScores || !newScores) {
-                            changedPlayerIds.push(playerId);
-                            continue;
-                        }
-    
-                        // 키 개수 비교 (빠른 필터)
-                        const prevScoreKeys = Object.keys(prevScores);
-                        const newScoreKeys = Object.keys(newScores);
-                        if (prevScoreKeys.length !== newScoreKeys.length) {
-                            changedPlayerIds.push(playerId);
-                            continue;
-                        }
-    
-                        // 코스별 점수 비교 (최소한의 깊은 비교)
-                        let hasChanged = false;
-                        for (const courseId of newScoreKeys) {
-                            const prevCourseScores = prevScores[courseId];
-                            const newCourseScores = newScores[courseId];
-    
-                            // 참조가 같으면 변경 없음
-                            if (prevCourseScores === newCourseScores) continue;
-    
-                            // 객체 비교 (홀별 점수)
-                            if (typeof prevCourseScores === 'object' && typeof newCourseScores === 'object') {
-                                const prevHoles = Object.keys(prevCourseScores || {});
-                                const newHoles = Object.keys(newCourseScores || {});
-                                if (prevHoles.length !== newHoles.length) {
-                                    hasChanged = true;
-                                    break;
-                                }
-                                // 홀별 점수 값 비교
-                                for (const hole of newHoles) {
-                                    if (prevCourseScores[hole] !== newCourseScores[hole]) {
-                                        hasChanged = true;
-                                        break;
-                                    }
-                                }
-                                if (hasChanged) break;
-                            } else if (prevCourseScores !== newCourseScores) {
-                                hasChanged = true;
-                                break;
-                            }
-                        }
-    
-                        if (hasChanged) {
-                            changedPlayerIds.push(playerId);
-                        }
-                    }
-    
-                    // 변경사항이 없으면 이전 상태 유지
-                    if (changedPlayerIds.length === 0) {
-                        return prev;
-                    }
-    
-                    // 변경된 선수들의 로그 캐시 무효화
-                    changedPlayerIds.forEach(playerId => {
-                        try {
-                            invalidatePlayerLogCache(playerId);
-                        } catch (e) { }
-                    });
-    
-                    return data;
-                // });
-            // });
-            */
-
-            // 구독 등록
-            activeUnsubsRef.current.push(unsubPlayersChanges);
-            activeUnsubsRef.current.push(unsubScoresChanged);
-            activeUnsubsRef.current.push(unsubScoresAdded);
-            activeUnsubsRef.current.push(unsubScoresRemoved);
-        }
-
-        // Tournament 변경사항만 감지 (외부 전광판과 완전히 동일)
-        let lastTournamentHash = '';
-        const unsubTournament = onChildChanged(tournamentRef, snap => {
-            const key = snap.key;
-            const value = snap.val();
-            if (key && value) {
-                const currentHash = JSON.stringify(value);
-                if (currentHash !== lastTournamentHash) {
-                    lastTournamentHash = currentHash;
-                    if (key === 'courses') {
-                        setCourses(value);
-                    } else if (key === 'groups') {
-                        setGroupsData(value);
-                    }
-                }
-            }
-        });
-        activeUnsubsRef.current.push(unsubTournament);
-
-        // 기본 구독들 (항상 필요)
-        const unsubTournamentName = onValue(tournamentNameRef, snap => {
-            const name = snap.val();
-            setTournamentName(name || '골프 대회');
-        });
-        const unsubIndividualSuddenDeath = onValue(individualSuddenDeathRef, snap => setIndividualSuddenDeathData(snap.val()));
-        const unsubTeamSuddenDeath = onValue(teamSuddenDeathRef, snap => setTeamSuddenDeathData(snap.val()));
-        const unsubIndividualBackcount = onValue(individualBackcountRef, snap => {
-            const data = snap.val();
-            // 레거시(boolean)와 그룹별 객체 구조 모두 지원
-            if (typeof data === 'boolean') {
-                // 예전 대회 데이터: true이면 모든 그룹에 적용된 것으로 간주
-                setIndividualBackcountApplied(data ? { '*': true } : {});
-            } else {
-                setIndividualBackcountApplied(data || {});
-            }
-        });
-        const unsubTeamBackcount = onValue(teamBackcountRef, snap => {
-            const data = snap.val();
-            if (typeof data === 'boolean') {
-                setTeamBackcountApplied(data ? { '*': true } : {});
-            } else {
-                setTeamBackcountApplied(data || {});
-            }
-        });
-
-        // 🟢 점수 초기화 동기화 리스너 추가 (lastResetAt 감시)
-        const lastResetAtRef = ref(db, 'tournaments/current/lastResetAt');
-        const unsubLastResetAt = onValue(lastResetAtRef, snap => {
-            const lastResetAt = snap.val();
-            if (lastResetAt) {
-                // 초기 로딩 시점의 값은 무두 무시하고, 이후 변경된 경우에만 동작
-                if (lastProcessedResetAt.current !== null && lastProcessedResetAt.current !== lastResetAt) {
-                    // console.log('점수 초기화 감지:', lastResetAt);
-                    setScores((prev: any) => {
-                        if (Object.keys(prev).length > 0) return {};
-                        return prev;
-                    });
-                    setPlayerScoreLogs({});
-                }
-                lastProcessedResetAt.current = lastResetAt;
-            }
-        });
-
-        const unsubIndividualNTP = onValue(individualNTPRef, snap => setIndividualNTPData(snap.val()));
-        const unsubTeamNTP = onValue(teamNTPRef, snap => setTeamNTPData(snap.val()));
-
-        // 기본 구독들 등록
-        activeUnsubsRef.current.push(unsubTournamentName);
-        activeUnsubsRef.current.push(unsubIndividualSuddenDeath);
-        activeUnsubsRef.current.push(unsubTeamSuddenDeath);
-        activeUnsubsRef.current.push(unsubIndividualBackcount);
-        activeUnsubsRef.current.push(unsubTeamBackcount);
-        activeUnsubsRef.current.push(unsubIndividualNTP);
-        activeUnsubsRef.current.push(unsubTeamNTP);
-
-        // 클린업은 stopSubscriptions()에서 처리
-        return () => stopSubscriptions();
-    }, [db, initialDataLoaded, resumeSeq]);
-
-
-    // Firebase에 순위 저장 (다른 페이지에서 사용하기 위해) - useEffect로 분리하여 부작용 제거
-    const prevRanksRef = useRef<string>('');
-    useEffect(() => {
-        if (!db || !finalDataByGroup) return;
-
-        const ranksData: { [playerId: string]: number | null } = {};
-        for (const groupName in finalDataByGroup) {
-            finalDataByGroup[groupName].forEach((player: ProcessedPlayer) => {
-                ranksData[player.id] = player.rank;
-            });
-        }
-
-        // 이전 순위와 비교하여 변경된 경우에만 저장 (불필요한 쓰기 방지)
-        const ranksDataStr = JSON.stringify(ranksData);
-        if (prevRanksRef.current === ranksDataStr) {
-            return; // 변경 없음
-        }
-        prevRanksRef.current = ranksDataStr;
-
-        const ranksRef = ref(db, 'tournaments/current/ranks');
-        set(ranksRef, ranksData).catch(err => {
-            console.error('순위 저장 오류:', err);
-        });
-    }, [finalDataByGroup, db]);
-
-
-    const groupProgress = useMemo(() => {
-        const progressByGroup: { [key: string]: number } = {};
-
-        for (const groupName in processedDataByGroup) {
-            const groupPlayers = processedDataByGroup[groupName];
-
-            if (!groupPlayers || groupPlayers.length === 0) {
-                progressByGroup[groupName] = 0;
-                continue;
-            }
-
-            const coursesForGroup = groupPlayers[0]?.assignedCourses;
-            if (!coursesForGroup || coursesForGroup.length === 0) {
-                progressByGroup[groupName] = 0;
-                continue;
-            }
-
-            const totalPossibleScoresInGroup = groupPlayers.length * coursesForGroup.length * 9;
-
-            if (totalPossibleScoresInGroup === 0) {
-                progressByGroup[groupName] = 0;
-                continue;
-            }
-
-            let totalScoresEnteredInGroup = 0;
-            groupPlayers.forEach((player: any) => {
-                if (scores[player.id]) {
-                    const assignedCourseIds = coursesForGroup.map((c: any) => c.id.toString());
-                    for (const courseId in scores[player.id]) {
-                        if (assignedCourseIds.includes(courseId)) {
-                            totalScoresEnteredInGroup += Object.keys(scores[player.id][courseId]).length;
-                        }
-                    }
-                }
-            });
-
-            const progress = Math.round((totalScoresEnteredInGroup / totalPossibleScoresInGroup) * 100);
-            progressByGroup[groupName] = isNaN(progress) ? 0 : progress;
-        }
-
-        return progressByGroup;
-    }, [processedDataByGroup, scores]);
-
-    // 플레이오프 체크를 위한 안정적인 해시 값 생성
-    const groupProgressHash = useMemo(() => {
-        if (!groupProgress) return '';
-        return JSON.stringify(groupProgress);
-    }, [groupProgress]);
-
-    const finalDataByGroupHash = useMemo(() => {
-        if (!finalDataByGroup) return '';
-        return JSON.stringify(finalDataByGroup);
-    }, [finalDataByGroup]);
-
-    const processedDataByGroupHash = useMemo(() => {
-        if (!processedDataByGroup) return '';
-        return JSON.stringify(processedDataByGroup);
-    }, [processedDataByGroup]);
-
-    const notifiedSuddenDeathGroupsStr = useMemo(() => {
-        return notifiedSuddenDeathGroups.join(',');
-    }, [notifiedSuddenDeathGroups]);
+    // 🚀 혁신적 최적화: 변경된 데이터만 다운로드
+    // (이전의 거대한 useEffect가 useDashboardData 훅으로 이전됨)
 
     useEffect(() => {
         if (!groupProgress || !finalDataByGroup || !processedDataByGroup) return;
@@ -2679,7 +1360,7 @@ export default function AdminDashboard() {
                 return newGroups;
             });
         }
-    }, [groupProgressHash, finalDataByGroupHash, processedDataByGroupHash, notifiedSuddenDeathGroupsStr, router]);
+    }, [groupProgress, finalDataByGroup, processedDataByGroup, notifiedSuddenDeathGroups, router]);
 
     const handleExportToExcel = async () => {
         setIsExporting(true);
@@ -2878,6 +1559,15 @@ export default function AdminDashboard() {
                 return;
             }
 
+            // 엑셀 파일 다운로드
+            const fileName = `${tournamentName || '대회'}_점수표_${new Date().toLocaleDateString('ko-KR').replace(/\. /g, '-').replace('.', '')}.xlsx`;
+            (XLSX as any).writeFile(wb, fileName);
+
+            toast({
+                title: "엑셀 다운로드 완료",
+                description: `${wb.SheetNames.length}개 그룹의 점수표가 다운로드되었습니다.`,
+            });
+
         } catch (error) {
             console.error("Export Failed:", error);
             toast({ title: "내보내기 실패", description: "엑셀 파일 생성 중 오류가 발생했습니다.", variant: "destructive" });
@@ -2888,17 +1578,6 @@ export default function AdminDashboard() {
 
 
 
-    // 🛡️ 안전한 구독 중단 함수 (외부 전광판과 동일)
-    const stopSubscriptions = () => {
-        activeUnsubsRef.current.forEach(unsub => {
-            try {
-                unsub();
-            } catch (error) {
-                console.warn('구독 해제 중 오류:', error);
-            }
-        });
-        activeUnsubsRef.current = [];
-    };
 
 
 
@@ -3026,106 +1705,6 @@ export default function AdminDashboard() {
         }
     };
 
-    // 🏆 Archive Handler
-    const handleArchiveClick = () => {
-        const today = new Date();
-        const yyyy = today.getFullYear();
-        const mm = String(today.getMonth() + 1).padStart(2, '0');
-        const dd = String(today.getDate()).padStart(2, '0');
-        setArchiveDate(`${yyyy}-${mm}-${dd}`);
-        setArchiveModalOpen(true);
-    };
-
-    const handleConfirmArchive = async (location: string, date: string) => {
-        if (!db) {
-            toast({ title: '오류', description: '데이터베이스 연결이 없습니다.', variant: 'destructive' });
-            return;
-        }
-        if (!location.trim()) {
-            toast({ title: '정보 부족', description: '대회 장소를 입력해주세요.', variant: 'destructive' });
-            return;
-        }
-        if (!date.trim()) {
-            toast({ title: '정보 부족', description: '대회 날짜를 입력해주세요.', variant: 'destructive' });
-            return;
-        }
-
-        try {
-            const timestamp = Date.now();
-            const archiveId = `archive_${timestamp}`;
-
-            // 1. Create Summary for List View (Lightweight)
-            const summaryData = {
-                id: archiveId,
-                tournamentName: tournamentName,
-                date: new Date().toISOString(),
-                location: location,
-                tournamentStartDate: date, // New field for display
-                groupCount: Object.keys(groupsData).length,
-                playerCount: Object.keys(players).length,
-                status: 'completed'
-            };
-
-            // 2. Create Full Detail Data (Heavy)
-            const finalRanks: { [playerId: string]: any } = {};
-            if (finalDataByGroup) {
-                Object.values(finalDataByGroup).flat().forEach((p: any) => {
-                    finalRanks[p.id] = {
-                        rank: p.rank,
-                        totalScore: p.totalScore,
-                        total: p.total,
-                        courseScores: p.courseScores,
-                        detailedScores: p.detailedScores
-                    };
-                });
-            }
-
-            const detailData = {
-                id: archiveId,
-                tournamentName: tournamentName,
-                location: location,
-                tournamentStartDate: date,
-                date: new Date().toISOString(),
-                players: players,
-                scores: scores,
-                groups: groupsData,
-                courses: courses,
-                finalRanks: finalRanks,
-                settings: {
-                    individualSuddenDeath: individualSuddenDeathData,
-                    teamSuddenDeath: teamSuddenDeathData,
-                    individualBackcount: individualBackcountApplied,
-                    teamBackcount: teamBackcountApplied,
-                    individualNTP: individualNTPData,
-                    teamNTP: teamNTPData
-                }
-            };
-
-            // 3. Save to Firebase (Dual path: Legacy + Gallery)
-            await Promise.all([
-                set(ref(db, `archives-list/${archiveId}`), summaryData),
-                set(ref(db, `archives-detail/${archiveId}`), detailData),
-                set(ref(db, `archives/${archiveId}`), {
-                    ...detailData,
-                    ...summaryData // Combine for compatibility
-                })
-            ]);
-
-            toast({
-                title: "기록 보관 완료",
-                description: `${tournamentName} 대회가 성공적으로 보관되었습니다.`,
-            });
-            setArchiveModalOpen(false);
-
-        } catch (error) {
-            console.error("Archive Failed:", error);
-            toast({
-                title: "보관 실패",
-                description: "대회 기록 보관 중 오류가 발생했습니다.",
-                variant: 'destructive'
-            });
-        }
-    };
 
     const handlePlayerSearchSelect = (pid: string) => {
         setSearchPlayer("");
@@ -3344,10 +1923,6 @@ export default function AdminDashboard() {
                                 </Button>
                                 <Button className="ml-2 bg-blue-600 hover:bg-blue-700 text-white min-w-[120px] px-4 py-2 font-bold" onClick={handleArchiveClick}>
                                     기록 보관하기
-                                </Button>
-                                <Button className="ml-2 bg-gray-600 hover:bg-gray-700 text-white min-w-[120px] px-4 py-2 font-bold" onClick={handlePrint}>
-                                    <Printer className="mr-2 h-4 w-4" />
-                                    인쇄하기
                                 </Button>
                                 <Button className="ml-2 bg-red-600 hover:bg-red-700 text-white min-w-[120px] px-4 py-2 font-bold" onClick={() => setShowResetConfirm(true)}>
                                     점수 초기화
@@ -3962,8 +2537,7 @@ export default function AdminDashboard() {
                             className="bg-blue-600 hover:bg-blue-700 w-full sm:w-auto"
                             disabled={!printModal.showAllGroups && printModal.selectedGroups.length === 0}
                         >
-                            <Printer className="mr-2 h-4 w-4" />
-                            인쇄하기
+                            🖨️ 인쇄하기
                         </Button>
                     </DialogFooter>
                 </DialogContent>
@@ -4015,7 +2589,7 @@ export default function AdminDashboard() {
             </Dialog>
 
             {/* 점수 수정 모달 - 로컬 상태로 관리하여 부모 리렌더링 방지 */}
-            <ScoreEditModalComponent
+            <ScoreEditModal
                 open={scoreEditModal.open}
                 playerId={scoreEditModal.playerId}
                 courseId={scoreEditModal.courseId}
@@ -4025,7 +2599,7 @@ export default function AdminDashboard() {
                 playerName={scoreEditModal.playerName}
                 courseName={scoreEditModal.courseName}
                 onClose={() => setScoreEditModal(prev => ({ ...prev, open: false }))}
-                onSave={async (score, forfeitType) => {
+                onSave={async (score: string, forfeitType: any) => {
                     setScoreEditModal(prev => ({ ...prev, score, forfeitType }));
                     await handleScoreEditSave(score, forfeitType);
                 }}
@@ -4035,7 +2609,7 @@ export default function AdminDashboard() {
             />
 
             {/* Archive Modal */}
-            <ArchiveModalComponent
+            <ArchiveModal
                 open={archiveModalOpen}
                 onOpenChange={setArchiveModalOpen}
                 tournamentName={tournamentName}
