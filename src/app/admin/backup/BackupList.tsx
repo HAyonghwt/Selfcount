@@ -283,8 +283,10 @@ const BackupList: React.FC = () => {
           tournamentName: `${json.tournamentName || "가져온 백업"} (가져옴)`,
         };
 
-        // systemBackups 경로에 저장
-        await set(ref(db, `systemBackups/${newBackupId}`), newBackupData);
+        if (db) {
+          // systemBackups 경로에 저장
+          await set(ref(db, `systemBackups/${newBackupId}`), newBackupData);
+        }
 
         toast({
           title: "백업 가져오기 성공",

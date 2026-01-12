@@ -1,0 +1,92 @@
+
+> nextn@0.1.0 typecheck
+> tsc --noEmit
+
+src/app/admin/backup/BackupList.tsx(287,23): error TS2345: Argument of type 'Database | null' is not assignable to parameter of type 'Database'.
+  Type 'null' is not assignable to type 'Database'.
+src/app/admin/dashboard/page.tsx(272,69): error TS2339: Property 'id' does not exist on type '{}'.
+src/app/admin/dashboard/page.tsx(275,101): error TS2339: Property 'id' does not exist on type '{}'.
+src/app/admin/dashboard/page.tsx(279,76): error TS2339: Property 'id' does not exist on type '{}'.
+src/app/admin/dashboard/page.tsx(289,65): error TS2339: Property 'assignedCourses' does not exist on type '{}'.
+src/app/admin/dashboard/page.tsx(291,65): error TS2339: Property 'id' does not exist on type '{}'.
+src/app/admin/dashboard/page.tsx(312,84): error TS2339: Property 'id' does not exist on type '{}'.
+src/app/admin/dashboard/page.tsx(315,70): error TS2339: Property 'id' does not exist on type '{}'.
+src/app/admin/dashboard/page.tsx(325,81): error TS2339: Property 'id' does not exist on type '{}'.
+src/app/admin/dashboard/page.tsx(335,101): error TS2339: Property 'id' does not exist on type '{}'.
+src/app/admin/dashboard/page.tsx(353,84): error TS2339: Property 'id' does not exist on type '{}'.
+src/app/admin/dashboard/page.tsx(361,95): error TS2339: Property 'id' does not exist on type '{}'.
+src/app/admin/dashboard/page.tsx(1792,39): error TS7006: Parameter 'pid' implicitly has an 'any' type.
+src/app/admin/dashboard/page.tsx(2630,71): error TS7006: Parameter 'p' implicitly has an 'any' type.
+src/app/admin/dashboard/page.tsx(2727,63): error TS7006: Parameter 'p' implicitly has an 'any' type.
+src/app/admin/dashboard/page.tsx(2749,46): error TS7006: Parameter 'player' implicitly has an 'any' type.
+src/app/admin/dashboard/page.tsx(3398,54): error TS2339: Property 'html2canvas' does not exist on type 'Window & typeof globalThis'.
+src/app/admin/players/page.tsx(102,56): error TS2345: Argument of type 'Database | null' is not assignable to parameter of type 'Database'.
+  Type 'null' is not assignable to type 'Database'.
+src/app/admin/players/page.tsx(3729,119): error TS2339: Property 'name' does not exist on type '{}'.
+src/app/admin/players/page.tsx(3886,131): error TS2339: Property 'name' does not exist on type '{}'.
+src/app/admin/referees/page.tsx(346,78): error TS2345: Argument of type 'Database | null' is not assignable to parameter of type 'Database'.
+  Type 'null' is not assignable to type 'Database'.
+src/app/admin/suddendeath/page.tsx(906,51): error TS2304: Cannot find name 'displayPlayers'.
+src/app/admin/suddendeath/page.tsx(906,73): error TS7006: Parameter 'p' implicitly has an 'any' type.
+src/app/admin/suddendeath/page.tsx(919,84): error TS7006: Parameter 'player' implicitly has an 'any' type.
+src/app/admin/suddendeath/page.tsx(926,73): error TS2322: Type 'Partial<SuddenDeathData>' is not assignable to type 'boolean | undefined'.
+src/app/admin/suddendeath/page.tsx(957,53): error TS2322: Type 'Partial<SuddenDeathData>' is not assignable to type 'boolean | undefined'.
+src/app/admin/suddendeath/page.tsx(972,53): error TS2322: Type 'Partial<SuddenDeathData>' is not assignable to type 'boolean | undefined'.
+src/app/admin/suddendeath/page.tsx(978,98): error TS2322: Type 'Partial<SuddenDeathData>' is not assignable to type 'boolean | undefined'.
+src/app/admin/suddendeath/page.tsx(994,120): error TS2304: Cannot find name 'groupName'.
+src/app/admin/suddendeath/page.tsx(1023,69): error TS2339: Property 'sort' does not exist on type 'Partial<SuddenDeathData>'.
+src/app/admin/suddendeath/page.tsx(1023,75): error TS7006: Parameter 'a' implicitly has an 'any' type.
+src/app/admin/suddendeath/page.tsx(1023,78): error TS7006: Parameter 'b' implicitly has an 'any' type.
+src/app/admin/suddendeath/page.tsx(1023,95): error TS7006: Parameter 'hole' implicitly has an 'any' type.
+src/app/admin/suddendeath/page.tsx(1032,73): error TS2339: Property 'map' does not exist on type 'Partial<SuddenDeathData>'.
+src/app/admin/suddendeath/page.tsx(1032,77): error TS7006: Parameter 'hole' implicitly has an 'any' type.
+src/app/admin/suddendeath/page.tsx(1037,61): error TS2322: Type '{ [key: string]: string; }' is not assignable to type 'string | number | readonly string[] | undefined'.
+  Type '{ [key: string]: string; }' is missing the following properties from type 'readonly string[]': length, concat, join, slice, and 26 more.
+src/app/admin/suddendeath/page.tsx(1038,78): error TS2554: Expected 5 arguments, but got 4.
+src/app/admin/suddendeath/page.tsx(1153,112): error TS2304: Cannot find name 'groupName'.
+src/app/referee/[hole]/page.tsx(331,28): error TS2345: Argument of type 'unknown[]' is not assignable to parameter of type 'SetStateAction<Course[]>'.
+  Type 'unknown[]' is not assignable to type 'Course[]'.
+    Type 'unknown' is not assignable to type 'Course'.
+src/app/referee/[hole]/page.tsx(397,57): error TS2339: Property 'courses' does not exist on type '{}'.
+src/app/referee/[hole]/page.tsx(397,96): error TS2339: Property 'courses' does not exist on type '{}'.
+src/app/referee/[hole]/page.tsx(398,32): error TS2345: Argument of type 'unknown[]' is not assignable to parameter of type 'SetStateAction<Course[]>'.
+  Type 'unknown[]' is not assignable to type 'Course[]'.
+    Type 'unknown' is not assignable to type 'Course'.
+src/app/referee/[hole]/page.tsx(401,40): error TS2339: Property 'courses' does not exist on type '{}'.
+src/app/referee/[hole]/page.tsx(402,78): error TS2339: Property 'courses' does not exist on type '{}'.
+src/app/referee/[hole]/page.tsx(413,50): error TS2339: Property 'groups' does not exist on type '{}'.
+src/app/referee/[hole]/page.tsx(534,30): error TS7006: Parameter 'prev' implicitly has an 'any' type.
+src/app/referee/[hole]/page.tsx(1468,19): error TS2345: Argument of type '(prev: { [key: string]: ScoreData; }) => { [x: string]: ScoreData | { score: number; forfeitType: "absent" | "disqualified" | "forfeit" | null | undefined; status: string; wasLocked: boolean | undefined; }; }' is not assignable to parameter of type 'SetStateAction<{ [key: string]: ScoreData; }>'.
+  Type '(prev: { [key: string]: ScoreData; }) => { [x: string]: ScoreData | { score: number; forfeitType: "absent" | "disqualified" | "forfeit" | null | undefined; status: string; wasLocked: boolean | undefined; }; }' is not assignable to type '(prevState: { [key: string]: ScoreData; }) => { [key: string]: ScoreData; }'.
+    Type '{ [x: string]: ScoreData | { score: number; forfeitType: "absent" | "disqualified" | "forfeit" | null | undefined; status: string; wasLocked: boolean | undefined; }; }' is not assignable to type '{ [key: string]: ScoreData; }'.
+      'string' index signatures are incompatible.
+        Type 'ScoreData | { score: number; forfeitType: "absent" | "disqualified" | "forfeit" | null | undefined; status: string; wasLocked: boolean | undefined; }' is not assignable to type 'ScoreData'.
+          Type '{ score: number; forfeitType: "absent" | "disqualified" | "forfeit" | null | undefined; status: string; wasLocked: boolean | undefined; }' is not assignable to type 'ScoreData'.
+            Types of property 'status' are incompatible.
+              Type 'string' is not assignable to type '"editing" | "locked"'.
+src/app/referee/[hole]/page.tsx(1532,13): error TS2322: Type '{ [x: string]: ScoreData | { score: number; forfeitType: "absent" | "disqualified" | "forfeit" | null | undefined; status: string; wasLocked: boolean | undefined; }; }' is not assignable to type '{ [key: string]: ScoreData; }'.
+  'string' index signatures are incompatible.
+    Type 'ScoreData | { score: number; forfeitType: "absent" | "disqualified" | "forfeit" | null | undefined; status: string; wasLocked: boolean | undefined; }' is not assignable to type 'ScoreData'.
+      Type '{ score: number; forfeitType: "absent" | "disqualified" | "forfeit" | null | undefined; status: string; wasLocked: boolean | undefined; }' is not assignable to type 'ScoreData'.
+        Types of property 'status' are incompatible.
+          Type 'string' is not assignable to type '"editing" | "locked"'.
+src/app/referee/[hole]/page.tsx(1728,26): error TS7006: Parameter 'prev' implicitly has an 'any' type.
+src/app/self-scoring/scoring/page.tsx(381,15): error TS2339: Property 'uploadOrder' does not exist on type 'PlayerDb'.
+src/app/self-scoring/scoring/page.tsx(381,46): error TS2339: Property 'uploadOrder' does not exist on type 'PlayerDb'.
+src/app/self-scoring/scoring/page.tsx(382,21): error TS2339: Property 'uploadOrder' does not exist on type 'PlayerDb'.
+src/app/self-scoring/scoring/page.tsx(382,44): error TS2339: Property 'uploadOrder' does not exist on type 'PlayerDb'.
+src/components/gift-event/GiftEventAdminPage.tsx(76,48): error TS2345: Argument of type 'Database | null' is not assignable to parameter of type 'Database'.
+  Type 'null' is not assignable to type 'Database'.
+src/components/gift-event/GiftEventAdminPage.tsx(93,45): error TS2345: Argument of type 'Database | null' is not assignable to parameter of type 'Database'.
+  Type 'null' is not assignable to type 'Database'.
+src/components/gift-event/GiftEventDisplay.tsx(51,48): error TS2345: Argument of type 'Database | null' is not assignable to parameter of type 'Database'.
+  Type 'null' is not assignable to type 'Database'.
+src/components/gift-event/GiftEventDisplay.tsx(62,13): error TS2353: Object literal may only specify known properties, and 'isBlackAndWhite' does not exist in type 'SetStateAction<{ enabled: boolean; size: number; opacity: number; offsetX: number; offsetY: number; saturation: number; intensity: number; }>'.
+src/components/gift-event/GiftEventDisplay.tsx(67,45): error TS2345: Argument of type 'Database | null' is not assignable to parameter of type 'Database'.
+  Type 'null' is not assignable to type 'Database'.
+src/components/ui/calendar.tsx(5,27): error TS2307: Cannot find module 'react-day-picker' or its corresponding type declarations.
+src/lib/firebase.ts(62,44): error TS2339: Property 'uid' does not exist on type 'never'.
+src/lib/scoreLogs.ts(445,28): error TS2345: Argument of type 'Database | null' is not assignable to parameter of type 'Database'.
+  Type 'null' is not assignable to type 'Database'.
+src/lib/scoreLogs.ts(492,28): error TS2345: Argument of type 'Database | null' is not assignable to parameter of type 'Database'.
+  Type 'null' is not assignable to type 'Database'.

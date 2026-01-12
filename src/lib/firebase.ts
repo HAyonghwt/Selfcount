@@ -45,21 +45,21 @@ export const ensureAuthenticated = async (maxRetries: number = 3, retryDelay: nu
   // 여기서는 호환성을 위해 직접 구현하거나 세션 복구를 기다림
   try {
     // 0.5초 정도 대기하며 세션 복구 확인
-    await new Promise((resolve) => {
+    await new Promise<void>((resolve) => {
       const unsubscribe = onAuthStateChanged(auth, (user) => {
         unsubscribe();
-        resolve(user);
+        resolve();
       });
       // 최대 1초만 기다림
       setTimeout(() => {
         unsubscribe();
-        resolve(null);
+        resolve();
       }, 1000);
     });
 
     const currentUser = auth.currentUser;
     if (currentUser) {
-      console.log('세션 복구 성공:', currentUser.uid);
+      console.log('세션 복구 성공:', (currentUser as User).uid);
       return true;
     }
   } catch (e) {

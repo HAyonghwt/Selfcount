@@ -24,13 +24,13 @@ export const logScoreChange = async (logData: Omit<ScoreLog, 'id' | 'modifiedAt'
   try {
     const logsRef = ref(db, 'scoreLogs');
     const newLogRef = push(logsRef);
-    
+
     const logWithTimestamp: ScoreLog = {
       ...logData,
       id: newLogRef.key || '',
       modifiedAt: Date.now()
     };
-    
+
     await set(newLogRef, logWithTimestamp);
   } catch (error) {
     throw error;
@@ -49,12 +49,12 @@ export const getPlayerScoreLogs = async (playerId: string): Promise<ScoreLog[]> 
       orderByChild('playerId'),
       equalTo(playerId)
     );
-    
+
     const snapshot = await get(playerLogsQuery);
     if (!snapshot.exists()) {
       return [];
     }
-    
+
     const logs: ScoreLog[] = [];
     snapshot.forEach((childSnapshot) => {
       logs.push({
@@ -62,7 +62,7 @@ export const getPlayerScoreLogs = async (playerId: string): Promise<ScoreLog[]> 
         ...childSnapshot.val()
       });
     });
-    
+
     // 최신 수정 내역이 먼저 오도록 정렬
     return logs.sort((a, b) => b.modifiedAt - a.modifiedAt);
   } catch (error) {
@@ -82,12 +82,12 @@ export const getMatchScoreLogs = async (matchId: string): Promise<ScoreLog[]> =>
       orderByChild('matchId'),
       equalTo(matchId)
     );
-    
+
     const snapshot = await get(matchLogsQuery);
     if (!snapshot.exists()) {
       return [];
     }
-    
+
     const logs: ScoreLog[] = [];
     snapshot.forEach((childSnapshot) => {
       logs.push({
@@ -95,7 +95,7 @@ export const getMatchScoreLogs = async (matchId: string): Promise<ScoreLog[]> =>
         ...childSnapshot.val()
       });
     });
-    
+
     // 최신 수정 내역이 먼저 오도록 정렬
     return logs.sort((a, b) => b.modifiedAt - a.modifiedAt);
   } catch (error) {
@@ -110,13 +110,13 @@ export const getSelfScoringLogs = async (): Promise<ScoreLog[]> => {
   if (!db) throw new Error('Firebase DB 연결 오류');
   try {
     const logsRef = ref(db, 'scoreLogs');
-    
+
     // 모든 로그를 가져온 후 클라이언트에서 필터링
     const snapshot = await get(logsRef);
     if (!snapshot.exists()) {
       return [];
     }
-    
+
     const logs: ScoreLog[] = [];
     snapshot.forEach((childSnapshot) => {
       const logData = childSnapshot.val();
@@ -128,7 +128,7 @@ export const getSelfScoringLogs = async (): Promise<ScoreLog[]> => {
         });
       }
     });
-    
+
     // 최신 수정 내역이 먼저 오도록 정렬
     return logs.sort((a, b) => b.modifiedAt - a.modifiedAt);
   } catch (error) {
@@ -154,10 +154,10 @@ const CACHE_DURATION = 2 * 60 * 1000; // 2분
  */
 export const getPlayerScoreLogsOptimized = async (playerId: string): Promise<ScoreLog[]> => {
   if (!db) throw new Error('Firebase DB 연결 오류');
-  
+
   const cacheKey = `player_${playerId}`;
   const now = Date.now();
-  
+
   // 캐시 확인
   if (logCache.has(cacheKey)) {
     const cached = logCache.get(cacheKey)!;
@@ -165,18 +165,18 @@ export const getPlayerScoreLogsOptimized = async (playerId: string): Promise<Sco
       return cached.data;
     }
   }
-  
+
   try {
     // 기존 함수 사용 (안전성 보장)
     const logs = await getPlayerScoreLogs(playerId);
-    
+
     // 캐시 업데이트
     logCache.set(cacheKey, {
       data: logs,
       timestamp: now,
       type: 'player'
     });
-    
+
     return logs;
   } catch (error) {
     throw error;
@@ -188,10 +188,10 @@ export const getPlayerScoreLogsOptimized = async (playerId: string): Promise<Sco
  */
 export const getMatchScoreLogsOptimized = async (matchId: string): Promise<ScoreLog[]> => {
   if (!db) throw new Error('Firebase DB 연결 오류');
-  
+
   const cacheKey = `match_${matchId}`;
   const now = Date.now();
-  
+
   // 캐시 확인
   if (logCache.has(cacheKey)) {
     const cached = logCache.get(cacheKey)!;
@@ -199,18 +199,18 @@ export const getMatchScoreLogsOptimized = async (matchId: string): Promise<Score
       return cached.data;
     }
   }
-  
+
   try {
     // 기존 함수 사용 (안전성 보장)
     const logs = await getMatchScoreLogs(matchId);
-    
+
     // 캐시 업데이트
     logCache.set(cacheKey, {
       data: logs,
       timestamp: now,
       type: 'match'
     });
-    
+
     return logs;
   } catch (error) {
     throw error;
@@ -222,10 +222,10 @@ export const getMatchScoreLogsOptimized = async (matchId: string): Promise<Score
  */
 export const getSelfScoringLogsOptimized = async (): Promise<ScoreLog[]> => {
   if (!db) throw new Error('Firebase DB 연결 오류');
-  
+
   const cacheKey = 'self_scoring';
   const now = Date.now();
-  
+
   // 캐시 확인
   if (logCache.has(cacheKey)) {
     const cached = logCache.get(cacheKey)!;
@@ -233,18 +233,18 @@ export const getSelfScoringLogsOptimized = async (): Promise<ScoreLog[]> => {
       return cached.data;
     }
   }
-  
+
   try {
     // 기존 함수 사용 (안전성 보장)
     const logs = await getSelfScoringLogs();
-    
+
     // 캐시 업데이트
     logCache.set(cacheKey, {
       data: logs,
       timestamp: now,
       type: 'self_scoring'
     });
-    
+
     return logs;
   } catch (error) {
     throw error;
@@ -256,10 +256,10 @@ export const getSelfScoringLogsOptimized = async (): Promise<ScoreLog[]> => {
  */
 export const getPlayerForfeitTypeOptimized = async (playerId: string, courseId: string, holeNumber: string): Promise<'absent' | 'disqualified' | 'forfeit' | null> => {
   if (!db) throw new Error('Firebase DB 연결 오류');
-  
+
   const cacheKey = `forfeit_${playerId}_${courseId}_${holeNumber}`;
   const now = Date.now();
-  
+
   // 캐시 확인
   if (logCache.has(cacheKey)) {
     const cached = logCache.get(cacheKey)!;
@@ -267,36 +267,36 @@ export const getPlayerForfeitTypeOptimized = async (playerId: string, courseId: 
       return (cached.data[0] as any)?.forfeitType || null;
     }
   }
-  
+
   try {
     // 기존 함수 사용하여 로그 가져오기
     const logs = await getPlayerScoreLogs(playerId);
-    
+
     // 기존과 동일한 필터링 로직
     const forfeitLogs = logs
       .filter(l => l.newValue === 0 && l.modifiedByType === 'judge' && l.comment)
       .filter(l => l.comment?.includes(`코스: ${courseId}`) || l.comment?.includes(`홀: ${holeNumber}`))
       .sort((a, b) => b.modifiedAt - a.modifiedAt);
-    
+
     if (forfeitLogs.length === 0) {
       return null;
     }
-    
+
     // 기존과 동일한 기권 타입 추출 로직
     const latestLog = forfeitLogs[0];
     let forfeitType: 'absent' | 'disqualified' | 'forfeit' | null = null;
-    
+
     if (latestLog.comment?.includes('불참')) forfeitType = 'absent';
     else if (latestLog.comment?.includes('실격')) forfeitType = 'disqualified';
     else if (latestLog.comment?.includes('기권')) forfeitType = 'forfeit';
-    
+
     // 캐시 업데이트
     logCache.set(cacheKey, {
       data: [{ forfeitType } as any],
       timestamp: now,
       type: 'forfeit'
     });
-    
+
     return forfeitType;
   } catch (error) {
     console.error('기권 타입 가져오기 실패:', error);
@@ -328,7 +328,7 @@ export const logScoreChangeWithCacheInvalidation = async (logData: Omit<ScoreLog
   try {
     // 기존 함수로 로그 저장
     await logScoreChange(logData);
-    
+
     // 캐시 무효화하여 실시간 업데이트 보장
     invalidateLogCache();
   } catch (error) {
@@ -377,7 +377,7 @@ export const logScoreChangeWithRealTimeUpdate = async (logData: Omit<ScoreLog, '
   try {
     // 기존 함수로 로그 저장
     await logScoreChange(logData);
-    
+
     // 실시간 업데이트를 위한 캐시 무효화
     if (logData.playerId) {
       invalidatePlayerLogCache(logData.playerId);
@@ -389,7 +389,7 @@ export const logScoreChangeWithRealTimeUpdate = async (logData: Omit<ScoreLog, '
     if ((logData.modifiedByType as any) === 'self') {
       invalidateSelfScoringLogCache();
     }
-    
+
     console.log(`[실시간 업데이트] 점수 변경 로그 저장 및 캐시 무효화 완료`);
   } catch (error) {
     throw error;
@@ -402,7 +402,7 @@ export const logScoreChangeWithRealTimeUpdate = async (logData: Omit<ScoreLog, '
  */
 export const setupRealTimeScoreUpdate = (onScoreChange: (playerId: string) => void): void => {
   if (typeof window === 'undefined') return;
-  
+
   // 전역 이벤트 리스너 설정
   const handleScoreChange = (event: CustomEvent) => {
     const { playerId } = event.detail;
@@ -411,9 +411,9 @@ export const setupRealTimeScoreUpdate = (onScoreChange: (playerId: string) => vo
       onScoreChange(playerId);
     }
   };
-  
+
   window.addEventListener('scoreChange', handleScoreChange as EventListener);
-  
+
   // 클린업 함수 반환 (사용하지 않음 - 전역 이벤트이므로)
   console.log(`[실시간 업데이트] 점수 변경 이벤트 리스너 설정 완료`);
 };
@@ -425,33 +425,35 @@ export const setupRealTimeScoreUpdate = (onScoreChange: (playerId: string) => vo
  */
 export const cleanupOldScoreLogs = async (daysToKeep: number = 30): Promise<number> => {
   if (!db) throw new Error('Firebase DB 연결 오류');
-  
+
   try {
     const logsRef = ref(db, 'scoreLogs');
     const cutoffTime = Date.now() - (daysToKeep * 24 * 60 * 60 * 1000);
-    
+
     // 모든 로그를 가져와서 오래된 것만 필터링
     const snapshot = await get(logsRef);
     if (!snapshot.exists()) {
       return 0;
     }
-    
+
     let deletedCount = 0;
     const deletePromises: Promise<void>[] = [];
-    
+
     snapshot.forEach((childSnapshot) => {
       const logData = childSnapshot.val();
       if (logData.modifiedAt && logData.modifiedAt < cutoffTime) {
-        const logRef = ref(db, `scoreLogs/${childSnapshot.key}`);
-        deletePromises.push(remove(logRef).then(() => {
-          deletedCount++;
-        }));
+        if (db) {
+          const logRef = ref(db, `scoreLogs/${childSnapshot.key}`);
+          deletePromises.push(remove(logRef).then(() => {
+            deletedCount++;
+          }));
+        }
       }
     });
-    
+
     await Promise.all(deletePromises);
     console.log(`[로그 정리] ${deletedCount}개의 오래된 로그가 삭제되었습니다. (${daysToKeep}일 이상)`);
-    
+
     return deletedCount;
   } catch (error) {
     console.error('로그 정리 중 오류 발생:', error);
@@ -467,7 +469,7 @@ export const cleanupOldScoreLogs = async (daysToKeep: number = 30): Promise<numb
  */
 export const cleanupOldScoreLogsByMatch = async (matchId: string, daysToKeep: number = 30): Promise<number> => {
   if (!db) throw new Error('Firebase DB 연결 오류');
-  
+
   try {
     const logsRef = ref(db, 'scoreLogs');
     const matchLogsQuery = query(
@@ -475,30 +477,32 @@ export const cleanupOldScoreLogsByMatch = async (matchId: string, daysToKeep: nu
       orderByChild('matchId'),
       equalTo(matchId)
     );
-    
+
     const cutoffTime = Date.now() - (daysToKeep * 24 * 60 * 60 * 1000);
-    
+
     const snapshot = await get(matchLogsQuery);
     if (!snapshot.exists()) {
       return 0;
     }
-    
+
     let deletedCount = 0;
     const deletePromises: Promise<void>[] = [];
-    
+
     snapshot.forEach((childSnapshot) => {
       const logData = childSnapshot.val();
       if (logData.modifiedAt && logData.modifiedAt < cutoffTime) {
-        const logRef = ref(db, `scoreLogs/${childSnapshot.key}`);
-        deletePromises.push(remove(logRef).then(() => {
-          deletedCount++;
-        }));
+        if (db) {
+          const logRef = ref(db, `scoreLogs/${childSnapshot.key}`);
+          deletePromises.push(remove(logRef).then(() => {
+            deletedCount++;
+          }));
+        }
       }
     });
-    
+
     await Promise.all(deletePromises);
     console.log(`[로그 정리] 경기 ${matchId}의 ${deletedCount}개의 오래된 로그가 삭제되었습니다. (${daysToKeep}일 이상)`);
-    
+
     return deletedCount;
   } catch (error) {
     console.error('로그 정리 중 오류 발생:', error);

@@ -28,7 +28,8 @@ export default function GiftEventDisplay() {
     offsetX: 0,
     offsetY: 0,
     saturation: 400,
-    intensity: 200
+    intensity: 200,
+    isBlackAndWhite: false
   });
 
   useEffect(() => {
@@ -45,6 +46,7 @@ export default function GiftEventDisplay() {
 
     // 초기 로드 시 설정과 로고 URL을 함께 불러오기
     const loadInitialData = async () => {
+      if (!db) return;
       try {
         await ensureAuthenticated();
         // 로고 설정 불러오기

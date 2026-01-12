@@ -70,6 +70,7 @@ export default function GiftEventAdminPage() {
 
     // 초기 로드 시 설정과 로고 URL을 먼저 불러오기
     const loadInitialData = async () => {
+      if (!db) return;
       try {
         await ensureAuthenticated();
         // 로고 설정 불러오기
@@ -124,23 +125,25 @@ export default function GiftEventAdminPage() {
     });
 
     // Fetch all players once to use as the base participants list
-    get(playersRef).then((snapshot) => {
-      if (snapshot.exists()) {
-        const playersData = snapshot.val();
-        let allParticipants: Participant[] = [];
-        Object.keys(playersData).forEach(id => {
-          const data = playersData[id];
-          if (data.type === 'team') {
-            // 팀이면 두 명을 각각 개별 참가자로 추가
-            allParticipants.push({ id: `${id}_1`, name: data.p1_name, club: data.p1_affiliation });
-            allParticipants.push({ id: `${id}_2`, name: data.p2_name, club: data.p2_affiliation });
-          } else {
-            allParticipants.push({ id, name: data.name, club: data.affiliation });
-          }
-        });
-        setParticipants(allParticipants);
-      }
-    });
+    if (db) {
+      get(playersRef).then((snapshot) => {
+        if (snapshot.exists()) {
+          const playersData = snapshot.val();
+          let allParticipants: Participant[] = [];
+          Object.keys(playersData).forEach(id => {
+            const data = playersData[id];
+            if (data.type === 'team') {
+              // 팀이면 두 명을 각각 개별 참가자로 추가
+              allParticipants.push({ id: `${id}_1`, name: data.p1_name, club: data.p1_affiliation });
+              allParticipants.push({ id: `${id}_2`, name: data.p2_name, club: data.p2_affiliation });
+            } else {
+              allParticipants.push({ id, name: data.name, club: data.affiliation });
+            }
+          });
+          setParticipants(allParticipants);
+        }
+      });
+    }
 
     return () => {
       unsubGiftEvent();
@@ -226,7 +229,7 @@ export default function GiftEventAdminPage() {
 
         // 이미 추첨 중이거나 완료된 상태라면 중단 (동시성 제어)
         if (currentData.status === 'drawing') {
-          return; // Abort transaction
+          return undefined; // Abort transaction by returning undefined
         }
 
         // 안전한 랜덤 추첨을 위해 참가자 목록 재확인

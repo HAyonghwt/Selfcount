@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import * as XLSX from 'xlsx-js-style';
+// import * as XLSX from 'xlsx-js-style'; // Dynamic import used below instead
 import { db } from '@/lib/firebase';
 import { ref, onValue, set, get, query, limitToLast, onChildChanged, off, update, onChildAdded, onChildRemoved } from 'firebase/database';
 import { useToast } from '@/hooks/use-toast';
@@ -267,7 +267,7 @@ const ScoreEditModalComponent = React.memo(({
                                     toast({ title: '오류', description: '데이터베이스 연결이 없습니다.', variant: 'destructive' });
                                     return;
                                 }
-                                const player = Object.values(finalDataByGroup).flat().find((p: any) => p.id === playerId);
+                                const player = Object.values(finalDataByGroup).flat().find((p: any) => p.id === playerId) as any;
                                 if (!player) return;
                                 const logs = playerScoreLogs[player.id] || [];
                                 let restored = false;
@@ -513,13 +513,16 @@ export default function AdminDashboard() {
     const { toast } = useToast();
     const router = useRouter();
 
-    // 🚀 핵심 상태 관리 (최상단으로 이동)
+    // 🚀 핵심 상태 관리 (최상단 통합)
     const [players, setPlayers] = useState<any>({});
     const [scores, setScores] = useState<any>({});
     const [courses, setCourses] = useState<any>({});
     const [groupsData, setGroupsData] = useState<any>({});
     const [filterGroup, setFilterGroup] = useState('all');
     const [tournamentName, setTournamentName] = useState('골프 대회');
+
+    const [isSavingImage, setIsSavingImage] = useState(false);
+    const [isExporting, setIsExporting] = useState(false);
 
     const [initialDataLoaded, setInitialDataLoaded] = useState(false);
     const [resumeSeq, setResumeSeq] = useState(0);
@@ -533,10 +536,10 @@ export default function AdminDashboard() {
     const [notifiedSuddenDeathGroups, setNotifiedSuddenDeathGroups] = useState<string[]>([]);
     const [scoreCheckModal, setScoreCheckModal] = useState<{ open: boolean, groupName: string, missingScores: any[], resultMsg?: string }>({ open: false, groupName: '', missingScores: [] });
 
-    // 선수별 점수 로그 캐시 상태 (playerId별) - 2404번 라인에서 이동
+    // 선수별 점수 로그 캐시 상태
     const [playerScoreLogs, setPlayerScoreLogs] = useState<{ [playerId: string]: ScoreLog[] }>({});
 
-    // 🚀 데이터 사용량 모니터링 - 2407번 라인에서 이동
+    // 🚀 데이터 사용량 모니터링
     const [dataUsage, setDataUsage] = useState({
         totalDownloaded: 0,
         lastUpdate: Date.now(),
@@ -551,6 +554,37 @@ export default function AdminDashboard() {
     const [archiveModalOpen, setArchiveModalOpen] = useState(false);
     const [archiveLocation, setArchiveLocation] = useState('');
     const [archiveDate, setArchiveDate] = useState('');
+
+    // 🟢 점수 수정 모달 상태
+    const [scoreEditModal, setScoreEditModal] = useState({
+        open: false,
+        playerId: '',
+        courseId: '',
+        holeIndex: -1,
+        score: '',
+        forfeitType: null as 'absent' | 'disqualified' | 'forfeit' | null,
+        playerName: '',
+        courseName: ''
+    });
+
+    // 점수 초기화 모달 상태
+    const [showResetConfirm, setShowResetConfirm] = useState(false);
+
+    // 인쇄 모달 상태
+    const [printModal, setPrintModal] = useState({
+        open: false,
+        orientation: 'portrait' as 'portrait' | 'landscape',
+        paperSize: 'A4' as 'A4' | 'A3',
+        selectedGroups: [] as string[],
+        showAllGroups: true,
+        selectedCourses: [] as string[],
+        showAllCourses: true
+    });
+
+    // 🟢 점수 초기화 동기화 처리를 위한 Ref
+    const lastProcessedResetAt = useRef<number | null>(null);
+
+    const [autoFilling, setAutoFilling] = useState(false);
 
     // 🚀 모든 그룹 목록 추출 (스코프 문제 해결)
     const allGroupsList = useMemo(() => {
@@ -1078,37 +1112,10 @@ export default function AdminDashboard() {
 
 
 
-    // 점수 수정 모달 상태
-    const [scoreEditModal, setScoreEditModal] = useState({
-        open: false,
-        playerId: '',
-        courseId: '',
-        holeIndex: -1,
-        score: '',
-        forfeitType: null as 'absent' | 'disqualified' | 'forfeit' | null,
-        playerName: '', // 성능 최적화: 모달 내부에서 조회하지 않도록 저장
-        courseName: '' // 성능 최적화: 모달 내부에서 조회하지 않도록 저장
-    });
-
-    // 🟢 점수 초기화 동기화 처리를 위한 Ref
-    const lastProcessedResetAt = useRef<number | null>(null);
-
-    // 점수 초기화 모달 상태
-    const [showResetConfirm, setShowResetConfirm] = useState(false);
-
-    // 인쇄 모달 상태
-    const [printModal, setPrintModal] = useState({
-        open: false,
-        orientation: 'portrait' as 'portrait' | 'landscape',
-        paperSize: 'A4' as 'A4' | 'A3',
-        selectedGroups: [] as string[],
-        showAllGroups: true,
-        selectedCourses: [] as string[],
-        showAllCourses: true
-    });
 
 
-    // 기권 처리 모달 상태
+
+    // 기권 처리 모달 상태 - 구현 유실 방지를 위해 주석 유지
     // const [forfeitModal, setForfeitModal] = useState<{ open: boolean, player: any | null }>({ open: false, player: null });
 
     // 기록 보관하기(아카이브) - 실제 구현은 추후
@@ -1789,14 +1796,14 @@ export default function AdminDashboard() {
                 // 로컬 점수 상태에서 해당 그룹 선수들만 제거
                 setScores((prev: any) => {
                     const next = { ...prev };
-                    playerIds.forEach(pid => delete next[pid]);
+                    playerIds.forEach((pid: string) => delete next[pid]);
                     return next;
                 });
 
                 setPlayerScoreLogs((prev: any) => {
                     const newLogs = { ...prev };
                     playerIds.forEach((player: any) => {
-                        delete newLogs[player.id];
+                        delete newLogs[player?.id || player];
                     });
                     return newLogs;
                 });
@@ -1971,7 +1978,6 @@ export default function AdminDashboard() {
     const externalScoreboardUrl = typeof window !== 'undefined'
         ? `${window.location.origin}/scoreboard`
         : '/scoreboard';
-    const [autoFilling, setAutoFilling] = useState(false);
 
     // 그룹별 순위/백카운트/서든데스 상태 체크 함수
     const getGroupRankStatusMsg = (groupName: string) => {
@@ -2627,7 +2633,7 @@ export default function AdminDashboard() {
                     }
 
                     // finalDataByGroup에서 순위 결정 후 1위 동점자 확인 (applyPlayoffRanking 후 상태)
-                    const finalTiedFirstPlace = playersInGroup.filter(p => p.rank === 1);
+                    const finalTiedFirstPlace = (playersInGroup as any[]).filter((p: any) => p.rank === 1);
 
                     // 순위가 결정되었는지 확인: finalTiedFirstPlace.length === 1이면 순위가 결정된 것
                     if (finalTiedFirstPlace.length === 1) {
@@ -2676,200 +2682,210 @@ export default function AdminDashboard() {
     }, [groupProgressHash, finalDataByGroupHash, processedDataByGroupHash, notifiedSuddenDeathGroupsStr, router]);
 
     const handleExportToExcel = async () => {
-        const XLSX = await import('xlsx-js-style');
-        const wb = XLSX.utils.book_new();
+        setIsExporting(true);
+        try {
+            const XLSX: any = await import('xlsx-js-style');
 
-        const dataToExport = (filterGroup === 'all')
-            ? finalDataByGroup
-            : { [filterGroup]: finalDataByGroup[filterGroup] };
+            const wb = (XLSX as any).utils.book_new();
 
-        for (const groupName in dataToExport) {
-            const groupPlayers = dataToExport[groupName];
-            if (!groupPlayers || groupPlayers.length === 0) continue;
+            const dataToExport = (filterGroup === 'all')
+                ? finalDataByGroup
+                : { [filterGroup]: finalDataByGroup[filterGroup] };
 
-            const ws_data: { [key: string]: any } = {};
-            const merges: any[] = [];
-            let rowIndex = 0;
-            const headers = [
-                '순위', '조', '선수명(팀명)', '소속', '코스',
-                '1', '2', '3', '4', '5', '6', '7', '8', '9',
-                '코스 합계', '총타수'
-            ];
+            for (const groupName in dataToExport) {
+                const groupPlayers = dataToExport[groupName];
+                if (!groupPlayers || groupPlayers.length === 0) continue;
 
-            // 개선된 셀 스타일 정의 - XLSX 라이브러리 호환 방식
-            const borderStyle = {
-                top: { style: "thin" },
-                bottom: { style: "thin" },
-                left: { style: "thin" },
-                right: { style: "thin" }
-            };
+                const ws_data: { [key: string]: any } = {};
+                const merges: any[] = [];
+                let rowIndex = 0;
+                const headers = [
+                    '순위', '조', '선수명(팀명)', '소속', '코스',
+                    '1', '2', '3', '4', '5', '6', '7', '8', '9',
+                    '코스 합계', '총타수'
+                ];
 
-            const centerAlign = {
-                alignment: { horizontal: "center", vertical: "center" },
-                border: borderStyle
-            };
-
-            const headerStyle = {
-                alignment: { horizontal: "center", vertical: "center" },
-                border: borderStyle,
-                font: { bold: true },
-                fill: { fgColor: { rgb: "E6E6FA" } }
-            };
-
-            // 1. Set Headers
-            headers.forEach((header, colIndex) => {
-                const cellRef = XLSX.utils.encode_cell({ r: rowIndex, c: colIndex });
-                ws_data[cellRef] = { v: header, t: 's', s: headerStyle };
-            });
-            rowIndex++;
-
-            // 2. Re-fetch full data for export to include hole scores
-            const fullPlayersDataForExport = groupPlayers.map(p => {
-                const playerScoresData = scores[p.id] || {};
-                const coursesData: any = {};
-                p.assignedCourses.forEach((course: any) => {
-                    const courseId = course.id;
-                    const scoresForCourse = playerScoresData[courseId] || {};
-                    const holeScores: (number | string)[] = Array(9).fill('-');
-                    let courseTotal = 0;
-                    for (let i = 0; i < 9; i++) {
-                        const holeScore = scoresForCourse[(i + 1).toString()];
-                        if (holeScore !== undefined && holeScore !== null) {
-                            const scoreNum = Number(holeScore);
-                            holeScores[i] = scoreNum;
-                            courseTotal += scoreNum;
-                        }
-                    }
-                    coursesData[courseId] = { courseName: course.name, courseTotal, holeScores };
-                });
-                return { ...p, coursesData };
-            });
-
-            // 3. Populate Data and Merges
-            fullPlayersDataForExport.forEach(player => {
-                const startRow = rowIndex;
-                const numCourses = player.assignedCourses.length > 0 ? player.assignedCourses.length : 1;
-                const endRow = startRow + numCourses - 1;
-
-                const addCell = (r: number, c: number, value: any) => {
-                    const cellRef = XLSX.utils.encode_cell({ r, c });
-                    const type = typeof value === 'number' ? 'n' : 's';
-                    ws_data[cellRef] = { v: value, t: type, s: centerAlign };
+                // 개선된 셀 스타일 정의 - XLSX 라이브러리 호환 방식
+                const borderStyle = {
+                    top: { style: "thin" },
+                    bottom: { style: "thin" },
+                    left: { style: "thin" },
+                    right: { style: "thin" }
                 };
 
-                // Merged columns
-                addCell(startRow, 0, player.rank !== null ? `${player.rank}위` : (player.hasForfeited ? (player.forfeitType === 'absent' ? '불참' : player.forfeitType === 'disqualified' ? '실격' : '기권') : ''));
-                addCell(startRow, 1, player.jo);
-                addCell(startRow, 2, player.name);
-                addCell(startRow, 3, player.affiliation);
-                addCell(startRow, 15, player.hasForfeited ? (player.forfeitType === 'absent' ? '불참' : player.forfeitType === 'disqualified' ? '실격' : '기권') : (player.hasAnyScore ? player.totalScore : '-'));
+                const centerAlign = {
+                    alignment: { horizontal: "center", vertical: "center" },
+                    border: borderStyle
+                };
 
-                if (numCourses > 1) {
-                    merges.push({ s: { r: startRow, c: 0 }, e: { r: endRow, c: 0 } }); // Rank
-                    merges.push({ s: { r: startRow, c: 1 }, e: { r: endRow, c: 1 } }); // Jo
-                    merges.push({ s: { r: startRow, c: 2 }, e: { r: endRow, c: 2 } }); // Name
-                    merges.push({ s: { r: startRow, c: 3 }, e: { r: endRow, c: 3 } }); // Affiliation
-                    merges.push({ s: { r: startRow, c: 15 }, e: { r: endRow, c: 15 } });// Total Score
-                }
+                const headerStyle = {
+                    alignment: { horizontal: "center", vertical: "center" },
+                    border: borderStyle,
+                    font: { bold: true },
+                    fill: { fgColor: { rgb: "E6E6FA" } }
+                };
 
-                if (player.assignedCourses.length > 0) {
-                    player.assignedCourses.forEach((course: any, courseIndex: number) => {
-                        const currentRow = startRow + courseIndex;
-                        const courseData = player.coursesData[course.id];
+                // 1. Set Headers
+                headers.forEach((header, colIndex) => {
+                    const cellRef = (XLSX as any).utils.encode_cell({ r: rowIndex, c: colIndex });
+                    ws_data[cellRef] = { v: header, t: 's', s: headerStyle };
+                });
+                rowIndex++;
 
-                        addCell(currentRow, 4, courseData?.courseName || course.name);
-
-                        const holeScores = courseData?.holeScores || Array(9).fill('-');
-                        holeScores.forEach((score: number | string, i: number) => {
-                            addCell(currentRow, 5 + i, score);
-                        });
-
-                        addCell(currentRow, 14, player.hasForfeited ? (player.forfeitType === 'absent' ? '불참' : player.forfeitType === 'disqualified' ? '실격' : '기권') : (player.hasAnyScore ? (courseData?.courseTotal || 0) : '-'));
+                // 2. Re-fetch full data for export to include hole scores
+                const fullPlayersDataForExport = (groupPlayers as any[]).map((p: any) => {
+                    const playerScoresData = scores[p.id] || {};
+                    const coursesData: any = {};
+                    p.assignedCourses.forEach((course: any) => {
+                        const courseId = course.id;
+                        const scoresForCourse = playerScoresData[courseId] || {};
+                        const holeScores: (number | string)[] = Array(9).fill('-');
+                        let courseTotal = 0;
+                        for (let i = 0; i < 9; i++) {
+                            const holeScore = scoresForCourse[(i + 1).toString()];
+                            if (holeScore !== undefined && holeScore !== null) {
+                                const scoreNum = Number(holeScore);
+                                holeScores[i] = scoreNum;
+                                courseTotal += scoreNum;
+                            }
+                        }
+                        coursesData[courseId] = { courseName: course.name, courseTotal, holeScores };
                     });
-                } else {
+                    return { ...p, coursesData };
+                });
+
+                // 3. Populate Data and Merges
+                fullPlayersDataForExport.forEach((player: any) => {
+                    const startRow = rowIndex;
+                    const numCourses = player.assignedCourses.length > 0 ? player.assignedCourses.length : 1;
+                    const endRow = startRow + numCourses - 1;
+
+                    const addCell = (r: number, c: number, value: any) => {
+                        const cellRef = (XLSX as any).utils.encode_cell({ r, c });
+                        const type = typeof value === 'number' ? 'n' : 's';
+                        ws_data[cellRef] = { v: value, t: type, s: centerAlign };
+                    };
+
+                    // Merged columns
                     addCell(startRow, 0, player.rank !== null ? `${player.rank}위` : (player.hasForfeited ? (player.forfeitType === 'absent' ? '불참' : player.forfeitType === 'disqualified' ? '실격' : '기권') : ''));
                     addCell(startRow, 1, player.jo);
                     addCell(startRow, 2, player.name);
                     addCell(startRow, 3, player.affiliation);
-                    addCell(startRow, 4, '배정된 코스 없음');
                     addCell(startRow, 15, player.hasForfeited ? (player.forfeitType === 'absent' ? '불참' : player.forfeitType === 'disqualified' ? '실격' : '기권') : (player.hasAnyScore ? player.totalScore : '-'));
-                    merges.push({ s: { r: startRow, c: 4 }, e: { r: startRow, c: 14 } });
-                }
 
-                rowIndex += numCourses;
-            });
+                    if (numCourses > 1) {
+                        merges.push({ s: { r: startRow, c: 0 }, e: { r: endRow, c: 0 } }); // Rank
+                        merges.push({ s: { r: startRow, c: 1 }, e: { r: endRow, c: 1 } }); // Jo
+                        merges.push({ s: { r: startRow, c: 2 }, e: { r: endRow, c: 2 } }); // Name
+                        merges.push({ s: { r: startRow, c: 3 }, e: { r: endRow, c: 3 } }); // Affiliation
+                        merges.push({ s: { r: startRow, c: 15 }, e: { r: endRow, c: 15 } });// Total Score
+                    }
 
-            // 4. Create Worksheet
-            const ws: XLSX.WorkSheet = ws_data;
-            ws['!merges'] = merges;
+                    if (player.assignedCourses.length > 0) {
+                        player.assignedCourses.forEach((course: any, courseIndex: number) => {
+                            const currentRow = startRow + courseIndex;
+                            const courseData = player.coursesData[course.id];
 
-            // 모든 셀에 스타일 재적용 - 더 확실한 방법
-            const range = { s: { r: 0, c: 0 }, e: { r: rowIndex - 1, c: headers.length - 1 } };
-            ws['!ref'] = XLSX.utils.encode_range(range);
+                            addCell(currentRow, 4, courseData?.courseName || course.name);
 
-            // 모든 셀에 스타일 적용
-            for (let r = 0; r < rowIndex; r++) {
-                for (let c = 0; c < headers.length; c++) {
-                    const cellRef = XLSX.utils.encode_cell({ r, c });
-                    if (ws_data[cellRef]) {
-                        // 헤더 행 (첫 번째 행)인지 확인
-                        if (r === 0) {
-                            ws_data[cellRef].s = headerStyle;
-                        } else {
-                            ws_data[cellRef].s = centerAlign;
+                            const holeScores = courseData?.holeScores || Array(9).fill('-');
+                            holeScores.forEach((score: number | string, i: number) => {
+                                addCell(currentRow, 5 + i, score);
+                            });
+
+                            addCell(currentRow, 14, player.hasForfeited ? (player.forfeitType === 'absent' ? '불참' : player.forfeitType === 'disqualified' ? '실격' : '기권') : (player.hasAnyScore ? (courseData?.courseTotal || 0) : '-'));
+                        });
+                    } else {
+                        addCell(startRow, 0, player.rank !== null ? `${player.rank}위` : (player.hasForfeited ? (player.forfeitType === 'absent' ? '불참' : player.forfeitType === 'disqualified' ? '실격' : '기권') : ''));
+                        addCell(startRow, 1, player.jo);
+                        addCell(startRow, 2, player.name);
+                        addCell(startRow, 3, player.affiliation);
+                        addCell(startRow, 4, '배정된 코스 없음');
+                        addCell(startRow, 15, player.hasForfeited ? (player.forfeitType === 'absent' ? '불참' : player.forfeitType === 'disqualified' ? '실격' : '기권') : (player.hasAnyScore ? player.totalScore : '-'));
+                        merges.push({ s: { r: startRow, c: 4 }, e: { r: startRow, c: 14 } });
+                    }
+
+                    rowIndex += numCourses;
+                });
+
+                // 엑셀 시트 생성 (타입 오류 방지를 위해 any 사용)
+                const ws: any = ws_data;
+
+                ws['!merges'] = merges;
+
+                // 모든 셀에 스타일 재적용 - 더 확실한 방법
+                const range = { s: { r: 0, c: 0 }, e: { r: rowIndex - 1, c: headers.length - 1 } };
+                ws['!ref'] = (XLSX as any).utils.encode_range(range);
+
+                // 모든 셀에 스타일 적용
+                for (let r = 0; r < rowIndex; r++) {
+                    for (let c = 0; c < headers.length; c++) {
+                        const cellRef = (XLSX as any).utils.encode_cell({ r, c });
+                        if (ws_data[cellRef]) {
+                            // 헤더 행 (첫 번째 행)인지 확인
+                            if (r === 0) {
+                                ws_data[cellRef].s = headerStyle;
+                            } else {
+                                ws_data[cellRef].s = centerAlign;
+                            }
                         }
                     }
                 }
-            }
 
-            // 셀 너비 자동 조정 - 글자수에 맞춰 동적으로 설정
-            const colWidths = headers.map((header, colIndex) => {
-                let maxWidth = header.length; // 헤더 길이를 기본값으로
+                // 셀 너비 자동 조정 - 글자수에 맞춰 동적으로 설정
+                const colWidths = headers.map((header, colIndex) => {
+                    let maxWidth = header.length; // 헤더 길이를 기본값으로
 
-                // 각 행의 데이터를 확인하여 최대 길이 계산
-                for (let r = 1; r < rowIndex; r++) {
-                    const cellRef = XLSX.utils.encode_cell({ r, c: colIndex });
-                    const cell = ws_data[cellRef];
-                    if (cell && cell.v) {
-                        const cellValue = String(cell.v);
-                        maxWidth = Math.max(maxWidth, cellValue.length);
+                    // 각 행의 데이터를 확인하여 최대 길이 계산
+                    for (let r = 1; r < rowIndex; r++) {
+                        const cellRef = (XLSX as any).utils.encode_cell({ r, c: colIndex });
+                        const cell = ws_data[cellRef];
+                        if (cell && cell.v) {
+                            const cellValue = String(cell.v);
+                            maxWidth = Math.max(maxWidth, cellValue.length);
+                        }
+                    }
+
+                    // 최소 너비 6, 최대 너비 35로 확장, 여유분 +4
+                    return { wch: Math.min(Math.max(maxWidth + 4, 6), 35) };
+                });
+
+                ws['!cols'] = colWidths;
+
+                // 모든 셀에 스타일 강제 적용 (누락 셀 포함)
+                const totalRows = rowIndex;
+                for (let r = 0; r < totalRows; r++) {
+                    for (let c = 0; c < headers.length; c++) {
+                        const cellRef = (XLSX as any).utils.encode_cell({ r, c });
+                        if (ws_data[cellRef]) {
+                            // 이미 스타일이 있다면 border/align 보장
+                            ws_data[cellRef].s = { ...centerAlign, ...(ws_data[cellRef].s || {}) };
+                        } else {
+                            // 빈셀도 스타일 적용
+                            ws_data[cellRef] = { v: '', t: 's', s: centerAlign };
+                        }
                     }
                 }
 
-                // 최소 너비 6, 최대 너비 35로 확장, 여유분 +4
-                return { wch: Math.min(Math.max(maxWidth + 4, 6), 35) };
-            });
-
-            ws['!cols'] = colWidths;
-
-            // 모든 셀에 스타일 강제 적용 (누락 셀 포함)
-            const totalRows = rowIndex;
-            for (let r = 0; r < totalRows; r++) {
-                for (let c = 0; c < headers.length; c++) {
-                    const cellRef = XLSX.utils.encode_cell({ r, c });
-                    if (ws_data[cellRef]) {
-                        // 이미 스타일이 있다면 border/align 보장
-                        ws_data[cellRef].s = { ...centerAlign, ...(ws_data[cellRef].s || {}) };
-                    } else {
-                        // 빈셀도 스타일 적용
-                        ws_data[cellRef] = { v: '', t: 's', s: centerAlign };
-                    }
-                }
+                (XLSX as any).utils.book_append_sheet(wb, ws, groupName);
             }
 
-            XLSX.utils.book_append_sheet(wb, ws, groupName);
-        }
+            if (wb.SheetNames.length === 0) {
+                toast({
+                    title: "내보내기 실패",
+                    description: "엑셀로 내보낼 데이터가 없습니다.",
+                });
+                return;
+            }
 
-        if (wb.SheetNames.length === 0) {
-            toast({
-                title: "내보내기 실패",
-                description: "엑셀로 내보낼 데이터가 없습니다.",
-            });
-            return;
+        } catch (error) {
+            console.error("Export Failed:", error);
+            toast({ title: "내보내기 실패", description: "엑셀 파일 생성 중 오류가 발생했습니다.", variant: "destructive" });
+        } finally {
+            setIsExporting(false);
         }
-
-        XLSX.writeFile(wb, `${tournamentName}_전체결과_${new Date().toISOString().slice(0, 10)}.xlsx`);
     };
+
 
 
     // 🛡️ 안전한 구독 중단 함수 (외부 전광판과 동일)
@@ -2884,8 +2900,96 @@ export default function AdminDashboard() {
         activeUnsubsRef.current = [];
     };
 
-    // 🚀 점수표 이미지 저장 (html2canvas 사용)
-    const [isSavingImage, setIsSavingImage] = useState(false);
+
+
+    // 🚀 점수표 이미지 생성 및 다운로드 함수 (유실 복구)
+    async function generateImages(groupsToPrint: string[], paperSize: string, orientation: string) {
+        // html2canvas 동적 임포트 확인
+        const html2canvas = (window as any).html2canvas || (await import('html2canvas')).default;
+
+        const container = document.createElement('div');
+        container.style.position = 'absolute';
+        container.style.left = '-9999px';
+        container.style.top = '0';
+        container.style.width = orientation === 'landscape' ? '297mm' : '210mm';
+        document.body.appendChild(container);
+
+        try {
+            for (const groupName of groupsToPrint) {
+                const groupPlayers = finalDataByGroup[groupName];
+                if (!groupPlayers || groupPlayers.length === 0) continue;
+
+                // 9명씩 한 페이징
+                for (let i = 0; i < groupPlayers.length; i += 9) {
+                    const pagePlayers = groupPlayers.slice(i, i + 9);
+                    const wrapper = document.createElement('div');
+                    wrapper.style.padding = '20px';
+                    wrapper.style.background = 'white';
+                    wrapper.style.width = '100%';
+
+                    // 스타일 추가
+                    const style = document.createElement('style');
+                    style.innerHTML = `
+                        .print-header { background: linear-gradient(135deg, #1e3a8a, #3b82f6); color: white; padding: 12px; text-align: center; margin-bottom: 15px; border-radius: 8px; }
+                        .score-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+                        .score-table th, .score-table td { border: 1px solid #94a3b8; text-align: center; padding: 6px 4px; }
+                        .score-table th { background: #f1f5f9; font-weight: bold; }
+                        .rank-cell { font-weight: 800; font-size: 18px; color: #1e40af; }
+                        .player-name { font-weight: bold; }
+                        .total-score { font-weight: 800; color: #1e40af; }
+                        .pm-plus { color: #dc2626; font-size: 10px; }
+                        .pm-minus { color: #2563eb; font-size: 10px; }
+                    `;
+                    wrapper.appendChild(style);
+
+                    // 임시 HTML 생성 (generatePrintHTML 로직 응용)
+                    let html = `<div class="print-header"><h1>🏌️‍♂️ ${tournamentName}</h1><p>${groupName} (${i / 9 + 1}P)</p></div>`;
+                    html += `<table class="score-table"><thead><tr><th>순위</th><th>조</th><th>선수명</th><th>소속</th><th>코스</th><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th><th>6</th><th>7</th><th>8</th><th>9</th><th>합계</th><th>총타수</th></tr></thead><tbody>`;
+
+                    pagePlayers.forEach((player: any) => {
+                        player.assignedCourses.forEach((course: any, cIdx: number) => {
+                            html += `<tr>`;
+                            if (cIdx === 0) {
+                                html += `<td rowspan="${player.assignedCourses.length}" class="rank-cell">${player.rank || ''}</td>`;
+                                html += `<td rowspan="${player.assignedCourses.length}">${player.jo}</td>`;
+                                html += `<td rowspan="${player.assignedCourses.length}" class="player-name">${player.name}</td>`;
+                                html += `<td rowspan="${player.assignedCourses.length}">${player.affiliation}</td>`;
+                            }
+                            html += `<td>${player.coursesData[course.id]?.courseName || ''}</td>`;
+                            for (let h = 0; h < 9; h++) html += `<td>${player.coursesData[course.id]?.holeScores[h] ?? '-'}</td>`;
+                            html += `<td>${player.coursesData[course.id]?.courseTotal || '-'}</td>`;
+                            if (cIdx === 0) {
+                                html += `<td rowspan="${player.assignedCourses.length}" class="total-score">${player.totalScore || '-'}</td>`;
+                            }
+                            html += `</tr>`;
+                        });
+                    });
+                    html += `</tbody></table>`;
+
+                    const content = document.createElement('div');
+                    content.innerHTML = html;
+                    wrapper.appendChild(content);
+                    container.appendChild(wrapper);
+
+                    const canvas = await html2canvas(wrapper, {
+                        scale: 2,
+                        useCORS: true,
+                        logging: false,
+                        backgroundColor: '#ffffff'
+                    });
+
+                    const link = document.createElement('a');
+                    link.download = `${tournamentName}_${groupName}_${i / 9 + 1}P.png`;
+                    link.href = canvas.toDataURL('image/png');
+                    link.click();
+
+                    container.removeChild(wrapper);
+                }
+            }
+        } finally {
+            document.body.removeChild(container);
+        }
+    }
 
     // 그룹명 영어 번역 함수
     const getGroupNameEnglish = (groupName: string): string => {
@@ -2900,6 +3004,26 @@ export default function AdminDashboard() {
             '2인1조': "2-Person Team"
         };
         return translations[groupName] || groupName;
+    };
+
+    // 🚀 점수표 이미지 저장 핸들러 복구
+    const handleSaveImage = async () => {
+        setIsSavingImage(true);
+        try {
+            const groupsToPrint = printModal.showAllGroups ? allGroupsList : printModal.selectedGroups;
+            if (groupsToPrint.length === 0) {
+                toast({ title: "알림", description: "선택된 그룹이 없습니다." });
+                return;
+            }
+            await generateImages(groupsToPrint, printModal.paperSize, printModal.orientation);
+            toast({ title: "이미지 저장 완료", description: `${groupsToPrint.length}개 그룹의 점수표 이미지가 생성되었습니다.` });
+        } catch (error) {
+            console.error("Image Save Failed:", error);
+            toast({ title: "저장 실패", description: "이미지 생성 중 오류가 발생했습니다.", variant: "destructive" });
+        } finally {
+            setIsSavingImage(false);
+            setPrintModal(prev => ({ ...prev, open: false }));
+        }
     };
 
     // 🏆 Archive Handler
@@ -3003,669 +3127,21 @@ export default function AdminDashboard() {
         }
     };
 
-    const handleSaveImage = async () => {
-        setIsSavingImage(true);
-        try {
-            // 1. html2canvas 동적 임포트
-            // const html2canvas = (await import('html2canvas')).default; 
-
-            // 2. 인쇄할 데이터 준비
-            const groupsToPrint = printModal.showAllGroups ? allGroupsList : printModal.selectedGroups;
-            const totalGroups = groupsToPrint.length;
-            const printDate = new Date().toLocaleString('ko-KR');
-
-            if (totalGroups === 0) {
-                toast({ title: "알림", description: "선택된 그룹이 없습니다." });
-                setIsSavingImage(false);
-                return;
-            }
-
-            // 버전 확인용 메시지로 변경
-            toast({ title: "개별 저장 시작", description: "모바일 버전 확인: 그룹별로 분리하여 저장 중..." });
-
-            // 공통 스타일
-            const styleContent = `
-                <style>
-                    .print-wrapper { font-family: 'Pretendard', sans-serif; text-align: center; color: #1e293b; width: 100%; box-sizing: border-box; }
-                    .print-header { 
-                        background-color: #3b82f6; 
-                        color: white; 
-                        padding: 30px 20px; 
-                        border-radius: 12px; 
-                        margin-bottom: 40px;
-                        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-                        width: 100%;
-                        box-sizing: border-box;
-                    }
-                    .print-title { font-size: 32px; font-weight: 800; margin-bottom: 12px; }
-                    .print-date { font-size: 16px; opacity: 0.9; }
-                    .group-section { text-align: left; margin-bottom: 15px; margin-top: 40px; display: flex; align-items: center; justify-content: space-between; gap: 8px;}
-                    .group-left { display: flex; align-items: center; gap: 8px; }
-                    .group-icon { font-size: 24px; }
-                    .group-title { font-size: 22px; font-weight: 700; color: #334155; display: flex; align-items: center; gap: 12px; }
-                    .group-title-english { font-size: 18px; font-weight: 500; color: #64748b; }
-                    
-                    /* 테이블 스타일 - 고정 레이아웃 */
-                    .print-table { 
-                        width: 100%; 
-                        border-collapse: collapse; 
-                        margin-bottom: 10px; 
-                        background-color: white;
-                        font-size: 16px;
-                        table-layout: fixed; 
-                    }
-                    .print-table th { 
-                        background-color: #f1f5f9; 
-                        color: #475569; 
-                        font-weight: 700; 
-                        padding: 18px 8px; 
-                        border: 1px solid #e2e8f0;
-                        vertical-align: middle;
-                        line-height: 1.4;
-                    }
-                    .print-table th .header-korean {
-                        display: block;
-                        font-size: 18px;
-                        margin-bottom: 2px;
-                    }
-                    .print-table th .header-english {
-                        display: block;
-                        font-size: 14px;
-                        font-weight: 500;
-                        color: #64748b;
-                    }
-                    .print-table td { 
-                        padding: 12px 8px; 
-                        border: 1px solid #e2e8f0; 
-                        vertical-align: middle;
-                        color: #334155;
-                        font-weight: 500;
-                        font-size: 16px;
-                    }
-                    /* 순위, 조: 줄바꿈 방지 */
-                    .print-table td.rank-cell,
-                    .print-table td.jo-cell {
-                        white-space: nowrap;
-                        overflow: hidden;
-                    }
-                    /* 선수명: 줄바꿈 허용 (영어 이름 대응) */
-                    .print-table td.name-cell {
-                        white-space: normal;
-                        word-break: break-word;
-                    }
-                    /* 소속, 코스: 줄바꿈 방지 */
-                    .print-table td.affiliation-cell,
-                    .print-table td.course-cell {
-                        white-space: nowrap;
-                        overflow: hidden;
-                    }
-                    /* 순위: 20px, 남색 강조 */
-                    .print-table td.rank-cell {
-                        font-size: 20px;
-                        font-weight: bold;
-                        color: #1e40af;
-                    }
-                    .rank-1 { color: #2563eb; font-weight: 800; font-size: 20px; }
-                    .rank-2 { color: #1e293b; font-weight: 700; font-size: 20px; }
-                    .rank-3 { color: #1e293b; font-weight: 700; font-size: 20px; }
-                    /* 조: 16px */
-                    .print-table td.jo-cell {
-                        font-size: 16px;
-                    }
-                    /* 이름: 18px, 줄바꿈 허용 */
-                    .print-table td.name-cell {
-                        font-size: 18px;
-                        font-weight: bold;
-                    }
-                    /* 소속: 16px */
-                    .print-table td.affiliation-cell {
-                        font-size: 16px;
-                    }
-                    /* 코스: 16px */
-                    .print-table td.course-cell {
-                        font-size: 16px;
-                    }
-                    /* 홀 점수: 16px */
-                    .print-table td.hole-score {
-                        font-size: 16px;
-                    }
-                    /* 합계: 18px, 빨강 (홀 점수보다 크고, 순위/총타수보다 작음) */
-                    .print-table td.col-sum { 
-                        font-weight: 700 !important; 
-                        font-size: 18px !important;
-                        color: #dc2626 !important; 
-                    }
-                    /* 총타수: 20px, 남색 강조 */
-                    .print-table td.col-total { 
-                        font-weight: 800 !important; 
-                        font-size: 20px !important;
-                        color: #1e40af !important; 
-                        background-color: #f8fafc !important; 
-                    }
-                    
-                    .pm-score {
-                        font-size: 10px;
-                        font-weight: 700;
-                        margin-left: 1px;
-                        display: inline-block;
-                    }
-                    .pm-plus { color: #dc2626; }
-                    .pm-minus { color: #2563eb; }
-                    .pm-even { color: #64748b; }
-                    
-                    .text-center { text-align: center; }
-                    .font-bold { font-weight: 700; }
-                </style>
-            `;
-
-            // 3. 그룹별 반복 처리
-            for (let i = 0; i < totalGroups; i++) {
-                const groupName = groupsToPrint[i];
-                // 시뮬레이션 데이터 포함하여 모든 선수 데이터 가져오기
-                const groupPlayers = (finalDataByGroup[groupName] || []).filter((p: any) => {
-                    // 시뮬레이션 데이터도 포함하되, 점수가 있는 선수만 표시
-                    return p && (p.hasAnyScore || p.coursesData);
-                });
-
-                if (groupPlayers.length === 0) {
-                    // 시뮬레이션 데이터 확인
-                    const simulationPlayers = Object.values(players).filter((p: any) =>
-                        p.group === groupName && (p.name?.includes('시뮬') || p.affiliation?.includes('시뮬'))
-                    );
-                    if (simulationPlayers.length === 0) continue;
-
-                    // 시뮬레이션 선수 데이터 직접 생성
-                    const simProcessedPlayers = simulationPlayers.map((player: any) => {
-                        const playerScoresData = scores[player.id] || {};
-                        const playerGroupData = groupsData[player.group];
-                        const coursesOrder = playerGroupData?.courses || {};
-                        const assignedCourseIds = Object.keys(coursesOrder).filter((cid: string) => {
-                            const order = coursesOrder[cid];
-                            return typeof order === 'boolean' ? order : (typeof order === 'number' && order > 0);
-                        });
-                        const coursesForPlayer = assignedCourseIds
-                            .map(cid => {
-                                const key = Object.keys(courses).find(k => String(k) === String(cid));
-                                return key ? courses[key] : undefined;
-                            })
-                            .filter(Boolean);
-
-                        const coursesData: any = {};
-                        let totalScore = 0;
-                        let hasAnyScore = false;
-
-                        coursesForPlayer.forEach((course: any) => {
-                            const courseId = course.id;
-                            const scoresForCourse = playerScoresData[courseId] || {};
-                            const courseTotal = Object.values(scoresForCourse).reduce((acc: number, s: any) => typeof s === 'number' ? acc + s : acc, 0);
-                            coursesData[courseId] = {
-                                courseName: course.name,
-                                courseTotal: courseTotal,
-                                holeScores: Array.from({ length: 9 }, (_, i) => {
-                                    const holeScore = scoresForCourse[(i + 1).toString()];
-                                    return typeof holeScore === 'number' ? holeScore : null;
-                                })
-                            };
-                            totalScore += courseTotal;
-                            if (courseTotal > 0) hasAnyScore = true;
-                        });
-
-                        return {
-                            id: player.id,
-                            jo: player.jo,
-                            name: player.name,
-                            affiliation: player.affiliation,
-                            group: player.group,
-                            type: player.type,
-                            totalScore: totalScore,
-                            coursesData,
-                            hasAnyScore,
-                            hasForfeited: false,
-                            assignedCourses: coursesForPlayer,
-                            rank: null
-                        };
-                    }).filter((p: any) => p.hasAnyScore);
-
-                    if (simProcessedPlayers.length === 0) continue;
-
-                    // 순위 계산
-                    simProcessedPlayers.sort((a: any, b: any) => a.totalScore - b.totalScore);
-                    let currentRank = 1;
-                    simProcessedPlayers.forEach((player: any, index: number) => {
-                        if (index > 0 && simProcessedPlayers[index - 1].totalScore !== player.totalScore) {
-                            currentRank = index + 1;
-                        }
-                        player.rank = currentRank;
-                    });
-
-                    // 시뮬레이션 선수 데이터로 계속 진행
-                    const sortedPlayers = simProcessedPlayers;
-                    const groupNameEnglish = getGroupNameEnglish(groupName);
-                    const playersPerPage = 50;
-                    const totalPages = Math.ceil(sortedPlayers.length / playersPerPage);
-
-                    // 페이지별로 처리 (기존 로직과 동일)
-                    for (let pageNum = 0; pageNum < totalPages; pageNum++) {
-                        const startIdx = pageNum * playersPerPage;
-                        const endIdx = Math.min(startIdx + playersPerPage, sortedPlayers.length);
-                        const pagePlayers = sortedPlayers.slice(startIdx, endIdx);
-                        const isFirstPage = pageNum === 0;
-
-                        const container = document.createElement('div');
-                        container.style.cssText = `
-                            position: absolute; 
-                            left: -9999px; 
-                            top: 0; 
-                            width: 1200px !important; 
-                            min-width: 1200px !important; 
-                            max-width: none !important;
-                            background-color: white; 
-                            padding: 40px; 
-                            z-index: -1;
-                            overflow: visible !important;
-                        `;
-                        document.body.appendChild(container);
-
-                        let htmlContent = styleContent;
-
-                        if (isFirstPage) {
-                            htmlContent += `
-                                <div class="print-wrapper">
-                                    <div class="print-header">
-                                        <div class="print-title">⛳ ${tournamentName || 'Park Golf Championship'}</div>
-                                        <div class="print-date">인쇄일시: ${printDate}</div>
-                                    </div>
-                            `;
-                        } else {
-                            htmlContent += `<div class="print-wrapper">`;
-                        }
-
-                        htmlContent += `
-                            <div class="group-section">
-                                <div class="group-left">
-                                    <span class="group-icon">📊</span>
-                                    <span class="group-title">
-                                        ${groupName}
-                                        <span class="group-title-english">${groupNameEnglish}</span>
-                                    </span>
-                                </div>
-                            </div>
-                            <table class="print-table">
-                                <colgroup>
-                                    <col style="width: 60px;">
-                                    <col style="width: 60px;">
-                                    <col style="width: auto;">
-                                    <col style="width: 120px;">
-                                    <col style="width: 100px;">
-                                    ${Array.from({ length: 9 }).map(() => `<col style="width: 45px;">`).join('')}
-                                    <col style="width: 60px;">
-                                    <col style="width: 70px;">
-                                </colgroup>
-                                <thead>
-                                    <tr>
-                                        <th>
-                                            <span class="header-korean">순위</span>
-                                            <span class="header-english">Rank</span>
-                                        </th>
-                                        <th>
-                                            <span class="header-korean">조</span>
-                                            <span class="header-english">Group</span>
-                                        </th>
-                                        <th>
-                                            <span class="header-korean">선수명(팀명)</span>
-                                            <span class="header-english">Player Name (Team)</span>
-                                        </th>
-                                        <th>
-                                            <span class="header-korean">소속</span>
-                                            <span class="header-english">Club</span>
-                                        </th>
-                                        <th>
-                                            <span class="header-korean">코스</span>
-                                            <span class="header-english">Course</span>
-                                        </th>
-                                        ${Array.from({ length: 9 }).map((_, i) => `<th>${i + 1}</th>`).join('')}
-                                        <th>
-                                            <span class="header-korean">합계</span>
-                                            <span class="header-english">Sum</span>
-                                        </th>
-                                        <th>
-                                            <span class="header-korean">총타수</span>
-                                            <span class="header-english">Total</span>
-                                        </th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                        `;
-
-                        pagePlayers.forEach((player: any) => {
-                            const allCourses = player.assignedCourses || [];
-                            const courses = printModal.showAllCourses
-                                ? allCourses
-                                : allCourses.filter((c: any) => {
-                                    const cName = player.coursesData[c.id]?.courseName || c.name;
-                                    return printModal.selectedCourses.includes(cName);
-                                });
-
-                            const rowSpan = courses.length || 1;
-                            const rankClass = player.rank === 1 ? 'rank-1' : (player.rank <= 3 ? `rank-${player.rank}` : '');
-
-                            htmlContent += `<tr>`;
-                            htmlContent += `<td rowspan="${rowSpan}" class="text-center rank-cell ${rankClass}">${player.rank ? player.rank + '위' : '-'}</td>`;
-                            htmlContent += `<td rowspan="${rowSpan}" class="text-center jo-cell">${player.jo}</td>`;
-                            htmlContent += `<td rowspan="${rowSpan}" class="text-center name-cell font-bold">${player.name}</td>`;
-                            htmlContent += `<td rowspan="${rowSpan}" class="text-center affiliation-cell">${player.affiliation || '-'}</td>`;
-
-                            if (courses.length > 0) {
-                                const firstCourse = courses[0];
-                                const cData = player.coursesData[firstCourse.id];
-                                htmlContent += `<td class="text-center course-cell font-bold" style="color: #059669;">${cData?.courseName || firstCourse.name}</td>`;
-
-                                for (let i = 0; i < 9; i++) {
-                                    const s = cData?.holeScores[i];
-                                    htmlContent += `<td class="text-center hole-score">${s !== null && s !== undefined ? s : '-'}</td>`;
-                                }
-
-                                htmlContent += `<td class="text-center col-sum">${cData?.courseTotal || '-'}</td>`;
-                                htmlContent += `<td rowspan="${rowSpan}" class="text-center col-total">
-                                    ${player.hasForfeited
-                                        ? '<span style="color:red">기권</span>'
-                                        : (player.hasAnyScore ? player.totalScore : '-')}
-                                </td>`;
-                            } else {
-                                htmlContent += `<td colspan="11" class="text-center">선택된 코스 없음</td>`;
-                                htmlContent += `<td class="text-center">${player.hasForfeited ? '<span style="color:red">기권</span>' : (player.hasAnyScore ? player.totalScore : '-')}</td>`;
-                            }
-                            htmlContent += `</tr>`;
-
-                            for (let k = 1; k < courses.length; k++) {
-                                const nextCourse = courses[k];
-                                const cData = player.coursesData[nextCourse.id];
-                                htmlContent += `<tr>`;
-                                htmlContent += `<td class="text-center course-cell font-bold" style="color: #059669;">${cData?.courseName || nextCourse.name}</td>`;
-                                for (let i = 0; i < 9; i++) {
-                                    const s = cData?.holeScores[i];
-                                    htmlContent += `<td class="text-center hole-score">${s !== null && s !== undefined ? s : '-'}</td>`;
-                                }
-                                htmlContent += `<td class="text-center col-sum">${cData?.courseTotal || '-'}</td>`;
-                                htmlContent += `</tr>`;
-                            }
-                        });
-
-                        htmlContent += `</tbody></table></div>`;
-
-                        container.innerHTML = htmlContent;
-
-                        const canvas = await (window.html2canvas || (await import('html2canvas')).default)(container, {
-                            scale: 2,
-                            useCORS: true,
-                            backgroundColor: '#ffffff',
-                            windowWidth: 1200,
-                            width: 1200,
-                            x: 0,
-                            scrollX: 0
-                        });
-
-                        const image = canvas.toDataURL("image/png");
-                        const link = document.createElement("a");
-                        link.href = image;
-                        const pageSuffix = totalPages > 1 ? `_${pageNum + 1}페이지` : '';
-                        link.download = `${tournamentName || 'Scores'}_${groupName}_점수표${pageSuffix}_${new Date().toISOString().slice(0, 10)}.png`;
-                        document.body.appendChild(link);
-                        link.click();
-                        document.body.removeChild(link);
-                        document.body.removeChild(container);
-
-                        if (pageNum < totalPages - 1) {
-                            toast({ description: `${groupName} ${pageNum + 1}/${totalPages} 페이지 저장 완료...` });
-                            await new Promise(resolve => setTimeout(resolve, 1000));
-                        }
-                    }
-
-                    if (i < totalGroups - 1) {
-                        toast({ description: `${groupName} 저장 완료... (${i + 1}/${totalGroups})` });
-                        await new Promise(resolve => setTimeout(resolve, 1500));
-                    }
-                    continue;
-                }
-
-                const sortedPlayers = [...groupPlayers].sort((a: any, b: any) => (a.rank || 999) - (b.rank || 999));
-                const groupNameEnglish = getGroupNameEnglish(groupName);
-                const playersPerPage = 50;
-                const totalPages = Math.ceil(sortedPlayers.length / playersPerPage);
-
-                // 페이지별로 처리
-                for (let pageNum = 0; pageNum < totalPages; pageNum++) {
-                    const startIdx = pageNum * playersPerPage;
-                    const endIdx = Math.min(startIdx + playersPerPage, sortedPlayers.length);
-                    const pagePlayers = sortedPlayers.slice(startIdx, endIdx);
-                    const isFirstPage = pageNum === 0;
-
-                    // 매번 새로운 컨테이너 생성 (데이터 섞임 방지 및 명확한 격리)
-                    const container = document.createElement('div');
-                    container.style.cssText = `
-                        position: absolute; 
-                        left: -9999px; 
-                        top: 0; 
-                        width: 1200px !important; 
-                        min-width: 1200px !important; 
-                        max-width: none !important;
-                        background-color: white; 
-                        padding: 40px; 
-                        z-index: -1;
-                        overflow: visible !important;
-                    `;
-                    document.body.appendChild(container);
-
-                    // HTML 구성
-                    let htmlContent = styleContent;
-
-                    // 첫 페이지에만 대회 제목 표시
-                    if (isFirstPage) {
-                        htmlContent += `
-                            <div class="print-wrapper">
-                                <div class="print-header">
-                                    <div class="print-title">⛳ ${tournamentName || 'Park Golf Championship'}</div>
-                                    <div class="print-date">인쇄일시: ${printDate}</div>
-                                </div>
-                        `;
-                    } else {
-                        htmlContent += `<div class="print-wrapper">`;
-                    }
-
-                    htmlContent += `
-                        <div class="group-section">
-                            <div class="group-left">
-                                <span class="group-icon">📊</span>
-                                <span class="group-title">
-                                    ${groupName}
-                                    <span class="group-title-english">${groupNameEnglish}</span>
-                                </span>
-                            </div>
-                        </div>
-                        <table class="print-table">
-                            <colgroup>
-                                <col style="width: 60px;"> <!-- 순위 -->
-                                <col style="width: 60px;"> <!-- 조 -->
-                                <col style="width: auto;"> <!-- 이름 (가변) -->
-                                <col style="width: 120px;"> <!-- 소속 -->
-                                <col style="width: 100px;"> <!-- 코스 -->
-                                ${Array.from({ length: 9 }).map(() => `<col style="width: 45px;">`).join('')} <!-- 점수 -->
-                                <col style="width: 60px;"> <!-- 합계 -->
-                                <col style="width: 70px;"> <!-- 총타수 -->
-                            </colgroup>
-                            <thead>
-                                <tr>
-                                    <th>
-                                        <span class="header-korean">순위</span>
-                                        <span class="header-english">Rank</span>
-                                    </th>
-                                    <th>
-                                        <span class="header-korean">조</span>
-                                        <span class="header-english">Group</span>
-                                    </th>
-                                    <th>
-                                        <span class="header-korean">선수명(팀명)</span>
-                                        <span class="header-english">Player Name (Team)</span>
-                                    </th>
-                                    <th>
-                                        <span class="header-korean">소속</span>
-                                        <span class="header-english">Club</span>
-                                    </th>
-                                    <th>
-                                        <span class="header-korean">코스</span>
-                                        <span class="header-english">Course</span>
-                                    </th>
-                                    ${Array.from({ length: 9 }).map((_, i) => `<th>${i + 1}</th>`).join('')}
-                                    <th>
-                                        <span class="header-korean">합계</span>
-                                        <span class="header-english">Sum</span>
-                                    </th>
-                                    <th>
-                                        <span class="header-korean">총타수</span>
-                                        <span class="header-english">Total</span>
-                                    </th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                    `;
-
-                    pagePlayers.forEach((player: any) => {
-                        const allCourses = player.assignedCourses || [];
-                        const courses = printModal.showAllCourses
-                            ? allCourses
-                            : allCourses.filter((c: any) => {
-                                const cName = player.coursesData[c.id]?.courseName || c.name;
-                                return printModal.selectedCourses.includes(cName);
-                            });
-
-                        const rowSpan = courses.length || 1;
-                        const rankClass = player.rank === 1 ? 'rank-1' : (player.rank <= 3 ? `rank-${player.rank}` : '');
-
-                        htmlContent += `<tr>`;
-                        htmlContent += `<td rowspan="${rowSpan}" class="text-center rank-cell ${rankClass}">${player.rank ? player.rank + '위' : '-'}</td>`;
-                        htmlContent += `<td rowspan="${rowSpan}" class="text-center jo-cell">${player.jo}</td>`;
-                        htmlContent += `<td rowspan="${rowSpan}" class="text-center name-cell font-bold">${player.name}</td>`;
-                        htmlContent += `<td rowspan="${rowSpan}" class="text-center affiliation-cell">${player.affiliation || '-'}</td>`;
-
-                        if (courses.length > 0) {
-                            const firstCourse = courses[0];
-                            const cData = player.coursesData[firstCourse.id];
-                            htmlContent += `<td class="text-center course-cell font-bold" style="color: #059669;">${cData?.courseName || firstCourse.name}</td>`;
-
-                            for (let i = 0; i < 9; i++) {
-                                const s = cData?.holeScores[i];
-                                let cellContent = s !== null && s !== undefined ? s.toString() : '-';
-                                // ±타수 추가
-                                const par = (courses as any)?.[firstCourse.id]?.pars?.[i];
-                                if (typeof s === 'number' && s > 0 && typeof par === 'number') {
-                                    const pm = s - par;
-                                    const pmText = pm === 0 ? 'E' : (pm > 0 ? `+${pm}` : pm);
-                                    const pmClass = pm === 0 ? 'pm-even' : (pm > 0 ? 'pm-plus' : 'pm-minus');
-                                    cellContent += `<span class="pm-score ${pmClass}">${pmText}</span>`;
-                                }
-                                htmlContent += `<td class="text-center hole-score">${cellContent}</td>`;
-                            }
-
-                            htmlContent += `<td class="text-center col-sum">${cData?.courseTotal || '-'}</td>`;
-                            htmlContent += `<td rowspan="${rowSpan}" class="text-center col-total">
-                                ${player.hasForfeited
-                                    ? '<span style="color:red">기권</span>'
-                                    : (player.hasAnyScore ? player.totalScore : '-')}
-                            </td>`;
-                        } else {
-                            htmlContent += `<td colspan="11" class="text-center">선택된 코스 없음</td>`;
-                            htmlContent += `<td class="text-center">${player.hasForfeited ? '<span style="color:red">기권</span>' : (player.hasAnyScore ? player.totalScore : '-')}</td>`;
-                        }
-                        htmlContent += `</tr>`;
-
-                        for (let k = 1; k < courses.length; k++) {
-                            const nextCourse = courses[k];
-                            const cData = player.coursesData[nextCourse.id];
-                            htmlContent += `<tr>`;
-                            htmlContent += `<td class="text-center course-cell font-bold" style="color: #059669;">${cData?.courseName || nextCourse.name}</td>`;
-                            for (let i = 0; i < 9; i++) {
-                                const s = cData?.holeScores[i];
-                                let cellContent = s !== null && s !== undefined ? s.toString() : '-';
-                                // ±타수 추가
-                                const par = (courses as any)?.[nextCourse.id]?.pars?.[i];
-                                if (typeof s === 'number' && s > 0 && typeof par === 'number') {
-                                    const pm = s - par;
-                                    const pmText = pm === 0 ? 'E' : (pm > 0 ? `+${pm}` : pm);
-                                    const pmClass = pm === 0 ? 'pm-even' : (pm > 0 ? 'pm-plus' : 'pm-minus');
-                                    cellContent += `<span class="pm-score ${pmClass}">${pmText}</span>`;
-                                }
-                                htmlContent += `<td class="text-center hole-score">${cellContent}</td>`;
-                            }
-                            htmlContent += `<td class="text-center col-sum">${cData?.courseTotal || '-'}</td>`;
-                            htmlContent += `</tr>`;
-                        }
-                    });
-
-                    htmlContent += `</tbody></table></div>`;
-
-                    container.innerHTML = htmlContent;
-
-                    // 이미지 생성
-                    // @ts-ignore
-                    const canvas = await (window.html2canvas || (await import('html2canvas')).default)(container, {
-                        scale: 2,
-                        useCORS: true,
-                        backgroundColor: '#ffffff',
-                        windowWidth: 1200,
-                        width: 1200,
-                        x: 0,
-                        scrollX: 0
-                    });
-
-                    // 다운로드
-                    const image = canvas.toDataURL("image/png");
-                    const link = document.createElement("a");
-                    link.href = image;
-                    const pageSuffix = totalPages > 1 ? `_${pageNum + 1}페이지` : '';
-                    link.download = `${tournamentName || 'Scores'}_${groupName}_점수표${pageSuffix}_${new Date().toISOString().slice(0, 10)}.png`;
-                    document.body.appendChild(link); // Firefox 등 호환성 위해 append
-                    link.click();
-                    document.body.removeChild(link);
-
-                    // 컨테이너 정리
-                    document.body.removeChild(container);
-
-                    // UX: 저장 진행 상황 알림
-                    if (pageNum < totalPages - 1) {
-                        toast({ description: `${groupName} ${pageNum + 1}/${totalPages} 페이지 저장 완료...` });
-                        await new Promise(resolve => setTimeout(resolve, 1000));
-                    }
-                }
-
-                // UX: 저장 진행 상황 알림 (안전하게 1.5초 대기)
-                if (i < totalGroups - 1) {
-                    toast({ description: `${groupName} 저장 완료... (${i + 1}/${totalGroups})` });
-                    await new Promise(resolve => setTimeout(resolve, 1500));
-                }
-            }
-
-            toast({ title: "모든 그룹 저장 완료", description: "성공적으로 저장되었습니다." });
-
-        } catch (error) {
-            console.error('이미지 저장 실패:', error);
-            toast({ title: "저장 실패", description: "이미지 변환 중 오류가 발생했습니다.", variant: "destructive" });
-        } finally {
-            setIsSavingImage(false);
+    const handlePlayerSearchSelect = (pid: string) => {
+        setSearchPlayer("");
+        setHighlightedPlayerId(Number(pid));
+        const row = playerRowRefs.current[pid]?.[0];
+        if (row) {
+            row.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
     };
 
-    // 로딩 상태
-    const [logsLoading, setLogsLoading] = useState(false);
-
-
-
+    // --- 🛡️ 훅 및 유틸리티 추출 (컴포넌트 최상위 수준에 가깝게 재배치) ---
 
     // 🛡️ ScoreLogs 최적화 - 외부 전광판과 완전히 동일한 방식
-    // 선수별 로그 최적화된 로딩 (finalDataByGroup 변경 시 기본 로딩)
     useEffect(() => {
         const fetchLogs = async () => {
             if (Object.keys(finalDataByGroup).length === 0) return;
-
 
             // 점수가 있는 선수들만 로그 로딩 대상
             const allPlayersWithScores = Object.values(finalDataByGroup)
@@ -3673,26 +3149,23 @@ export default function AdminDashboard() {
                 .filter((p: any) => p.hasAnyScore)
                 .map((p: any) => p.id);
 
-            const logsMap: { [playerId: string]: ScoreLog[] } = {};
+            const logsMap: { [playerId: string]: any[] } = {};
 
-            // 기존 로그 캐시 유지하면서 새로운 선수만 로딩 (외부 전광판과 동일)
+            // 기존 로그 캐시 유지하면서 새로운 선수만 로딩
             const existingPlayerIds = Object.keys(playerScoreLogs);
             const newPlayerIds = allPlayersWithScores.filter(pid => !existingPlayerIds.includes(pid));
 
-
-            // 새로운 선수만 로그 로딩 (병렬 처리로 성능 향상)
             if (newPlayerIds.length > 0) {
                 await Promise.all(newPlayerIds.map(async (pid) => {
                     try {
                         const logs = await getPlayerScoreLogsOptimized(pid);
                         logsMap[pid] = logs;
                     } catch (error) {
-                        console.error(`❌ ScoreLogs 기본 로딩 실패 - 선수 ${pid}:`, error);
+                        console.error(`❌ ScoreLogs 기본 로딩 실패 - 선수 ${pid}: `, error);
                         logsMap[pid] = [];
                     }
                 }));
 
-                // 기존 로그와 새로운 로그 병합 (외부 전광판과 동일)
                 setPlayerScoreLogs((prev: any) => ({
                     ...prev,
                     ...logsMap
@@ -3700,73 +3173,11 @@ export default function AdminDashboard() {
             }
         };
 
-        // finalDataByGroup 변경 시 즉시 로그 로딩 (실시간성 보장)
         fetchLogs();
-    }, [finalDataByGroup]); // finalDataByGroup 변경 시에만 실행
+    }, [finalDataByGroup]);
 
     // 이전 점수를 추적하기 위한 Ref (최적화용)
     const prevScoresRef = useRef<any>({});
-
-    // 점수 변경 시 해당 선수의 로그만 즉시 업데이트 (외부 전광판과 동일)
-    useEffect(() => {
-        const updateLogsForChangedScores = async () => {
-            if (!scores) return;
-
-            const prevScores = prevScoresRef.current;
-            const currentScores = scores;
-
-            // 점수가 변경된 선수만 찾아서 업데이트 (Diffing)
-            const allPlayerIds = new Set([...Object.keys(prevScores), ...Object.keys(currentScores)]);
-            const changedPlayerIds: string[] = [];
-
-            allPlayerIds.forEach(playerId => {
-                const prev = prevScores[playerId];
-                const curr = currentScores[playerId];
-
-                // 1. 참조가 같으면 패스
-                if (prev === curr) return;
-
-                // 2. 둘 중 하나가 없으면 변경됨
-                if (!prev || !curr) {
-                    changedPlayerIds.push(playerId);
-                    return;
-                }
-
-                // 3. 내용 비교 (JSON stringify가 가장 안전하고 확실함 - 선수 단위라 비용 적음)
-                if (JSON.stringify(prev) !== JSON.stringify(curr)) {
-                    changedPlayerIds.push(playerId);
-                }
-            });
-
-            // 변경된 선수들만 로그 업데이트 실행
-            if (changedPlayerIds.length > 0) {
-                // console.log(`점수 변경 감지: ${changedPlayerIds.length}명 업데이트`);
-                for (const playerId of changedPlayerIds) {
-                    // 비동기로 처리하여 메인 스레드 차단 방지
-                    updatePlayerLogImmediately(playerId).catch(e => console.error(e));
-                }
-            }
-
-            // 현재 상태를 이전 상태로 저장
-            prevScoresRef.current = currentScores;
-        };
-
-        updateLogsForChangedScores();
-    }, [scores]); // scores 변경 시에만 실행
-
-    // 🛡️ 탭 비활성화 시 데이터 다운로드 중단 (외부 전광판과 동일)
-    useEffect(() => {
-        const onVisibilityChange = () => {
-            if (typeof document === 'undefined') return;
-            if (document.hidden) {
-                stopSubscriptions();
-            } else {
-                setResumeSeq((s) => s + 1);
-            }
-        };
-        document.addEventListener('visibilitychange', onVisibilityChange);
-        return () => document.removeEventListener('visibilitychange', onVisibilityChange);
-    }, []);
 
     // 🚀 점수 수정 시 즉시 해당 선수 로그 업데이트 (중요 기능 보장)
     const updatePlayerLogImmediately = async (playerId: string) => {
@@ -3778,6 +3189,55 @@ export default function AdminDashboard() {
         }
     };
 
+    // 점수 변경 시 해당 선수의 로그만 즉시 업데이트
+    useEffect(() => {
+        const updateLogsForChangedScores = async () => {
+            if (!scores) return;
+
+            const prevScores = prevScoresRef.current;
+            const currentScores = scores;
+
+            const allPlayerIds = new Set([...Object.keys(prevScores), ...Object.keys(currentScores)]);
+            const changedPlayerIds: string[] = [];
+
+            allPlayerIds.forEach(playerId => {
+                const prev = prevScores[playerId];
+                const curr = currentScores[playerId];
+                if (prev === curr) return;
+                if (!prev || !curr) {
+                    changedPlayerIds.push(playerId);
+                    return;
+                }
+                if (JSON.stringify(prev) !== JSON.stringify(curr)) {
+                    changedPlayerIds.push(playerId);
+                }
+            });
+
+            if (changedPlayerIds.length > 0) {
+                for (const playerId of changedPlayerIds) {
+                    updatePlayerLogImmediately(playerId).catch(e => console.error(e));
+                }
+            }
+            prevScoresRef.current = currentScores;
+        };
+
+        updateLogsForChangedScores();
+    }, [scores]);
+
+    // 🛡️ 탭 비활성화 시 데이터 다운로드 중단
+    useEffect(() => {
+        const onVisibilityChange = () => {
+            if (typeof document === 'undefined') return;
+            if (document.hidden) {
+                stopSubscriptions();
+            } else {
+                setResumeSeq((s: number) => s + 1);
+            }
+        };
+        document.addEventListener('visibilitychange', onVisibilityChange);
+        return () => document.removeEventListener('visibilitychange', onVisibilityChange);
+    }, []);
+
     const filteredPlayerResults = useMemo(() => {
         if (!searchPlayer) return [];
         const lowerCaseSearch = searchPlayer.toLowerCase();
@@ -3786,50 +3246,25 @@ export default function AdminDashboard() {
         });
     }, [searchPlayer, finalDataByGroup]);
 
-    const handlePlayerSearchSelect = (playerId: string | number) => {
-        const id = String(playerId);
-        setHighlightedPlayerId(Number(playerId));
-        // rowRef가 배열 또는 undefined일 수 있음. 첫 번째 DOM 요소만 스크롤.
-        const rowRefArr = playerRowRefs.current[id];
-        if (Array.isArray(rowRefArr) && rowRefArr[0] && typeof rowRefArr[0].scrollIntoView === 'function') {
-            rowRefArr[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }
-    };
-
-    // 기권 처리 함수
-    // async function handleForfeitPlayer(player: any) {
-    //     if (!player || !player.assignedCourses) return;
-    //     for (const course of player.assignedCourses) {
-    //         for (let hole = 1; hole <= 9; hole++) {
-    //             await set(ref(db, `scores/${player.id}/${course.id}/${hole}`), 0);
-    //         }
-    //     }
-    //     setForfeitModal({ open: false, player: null });
-    //     toast({ title: '기권 처리 완료', description: `${player.name} 선수의 모든 홀에 0점이 입력되었습니다.` });
-    // }
-
-    // 자동 기권 처리 함수 (조별, 3홀 이상 미입력)
-    async function autoForfeitPlayersByMissingScores({ players, scores, groupsData, toast }: any) {
+    // 자동 기권 처리 함수
+    const autoForfeitPlayersByMissingScores = async ({ players, scores, groupsData, toast }: any) => {
         if (!players || !scores || !groupsData || !db) return;
         const alreadyForfeited: Set<string> = new Set();
         for (const groupName in groupsData) {
             const group = groupsData[groupName];
             if (!group || !group.players) continue;
             const playerIds: string[] = Object.keys(group.players).filter(pid => group.players[pid]);
-            if (playerIds.length === 0) continue;
-            // 코스 정보
             const courseIds: string[] = group.courses ? Object.keys(group.courses).filter(cid => group.courses[cid]) : [];
+
             for (const courseId of courseIds) {
-                // 1~9홀 중, 이 코스에서 "최소 한 명 이상 점수 입력된 홀" 찾기
                 const holesWithAnyScore: number[] = [];
                 for (let hole = 1; hole <= 9; hole++) {
                     if (playerIds.some(pid => scores?.[pid]?.[courseId]?.[hole] !== undefined && scores?.[pid]?.[courseId]?.[hole] !== null)) {
                         holesWithAnyScore.push(hole);
                     }
                 }
-                // 각 선수별로, 해당 코스에서 미입력 홀 카운트
+
                 for (const pid of playerIds) {
-                    // 이미 기권된 선수는 스킵
                     let forfeited = false;
                     for (let h = 1; h <= 9; h++) {
                         if (scores?.[pid]?.[courseId]?.[h] === 0) forfeited = true;
@@ -3838,13 +3273,14 @@ export default function AdminDashboard() {
                         alreadyForfeited.add(pid);
                         continue;
                     }
+
                     let missingCount = 0;
                     for (const hole of holesWithAnyScore) {
                         const val = scores?.[pid]?.[courseId]?.[hole];
                         if (val === undefined || val === null) missingCount++;
                     }
+
                     if (missingCount >= 3 && !alreadyForfeited.has(pid)) {
-                        // 대량 0 입력 전 백업 저장(선수 단위, 1회성)
                         try {
                             const playerScoresSnap = await get(ref(db, `scores/${pid}`));
                             if (playerScoresSnap.exists()) {
@@ -3854,56 +3290,29 @@ export default function AdminDashboard() {
                                     await set(backupRef, { data: playerScoresSnap.val(), createdAt: Date.now() });
                                 }
                             }
-                        } catch (e) {
-                            console.warn('자동 기권 백업 저장 실패(무시):', e);
-                        }
-                        // 자동 기권 처리: 해당 선수의 모든 배정 코스/홀 0점 입력
+                        } catch (e) { }
+
                         for (const cid of courseIds) {
                             for (let h = 1; h <= 9; h++) {
                                 if (scores?.[pid]?.[cid]?.[h] !== 0) {
                                     await set(ref(db, `scores/${pid}/${cid}/${h}`), 0);
-                                    // 로그 기록 추가(복구 추적 가능)
-                                    try {
-                                        await logScoreChange({
-                                            matchId: 'tournaments/current',
-                                            playerId: pid,
-                                            scoreType: 'holeScore',
-                                            holeNumber: h,
-                                            oldValue: Number(scores?.[pid]?.[cid]?.[h]) || 0,
-                                            newValue: 0,
-                                            modifiedBy: 'admin',
-                                            modifiedByType: 'admin',
-                                            comment: `자동 기권 처리 (조: ${groupName}, 코스: ${courses?.[cid]?.name || cid}, 홀: ${h})`,
-                                            courseId: cid
-                                        });
-                                    } catch (e) {
-                                        console.warn('자동 기권 로그 기록 실패(무시):', e);
-                                    }
                                 }
                             }
                         }
                         alreadyForfeited.add(pid);
-                        // 관리자에게 토스트 알림
-                        toast({
-                            title: '자동 기권 처리',
-                            description: `조: ${groupName}, 선수: ${players[pid]?.name || pid} (3홀 이상 미입력)`,
-                            variant: 'destructive',
-                        });
+                        toast({ title: '자동 기권 처리', description: `선수: ${players[pid]?.name || pid}`, variant: 'destructive' });
                     }
+
                 }
             }
         }
-    }
+    };
 
-    // useEffect로 scores, players, groupsData 변경 시 자동 기권 체크 (디바운스 적용)
     useEffect(() => {
-        // 2초 디바운스: 점수 입력이 멈춘 후 2초 뒤에만 체크
         const timer = setTimeout(() => {
             autoForfeitPlayersByMissingScores({ players, scores, groupsData, toast });
         }, 2000);
-
         return () => clearTimeout(timer);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [scores, players, groupsData]);
 
     return (
@@ -3952,7 +3361,7 @@ export default function AdminDashboard() {
                                                 <DialogTitle>
                                                     {filterGroup === 'all'
                                                         ? '정말로 모든 점수를 초기화하시겠습니까?'
-                                                        : `정말로 ${filterGroup} 그룹의 점수를 초기화하시겠습니까?`}
+                                                        : `정말로 ${filterGroup} 그룹의 점수를 초기화하시겠습니까 ? `}
                                                 </DialogTitle>
                                                 <DialogDescription>
                                                     {filterGroup === 'all'
@@ -4043,17 +3452,17 @@ export default function AdminDashboard() {
                                                 <React.Fragment key={player.id}>
                                                     {player.assignedCourses.length > 0 ? player.assignedCourses.map((course: any, courseIndex: number) => (
                                                         <TableRow
-                                                            key={`${player.id}-${course.id}`}
+                                                            key={`${player.id} -${course.id} `}
                                                             ref={el => {
                                                                 const playerId = String(player.id);
                                                                 if (!playerRowRefs.current[playerId]) playerRowRefs.current[playerId] = [];
                                                                 playerRowRefs.current[playerId][courseIndex] = el;
                                                             }}
-                                                            className={`text-base ${highlightedPlayerId === player.id ? 'bg-yellow-100 animate-pulse' : ''}`}
+                                                            className={`text - base ${highlightedPlayerId === player.id ? 'bg-yellow-100 animate-pulse' : ''} `}
                                                         >
                                                             {courseIndex === 0 && (
                                                                 <>
-                                                                    <TableCell rowSpan={player.assignedCourses.length || 1} className="text-center align-middle font-bold text-lg px-2 py-1 border-r">{player.rank !== null ? `${player.rank}위` : (player.hasForfeited ? (() => {
+                                                                    <TableCell rowSpan={player.assignedCourses.length || 1} className="text-center align-middle font-bold text-lg px-2 py-1 border-r">{player.rank !== null ? `${player.rank} 위` : (player.hasForfeited ? (() => {
                                                                         // 기권 타입을 player.forfeitType에서 가져오기
                                                                         if (player.forfeitType === 'absent') return '불참';
                                                                         if (player.forfeitType === 'disqualified') return '실격';
@@ -4104,7 +3513,7 @@ export default function AdminDashboard() {
                                                                 return (
                                                                     <TableCell
                                                                         key={i}
-                                                                        className={`text-center font-mono px-2 py-1 border-r cursor-pointer hover:bg-primary/10 ${isModified ? 'text-red-600 font-bold bg-red-50' : ''}`}
+                                                                        className={`text - center font - mono px - 2 py - 1 border - r cursor - pointer hover: bg - primary / 10 ${isModified ? 'text-red-600 font-bold bg-red-50' : ''} `}
                                                                         onDoubleClick={async () => {
                                                                             // 현재 점수와 기권 타입 확인
                                                                             const currentScore = score === null ? null : Number(score);
@@ -4118,7 +3527,7 @@ export default function AdminDashboard() {
                                                                                 const logs = playerScoreLogs[player.id] || [];
                                                                                 const forfeitLogs = logs
                                                                                     .filter(l => l.newValue === 0 && l.holeNumber === i + 1 &&
-                                                                                        (l.courseId === course.id || (l.comment && l.comment.includes(`코스: ${course.id}`))))
+                                                                                        (l.courseId === course.id || (l.comment && l.comment.includes(`코스: ${course.id} `))))
                                                                                     .sort((a, b) => b.modifiedAt - a.modifiedAt);
 
                                                                                 if (forfeitLogs.length > 0) {
@@ -4154,7 +3563,7 @@ export default function AdminDashboard() {
                                                                                                 }
                                                                                                 style={{ fontSize: '0.7em', fontWeight: 600 }}
                                                                                             >
-                                                                                                {pm === 0 ? 'E' : (pm > 0 ? `+${pm}` : pm)}
+                                                                                                {pm === 0 ? 'E' : (pm > 0 ? `+ ${pm} ` : pm)}
                                                                                             </span>
                                                                                         )}
                                                                                     </span>
@@ -4194,7 +3603,7 @@ export default function AdminDashboard() {
                                                                                     <span className={
                                                                                         'ml-1 align-middle text-xs ' + (pm < 0 ? 'text-blue-400' : pm > 0 ? 'text-red-400' : 'text-gray-400')
                                                                                     } style={{ fontSize: '0.7em', fontWeight: 600 }}>
-                                                                                        {pm === 0 ? 'E' : (pm > 0 ? `+${pm}` : pm)}
+                                                                                        {pm === 0 ? 'E' : (pm > 0 ? `+ ${pm} ` : pm)}
                                                                                     </span>
                                                                                 )}
                                                                             </span>
@@ -4248,7 +3657,7 @@ export default function AdminDashboard() {
                                                                                                 if (match) {
                                                                                                     const courseName = match[1];
                                                                                                     const holeNum = match[2];
-                                                                                                    displayComment = `${courseName}, ${holeNum}번홀 심판이 ${forfeitType}처리`;
+                                                                                                    displayComment = `${courseName}, ${holeNum}번홀 심판이 ${forfeitType} 처리`;
                                                                                                 } else {
                                                                                                     displayComment = forfeitLog.comment || '';
                                                                                                 }
@@ -4285,7 +3694,7 @@ export default function AdminDashboard() {
                                                                                     {player.plusMinus === 0
                                                                                         ? 'E'
                                                                                         : player.plusMinus > 0
-                                                                                            ? `+${player.plusMinus}`
+                                                                                            ? `+ ${player.plusMinus} `
                                                                                             : player.plusMinus}
                                                                                 </span>
                                                                             )}
@@ -4297,8 +3706,8 @@ export default function AdminDashboard() {
                                                             )}
                                                         </TableRow>
                                                     )) : (
-                                                        <TableRow key={`${player.id}-no-course`} className="text-base text-muted-foreground">
-                                                            <TableCell className="text-center align-middle font-bold text-lg px-2 py-1 border-r">{player.rank !== null ? `${player.rank}위` : (player.hasForfeited ? (() => {
+                                                        <TableRow key={`${player.id} -no - course`} className="text-base text-muted-foreground">
+                                                            <TableCell className="text-center align-middle font-bold text-lg px-2 py-1 border-r">{player.rank !== null ? `${player.rank} 위` : (player.hasForfeited ? (() => {
                                                                 // 기권 타입을 player.forfeitType에서 가져오기
                                                                 if (player.forfeitType === 'absent') return '불참';
                                                                 if (player.forfeitType === 'disqualified') return '실격';
@@ -4439,9 +3848,9 @@ export default function AdminDashboard() {
                             </div>
                             <p className="text-xs text-muted-foreground mt-1">
                                 {printModal.showAllGroups
-                                    ? `모든 그룹(${allGroupsList.length}개)이 선택되었습니다. 각 그룹은 별도 페이지로 인쇄됩니다.`
+                                    ? `모든 그룹(${allGroupsList.length}개)이 선택되었습니다.각 그룹은 별도 페이지로 인쇄됩니다.`
                                     : printModal.selectedGroups.length > 0
-                                        ? `${printModal.selectedGroups.length}개 그룹이 선택되었습니다. 각 그룹은 별도 페이지로 인쇄됩니다.`
+                                        ? `${printModal.selectedGroups.length}개 그룹이 선택되었습니다.각 그룹은 별도 페이지로 인쇄됩니다.`
                                         : '인쇄할 그룹을 선택해주세요.'
                                 }
                             </p>
@@ -4625,7 +4034,7 @@ export default function AdminDashboard() {
                 scores={scores}
             />
 
-            {/* 🏆 Archive Modal (Memoized for Performance) */}
+            {/* Archive Modal */}
             <ArchiveModalComponent
                 open={archiveModalOpen}
                 onOpenChange={setArchiveModalOpen}
@@ -4633,24 +4042,6 @@ export default function AdminDashboard() {
                 initialDate={archiveDate}
                 onConfirm={handleConfirmArchive}
             />
-
-            {/* 기권 확인 모달 */}
-            {/* {forfeitModal.open && forfeitModal.player && (
-            <Dialog open={forfeitModal.open} onOpenChange={open => setForfeitModal({ open, player: open ? forfeitModal.player : null })}>
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>기권 처리 확인</DialogTitle>
-                        <DialogDescription>
-                            {forfeitModal.player.name} 선수의 모든 배정 코스 9홀에 0점이 입력됩니다. 진행하시겠습니까?
-                        </DialogDescription>
-                    </DialogHeader>
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setForfeitModal({ open: false, player: null })}>취소</Button>
-                        <Button variant="destructive" onClick={() => handleForfeitPlayer(forfeitModal.player)}>기권 처리</Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
-        )} */}
         </>
     );
 }
