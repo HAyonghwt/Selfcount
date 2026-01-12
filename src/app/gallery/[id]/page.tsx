@@ -459,7 +459,7 @@ export default function GalleryDetailPage() {
             <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-slate-100 px-4 py-4 safe-top shadow-sm">
                 <div className="max-w-4xl mx-auto flex items-center justify-between">
                     <button
-                        onClick={() => router.back()}
+                        onClick={() => router.push('/gallery')}
                         className="p-2 -ml-2 text-slate-400 hover:text-slate-800 transition-colors"
                     >
                         <ChevronLeft className="w-6 h-6" />
@@ -479,23 +479,25 @@ export default function GalleryDetailPage() {
 
             <main className="max-w-4xl mx-auto px-4 py-3 space-y-3">
                 {/* Tournament Overview Stats */}
-                <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 flex items-center gap-4">
-                        <div className="w-10 h-10 rounded-xl bg-orange-50 flex items-center justify-center border border-orange-100">
-                            <Users className="w-5 h-5 text-orange-500" />
+                <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-white rounded-md h-[50px] px-3 shadow-sm border border-slate-200 flex items-center gap-2.5">
+                        <div className="shrink-0">
+                            <Users className="w-5 h-5 text-orange-500 opacity-80" />
                         </div>
-                        <div>
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-0.5">참가 선수</p>
-                            <p className="text-lg font-black text-slate-900 leading-none">{archiveData.playerCount || 0}<span className="text-[11px] ml-0.5 opacity-40">명</span></p>
+                        <div className="flex flex-col justify-center min-w-0">
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider leading-none mb-1">참가 선수</p>
+                            <p className="text-sm font-black text-slate-900 leading-none">
+                                {archiveData.playerCount || 0}<span className="text-[10px] ml-0.5 opacity-40 font-bold">명</span>
+                            </p>
                         </div>
                     </div>
-                    <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 flex items-center gap-4">
-                        <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center border border-blue-100">
-                            <Activity className="w-5 h-5 text-blue-500" />
+                    <div className="bg-white rounded-md h-[50px] px-3 shadow-sm border border-slate-200 flex items-center gap-2.5">
+                        <div className="shrink-0">
+                            <Activity className="w-5 h-5 text-blue-500 opacity-80" />
                         </div>
-                        <div>
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-0.5">기록 보관일</p>
-                            <p className="text-lg font-black text-slate-900 leading-none">
+                        <div className="flex flex-col justify-center min-w-0">
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider leading-none mb-1">기록 보관일</p>
+                            <p className="text-[11px] font-black text-slate-900 leading-none whitespace-nowrap overflow-hidden text-ellipsis">
                                 {archiveData.savedAt ? new Date(archiveData.savedAt).toLocaleDateString() : '-'}
                             </p>
                         </div>
@@ -513,7 +515,7 @@ export default function GalleryDetailPage() {
                             placeholder="선수명 또는 소속 클럽 검색"
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
-                            className="w-full bg-white border border-slate-200 rounded-2xl py-4 pl-11 pr-4 text-sm font-bold text-slate-800 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#3b82f6]/10 focus:border-[#3b82f6] shadow-sm transition-all"
+                            className="w-full h-[50px] bg-white border border-slate-200 rounded-md pl-11 pr-4 text-sm font-bold text-slate-800 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#3b82f6]/10 focus:border-[#3b82f6] shadow-sm transition-all"
                         />
                     </div>
 
