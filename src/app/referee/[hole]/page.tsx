@@ -127,6 +127,40 @@ export default function RefereePage() {
     // 안내 모달 상태 추가
     const [showAllJosCompleteModal, setShowAllJosCompleteModal] = useState(false);
 
+    // 실시간 연결 상태 감지 (Firebase + Browser Network Status)
+    const [isConnected, setIsConnected] = useState<boolean>(true);
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+
+        // 1. Firebase 실시간 DB 연결 감지
+        let fbConnected = true;
+        let unsub: (() => void) | null = null;
+
+        if (db) {
+            const connectedRef = ref(db, ".info/connected");
+            unsub = onValue(connectedRef, (snap) => {
+                fbConnected = !!snap.val();
+                setIsConnected(fbConnected && window.navigator.onLine);
+            });
+        }
+
+        // 2. 브라우저 네트워크 상태 감지 (와이파이 등 즉각 대응)
+        const handleOnline = () => setIsConnected(fbConnected && true);
+        const handleOffline = () => setIsConnected(false);
+
+        window.addEventListener('online', handleOnline);
+        window.addEventListener('offline', handleOffline);
+
+        // 초기 상태 설정
+        setIsConnected(window.navigator.onLine && fbConnected);
+
+        return () => {
+            if (unsub) unsub();
+            window.removeEventListener('online', handleOnline);
+            window.removeEventListener('offline', handleOffline);
+        };
+    }, []);
+
     // completedJos를 별도 상태로 관리
     const [completedJosState, setCompletedJosState] = useState<Set<string>>(new Set());
 
@@ -2111,7 +2145,19 @@ export default function RefereePage() {
 
     return (
         <>
-            <div className="bg-slate-50 min-h-screen p-2 sm:p-4 flex flex-col font-body">
+            {/* 실시간 연결 상태바 */}
+            <div className={cn(
+                "fixed top-0 left-0 right-0 h-10 flex items-center justify-center z-[10001] transition-colors duration-300 font-bold text-sm",
+                isConnected ? "bg-emerald-500 text-white" : "bg-rose-500 text-white animate-pulse"
+            )}>
+                {isConnected ? (
+                    <><span className="w-2 h-2 rounded-full bg-white mr-2 shadow-[0_0_8px_rgba(255,255,255,0.8)]"></span> 실시간 데이터 연결 안정</>
+                ) : (
+                    <><span className="w-2 h-2 rounded-full bg-white mr-2 animate-ping"></span> 데이터 연결 끊김 (내 폰에 임시 저장 중)</>
+                )}
+            </div>
+
+            <div className="bg-slate-50 min-h-screen p-2 sm:p-4 flex flex-col font-body" style={{ paddingTop: '45px' }}>
                 <header className="flex justify-between items-center mb-4">
                     <h1 className="text-2xl sm:text-3xl font-extrabold text-primary break-keep leading-tight">
                         {getRefereeDisplayName()}

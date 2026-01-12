@@ -246,15 +246,38 @@ export default function BatchScoringPage() {
   const [passwordInput, setPasswordInput] = useState('');
   const [passwordError, setPasswordError] = useState(false);
 
-  // 실시간 연결 상태 감지 (/.info/connected 활용)
+  // 실시간 연결 상태 감지 (Firebase + Browser Network Status)
   const [isConnected, setIsConnected] = useState<boolean>(true);
   useEffect(() => {
-    if (!db) return;
-    const connectedRef = ref(db, ".info/connected");
-    const unsub = onValue(connectedRef, (snap) => {
-      setIsConnected(!!snap.val());
-    });
-    return () => unsub();
+    if (typeof window === 'undefined') return;
+
+    // 1. Firebase 실시간 DB 연결 감지
+    let fbConnected = true;
+    let unsub: (() => void) | null = null;
+
+    if (db) {
+      const connectedRef = ref(db, ".info/connected");
+      unsub = onValue(connectedRef, (snap) => {
+        fbConnected = !!snap.val();
+        setIsConnected(fbConnected && window.navigator.onLine);
+      });
+    }
+
+    // 2. 브라우저 네트워크 상태 감지 (와이파이 등 즉각 대응)
+    const handleOnline = () => setIsConnected(fbConnected && true);
+    const handleOffline = () => setIsConnected(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    // 초기 상태 설정
+    setIsConnected(window.navigator.onLine && fbConnected);
+
+    return () => {
+      if (unsub) unsub();
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
   }, []);
 
 
