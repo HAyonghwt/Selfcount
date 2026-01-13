@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { db } from '@/lib/firebase';
+import { db, auth } from '@/lib/firebase';
 import { ref, onValue, set, get, query, limitToLast, onChildChanged, off, update, onChildAdded, onChildRemoved } from 'firebase/database';
 import { useToast } from '@/hooks/use-toast';
 import { ToastAction } from '@/components/ui/toast';
@@ -130,6 +130,48 @@ export default function AdminDashboard() {
     });
 
     const [autoFilling, setAutoFilling] = useState(false);
+
+    // 🔥 관리자 권한 활성화 기능
+    const handleActivateAdmin = async () => {
+        if (!db) {
+            toast({ title: '오류', description: '데이터베이스 연결이 없습니다.', variant: 'destructive' });
+            return;
+        }
+
+        // 현재 사용자 확인 (lib/firebase.ts의 auth 객체 사용)
+        const currentUser = auth?.currentUser;
+        if (!currentUser) {
+            toast({ title: '오류', description: '로그인 정보를 찾을 수 없습니다. 페이지를 새로고침 해주세요.', variant: 'destructive' });
+            return;
+        }
+
+        try {
+            // authorizedWriters 노드에 현재 사용자의 UID 등록
+            // 규칙: auth.uid === $uid 인 경우 쓰기 가능을 활용
+            await set(ref(db, `authorizedWriters/${currentUser.uid}`), {
+                role: 'admin',
+                email: currentUser.email || 'anonymous',
+                registeredAt: Date.now()
+            });
+
+            toast({
+                title: '권한 활성화 성공',
+                description: '관리자 권한이 성공적으로 등록되었습니다. 모든 기능을 사용할 수 있습니다.',
+            });
+
+            // 페이지 새로고침하여 상태 반영
+            setTimeout(() => {
+                window.location.reload();
+            }, 1500);
+        } catch (e: any) {
+            console.error('권한 등록 에러:', e);
+            toast({
+                title: '권한 활성화 실패',
+                description: '권한 등록 중 오류가 발생했습니다: ' + (e.message || 'Permission Denied'),
+                variant: 'destructive'
+            });
+        }
+    };
 
     // 🚀 모든 그룹 목록 추출 (스코프 문제 해결)
     const allGroupsList = useMemo(() => {
@@ -1929,6 +1971,10 @@ export default function AdminDashboard() {
                                 </Button>
                                 <Button className="ml-2 bg-red-600 hover:bg-red-700 text-white min-w-[120px] px-4 py-2 font-bold" onClick={() => setShowResetConfirm(true)}>
                                     점수 초기화
+                                </Button>
+                                <Button className="ml-2 bg-amber-500 hover:bg-amber-600 text-white min-w-[140px] px-4 py-2 font-bold" onClick={handleActivateAdmin}>
+                                    <Lock className="mr-2 h-4 w-4" />
+                                    관리자 권한 활성화
                                 </Button>
 
                                 {/* 점수 초기화 확인 모달 */}

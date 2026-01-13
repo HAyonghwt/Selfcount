@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogD
 import { Button } from '@/components/ui/button';
 import { ChevronUp, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { db } from '@/lib/firebase';
+import { db, ensureAuthenticated } from '@/lib/firebase';
 import { ref, set, get } from 'firebase/database';
 import { useToast } from '@/hooks/use-toast';
 import { logScoreChange, invalidatePlayerLogCache, getPlayerScoreLogsOptimized, ScoreLog } from '@/lib/scoreLogs';
@@ -147,6 +147,17 @@ const ScoreEditModal = React.memo(({
                             onClick={async () => {
                                 if (!db) {
                                     toast({ title: '오류', description: '데이터베이스 연결이 없습니다.', variant: 'destructive' });
+                                    return;
+                                }
+
+                                // Firebase 인증 확인
+                                const isAuthenticated = await ensureAuthenticated();
+                                if (!isAuthenticated) {
+                                    toast({
+                                        title: '인증 실패',
+                                        description: 'Firebase 인증에 실패했습니다. 페이지를 새로고침해주세요.',
+                                        variant: 'destructive'
+                                    });
                                     return;
                                 }
                                 const player = Object.values(finalDataByGroup).flat().find((p: any) => p.id === playerId) as any;
