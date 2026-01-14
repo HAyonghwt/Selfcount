@@ -820,11 +820,22 @@ export default function AdminDashboard() {
                             scoreUpdates[`${player.id}/${course.id}`] = null;
                         });
                     }
+                    // [추가] 플레이어의 기권 타입 정보도 초기화
+                    scoreUpdates[`../players/${player.id}/forfeitType`] = null;
                 });
 
                 // 1. Firebase 데이터 삭제 (특정 그룹)
                 if (Object.keys(scoreUpdates).length > 0) {
                     await update(ref(db, 'scores'), scoreUpdates);
+
+                    // [추가] 모든 플레이어의 forfeitType 필드도 초기화
+                    const playerForfeitUpdates: any = {};
+                    Object.keys(players).forEach(pid => {
+                        playerForfeitUpdates[`players/${pid}/forfeitType`] = null;
+                    });
+                    if (Object.keys(playerForfeitUpdates).length > 0) {
+                        await update(ref(db), playerForfeitUpdates);
+                    }
 
                     // 로그 삭제 (해당 그룹 선수들의 로그만)
                     try {
@@ -1024,6 +1035,11 @@ export default function AdminDashboard() {
                     // 모든 업데이트를 병렬로 실행
                     await Promise.all(updatePromises);
 
+                    // [추가] 플레이어 노드에 forfeitType 명시적 저장
+                    await update(ref(db, `players/${playerId}`), {
+                        forfeitType: effectiveForfeitType
+                    });
+
                     // 실시간 업데이트를 위한 로그 캐시 무효화 (한 번만)
                     invalidatePlayerLogCache(playerId);
                 }
@@ -1043,8 +1059,10 @@ export default function AdminDashboard() {
             if (prevScore !== scoreValue) {
                 try {
                     // 점수 저장과 로그 기록을 병렬로 실행
+                    // [수정] 점수 저장 시 forfeitType도 함께 초기화
                     await Promise.all([
                         set(ref(db, `scores/${playerId}/${courseId}/${holeIndex + 1}`), scoreValue),
+                        update(ref(db, `players/${playerId}`), { forfeitType: null }),
                         logScoreChange({
                             matchId: 'tournaments/current',
                             playerId,

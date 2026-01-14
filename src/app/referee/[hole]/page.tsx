@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Minus, Plus, Save, Lock, Trophy, ArrowLeft } from 'lucide-react';
 import { db, ensureAuthenticated } from '@/lib/firebase';
-import { ref, onValue, set, get } from 'firebase/database';
+import { ref, set, onValue, get, update, query, limitToLast, onChildAdded, onChildChanged, push, getDatabase } from 'firebase/database';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription } from "@/components/ui/alert-dialog";
 import { useToast } from '@/hooks/use-toast';
@@ -1698,6 +1698,16 @@ export default function RefereePage() {
                                 }
                             }
                         }
+
+                        // [추가] 플레이어 노드에 forfeitType 명시적 저장
+                        await update(ref(dbInstance, `/players/${playerToSave.id}`), {
+                            forfeitType: scoreData.forfeitType
+                        });
+                    } else {
+                        // 0점보다 큰 점수 저장 시 forfeitType 초기화
+                        await update(ref(dbInstance, `/players/${playerToSave.id}`), {
+                            forfeitType: null
+                        });
                     }
 
                     // 0점 처리 후에는 refreshScoresData()가 호출되므로 별도 캐시 무효화 불필요
