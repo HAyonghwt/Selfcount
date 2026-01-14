@@ -8,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { db, auth } from '@/lib/firebase';
 import { ref, onValue, set, get, query, limitToLast, onChildChanged, off, update, onChildAdded, onChildRemoved } from 'firebase/database';
 import { useToast } from '@/hooks/use-toast';
@@ -117,6 +118,8 @@ export default function AdminDashboard() {
 
     // 점수 초기화 모달 상태
     const [showResetConfirm, setShowResetConfirm] = useState(false);
+    // 관리자 권한 활성화 확인 모달 상태
+    const [showAdminActivateConfirm, setShowAdminActivateConfirm] = useState(false);
 
     // 인쇄 모달 상태
     const [printModal, setPrintModal] = useState({
@@ -1990,10 +1993,43 @@ export default function AdminDashboard() {
                                 <Button className="ml-2 bg-red-600 hover:bg-red-700 text-white min-w-[120px] px-4 py-2 font-bold" onClick={() => setShowResetConfirm(true)}>
                                     점수 초기화
                                 </Button>
-                                <Button className="ml-2 bg-amber-500 hover:bg-amber-600 text-white min-w-[140px] px-4 py-2 font-bold" onClick={handleActivateAdmin}>
+                                <Button className="ml-2 bg-amber-500 hover:bg-amber-600 text-white min-w-[140px] px-4 py-2 font-bold" onClick={() => setShowAdminActivateConfirm(true)}>
                                     <Lock className="mr-2 h-4 w-4" />
                                     관리자 권한 활성화
                                 </Button>
+
+                                {/* 관리자 권한 활성화 확인 모달 */}
+                                {showAdminActivateConfirm && (
+                                    <AlertDialog open={showAdminActivateConfirm} onOpenChange={setShowAdminActivateConfirm}>
+                                        <AlertDialogContent className="bg-gray-900 text-white border-gray-700">
+                                            <AlertDialogHeader>
+                                                <AlertDialogTitle className="text-xl font-bold text-amber-500 flex items-center gap-2">
+                                                    <Lock className="h-5 w-5" />
+                                                    관리자 권한을 활성화하시겠습니까?
+                                                </AlertDialogTitle>
+                                                <AlertDialogDescription className="text-gray-300 py-2">
+                                                    <div className="space-y-2">
+                                                        <p>이 기능은 현재 사용 중인 브라우저에 <span className="text-white font-bold">데이터 수정 및 삭제 권한</span>을 등록합니다.</p>
+                                                        <ul className="list-disc list-inside text-sm space-y-1 text-gray-400">
+                                                            <li>점수 수정, 초기화 등 관리 기능을 사용할 때 필요합니다.</li>
+                                                            <li>기기당 <span className="text-white">처음 한 번만</span> 등록하면 됩니다.</li>
+                                                            <li>등록 후 페이지가 자동으로 새로고침됩니다.</li>
+                                                        </ul>
+                                                    </div>
+                                                </AlertDialogDescription>
+                                            </AlertDialogHeader>
+                                            <AlertDialogFooter>
+                                                <AlertDialogCancel className="bg-gray-800 text-white border-gray-600 hover:bg-gray-700">취소</AlertDialogCancel>
+                                                <AlertDialogAction
+                                                    onClick={handleActivateAdmin}
+                                                    className="bg-amber-500 hover:bg-amber-600 text-white font-bold"
+                                                >
+                                                    권한 등록하기
+                                                </AlertDialogAction>
+                                            </AlertDialogFooter>
+                                        </AlertDialogContent>
+                                    </AlertDialog>
+                                )}
 
                                 {/* 점수 초기화 확인 모달 */}
                                 {showResetConfirm && (
