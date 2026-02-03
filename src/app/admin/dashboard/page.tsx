@@ -2007,8 +2007,8 @@ export default function AdminDashboard() {
                                                     <Lock className="h-5 w-5" />
                                                     관리자 권한을 활성화하시겠습니까?
                                                 </AlertDialogTitle>
-                                                <AlertDialogDescription className="text-gray-300 py-2">
-                                                    <div className="space-y-2">
+                                                <AlertDialogDescription asChild>
+                                                    <div className="space-y-2 text-gray-300 py-2">
                                                         <p>이 기능은 현재 사용 중인 브라우저에 <span className="text-white font-bold">데이터 수정 및 삭제 권한</span>을 등록합니다.</p>
                                                         <ul className="list-disc list-inside text-sm space-y-1 text-gray-400">
                                                             <li>점수 수정, 초기화 등 관리 기능을 사용할 때 필요합니다.</li>

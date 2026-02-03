@@ -391,7 +391,7 @@ export default function LoginPage() {
           }
         } else if (userEmail.startsWith('player') && userEmail.endsWith('@yongin.com')) {
           router.push('/self-scoring');
-        } else if (email === 'hayonghwy@gmail.com') {
+        } else if (userEmail.toLowerCase() === 'hayonghwy@gmail.com') {
           router.push('/super-admin');
         } else {
           setError(`'${userEmail}' 계정은 이 앱에 대한 접근 권한이 없습니다.`);
