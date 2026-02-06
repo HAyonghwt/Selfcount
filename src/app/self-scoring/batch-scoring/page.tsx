@@ -882,11 +882,11 @@ export default function BatchScoringPage() {
         setGroupCurrentHole(null);
         setLocalCleared({});
 
-        toast({
-          title: isGroupReset ? '그룹 초기화 알림' : '전체 초기화 알림',
-          description: '관리자에 의해 경기 데이터가 초기화되어 로컬 임시 저장 점수가 삭제되었습니다.',
-          duration: 5000
-        });
+        // toast({
+        //   title: isGroupReset ? '그룹 초기화 알림' : '전체 초기화 알림',
+        //   description: '관리자에 의해 경기 데이터가 초기화되어 로컬 임시 저장 점수가 삭제되었습니다.',
+        //   duration: 5000
+        // });
       } catch (error) {
         console.error('로컬 데이터 초기화 중 오류:', error);
       }
