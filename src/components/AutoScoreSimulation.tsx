@@ -327,7 +327,7 @@ export default function AutoScoreSimulation() {
             const latestScores = scoresSnapshot.val() || {};
 
             // 모든 점수 저장 작업을 배열로 수집
-            const scoreTasks: Array<() => Promise<void>> = [];
+            const scoreTasks: Array<() => Promise<{ success: boolean; error?: string; context?: string }>> = [];
             const currentSelectedCourses = day === 1 ? selectedCourses1 : selectedCourses2;
 
             for (const player of allIndividualPlayers) {
@@ -356,9 +356,17 @@ export default function AutoScoreSimulation() {
                                 prevScore,
                                 latestScores,
                                 day
-                            ).catch((error: any) => {
-                                console.error(`점수 저장 실패 (선수: ${player.id}, 코스: ${course.id}, 홀: ${hole}):`, error);
-                            })
+                            )
+                                .then(() => ({ success: true }))
+                                .catch((error: any) => {
+                                    const errorMsg = error.message || '알 수 없는 오류';
+                                    console.error(`점수 저장 실패 (선수: ${player.id}, 코스: ${course.id}, 홀: ${hole}):`, error);
+                                    return {
+                                        success: false,
+                                        error: errorMsg,
+                                        context: `선수(${player.name || player.id}) 코스(${course.name || course.id}) ${hole}홀`
+                                    };
+                                })
                         );
                     }
                 }
@@ -368,22 +376,34 @@ export default function AutoScoreSimulation() {
             const BATCH_SIZE = 20;
             const BATCH_DELAY = 50;
             let processedScores = 0;
-            let totalScores = 0;
+            let totalSuccess = 0;
+            let totalFailure = 0;
+            const failureReasons: string[] = [];
             const totalExpectedScores = scoreTasks.length;
 
             for (let i = 0; i < scoreTasks.length; i += BATCH_SIZE) {
                 const batch = scoreTasks.slice(i, i + BATCH_SIZE);
 
                 // 현재 배치를 병렬로 실행
-                const results = await Promise.allSettled(batch.map(task => task()));
-                const successCount = results.filter(r => r.status === 'fulfilled').length;
-                totalScores += successCount;
+                const results = await Promise.all(batch.map(task => task()));
+
+                results.forEach(res => {
+                    if (res.success) {
+                        totalSuccess++;
+                    } else {
+                        totalFailure++;
+                        if (res.error) {
+                            failureReasons.push(`[${res.context}] ${res.error}`);
+                        }
+                    }
+                });
+
                 processedScores += batch.length;
 
                 // 진행률 업데이트
                 setSimulationState({
                     isRunning: true,
-                    currentStep: `심판 ${day}차 점수 입력 중... (${processedScores}/${scoreTasks.length}개 완료)`,
+                    currentStep: `심판 ${day}차 점수 입력 중... (${processedScores}/${scoreTasks.length}개 완료 | 실패 ${totalFailure}건)`,
                     progress: (processedScores / totalExpectedScores) * 100
                 });
 
@@ -393,14 +413,28 @@ export default function AutoScoreSimulation() {
                 }
             }
 
-            toast({
-                title: '완료',
-                description: `심판 ${day}차 점수 입력이 완료되었습니다. (${totalScores}개 점수 등록)`
-            });
+            if (totalFailure > 0) {
+                // 실패 원인 중복 제거 및 상위 5개만 표시
+                const uniqueErrors = Array.from(new Set(failureReasons)).slice(0, 5);
+                const errorSummary = uniqueErrors.join('\n');
+                const moreErrors = failureReasons.length > 5 ? `\n...외 ${failureReasons.length - 5}건` : '';
+
+                toast({
+                    title: '완료 (일부 실패)',
+                    description: `성공: ${totalSuccess}건, 실패: ${totalFailure}건\n\n[실패 원인]\n${errorSummary}${moreErrors}`,
+                    variant: 'destructive',
+                    duration: 10000 // 사용자가 읽을 수 있도록 시간을 길게 설정
+                });
+            } else {
+                toast({
+                    title: '완료',
+                    description: `심판 ${day}차 점수 입력이 완료되었습니다. (${totalSuccess}개 점수 등록 성공)`
+                });
+            }
         } catch (error: any) {
             toast({
-                title: '오류',
-                description: error.message || '알 수 없는 오류',
+                title: '치명적 오류',
+                description: error.message || '알 수 없는 오류가 발생하여 중단되었습니다.',
                 variant: 'destructive'
             });
         } finally {
@@ -458,9 +492,7 @@ export default function AutoScoreSimulation() {
             const latestScores = scoresSnapshot.val() || {};
 
             // 모든 점수 저장 작업을 배열로 수집
-            const scoreTasks: Array<() => Promise<void>> = [];
-            // const totalPlayers = allIndividualPlayers.length; // Not directly used for totalExpectedScores anymore
-            // const totalExpectedScores = totalPlayers * targetCourses.length * 9; // This was for a single set of targetCourses
+            const scoreTasks: Array<() => Promise<{ success: boolean; error?: string; context?: string }>> = [];
 
             for (const player of allIndividualPlayers) {
                 const groupName = player.group || '';
@@ -491,9 +523,17 @@ export default function AutoScoreSimulation() {
                                 player.jo || 0,
                                 day,
                                 false // 조장 모드
-                            ).catch((error: any) => {
-                                console.error(`점수 저장 실패 (선수: ${player.id}, 코스: ${course.id}, 홀: ${hole}):`, error);
-                            })
+                            )
+                                .then(() => ({ success: true }))
+                                .catch((error: any) => {
+                                    const errorMsg = error.message || '알 수 없는 오류';
+                                    console.error(`점수 저장 실패 (선수: ${player.id}, 코스: ${course.id}, 홀: ${hole}):`, error);
+                                    return {
+                                        success: false,
+                                        error: errorMsg,
+                                        context: `선수(${player.name || player.id}) 코스(${course.name || course.id}) ${hole}홀`
+                                    };
+                                })
                         );
                     }
                 }
@@ -503,22 +543,34 @@ export default function AutoScoreSimulation() {
             const BATCH_SIZE = 20;
             const BATCH_DELAY = 50;
             let processedScores = 0;
-            let totalScores = 0;
-            const totalExpectedScores = scoreTasks.length; // Use actual task count for progress
+            let totalSuccess = 0;
+            let totalFailure = 0;
+            const failureReasons: string[] = [];
+            const totalExpectedScores = scoreTasks.length;
 
             for (let i = 0; i < scoreTasks.length; i += BATCH_SIZE) {
                 const batch = scoreTasks.slice(i, i + BATCH_SIZE);
 
                 // 현재 배치를 병렬로 실행
-                const results = await Promise.allSettled(batch.map(task => task()));
-                const successCount = results.filter(r => r.status === 'fulfilled').length;
-                totalScores += successCount;
+                const results = await Promise.all(batch.map(task => task()));
+
+                results.forEach(res => {
+                    if (res.success) {
+                        totalSuccess++;
+                    } else {
+                        totalFailure++;
+                        if (res.error) {
+                            failureReasons.push(`[${res.context}] ${res.error}`);
+                        }
+                    }
+                });
+
                 processedScores += batch.length;
 
                 // 진행률 업데이트
                 setSimulationState({
                     isRunning: true,
-                    currentStep: `조장 ${day}차 점수 입력 중... (${processedScores}/${scoreTasks.length}개 완료)`,
+                    currentStep: `조장 ${day}차 점수 입력 중... (${processedScores}/${scoreTasks.length}개 완료 | 실패 ${totalFailure}건)`,
                     progress: (processedScores / totalExpectedScores) * 100
                 });
 
@@ -528,14 +580,27 @@ export default function AutoScoreSimulation() {
                 }
             }
 
-            toast({
-                title: '완료',
-                description: `조장 ${day}차 점수 입력이 완료되었습니다. (${totalScores}개 점수 등록)`
-            });
+            if (totalFailure > 0) {
+                const uniqueErrors = Array.from(new Set(failureReasons)).slice(0, 5);
+                const errorSummary = uniqueErrors.join('\n');
+                const moreErrors = failureReasons.length > 5 ? `\n...외 ${failureReasons.length - 5}건` : '';
+
+                toast({
+                    title: '완료 (일부 실패)',
+                    description: `성공: ${totalSuccess}건, 실패: ${totalFailure}건\n\n[실패 원인]\n${errorSummary}${moreErrors}`,
+                    variant: 'destructive',
+                    duration: 10000
+                });
+            } else {
+                toast({
+                    title: '완료',
+                    description: `조장 ${day}차 점수 입력이 완료되었습니다. (${totalSuccess}개 점수 등록 성공)`
+                });
+            }
         } catch (error: any) {
             toast({
-                title: '오류',
-                description: error.message || '알 수 없는 오류',
+                title: '치명적 오류',
+                description: error.message || '알 수 없는 오류가 발생하여 중단되었습니다.',
                 variant: 'destructive'
             });
         } finally {
@@ -593,7 +658,7 @@ export default function AutoScoreSimulation() {
             const latestScores = scoresSnapshot.val() || {};
 
             // 모든 점수 저장 작업을 배열로 수집
-            const scoreTasks: Array<() => Promise<void>> = [];
+            const scoreTasks: Array<() => Promise<{ success: boolean; error?: string; context?: string }>> = [];
             // const totalPlayers = allIndividualPlayers.length; // Not directly used for totalExpectedScores anymore
             // const totalExpectedScores = totalPlayers * targetCourses.length * 9; // This was for a single set of targetCourses
 
@@ -626,9 +691,17 @@ export default function AutoScoreSimulation() {
                                 player.jo || 0,
                                 day,
                                 true // 일괄 입력 모드
-                            ).catch((error: any) => {
-                                console.error(`점수 저장 실패 (선수: ${player.id}, 코스: ${course.id}, 홀: ${hole}):`, error);
-                            })
+                            )
+                                .then(() => ({ success: true }))
+                                .catch((error: any) => {
+                                    const errorMsg = error.message || '알 수 없는 오류';
+                                    console.error(`점수 저장 실패 (선수: ${player.id}, 코스: ${course.id}, 홀: ${hole}):`, error);
+                                    return {
+                                        success: false,
+                                        error: errorMsg,
+                                        context: `선수(${player.name || player.id}) 코스(${course.name || course.id}) ${hole}홀`
+                                    };
+                                })
                         );
                     }
                 }
@@ -638,22 +711,34 @@ export default function AutoScoreSimulation() {
             const BATCH_SIZE = 20;
             const BATCH_DELAY = 50;
             let processedScores = 0;
-            let totalScores = 0;
+            let totalSuccess = 0;
+            let totalFailure = 0;
+            const failureReasons: string[] = [];
             const totalExpectedScores = scoreTasks.length;
 
             for (let i = 0; i < scoreTasks.length; i += BATCH_SIZE) {
                 const batch = scoreTasks.slice(i, i + BATCH_SIZE);
 
                 // 현재 배치를 병렬로 실행
-                const results = await Promise.allSettled(batch.map(task => task()));
-                const successCount = results.filter(r => r.status === 'fulfilled').length;
-                totalScores += successCount;
+                const results = await Promise.all(batch.map(task => task()));
+
+                results.forEach(res => {
+                    if (res.success) {
+                        totalSuccess++;
+                    } else {
+                        totalFailure++;
+                        if (res.error) {
+                            failureReasons.push(`[${res.context}] ${res.error}`);
+                        }
+                    }
+                });
+
                 processedScores += batch.length;
 
                 // 진행률 업데이트
                 setSimulationState({
                     isRunning: true,
-                    currentStep: `일괄 입력 모드 ${day}차 점수 입력 중... (${processedScores}/${scoreTasks.length}개 완료)`,
+                    currentStep: `일괄 입력 모드 ${day}차 점수 입력 중... (${processedScores}/${scoreTasks.length}개 완료 | 실패 ${totalFailure}건)`,
                     progress: (processedScores / totalExpectedScores) * 100
                 });
 
@@ -663,10 +748,23 @@ export default function AutoScoreSimulation() {
                 }
             }
 
-            toast({
-                title: '완료',
-                description: `일괄 입력 모드 ${day}차 점수 입력이 완료되었습니다. (${totalScores}개 점수 등록)`
-            });
+            if (totalFailure > 0) {
+                const uniqueErrors = Array.from(new Set(failureReasons)).slice(0, 5);
+                const errorSummary = uniqueErrors.join('\n');
+                const moreErrors = failureReasons.length > 5 ? `\n...외 ${failureReasons.length - 5}건` : '';
+
+                toast({
+                    title: '완료 (일부 실패)',
+                    description: `성공: ${totalSuccess}건, 실패: ${totalFailure}건\n\n[실패 원인]\n${errorSummary}${moreErrors}`,
+                    variant: 'destructive',
+                    duration: 10000
+                });
+            } else {
+                toast({
+                    title: '완료',
+                    description: `일괄 입력 모드 ${day}차 점수 입력이 완료되었습니다. (${totalSuccess}개 점수 등록 성공)`
+                });
+            }
         } catch (error: any) {
             toast({
                 title: '오류',
