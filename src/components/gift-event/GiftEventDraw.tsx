@@ -94,7 +94,8 @@ export default function GiftEventDraw({ winner, onAnimationEnd, drawStartTime, l
     // 타임스탬프 기반 동기화 로직
     const now = Date.now();
     const startTimeOverride = drawStartTime || now;
-    const elapsedAtStart = now - startTimeOverride;
+    // Fix: 클라이언트 시간이 서버(관리자) 시간보다 느릴 경우 음수가 되어 애니메이션이 길어지는 문제 방지
+    const elapsedAtStart = Math.max(0, now - startTimeOverride);
 
     // 이미 애니메이션이 끝난 시간(6초)이면 바로 결과 표시
     if (drawStartTime && elapsedAtStart >= 5800) {

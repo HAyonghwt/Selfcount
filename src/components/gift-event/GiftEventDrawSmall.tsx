@@ -74,8 +74,9 @@ export default function GiftEventDrawSmall({ winner, onAnimationEnd, drawStartTi
 
     // 타임스탬프 기반 동기화 로직
     const now = Date.now();
-    const startTime = drawStartTime;
-    const elapsedAtStart = now - startTime;
+    const startTime = drawStartTime || now;
+    // Fix: 클라이언트 시간이 서버(관리자) 시간보다 느릴 경우 음수가 되어 애니메이션이 길어지는 문제 방지
+    const elapsedAtStart = Math.max(0, now - startTime);
     const ANIMATION_DURATION = 3500; // 전체 애니메이션 시간 (2.5초 + 1초 대기)
 
     // 이미 애니메이션이 끝난 시간이면 바로 결과 표시
@@ -164,8 +165,8 @@ export default function GiftEventDrawSmall({ winner, onAnimationEnd, drawStartTi
       width: '60%',
       height: '60%',
       // 흑백 모드일 때는 검정색 배경, 아닐 때는 골드 그라데이션
-      background: isBW 
-        ? '#000000' 
+      background: isBW
+        ? '#000000'
         : 'linear-gradient(135deg, #CFB53B 0%, #F9F295 45%, #E6B800 70%, #996515 100%)',
       // 로고를 마스크로 사용
       WebkitMaskImage: `url('${logoUrl.replace(/'/g, "\\'")}')`,
@@ -184,7 +185,7 @@ export default function GiftEventDrawSmall({ winner, onAnimationEnd, drawStartTi
       pointerEvents: 'none' as const,
       zIndex: 10
     };
-    
+
     return style;
   };
 
