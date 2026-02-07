@@ -1736,7 +1736,9 @@ function ExternalScoreboard() {
 
                 // 그룹의 courses에서 순서 가져오기, 없으면 코스의 order 사용
                 let numA: number;
-                if (typeof orderA === 'boolean') {
+                if (typeof orderA === 'object' && orderA !== null) {
+                    numA = orderA.order || 0;
+                } else if (typeof orderA === 'boolean') {
                     numA = orderA ? (a.order || 0) : 0;
                 } else if (typeof orderA === 'number' && orderA > 0) {
                     numA = orderA;
@@ -1745,7 +1747,9 @@ function ExternalScoreboard() {
                 }
 
                 let numB: number;
-                if (typeof orderB === 'boolean') {
+                if (typeof orderB === 'object' && orderB !== null) {
+                    numB = orderB.order || 0;
+                } else if (typeof orderB === 'boolean') {
                     numB = orderB ? (b.order || 0) : 0;
                 } else if (typeof orderB === 'number' && orderB > 0) {
                     numB = orderB;
