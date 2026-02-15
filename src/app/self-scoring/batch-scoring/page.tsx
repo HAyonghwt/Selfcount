@@ -39,6 +39,7 @@ import { logScoreChange, getPlayerScoreLogs, ScoreLog, invalidatePlayerLogCache 
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import html2canvas from "html2canvas";
 import { cn } from "@/lib/utils";
+import ScoreOcrScanner from "./components/ScoreOcrScanner";
 import "./styles.css";
 
 type CourseTab = { id: string; name: string; pars: number[]; originalOrder?: number };
@@ -67,8 +68,68 @@ type LastInputInfo = {
   action: string;
 };
 
+// [안정화] 페이지 전체에서 공유할 정적 빈 행렬 (리렌더링 시 참조 변화 방지)
+const EMPTY_MATRIX = Array.from({ length: 4 }, () => Array(9).fill(null));
+
 export default function BatchScoringPage() {
   const { toast } = useToast();
+
+  // [추가] OCR 결과 처리 함수
+  const handleOcrResult = (data: any) => {
+    if (!data?.courses || !Array.isArray(data.courses) || typeof window === 'undefined') return;
+
+    data.courses.forEach((ocrCourse: any) => {
+      // 코스 이름 매칭 (예: "C코스" -> "C")
+      const matchedCourse = courseTabs.find(c =>
+        c.name.includes(ocrCourse.courseName) || ocrCourse.courseName.includes(c.name)
+      );
+
+      if (matchedCourse) {
+        const courseId = matchedCourse.id;
+        const key = `selfScoringDraft_${courseId}_${selectedGroup || 'g'}_${selectedJo || 'j'}`;
+
+        // 1. 기존 localStorage 데이터 가져오기 (없으면 초기화)
+        const saved = localStorage.getItem(key);
+        const parsed = saved ? JSON.parse(saved) : {
+          draft: Array.from({ length: 4 }, () => Array(9).fill(null)),
+          start: groupStartHole,
+          current: groupCurrentHole
+        };
+
+        // 2. OCR 데이터 병합
+        ocrCourse.players.forEach((ocrPlayer: any) => {
+          const playerIndex = playerNames.findIndex(pn => pn === ocrPlayer.name);
+          if (playerIndex !== -1) {
+            ocrPlayer.scores.forEach((score: number | null, holeIdx: number) => {
+              if (holeIdx < 9 && typeof score === 'number') {
+                parsed.draft[playerIndex][holeIdx] = score;
+              }
+            });
+          }
+        });
+
+        // 3. localStorage에 다시 저장 (영구 보관)
+        localStorage.setItem(key, JSON.stringify(parsed));
+
+        // 4. 현재 활성화된 코스라면 메모리 상태(draftScores, batchInputScores)에도 즉시 반영
+        if (String(courseId) === String(activeCourseId)) {
+          const nextDraft = parsed.draft.map((row: any) => [...row]);
+          setDraftScores(nextDraft);
+          setBatchInputScores(nextDraft);
+
+          toast({
+            title: "현재 코스 업데이트",
+            description: `${matchedCourse.name}의 점수가 업데이트되었습니다.`,
+          });
+        } else {
+          toast({
+            title: "백그라운드 코스 업데이트",
+            description: `${matchedCourse.name}의 점수가 인식되어 저장되었습니다. 해당 탭 이동 시 확인 가능합니다.`,
+          });
+        }
+      }
+    });
+  };
 
   // 인앱 브라우저 리다이렉트 스크립트
   useEffect(() => {
@@ -913,7 +974,7 @@ export default function BatchScoringPage() {
   // 현재 코스/파 데이터
   const activeCourse = useMemo(() => courseTabs.find((c) => String(c.id) === String(activeCourseId)) || null, [courseTabs, activeCourseId]);
   const activePars = activeCourse?.pars || [3, 4, 4, 4, 4, 3, 5, 3, 3];
-  const rawTableScores = debouncedScores[activeCourseId] || Array.from({ length: 4 }, () => Array(9).fill(null));
+  const rawTableScores = debouncedScores[activeCourseId] || EMPTY_MATRIX;
   // 표시용 점수 매트릭스: 팀 모드일 때는 같은 팀 구성원 중 첫 인덱스의 값을 사용(입력과 저장은 첫 인덱스에만 기록)
   const tableScores = useMemo(() => {
     if (gameMode !== 'team') return rawTableScores;
@@ -938,89 +999,61 @@ export default function BatchScoringPage() {
       } catch { }
     }
   }, []);
+  // [수정] 코스 변경 시 점수 및 상태 통합 초기설정 (DB + LocalStorage)
   useEffect(() => {
-    // 코스가 변경되었을 때만 초기화
-    if (activeCourseId && activeCourseId !== prevCourseIdRef.current) {
-      prevCourseIdRef.current = activeCourseId;
-      if (tableScores && tableScores.length > 0) {
-        setBatchInputScores(prev => {
-          // 기존 점수가 있으면 그것을 사용
-          const next = tableScores.map(row => [...row]);
-          return next;
-        });
-      } else {
-        // 점수가 없으면 빈 배열로 초기화
-        setBatchInputScores(Array.from({ length: 4 }, () => Array(9).fill(null)));
-      }
-    }
-  }, [activeCourseId]); // activeCourseId만 의존성으로 사용
+    if (!activeCourseId || typeof window === 'undefined') return;
 
-  // 코스별 시작홀/현재홀 상태 복원 (코스 변경 시)
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
+    // 현재 컨텍스트 키 (코스/그룹/조)
+    const contextKey = `${activeCourseId}_${selectedGroup || 'g'}_${selectedJo || 'j'}`;
+
+    // DB 데이터(tableScores)가 아직 로드되지 않았고 초안도 없다면 루프 방지를 위해 대기
+    const hasDbData = tableScores.some(row => row.some(v => v !== null));
+
+    // 1. LocalStorage에서 해당 코스의 초안 및 진행 정보 가져오기
+    let localDraft: (number | null)[][] | null = null;
+    let localStart = null;
+    let localCurrent = null;
+
     try {
-      const key = `selfScoringDraft_${activeCourseId}_${selectedGroup || 'g'}_${selectedJo || 'j'}`;
-      const saved = localStorage.getItem(key);
+      const saved = localStorage.getItem(`selfScoringDraft_${contextKey}`);
       if (saved) {
         const parsed = JSON.parse(saved);
-        // 현재 코스의 시작홀과 현재홀을 코스별 상태에 저장
-        setCourseStartHoles(prev => ({
-          ...prev,
-          [activeCourseId]: parsed?.start ?? null
-        }));
-        setCourseCurrentHoles(prev => ({
-          ...prev,
-          [activeCourseId]: parsed?.current ?? null
-        }));
-        // 기존 호환성을 위해 전역 상태도 업데이트
-        if (parsed?.start != null) setGroupStartHole(parsed.start);
-        if (parsed?.current != null) setGroupCurrentHole(parsed.current);
-      } else {
-        // 저장된 데이터가 없으면 코스별 상태에서 null로 설정
-        setCourseStartHoles(prev => ({
-          ...prev,
-          [activeCourseId]: null
-        }));
-        setCourseCurrentHoles(prev => ({
-          ...prev,
-          [activeCourseId]: null
-        }));
-        setGroupStartHole(null);
-        setGroupCurrentHole(null);
+        if (Array.isArray(parsed?.draft)) localDraft = parsed.draft;
+        localStart = parsed?.start ?? null;
+        localCurrent = parsed?.current ?? null;
       }
-    } catch {
-      setCourseStartHoles(prev => ({
-        ...prev,
-        [activeCourseId]: null
-      }));
-      setCourseCurrentHoles(prev => ({
-        ...prev,
-        [activeCourseId]: null
-      }));
-      setGroupStartHole(null);
-      setGroupCurrentHole(null);
+    } catch (e) {
+      console.error('초안 복원 실패:', e);
     }
-  }, [activeCourseId, selectedGroup, selectedJo]);
 
-  // 로컬 초안/시작/현재홀 복원 (코스/그룹/조 변경 시)
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    try {
-      const key = `selfScoringDraft_${activeCourseId}_${selectedGroup || 'g'}_${selectedJo || 'j'}`;
-      const saved = localStorage.getItem(key);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        const ds: (number | null)[][] = Array.isArray(parsed?.draft)
-          ? parsed.draft
-          : Array.from({ length: 4 }, () => Array(9).fill(null));
-        setDraftScores(ds);
-      } else {
-        setDraftScores(Array.from({ length: 4 }, () => Array(9).fill(null)));
-      }
-    } catch {
-      setDraftScores(Array.from({ length: 4 }, () => Array(9).fill(null)));
+    // 2. 점수 매트릭스 결정: 초안(OCR 등)이 있으면 그것을, 없으면 DB 점수를 사용
+    const targetScores = localDraft || (hasDbData
+      ? tableScores.map((row: (number | null)[]) => [...row])
+      : EMPTY_MATRIX);
+
+    // [중요] 무한 루프 방지: 현재 상태와 동일하면 업데이트하지 않음
+    // JSON.stringify를 이용한 간단한 값 비교 (참조가 달라도 값이 같으면 스킵)
+    const currentDraftStr = JSON.stringify(draftScores);
+    const targetScoresStr = JSON.stringify(targetScores);
+
+    if (prevCourseIdRef.current === contextKey && currentDraftStr === targetScoresStr) {
+      return;
     }
-  }, [activeCourseId, selectedGroup, selectedJo]);
+
+    // 3. 상태 일괄 업데이트
+    setDraftScores(targetScores);
+    setBatchInputScores(targetScores.map((row: (number | null)[]) => [...row]));
+
+    // 시작홀/현재홀 업데이트
+    setCourseStartHoles(prev => ({ ...prev, [activeCourseId]: localStart }));
+    setCourseCurrentHoles(prev => ({ ...prev, [activeCourseId]: localCurrent }));
+    if (localStart !== null) setGroupStartHole(localStart);
+    if (localCurrent !== null) setGroupCurrentHole(localCurrent);
+
+    prevCourseIdRef.current = contextKey;
+  }, [activeCourseId, tableScores, selectedGroup, selectedJo]); // tableScores가 바뀌면(DB 로드 완료 시) 재실행됨
+
+  // (기존 중복 코스 데이터 복원 Effect 제거됨 - 위 통합 Effect로 합쳐짐)
 
   // 대시보드 초기화 감지 및 홀 활성화 상태 초기화
   useEffect(() => {
@@ -1047,12 +1080,13 @@ export default function BatchScoringPage() {
         [activeCourseId]: null
       }));
 
-      // localStorage의 start, current도 초기화
+      // localStorage의 start, current도 초기화 (주의: draft는 보존하여 점수 증발 방지)
       try {
         const key = `selfScoringDraft_${activeCourseId}_${selectedGroup || 'g'}_${selectedJo || 'j'}`;
         const saved = localStorage.getItem(key);
         if (saved) {
           const parsed = JSON.parse(saved);
+          // 점수 데이터(draft)는 삭제하지 않고 진행 정보만 초기화
           parsed.start = null;
           parsed.current = null;
           localStorage.setItem(key, JSON.stringify(parsed));
@@ -1063,21 +1097,22 @@ export default function BatchScoringPage() {
 
       // 사인 데이터도 초기화
       try {
-        // 개인 사인 삭제
+        // [주의] OCR 이후 비어있는 DB 동기화로 인해 사인이 지워지지 않도록 체크 로직 필요
+        // 단, 관리자가 의도적으로 리셋한 경우(lastResetAt)에는 다른 Effect에서 지움
+        // 여기서는 단순 DB null 상태에 따른 자동 삭제 로직을 완화함
+
+        // 만약 DB가 비어있고, 특정 시그널(예: 관리자 초기화)이 있을 때만 삭제하도록 하거나
+        // 현재는 점수 증발 방지를 위해 자동 삭제 주석 처리 고려
+        /*
         const signKey = `selfScoringSign_${activeCourseId}_${selectedGroup || 'g'}_${selectedJo || 'j'}`;
         localStorage.removeItem(signKey);
-
-        // 팀 사인 삭제
         const teamSignKey = `selfScoringSignTeam_${activeCourseId}_${selectedGroup || 'g'}_${selectedJo || 'j'}`;
         localStorage.removeItem(teamSignKey);
-
-        // 사인 후 잠금 상태 삭제
         const postSignLockKey = `selfScoringPostSignLock_${activeCourseId}_${selectedGroup || 'g'}_${selectedJo || 'j'}`;
         localStorage.removeItem(postSignLockKey);
-
-        // 사인 상태 초기화
         setSignatures(['', '', '', '']);
         setPostSignLock(false);
+        */
       } catch (error) {
         console.error('사인 데이터 초기화 실패:', error);
       }
@@ -2741,11 +2776,20 @@ export default function BatchScoringPage() {
         </div>
 
         {/* 표 상단 메타 정보 */}
-        <div className="score-meta">
-          <span>경기방식: <b>{gameMode === 'team' ? '2인1팀' : gameMode === 'individual' ? '개인전' : '-'}</b></span>
-          <span>그룹: <b>{selectedGroup || '-'}</b></span>
-          <span>조: <b>{selectedJo || '-'}</b></span>
-          {isReadOnlyMode && <span style={{ color: '#666', fontStyle: 'italic' }}>보기전용모드</span>}
+        <div className="score-meta" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            <span>경기방식: <b>{gameMode === 'team' ? '2인1팀' : gameMode === 'individual' ? '개인전' : '-'}</b></span>
+            <span>그룹: <b>{selectedGroup || '-'}</b></span>
+            <span>조: <b>{selectedJo || '-'}</b></span>
+            {isReadOnlyMode && <span style={{ color: '#666', fontStyle: 'italic' }}>보기전용모드</span>}
+          </div>
+
+          {/* [추가] OCR 스캐너 버튼 */}
+          {!isReadOnlyMode && (
+            <div className="ocr-scanner-wrapper">
+              <ScoreOcrScanner onResult={handleOcrResult} />
+            </div>
+          )}
         </div>
 
 
