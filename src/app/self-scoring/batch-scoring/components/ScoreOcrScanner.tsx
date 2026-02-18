@@ -35,8 +35,8 @@ export default function ScoreOcrScanner({ onResult }: ScoreOcrScannerProps) {
                 img.src = event.target?.result as string;
                 img.onload = () => {
                     const canvas = document.createElement('canvas');
-                    const MAX_WIDTH = 1600; // 분석에 충분한 해상도 유지하면서 용량 최적화
-                    const MAX_HEIGHT = 1600;
+                    const MAX_WIDTH = 1024; // 분석에 충분한 해상도 유지하면서 용량 최적화
+                    const MAX_HEIGHT = 1024;
                     let width = img.width;
                     let height = img.height;
 
