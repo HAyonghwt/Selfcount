@@ -95,11 +95,7 @@ export default function ScoreOcrScanner({ onResult }: ScoreOcrScannerProps) {
             // 3. 결과 전달
             onResult(data);
 
-            toast({
-                title: "분석 완료",
-                description: "사진에서 점수를 성공적으로 추출했습니다. 화면의 점수를 확인해주세요.",
-                duration: 1000,
-            });
+
 
             setIsOpen(false);
         } catch (error: any) {
