@@ -99,7 +99,10 @@ export default function BatchScoringPage() {
 
         // 2. OCR 데이터 병합
         ocrCourse.players.forEach((ocrPlayer: any) => {
-          const playerIndex = playerNames.findIndex(pn => pn === ocrPlayer.name);
+          // [개선] 이름 매칭 시 공백을 제거하고 비교하여 상하 분리된 이름도 잘 매칭되도록 함
+          const normalizedOcrName = ocrPlayer.name.replace(/\s+/g, '');
+          const playerIndex = playerNames.findIndex(pn => (pn || '').replace(/\s+/g, '') === normalizedOcrName);
+
           if (playerIndex !== -1) {
             ocrPlayer.scores.forEach((score: number | null, holeIdx: number) => {
               if (holeIdx < 9 && typeof score === 'number') {
