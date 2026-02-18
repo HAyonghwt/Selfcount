@@ -40,6 +40,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import html2canvas from "html2canvas";
 import { cn } from "@/lib/utils";
 import ScoreOcrScanner from "./components/ScoreOcrScanner";
+import { validateOcrScores } from "./components/validateOcrScores";
 import "./styles.css";
 
 type CourseTab = { id: string; name: string; pars: number[]; originalOrder?: number };
@@ -129,6 +130,21 @@ export default function BatchScoringPage() {
         }
       }
     });
+
+    // [검증] OCR 인식 결과 검증 (기존 저장 로직 이후 별도 실행)
+    const courseParMap = new Map<string, { name: string; pars: number[] }>();
+    courseTabs.forEach(c => courseParMap.set(c.id, { name: c.name, pars: c.pars }));
+    const warnings = validateOcrScores(data.courses, courseParMap);
+
+    if (warnings.length > 0) {
+      const warningMessages = warnings.slice(0, 5).map(w => w.message).join('\n');
+      const extra = warnings.length > 5 ? `\n...외 ${warnings.length - 5}건` : '';
+      toast({
+        title: `⚠️ 점수 확인 필요 (${warnings.length}건)`,
+        description: warningMessages + extra,
+        variant: "destructive",
+      });
+    }
   };
 
   // 인앱 브라우저 리다이렉트 스크립트

@@ -10,6 +10,7 @@ const OcrResultSchema = z.object({
         players: z.array(z.object({
             name: z.string().describe('선수 이름'),
             scores: z.array(z.union([z.number(), z.null()])).describe('1홀부터 9홀까지의 점수 (기록이 없으면 null)'),
+            total: z.union([z.number(), z.null()]).optional().describe('합계 점수 (기재되어 있으면 숫자, 없거나 읽을 수 없으면 null)'),
         })).describe('해당 코스의 선수별 점수 리스트')
     })).describe('인식된 모든 코스의 데이터')
 });
@@ -31,7 +32,7 @@ export async function POST(req: NextRequest) {
       3. [매우 중요] 점수 칸에는 좌측에 바를 정(正)자로 표시된 획수와 우측에 아라비아 숫자가 함께 적혀 있을 수 있습니다.
          바를 정(正)자는 무시하고, '우측에 적힌 아라비아 숫자'만 점수로 인식하세요.
       4. 만약 특정 홀에 점수가 적혀 있지 않다면 null로 표시하세요.
-      5. 합계(Total)나 서명(Signature) 칸은 무시하고 홀별 점수만 집중하세요.
+       5. 합계(Total) 칸에 숫자가 적혀 있다면 그 숫자도 함께 읽어주세요. 서명(Signature) 칸은 무시하세요.
       6. 모든 이름과 숫자를 정확하게 읽어주세요.
     `;
 
