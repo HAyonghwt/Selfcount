@@ -117,21 +117,12 @@ export default function BatchScoringPage() {
           const nextDraft = parsed.draft.map((row: any) => [...row]);
           setDraftScores(nextDraft);
           setBatchInputScores(nextDraft);
-
-          toast({
-            title: "현재 코스 업데이트",
-            description: `${matchedCourse.name}의 점수가 업데이트되었습니다.`,
-          });
-        } else {
-          toast({
-            title: "백그라운드 코스 업데이트",
-            description: `${matchedCourse.name}의 점수가 인식되어 저장되었습니다. 해당 탭 이동 시 확인 가능합니다.`,
-          });
         }
       }
     });
 
     // [검증] OCR 인식 결과 검증 (기존 저장 로직 이후 별도 실행)
+    // 경고가 있으면 경고 토스트만, 없으면 아무것도 표시 안 함 (분석 완료는 ScoreOcrScanner에서 표시)
     const courseParMap = new Map<string, { name: string; pars: number[] }>();
     courseTabs.forEach(c => courseParMap.set(c.id, { name: c.name, pars: c.pars }));
     const warnings = validateOcrScores(data.courses, courseParMap);
