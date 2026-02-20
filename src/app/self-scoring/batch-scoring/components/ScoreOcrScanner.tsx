@@ -35,8 +35,8 @@ export default function ScoreOcrScanner({ onResult }: ScoreOcrScannerProps) {
                 img.src = event.target?.result as string;
                 img.onload = () => {
                     const canvas = document.createElement('canvas');
-                    const MAX_WIDTH = 1024; // 분석에 충분한 해상도 유지하면서 용량 최적화
-                    const MAX_HEIGHT = 1024;
+                    const MAX_WIDTH = 1600; // 해상도 상향하여 인식률 개선
+                    const MAX_HEIGHT = 1600;
                     let width = img.width;
                     let height = img.height;
 
@@ -55,10 +55,15 @@ export default function ScoreOcrScanner({ onResult }: ScoreOcrScannerProps) {
                     canvas.width = width;
                     canvas.height = height;
                     const ctx = canvas.getContext('2d');
-                    ctx?.drawImage(img, 0, 0, width, height);
 
-                    // JPEG 형식으로 압축 (퀄리티 0.7)
-                    const base64 = canvas.toDataURL('image/jpeg', 0.7);
+                    if (ctx) {
+                        // 가독성 보정: 대비와 밝기를 약간 높여 글씨를 선명하게 함
+                        ctx.filter = 'contrast(1.2) brightness(1.1)';
+                        ctx.drawImage(img, 0, 0, width, height);
+                    }
+
+                    // JPEG 형식으로 압축 (퀄리티 0.8로 약간 상향)
+                    const base64 = canvas.toDataURL('image/jpeg', 0.8);
                     resolve(base64);
                 };
                 img.onerror = reject;
