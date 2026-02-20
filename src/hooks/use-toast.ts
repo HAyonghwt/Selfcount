@@ -9,7 +9,7 @@ import type {
 } from "@/components/ui/toast"
 
 const TOAST_LIMIT = 1
-// 토스트 자동 제거까지의 지연. 3초 후 사라지도록 설정
+// 토스트 자동 제거까지의 지연. 1초 후 사라지도록 설정
 const TOAST_REMOVE_DELAY = 1000
 
 type ToasterToast = ToastProps & {
