@@ -35,8 +35,8 @@ export default function ScoreOcrScanner({ onResult }: ScoreOcrScannerProps) {
                 img.src = event.target?.result as string;
                 img.onload = () => {
                     const canvas = document.createElement('canvas');
-                    const MAX_WIDTH = 1600; // 해상도 상향하여 인식률 개선
-                    const MAX_HEIGHT = 1600;
+                    const MAX_WIDTH = 1024; // 이전 해상도로 복구 (속도 최적화)
+                    const MAX_HEIGHT = 1024;
                     let width = img.width;
                     let height = img.height;
 
