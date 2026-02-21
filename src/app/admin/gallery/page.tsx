@@ -5,9 +5,10 @@ import { db } from "@/lib/firebase";
 import { ref, onValue } from "firebase/database";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Copy, Download, Tv, Link as LinkIcon, ExternalLink } from "lucide-react";
+import { Copy, Download, Tv, Link as LinkIcon, ExternalLink, Printer } from "lucide-react";
 // @ts-ignore
 import QRCode from 'qrcode.react';
+import QrPrintView from "./components/QrPrintView";
 
 interface ArchiveSummary {
     id: string;
@@ -96,6 +97,7 @@ const ShareCard = ({ title, description, url }: { title: string, description: st
 export default function AdminGalleryPage() {
     const [archives, setArchives] = useState<ArchiveSummary[]>([]);
     const [loading, setLoading] = useState(true);
+    const [qrPrintTarget, setQrPrintTarget] = useState<ArchiveSummary | null>(null);
 
     const baseUrl = typeof window !== 'undefined' ? `${window.location.origin}` : '';
     const mainGalleryUrl = `${baseUrl}/gallery`;
@@ -196,6 +198,15 @@ export default function AdminGalleryPage() {
                                         >
                                             <ExternalLink className="w-4 h-4" />
                                         </Button>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="h-8 text-[12px] font-bold border-blue-200 text-blue-600 hover:bg-blue-50"
+                                            onClick={() => setQrPrintTarget(archive)}
+                                        >
+                                            <Printer className="w-3.5 h-3.5 mr-1.5" />
+                                            QR 인쇄
+                                        </Button>
                                     </div>
                                 </div>
                             ))}
@@ -203,6 +214,16 @@ export default function AdminGalleryPage() {
                     )}
                 </CardContent>
             </Card>
+
+            {qrPrintTarget && (
+                <QrPrintView
+                    isOpen={!!qrPrintTarget}
+                    onClose={() => setQrPrintTarget(null)}
+                    tournamentName={qrPrintTarget.tournamentName || qrPrintTarget.name || "대회"}
+                    galleryUrl={`${baseUrl}/gallery/${qrPrintTarget.id}`}
+                    scoreboardUrl={`${baseUrl}/scoreboard`}
+                />
+            )}
         </div>
     );
 }
